@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppSphere</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #fff;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    user-select: none;
+  }
+  #field {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+  .cw {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    touch-action: none;
+    will-change: left, top;
+  }
+  .cw.dragging { cursor: grabbing; z-index: 1000 !important; }
+  .cw.dragging .circle {
+    box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+    transform: scale(1.05);
+  }
+  .cw.pushed .circle {
+    transition: none;
+  }
+  .circle {
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: box-shadow 0.2s, transform 0.2s;
+  }
+  .cw:not(.dragging):hover .circle {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  }
+  .c-name {
+    font-weight: 600;
+    color: #fff;
+    text-align: center;
+    line-height: 1.2;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    pointer-events: none;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    max-width: 75%;
+  }
+  .c-score {
+    font-family: 'DM Mono', monospace;
+    color: rgba(255,255,255,0.75);
+    margin-top: 4px;
+    pointer-events: none;
+  }
+  .cw:not(.dragging):hover .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .tip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(5px);
+    background: #111;
+    color: #fff;
+    border-radius: 8px;
+    padding: 8px 14px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s, transform 0.15s;
+    z-index: 9999;
+    font-size: 12px;
+  }
+  .tip::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #111;
+  }
+  .tip-name { font-weight: 600; margin-bottom: 2px; }
+  .tip-meta { color: #aaa; font-size: 11px; font-family: 'DM Mono', monospace; }
+
+  @keyframes popIn {
+    from { opacity:0; transform:translate(-50%,-50%) scale(0.2); }
+    to   { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  }
+
+  /* ── LOGIN ── */
+  #login-screen {
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.5s ease;
+  }
+  #login-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .login-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+  }
+  .login-title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #111;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+  .login-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 36px;
+  }
+  .google-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 24px;
+    background: #fff;
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .google-btn:hover {
+    border-color: #aaa;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  .google-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+  /* ── NOME UTENTE IN ALTO ── */
+  #user-bar {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    z-index: 500;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #888;
+  }
+  #user-bar.visible { display: flex; }
+  #logout-btn {
+    padding: 5px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #888;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  #logout-btn:hover { border-color: #aaa; color: #111; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-title">AppSphere</div>
+    <div class="login-sub">// il tuo universo di applicazioni</div>
+    <button class="google-btn" onclick="loginWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Accedi con Google
+    </button>
+  </div>
+</div>
+
+<!-- UTENTE BAR -->
+<div id="user-bar">
+  <span id="user-name"></span>
+  <button id="logout-btn" onclick="logout()">Esci</button>
+</div>
+
+<div id="field"></div>
+<script>
+const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
+
+const PAD = 12;
+const GAP = 8; // minimum gap between circles
+
+let nodes = []; // { el, x, y, r, app }
+let W, H;
+
+// ── SIZE ──
+function sizeOf(score) {
+  const min = Math.min(...CURRENT_APPS.map(a => a.score));
+  const max = Math.max(...CURRENT_APPS.map(a => a.score));
+  return Math.round(72 + ((score - min) / (max - min || 1)) * 130);
+}
+
+// ── INITIAL PACK (no overlap) ──
+function initialPlace(r, existingNodes) {
+  for (let i = 0; i < 6000; i++) {
+    const x = r + PAD + Math.random() * (W - 2*r - 2*PAD);
+    const y = r + PAD + Math.random() * (H - 2*r - 2*PAD);
+    const ok = existingNodes.every(n => Math.hypot(x - n.x, y - n.y) >= r + n.r + GAP);
+    if (ok) return { x, y };
+  }
+  return { x: W/2, y: H/2 };
+}
+
+// ── COLLISION RESOLUTION ──
+// Iteratively push circles apart. draggedId is the one being moved (pinned).
+function resolveCollisions(draggedId) {
+  const ITERS = 40;
+  for (let iter = 0; iter < ITERS; iter++) {
+    let moved = false;
+    for (let a = 0; a < nodes.length; a++) {
+      for (let b = a + 1; b < nodes.length; b++) {
+        const na = nodes[a];
+        const nb = nodes[b];
+        const minDist = na.r + nb.r + GAP;
+        const dx = nb.x - na.x;
+        const dy = nb.y - na.y;
+        const dist = Math.hypot(dx, dy) || 0.01;
+        if (dist >= minDist) continue;
+
+        moved = true;
+        const overlap = minDist - dist;
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // dragged circle is pinned — push the other fully
+        if (na.id === draggedId) {
+          nb.x += nx * overlap;
+          nb.y += ny * overlap;
+        } else if (nb.id === draggedId) {
+          na.x -= nx * overlap;
+          na.y -= ny * overlap;
+        } else {
+          // both free — split equally
+          na.x -= nx * overlap * 0.5;
+          na.y -= ny * overlap * 0.5;
+          nb.x += nx * overlap * 0.5;
+          nb.y += ny * overlap * 0.5;
+        }
+      }
+    }
+    // clamp all to viewport
+    nodes.forEach(n => {
+      if (n.id === draggedId) return;
+      n.x = Math.min(W - n.r - PAD, Math.max(n.r + PAD, n.x));
+      n.y = Math.min(H - n.r - PAD, Math.max(n.r + PAD, n.y));
+    });
+    if (!moved) break;
+  }
+}
+
+// ── APPLY POSITIONS TO DOM ──
+function applyPositions(draggedId) {
+  nodes.forEach(n => {
+    n.el.style.left = n.x + 'px';
+    n.el.style.top  = n.y + 'px';
+    if (n.id !== draggedId) {
+      n.el.classList.add('pushed');
+      // remove pushed class after a tick so transitions stay off only during move
+    }
+  });
+}
+
+// ── FIT FONT SIZE ──
+// Binary search: largest font-size where text block fits inside circle's inscribed square
+function fitFontSize(name, circleSize) {
+  const maxW = circleSize * 0.64;
+  const maxH = circleSize * 0.64;
+
+  const el = document.createElement('span');
+  el.style.cssText = [
+    'position:absolute',
+    'visibility:hidden',
+    'pointer-events:none',
+    'white-space:normal',
+    `max-width:${maxW}px`,
+    'word-break:break-word',
+    'text-align:center',
+    "font-family:'DM Sans',sans-serif",
+    'font-weight:600',
+    'line-height:1.2',
+  ].join(';');
+  el.textContent = name;
+  document.body.appendChild(el);
+
+  let lo = 8, hi = circleSize * 0.55;
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2;
+    el.style.fontSize = mid + 'px';
+    if (el.offsetWidth <= maxW && el.offsetHeight <= maxH) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  document.body.removeChild(el);
+  return Math.floor(lo);
+}
+
+// ── BUILD DOM ──
+let CURRENT_APPS = [];
+
+function render(apps) {
+  if (apps) CURRENT_APPS = apps;
+  const field = document.getElementById('field');
+  W = field.offsetWidth;
+  H = field.offsetHeight;
+  field.innerHTML = '';
+  nodes = [];
+
+  const sorted = [...CURRENT_APPS].sort((a, b) => b.score - a.score);
+
+  sorted.forEach((app, i) => {
+    const size = sizeOf(app.score);
+    const r = size / 2;
+    const pos = initialPlace(r, nodes);
+
+    const color = OLYMPIC[i % OLYMPIC.length];
+    const nameFz  = fitFontSize(app.name, size);
+    const scoreFz = Math.max(8, size * 0.075);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cw';
+    wrap.style.left = pos.x + 'px';
+    wrap.style.top  = pos.y + 'px';
+    wrap.style.zIndex = i + 1;
+    wrap.style.animation = `popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.07}s both`;
+
+    wrap.innerHTML = `
+      <div class="circle" style="width:${size}px;height:${size}px;background:${color};border:4px solid #111;">
+        <span class="c-name" style="font-size:${nameFz}px">${app.name}</span>
+        <span class="c-score" style="font-size:${scoreFz}px">${app.score}</span>
+      </div>
+      <div class="tip">
+        <div class="tip-name">${app.name}</div>
+        <div class="tip-meta">${app.description} · ${app.score} pts</div>
+      </div>
+    `;
+
+    const node = { id: app.id, el: wrap, x: pos.x, y: pos.y, r, app };
+    nodes.push(node);
+    makeDraggable(node);
+    field.appendChild(wrap);
+  });
+}
+
+// ── DRAG ──
+let zTop = 100;
+
+function makeDraggable(node) {
+  const el = node.el;
+  let dragging = false;
+  let startX, startY, origX, origY, moved;
+
+  function getXY(e) {
+    return e.touches
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      : { x: e.clientX, y: e.clientY };
+  }
+
+  function onDown(e) {
+    const { x, y } = getXY(e);
+    startX = x; startY = y;
+    origX = node.x; origY = node.y;
+    dragging = true; moved = false;
+    el.style.zIndex = ++zTop;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+  }
+
+  function onMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const { x, y } = getXY(e);
+    const dx = x - startX;
+    const dy = y - startY;
+
+    if (!moved && Math.hypot(dx, dy) > 4) {
+      moved = true;
+      el.classList.add('dragging');
+    }
+    if (!moved) return;
+
+    // Update dragged node position (clamped)
+    node.x = Math.min(W - node.r - PAD, Math.max(node.r + PAD, origX + dx));
+    node.y = Math.min(H - node.r - PAD, Math.max(node.r + PAD, origY + dy));
+
+    // Resolve collisions keeping this node pinned
+    resolveCollisions(node.id);
+
+    // Apply all positions
+    applyPositions(node.id);
+  }
+
+  function onUp() {
+    dragging = false;
+    el.classList.remove('dragging');
+    nodes.forEach(n => n.el.classList.remove('pushed'));
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('mouseup', onUp);
+    window.removeEventListener('touchend', onUp);
+    if (!moved) launchApp(node.app);
+  }
+
+  el.addEventListener('mousedown', onDown);
+  el.addEventListener('touchstart', onDown, { passive: true });
+}
+
+function launchApp(app) {
+  const blob = new Blob([app.html], { type: 'text/html; charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+
+  // Passa il token Google all'app figlia via postMessage
+  const googleToken = sessionStorage.getItem('google_token');
+  if (googleToken && win) {
+    setTimeout(() => win.postMessage({ type: 'GOOGLE_TOKEN', token: googleToken }, '*'), 1000);
+  }
+}
+
+// ── AUTH ──
+const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+function loginWithGoogle() {
+  const redirect = window.location.href.split('#')[0].split('?')[0];
+  const scopes = [
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/fitness.activity.read',
+    'https://www.googleapis.com/auth/fitness.body.read',
+    'https://www.googleapis.com/auth/fitness.nutrition.read',
+  ].join(' ');
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google`
+    + `&redirect_to=${encodeURIComponent(redirect)}`
+    + `&scopes=${encodeURIComponent(scopes)}`
+    + `&access_type=offline`;
+}
+
+async function logout() {
+  const token = sessionStorage.getItem('sb_token');
+  if (token) {
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+    }).catch(() => {});
+  }
+  sessionStorage.removeItem('sb_token');
+  document.getElementById('user-bar').classList.remove('visible');
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+function parseHash() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return null;
+  const p = {};
+  hash.split('&').forEach(kv => { const [k,v] = kv.split('='); p[decodeURIComponent(k)] = decodeURIComponent(v||''); });
+  if (p.access_token) {
+    sessionStorage.setItem('sb_token', p.access_token);
+    // provider_token = token Google reale, usabile con Google Fit API
+    if (p.provider_token) sessionStorage.setItem('google_token', p.provider_token);
+    history.replaceState(null, '', window.location.pathname);
+    return p.access_token;
+  }
+  return null;
+}
+
+async function getUserInfo(token) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+  });
+  return res.ok ? res.json() : null;
+}
+
+function showApp(user) {
+  const name = user?.user_metadata?.full_name || user?.email || 'Utente';
+  document.getElementById('user-name').textContent = name.split(' ')[0];
+  document.getElementById('user-bar').classList.add('visible');
+  const ls = document.getElementById('login-screen');
+  ls.classList.add('hidden');
+  setTimeout(() => {
+    ls.style.display = 'none';
+    loadApps();
+  }, 500);
+}
+
+// ── CARICA APP DA SUPABASE ──
+async function loadApps() {
+  const token = sessionStorage.getItem('sb_token');
+
+  // 1. Leggi tutte le app attive
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/cm_apps?active=eq.true&select=id,title,description,score_query,html_content,color&order=id.asc`,
+    {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      }
+    }
+  );
+
+  if (!res.ok) {
+    console.error('Errore fetch cm_apps:', await res.text());
+    return;
+  }
+
+  const rows = await res.json();
+
+  // 2. Per ogni app esegui la score_query
+  const apps = await Promise.all(rows.map(async (row, i) => {
+    let score = 0;
+    try {
+      const rpc = await fetch(`${SUPABASE_URL}/rest/v1/rpc/run_score_query`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: row.score_query })
+      });
+      if (rpc.ok) score = Number(await rpc.json()) || 0;
+    } catch(e) {
+      console.warn('Score query fallita per', row.title, e);
+    }
+
+    return {
+      id:          row.id,
+      name:        row.title,
+      description: row.description || '',
+      score:       score,
+      color:       row.color || OLYMPIC[i % OLYMPIC.length],
+      html:        row.html_content,
+    };
+  }));
+
+  render(apps);
+}
+
+async function init() {
+  const token = parseHash() || sessionStorage.getItem('sb_token');
+  if (token) {
+    const user = await getUserInfo(token);
+    if (user) { showApp(user); return; }
+    sessionStorage.removeItem('sb_token');
+  }
+  // show login
+}
+init();
+
+window.addEventListener('resize', () => { if (CURRENT_APPS.length) render(); });
+</script>
+</body>
+</html>
