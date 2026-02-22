@@ -225,13 +225,18 @@ function sizeOf(score) {
 
 // ── INITIAL PACK (no overlap) ──
 function initialPlace(r, existingNodes) {
+  const cx = W / 2;
+  const cy = H / 2;
+  const spread = Math.min(W, H) * 0.25;
   for (let i = 0; i < 6000; i++) {
-    const x = r + PAD + Math.random() * (W - 2*r - 2*PAD);
-    const y = r + PAD + Math.random() * (H - 2*r - 2*PAD);
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = Math.random() * spread;
+    const x = Math.min(W - r - PAD, Math.max(r + PAD, cx + Math.cos(angle) * dist));
+    const y = Math.min(H - r - PAD, Math.max(r + PAD, cy + Math.sin(angle) * dist));
     const ok = existingNodes.every(n => Math.hypot(x - n.x, y - n.y) >= r + n.r + GAP);
     if (ok) return { x, y };
   }
-  return { x: W/2, y: H/2 };
+  return { x: cx, y: cy };
 }
 
 // ── COLLISION RESOLUTION ──
