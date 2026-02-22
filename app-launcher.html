@@ -227,14 +227,17 @@ function sizeOf(score) {
 function initialPlace(r, existingNodes) {
   const cx = W / 2;
   const cy = H / 2;
-  const spread = Math.min(W, H) * 0.25;
-  for (let i = 0; i < 6000; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist  = Math.random() * spread;
-    const x = Math.min(W - r - PAD, Math.max(r + PAD, cx + Math.cos(angle) * dist));
-    const y = Math.min(H - r - PAD, Math.max(r + PAD, cy + Math.sin(angle) * dist));
-    const ok = existingNodes.every(n => Math.hypot(x - n.x, y - n.y) >= r + n.r + GAP);
-    if (ok) return { x, y };
+  // Start tight at center, expand spread until a non-overlapping spot is found
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const spread = r + attempt * (r * 0.5);
+    for (let i = 0; i < 30; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist  = Math.random() * spread;
+      const x = Math.min(W - r - PAD, Math.max(r + PAD, cx + Math.cos(angle) * dist));
+      const y = Math.min(H - r - PAD, Math.max(r + PAD, cy + Math.sin(angle) * dist));
+      const ok = existingNodes.every(n => Math.hypot(x - n.x, y - n.y) >= r + n.r + GAP);
+      if (ok) return { x, y };
+    }
   }
   return { x: cx, y: cy };
 }
