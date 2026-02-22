@@ -220,7 +220,8 @@ let W, H;
 function sizeOf(score) {
   const min = Math.min(...CURRENT_APPS.map(a => a.score));
   const max = Math.max(...CURRENT_APPS.map(a => a.score));
-  return Math.round(72 + ((score - min) / (max - min || 1)) * 130);
+  const base = min + 1000;
+  return Math.round(72 + ((score - base) / (max - base || 1)) * 130);
 }
 
 // ── INITIAL PACK (no overlap) ──
