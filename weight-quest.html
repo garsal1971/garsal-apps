@@ -1264,12 +1264,11 @@
             // Blocca modifica se obiettivo chiuso
             if (userData.currentObjective && (userData.currentObjective.status === 'success' || userData.currentObjective.status === 'failed')) {
                 alert('Questo obiettivo è chiuso e non può essere modificato!');
-                hideMilestoneModal();
                 return;
             }
-            
-            var date = document.getElementById('milestoneDate').value;
-            var weight = parseFloat(document.getElementById('milestoneWeight').value);
+
+            var date = document.getElementById('newMilestoneDate').value;
+            var weight = parseFloat(document.getElementById('newMilestoneWeight').value);
             
             if (!date || !weight || weight <= 0) {
                 alert('Inserisci data e peso validi!');
@@ -1287,8 +1286,9 @@
                 return new Date(a.date) - new Date(b.date);
             });
             
+            document.getElementById('newMilestoneDate').value = '';
+            document.getElementById('newMilestoneWeight').value = '';
             updateMilestoneList();
-            hideMilestoneModal();
             log('Milestone aggiunta: ' + date + ' - ' + weight + ' kg');
         }
 
