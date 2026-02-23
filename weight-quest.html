@@ -1,0 +1,3119 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Weight Quest v2.4.1</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f0f0;
+        }
+
+        /* TOP BAR PINK */
+        .top-bar {
+            background: linear-gradient(135deg, #FF3366 0%, #FF6B9D 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .date-calendar {
+            background: white;
+            color: #333;
+            border-radius: 8px;
+            padding: 8px 12px;
+            min-width: 90px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .date-month {
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #FF3366;
+        }
+
+        .date-day {
+            font-size: 28px;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .top-title {
+            font-size: 20px;
+            font-weight: bold;
+            flex: 1;
+            text-align: center;
+        }
+
+        /* ICON NAVIGATION */
+        .icon-nav {
+            background: white;
+            display: flex;
+            justify-content: space-around;
+            padding: 15px 0;
+            border-bottom: 2px solid #eee;
+        }
+
+        .icon-nav-item {
+            flex: 1;
+            text-align: center;
+            cursor: pointer;
+            padding: 10px;
+            transition: all 0.2s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .icon-nav-item:hover {
+            background: #f9f9f9;
+        }
+
+        .icon-nav-item.active {
+            border-bottom-color: #FF3366;
+        }
+
+        .icon-nav-item .icon {
+            font-size: 36px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .icon-nav-item .label {
+            font-size: 11px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .icon-nav-item.active .label {
+            color: #FF3366;
+            font-weight: bold;
+        }
+
+        /* MAIN CONTENT */
+        .content {
+            padding: 0;
+        }
+
+        .page {
+            display: none;
+            padding: 20px;
+            min-height: calc(100vh - 200px);
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* SIDEBAR FLOATING BUTTON */
+        .sidebar-toggle {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #4A90E2;
+            color: white;
+            border: none;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        .sidebar-toggle:active {
+            transform: scale(0.95);
+        }
+
+        /* SIDEBAR OVERLAY */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 300px;
+            background: white;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+            transform: translateX(100%);
+            transition: transform 0.3s;
+            z-index: 999;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .sidebar-overlay.active {
+            transform: translateX(0);
+        }
+
+        .sidebar-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 998;
+        }
+
+        .sidebar-backdrop.active {
+            display: block;
+        }
+
+        .sidebar-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .sidebar-section {
+            margin-bottom: 25px;
+        }
+
+        .sidebar-title {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .total-score-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .total-score-value {
+            font-size: 48px;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .total-score-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .objective-card-mini {
+            background: #f5f5f5;
+            border-left: 4px solid #00B894;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .objective-card-mini:hover {
+            background: #e8e8e8;
+            transform: translateX(-3px);
+        }
+
+        .objective-card-mini.failed {
+            border-left-color: #E74C3C;
+        }
+
+        .objective-card-mini .name {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .objective-card-mini .score {
+            font-size: 20px;
+            font-weight: bold;
+            color: #00B894;
+        }
+
+        .objective-card-mini.failed .score {
+            color: #E74C3C;
+        }
+
+        .objective-card-mini .dates {
+            font-size: 10px;
+            color: #999;
+            margin-top: 3px;
+        }
+
+        /* CARDS */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        /* STATS GRID */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .stat-box {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .stat-box.gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .stat-box.teal {
+            border: 3px solid #00B894;
+        }
+
+        .stat-box.red {
+            border: 3px solid #E74C3C;
+        }
+
+        .stat-box.yellow {
+            border: 3px solid #FFB900;
+        }
+
+        .stat-value {
+            font-size: 42px;
+            font-weight: bold;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .stat-box.teal .stat-value { color: #00B894; }
+        .stat-box.red .stat-value { color: #E74C3C; }
+        .stat-box.yellow .stat-value { color: #FFB900; }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: bold;
+            opacity: 0.8;
+        }
+
+        /* FORM ELEMENTS */
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 8px 0;
+            font-family: inherit;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #FF3366;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #FF3366;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #E62958;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(255, 51, 102, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* TABLE */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            background: #f5f5f5;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid #ddd;
+            font-size: 12px;
+        }
+
+        td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background: #f9f9f9;
+        }
+
+        /* CHART */
+        #chartContainer {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* UTILITIES */
+        .hidden { display: none !important; }
+
+        /* DEBUG */
+        #debugLog {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.95);
+            color: lime;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 11px;
+            font-family: monospace;
+            transform: translateY(100%);
+            transition: transform 0.3s;
+            z-index: 10000;
+        }
+
+        #debugLog.active {
+            transform: translateY(0);
+        }
+
+        #debugBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 20px;
+            z-index: 1001;
+            background: #333;
+        }
+
+        /* AUTH */
+        #authSection {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .auth-card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .auth-card h1 {
+            color: #FF3366;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar-overlay {
+                width: 100%;
+            }
+        }
+        .content-wrapper {
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .main-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* DESKTOP LAYOUT WITH FIXED SIDEBAR */
+        @media (min-width: 769px) {
+            .icon-nav {
+                display: none;
+            }
+            .date-calendar {
+                display: none;
+            }
+            .top-title {
+                display: none;
+            }
+            #btnSync {
+                display: none;
+            }
+            .sidebar-desktop {
+                display: flex;
+                flex-direction: column;
+                width: 280px;
+                background: #F3F4F6;
+                border-right: 1px solid #E5E7EB;
+                padding: 1.0rem 0.75rem;
+                position: sticky;
+                top: 0;
+                height: calc(100vh - 80px);
+            }
+            .sidebar-logo {
+                display: none;
+            }
+            .top-bar {
+                display: none;
+            }
+            .sidebar-nav-item {
+                padding: 0.5rem 0.6rem;
+                margin-bottom: 0.5rem;
+                border-radius: 0;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                font-size: 1.1rem;
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .sidebar-nav-item:hover {
+                background: rgba(255,255,255,0.1);
+                transform: translateX(5px);
+            }
+            .sidebar-nav-item.active {
+                background: #FF3366;
+                color: white;
+            }
+            .sidebar-nav-item .nav-icon {
+                font-size: 1.1rem;
+            }
+            .sidebar-sync-box {
+                margin-top: auto;
+                padding: 0.75rem;
+                background: rgba(0,217,163,0.1);
+                border: 2px solid #00B894;
+            }
+            .sidebar-toggle {
+                display: none;
+            }
+            .sidebar-overlay,
+            .sidebar-backdrop {
+                display: none !important;
+            }
+        }
+        @media (max-width: 768px) {
+            .sidebar-desktop {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- AUTH SECTION -->
+    <div id="authSection">
+        <div class="auth-card">
+            <h1>⚖️ WEIGHT QUEST</h1>
+            <p style="margin-bottom: 30px; color: #666;">Dashboard gestione peso e obiettivi</p>
+            <button id="btnLogin" style="font-size: 16px; padding: 15px 40px;">🔐 Accedi con Google</button>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="mainSection" class="hidden">
+        <!-- TOP BAR -->
+        <div class="top-bar">
+            <div class="date-calendar">
+                <div class="date-month" id="topMonth">Feb</div>
+                <div class="date-day" id="topDay">18</div>
+            </div>
+            <div class="top-title" id="topTitle">Weight Quest</div>
+            <button style="background: none; border: none; color: white; font-size: 24px; padding: 5px 10px; cursor: pointer;" id="btnSync" title="Sincronizza">🔄</button>
+        </div>
+
+        <!-- ICON NAVIGATION -->
+        <div class="icon-nav">
+            <div class="icon-nav-item active" data-page="obiettivi">
+                <span class="icon">⚙️</span>
+                <span class="label">Obiettivi</span>
+            </div>
+            <div class="icon-nav-item" data-page="tabella">
+                <span class="icon">📊</span>
+                <span class="label">Tabella</span>
+            </div>
+            <div class="icon-nav-item" data-page="grafico">
+                <span class="icon">📈</span>
+                <span class="label">Grafico</span>
+            </div>
+        </div>
+
+        <!-- CONTENT WRAPPER -->
+        <div class="content-wrapper">
+            <!-- DESKTOP SIDEBAR -->
+            <div class="sidebar-desktop">
+                <div class="sidebar-logo">⚖️ Weight</div>
+                <nav>
+                    <div class="sidebar-nav-item active" data-page="obiettivi">
+                        <span class="nav-icon">⚙️</span>
+                        <span>Obiettivi</span>
+                    </div>
+                    <div class="sidebar-nav-item" data-page="tabella">
+                        <span class="nav-icon">📊</span>
+                        <span>Tabella</span>
+                    </div>
+                    <div class="sidebar-nav-item" data-page="grafico">
+                        <span class="nav-icon">📈</span>
+                        <span>Grafico</span>
+                    </div>
+                </nav>
+                <div class="sidebar-sync-box">
+                    <button id="btnSyncDesktop" style="width:100%; background:#00B894; color:white; border:none; padding:10px; font-size:14px; font-weight:bold; cursor:pointer;">🔄 Sincronizza</button>
+                </div>
+            </div>
+
+            <!-- MAIN CONTENT -->
+            <div class="content main-content">
+            <!-- PAGE 1: OBIETTIVI -->
+            <div id="obiettiviPage" class="page active">
+                <!-- Stats Totali -->
+                <div class="stats-grid">
+                    <div class="stat-box gradient">
+                        <div class="stat-value" id="statsScore">0</div>
+                        <div class="stat-label">Punteggio</div>
+                    </div>
+                    <div class="stat-box teal">
+                        <div class="stat-value" id="statsCompleted">0</div>
+                        <div class="stat-label">Completati</div>
+                    </div>
+                    <div class="stat-box red">
+                        <div class="stat-value" id="statsFailed">0</div>
+                        <div class="stat-label">Falliti</div>
+                    </div>
+                    <div class="stat-box yellow">
+                        <div class="stat-value" id="statsActive">0</div>
+                        <div class="stat-label">Attivi</div>
+                    </div>
+                </div>
+
+                <!-- Peso Attuale -->
+                <div class="card">
+                    <h3>⚖️ Peso Attuale</h3>
+                    <div style="text-align: center;">
+                        <div style="font-size: 56px; font-weight: bold; color: #FF3366;" id="weightValue">--</div>
+                        <div style="font-size: 14px; color: #666;">kg</div>
+                    </div>
+                </div>
+
+                <!-- Gestione Obiettivo Corrente -->
+                <div class="card">
+                    <h3>🎯 Gestione Obiettivo</h3>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px;">Seleziona Obiettivo</label>
+                        <select id="objectiveSelect"></select>
+                    </div>
+
+                    <div id="objectiveStatusBar" class="hidden" style="padding: 10px; margin: 10px 0; border-radius: 8px; text-align: center; font-weight: bold;"></div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px;">Nome Obiettivo</label>
+                        <input type="text" id="objectiveName" placeholder="Es: Dieta Primavera 2026">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;">
+                        <div>
+                            <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Punti Bonus Giornaliero</label>
+                            <input type="number" id="objectiveDailyBonus" value="10">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Punti Malus Giornaliero</label>
+                            <input type="number" id="objectiveDailyMalus" value="5">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Punti Bonus Finale</label>
+                            <input type="number" id="objectiveFinalBonus" value="100">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Punti Malus Finale</label>
+                            <input type="number" id="objectiveFinalMalus" value="50">
+                        </div>
+                    </div>
+
+                    <div id="multiplierDisplay" style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0; font-size: 13px;"></div>
+
+                    <h4 style="margin: 20px 0 10px 0;">Milestone Progressive</h4>
+                    <div id="milestoneList" style="margin-bottom: 15px;"></div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                        <input type="date" id="newMilestoneDate" placeholder="Data">
+                        <input type="number" step="0.1" id="newMilestoneWeight" placeholder="Peso (kg)">
+                    </div>
+                    <button id="btnAddMilestone">➕ Aggiungi Milestone</button>
+
+                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <button id="btnSaveObjective">💾 Salva</button>
+                        <button id="btnCloseSuccess" style="background: #00B894;">🏆 Successo</button>
+                        <button id="btnCloseFailed" style="background: #E74C3C;">💀 Fallito</button>
+                        <button id="btnDeleteObjective" style="background: #666;">🗑️ Elimina</button>
+                    </div>
+                </div>
+
+                <!-- Punteggio Corrente -->
+                <div class="card">
+                    <h3>📊 Punteggio Obiettivo Corrente</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                        <div>
+                            <div style="font-size: 36px; font-weight: bold; color: #FF3366;" id="scoreValue">0</div>
+                            <div style="font-size: 12px; color: #666;">Totale</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 36px; font-weight: bold; color: #4A90E2;" id="avgScoreValue">0.0</div>
+                            <div style="font-size: 12px; color: #666;">Media/Giorno</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE 2: TABELLA -->
+            <div id="tabellaPage" class="page">
+                <div class="card">
+                    <h3>📊 Storico Pesate</h3>
+                    <div style="overflow-x: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Target</th>
+                                    <th>Peso MIN</th>
+                                    <th>Ora</th>
+                                    <th>Peso MAX</th>
+                                    <th>Ora</th>
+                                    <th>Punti</th>
+                                    <th>Cumul.</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weightTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE 3: GRAFICO -->
+            <div id="graficoPage" class="page">
+                <div class="card">
+                    <h3>📈 Andamento Peso</h3>
+                    <div id="chartContainer" style="position: relative; height: 400px; min-width: 100%;">
+                        <canvas id="weightChart" width="1000" height="400"></canvas>
+                    </div>
+                    <div style="margin-top: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                        <button id="btnZoomIn" style="padding: 10px 20px;">🔍 Zoom In</button>
+                        <button id="btnResetZoom" style="padding: 10px 20px; background: #666;">⟲ Reset</button>
+                        <button id="btnZoomOut" style="padding: 10px 20px;">🔍 Zoom Out</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        </div> <!-- /content-wrapper -->
+        <!-- SIDEBAR TOGGLE BUTTON -->
+        <button class="sidebar-toggle" id="sidebarToggle">📋</button>
+
+        <!-- SIDEBAR OVERLAY -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+        <div class="sidebar-overlay" id="sidebarOverlay">
+            <button class="sidebar-close" id="sidebarClose">✕</button>
+            
+            <div class="total-score-box">
+                <div class="total-score-value" id="sidebarTotalScore">0</div>
+                <div class="total-score-label">PUNTEGGIO TOTALE</div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">✅ COMPLETATI</div>
+                <div id="sidebarCompleted">
+                    <div style="text-align: center; color: #999; font-size: 13px; padding: 20px;">Nessun obiettivo completato</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">❌ FALLITI</div>
+                <div id="sidebarFailed">
+                    <div style="text-align: center; color: #999; font-size: 13px; padding: 20px;">Nessun obiettivo fallito</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DEBUG -->
+    <button id="debugBtn">🐛</button>
+    <div id="debugLog"></div>
+
+    <script>
+        var APP_VERSION = 'v3.1.0';
+        
+        // Supabase client minimale senza CDN
+        class SupabaseClient {
+            constructor(url, key) {
+                this.url = url;
+                this.key = key;
+                this.headers = {
+                    'apikey': key,
+                    'Authorization': 'Bearer ' + key,
+                    'Content-Type': 'application/json'
+                };
+            }
+
+            from(table) {
+                var self = this;
+                return {
+                    select: function(columns) {
+                        return {
+                            order: function(column, opts) {
+                                return {
+                                    limit: function(n) {
+                                        return self._query(table, columns, column, opts, n);
+                                    },
+                                    then: function(cb) {
+                                        return self._query(table, columns, column, opts).then(cb);
+                                    }
+                                };
+                            },
+                            then: function(cb) {
+                                return self._query(table, columns).then(cb);
+                            }
+                        };
+                    },
+                    insert: function(data) {
+                        return self._insert(table, data);
+                    },
+                    upsert: function(data, opts) {
+                        return self._upsert(table, data, opts);
+                    },
+                    update: function(data) {
+                        return {
+                            eq: function(col, val) {
+                                return self._update(table, data, col, val);
+                            }
+                        };
+                    }
+                };
+            }
+
+            _query(table, columns, orderCol, orderOpts, limit) {
+                var url = this.url + '/rest/v1/' + table + '?select=' + (columns || '*');
+                if (orderCol) {
+                    url += '&order=' + orderCol + '.' + (orderOpts && orderOpts.ascending ? 'asc' : 'desc');
+                }
+                if (limit) {
+                    url += '&limit=' + limit;
+                }
+
+                return fetch(url, {
+                    method: 'GET',
+                    headers: this.headers
+                }).then(function(res) {
+                    return res.json().then(function(data) {
+                        return { data: data, error: null };
+                    });
+                }).catch(function(error) {
+                    return { data: null, error: error };
+                });
+            }
+
+            _insert(table, data) {
+                var url = this.url + '/rest/v1/' + table;
+                return fetch(url, {
+                    method: 'POST',
+                    headers: this.headers,
+                    body: JSON.stringify(data)
+                }).then(function(res) {
+                    return res.json().then(function(data) {
+                        return { data: data, error: null };
+                    });
+                }).catch(function(error) {
+                    return { data: null, error: error };
+                });
+            }
+
+            _upsert(table, data, opts) {
+                var url = this.url + '/rest/v1/' + table;
+                if (opts && opts.onConflict) {
+                    url += '?on_conflict=' + opts.onConflict;
+                }
+                var headers = Object.assign({}, this.headers);
+                headers['Prefer'] = 'resolution=merge-duplicates';
+
+                return fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(data)
+                }).then(function(res) {
+                    if (!res.ok) {
+                        return res.text().then(function(text) {
+                            return { data: null, error: { message: text, status: res.status } };
+                        });
+                    }
+                    return { data: null, error: null };
+                }).catch(function(error) {
+                    return { data: null, error: error };
+                });
+            }
+
+            _update(table, data, col, val) {
+                var url = this.url + '/rest/v1/' + table + '?' + col + '=eq.' + val;
+                return fetch(url, {
+                    method: 'PATCH',
+                    headers: this.headers,
+                    body: JSON.stringify(data)
+                }).then(function(res) {
+                    return { data: null, error: null };
+                }).catch(function(error) {
+                    return { data: null, error: error };
+                });
+            }
+        }
+
+        // CONFIG
+        var CONFIG = {
+            supabaseUrl: 'https://jajlmmdsjlvzgcxiiypk.supabase.co',
+            supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU',
+            googleClientId: '792683148606-9msthde03l2con90vt5la2u2d2srt89s.apps.googleusercontent.com'
+        };
+
+        // STATE
+        var supabase = null;
+        var googleToken = null;
+        var userData = { targetWeight: null, score: 0, weights: [], milestones: [] };
+        var isLoadingData = false; // Flag per evitare caricamenti simultanei
+        var tempMilestones = []; // Milestone temporanee prima del salvataggio
+
+        // LOG FUNCTION
+        function log(msg) {
+            var debugLog = document.getElementById('debugLog');
+            var line = document.createElement('div');
+            var time = new Date().toLocaleTimeString();
+            line.textContent = '[' + time + '] ' + msg;
+            debugLog.appendChild(line);
+            debugLog.scrollTop = debugLog.scrollHeight;
+            console.log(msg);
+        }
+
+        // TOGGLE DEBUG
+        document.getElementById('debugBtn').onclick = function() {
+            document.getElementById('debugLog').classList.toggle('active');
+        };
+
+        // INIT
+        function closeSidebar() {
+            document.getElementById('sidebarOverlay').classList.remove('active');
+            document.getElementById('sidebarBackdrop').classList.remove('active');
+        }
+
+        function handleObjectiveCardClick(e) {
+            var card = e.target.closest('.objective-card-mini');
+            if (card && card.dataset.objectiveId) {
+                var objId = parseInt(card.dataset.objectiveId);
+                loadObjectiveById(objId);
+                closeSidebar();
+            }
+        }
+
+        function updateSidebarStats() {
+            if (!allObjectives || allObjectives.length === 0) {
+                return;
+            }
+
+            var totalScore = 0;
+            var completed = allObjectives.filter(function(o) { return o.status === 'success'; });
+            var failed = allObjectives.filter(function(o) { return o.status === 'failed'; });
+
+            // Calculate total score from closed objectives
+            allObjectives.forEach(function(obj) {
+                if (obj.status === 'success' || obj.status === 'failed') {
+                    totalScore += (obj.total_score || 0);
+                }
+            });
+
+            // Update total score with null check
+            var elTotal = document.getElementById('sidebarTotalScore');
+            if (elTotal) elTotal.textContent = totalScore;
+
+            // Completed list
+            var completedHtml = '';
+            if (completed.length === 0) {
+                completedHtml = '<div style="text-align: center; color: #999; font-size: 13px; padding: 20px;">Nessun obiettivo completato</div>';
+            } else {
+                completed.forEach(function(obj) {
+                    completedHtml += '<div class="objective-card-mini" data-objective-id="' + obj.id + '">';
+                    completedHtml += '<div class="name">' + obj.objective_name + '</div>';
+                    completedHtml += '<div class="score">' + (obj.total_score || 0) + ' pt</div>';
+                    completedHtml += '<div class="dates">' + obj.start_date + ' → ' + obj.end_date + '</div>';
+                    completedHtml += '</div>';
+                });
+            }
+            
+            var elComp = document.getElementById('sidebarCompleted');
+            if (elComp) elComp.innerHTML = completedHtml;
+
+            // Failed list
+            var failedHtml = '';
+            if (failed.length === 0) {
+                failedHtml = '<div style="text-align: center; color: #999; font-size: 13px; padding: 20px;">Nessun obiettivo fallito</div>';
+            } else {
+                failed.forEach(function(obj) {
+                    failedHtml += '<div class="objective-card-mini failed" data-objective-id="' + obj.id + '">';
+                    failedHtml += '<div class="name">' + obj.objective_name + '</div>';
+                    failedHtml += '<div class="score">' + (obj.total_score || 0) + ' pt</div>';
+                    failedHtml += '<div class="dates">' + obj.start_date + ' → ' + obj.end_date + '</div>';
+                    failedHtml += '</div>';
+                });
+            }
+            
+            var elFail = document.getElementById('sidebarFailed');
+            if (elFail) elFail.innerHTML = failedHtml;
+            
+            // Update desktop sidebar too
+            var elDesktopTotal = document.getElementById("desktopTotalScore");
+            if (elDesktopTotal) elDesktopTotal.textContent = totalScore;
+            
+            var elDesktopComp = document.getElementById("desktopCompleted");
+            if (elDesktopComp) elDesktopComp.innerHTML = completedHtml;
+            
+            var elDesktopFail = document.getElementById("desktopFailed");
+            if (elDesktopFail) elDesktopFail.innerHTML = failedHtml;
+        }
+        function updateDashboardStats() {
+            if (!allObjectives || allObjectives.length === 0) {
+                return;
+            }
+
+            var totalScore = 0;
+            var completed = 0;
+            var failed = 0;
+            var active = 0;
+
+            allObjectives.forEach(function(obj) {
+                if (obj.status === 'success') {
+                    completed++;
+                    totalScore += (obj.total_score || 0);
+                } else if (obj.status === 'failed') {
+                    failed++;
+                    totalScore += (obj.total_score || 0);
+                } else {
+                    active++;
+                }
+            });
+
+            // Safe update with null checks
+            var el;
+            el = document.getElementById('statsScore');
+            if (el) el.textContent = totalScore;
+            
+            el = document.getElementById('statsCompleted');
+            if (el) el.textContent = completed;
+            
+            el = document.getElementById('statsFailed');
+            if (el) el.textContent = failed;
+            
+            el = document.getElementById('statsActive');
+            if (el) el.textContent = active;
+        }
+
+        function init() {
+            log('=== INIT START ' + APP_VERSION + ' ===');
+            
+            try {
+                // Init Supabase (custom client)
+                supabase = new SupabaseClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+                log('Supabase client creato');
+
+                // Event listeners
+                document.getElementById('btnLogin').onclick = loginGoogle;
+                document.getElementById('btnAddMilestone').onclick = addMilestone;
+                document.getElementById('btnSaveObjective').onclick = doSaveMilestones;
+                document.getElementById('btnSync').onclick = syncFit;
+                document.getElementById('btnSyncDesktop').onclick = syncFit;
+                document.getElementById('btnZoomIn').onclick = zoomIn;
+                document.getElementById('btnResetZoom').onclick = resetZoom;
+                document.getElementById('btnZoomOut').onclick = zoomOut;
+                document.getElementById('btnCloseSuccess').onclick = function() { closeObjective('success'); };
+                document.getElementById('btnCloseFailed').onclick    = function() { closeObjective('failed');  };
+                document.getElementById('btnDeleteObjective').onclick  = deleteObjective;
+                document.getElementById('objectiveSelect').onchange    = onObjectiveSelectChange;
+                
+                log('Event listeners OK');
+
+                // Check token
+                checkToken();
+                
+                // ============================================
+                // NAVIGATION & SIDEBAR SETUP
+                // ============================================
+
+                // Icon Navigation
+                document.querySelectorAll('.icon-nav-item').forEach(function(item) {
+                    item.addEventListener('click', function() {
+                        var pageName = this.getAttribute('data-page');
+                        
+                        // Update active tab
+                        document.querySelectorAll('.icon-nav-item').forEach(function(i) {
+                            i.classList.remove('active');
+                        });
+                        this.classList.add('active');
+                        
+                        // Show selected page
+                        document.querySelectorAll('.page').forEach(function(p) {
+                            p.classList.remove('active');
+                        });
+                        document.getElementById(pageName + 'Page').classList.add('active');
+                        
+                        // Update title
+                        var titles = {
+                            'obiettivi': 'Obiettivi',
+                            'tabella': 'Tabella Pesi',
+                            'grafico': 'Grafico Peso'
+                        };
+                        document.getElementById('topTitle').textContent = titles[pageName] || 'Weight Quest';
+                        
+                        // Refresh data when switching to tabella or grafico
+                        if (pageName === 'tabella' && userData.weights && userData.weights.length > 0) {
+                            updateWeightTable(userData.weights);
+                        } else if (pageName === 'grafico' && userData.weights && userData.weights.length > 0) {
+                            updateWeightChart(userData.weights);
+                        }
+                    });
+                });
+
+                // Sidebar Toggle (mobile)
+                document.getElementById('sidebarToggle').addEventListener('click', function() {
+                    document.getElementById('sidebarOverlay').classList.add('active');
+                    document.getElementById('sidebarBackdrop').classList.add('active');
+                    updateSidebarStats();
+                });
+
+                document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
+                document.getElementById('sidebarBackdrop').addEventListener('click', closeSidebar);
+
+                // Setup event delegation for objective cards (mobile sidebar)
+                document.getElementById('sidebarCompleted').addEventListener('click', handleObjectiveCardClick);
+                document.getElementById('sidebarFailed').addEventListener('click', handleObjectiveCardClick);
+
+                // Desktop sidebar navigation
+                document.querySelectorAll('.sidebar-nav-item').forEach(function(item) {
+                    item.addEventListener('click', function() {
+                        var pageName = this.getAttribute('data-page');
+
+                        // Update active state
+                        document.querySelectorAll('.sidebar-nav-item').forEach(function(i) {
+                            i.classList.remove('active');
+                        });
+                        this.classList.add('active');
+
+                        // Show selected page
+                        document.querySelectorAll('.page').forEach(function(p) {
+                            p.classList.remove('active');
+                        });
+                        document.getElementById(pageName + 'Page').classList.add('active');
+
+                        // Update title
+                        var titles = {
+                            'obiettivi': 'Obiettivi',
+                            'tabella': 'Tabella Pesi',
+                            'grafico': 'Grafico Peso'
+                        };
+                        document.getElementById('topTitle').textContent = titles[pageName] || 'Weight Quest';
+
+                        // Refresh data
+                        if (pageName === 'tabella' && userData.weights && userData.weights.length > 0) {
+                            updateWeightTable(userData.weights);
+                        } else if (pageName === 'grafico' && userData.weights && userData.weights.length > 0) {
+                            updateWeightChart(userData.weights);
+                        }
+                    });
+                });
+
+                // Update date display
+                var now = new Date();
+                var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                document.getElementById('topMonth').textContent = months[now.getMonth()];
+                document.getElementById('topDay').textContent = now.getDate();
+
+                log('Navigation initialized');
+                
+                log('=== INIT COMPLETE ===');
+                
+            } catch (error) {
+                log('ERROR INIT: ' + error.message);
+                alert('Errore inizializzazione: ' + error.message);
+            }
+        }
+
+        function checkToken() {
+            log('Controllo token...');
+
+            // From postMessage (quando lanciata da Apps)
+            window.addEventListener('message', function(event) {
+                if (event.data && event.data.type === 'GOOGLE_TOKEN' && event.data.token) {
+                    log('Token ricevuto da Apps via postMessage');
+                    googleToken = event.data.token;
+                    localStorage.setItem('googleToken', googleToken);
+                    if (document.getElementById('authSection') && !document.getElementById('authSection').classList.contains('hidden')) {
+                        showMain();
+                    }
+                }
+            });
+
+            // From URL
+            var hash = window.location.hash;
+            if (hash.indexOf('access_token') !== -1) {
+                var parts = hash.split('access_token=')[1];
+                googleToken = parts.split('&')[0];
+                localStorage.setItem('googleToken', googleToken);
+                window.history.replaceState({}, document.title, window.location.pathname);
+                log('Token ottenuto da URL');
+                showMain();
+                return;
+            }
+
+            // From storage
+            var saved = localStorage.getItem('googleToken');
+            if (saved) {
+                googleToken = saved;
+                log('Token recuperato da storage');
+                showMain();
+            } else {
+                log('Nessun token trovato - attendo postMessage da Apps');
+            }
+        }
+
+        function showMain() {
+            log('Mostro sezione principale');
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('mainSection').classList.remove('hidden');
+            
+            // Carica obiettivo più recente dal DB
+            // (reloadWeightData verrà chiamato automaticamente da loadObjectiveById)
+            loadActiveObjective()
+                .catch(function() {
+                    log('Nessun obiettivo → carico dati peso comunque...');
+                    loadData();
+                });
+        }
+
+        function loginGoogle() {
+            log('Avvio login Google...');
+            var redirect = window.location.origin + window.location.pathname;
+            var scope = 'https://www.googleapis.com/auth/fitness.body.read';
+            var url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+                'client_id=' + CONFIG.googleClientId +
+                '&redirect_uri=' + encodeURIComponent(redirect) +
+                '&response_type=token' +
+                '&scope=' + encodeURIComponent(scope);
+            window.location.href = url;
+        }
+
+        function showMilestoneModal() {
+            document.getElementById('milestoneModal').classList.remove('hidden');
+            document.getElementById('milestoneDate').value = '';
+            document.getElementById('milestoneWeight').value = '';
+        }
+
+        function hideMilestoneModal() {
+            document.getElementById('milestoneModal').classList.add('hidden');
+        }
+
+        function addMilestone() {
+            // Blocca modifica se obiettivo chiuso
+            if (userData.currentObjective && (userData.currentObjective.status === 'success' || userData.currentObjective.status === 'failed')) {
+                alert('Questo obiettivo è chiuso e non può essere modificato!');
+                hideMilestoneModal();
+                return;
+            }
+            
+            var date = document.getElementById('milestoneDate').value;
+            var weight = parseFloat(document.getElementById('milestoneWeight').value);
+            
+            if (!date || !weight || weight <= 0) {
+                alert('Inserisci data e peso validi!');
+                return;
+            }
+            
+            // Aggiungi milestone (solo date e weight)
+            tempMilestones.push({ 
+                date: date, 
+                weight: weight
+            });
+            
+            // Ordina per data
+            tempMilestones.sort(function(a, b) {
+                return new Date(a.date) - new Date(b.date);
+            });
+            
+            updateMilestoneList();
+            hideMilestoneModal();
+            log('Milestone aggiunta: ' + date + ' - ' + weight + ' kg');
+        }
+
+        function updateMilestoneList() {
+            var container = document.getElementById('milestoneList');
+            container.innerHTML = '';
+            
+            if (tempMilestones.length === 0) {
+                container.innerHTML = '<div style="font-size: 12px; color: #999; text-align: center; padding: 10px;">Nessuna milestone impostata</div>';
+                return;
+            }
+            
+            tempMilestones.forEach(function(m, index) {
+                var item = document.createElement('div');
+                item.style.padding = '10px';
+                item.style.margin = '5px 0';
+                item.style.background = 'white';
+                item.style.border = '1px solid #ddd';
+                item.style.borderRadius = '5px';
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.alignItems = 'center';
+                
+                var info = document.createElement('span');
+                info.textContent = '📍 ' + m.date + ' → ' + m.weight + ' kg';
+                info.style.fontWeight = 'bold';
+                
+                var btnRemove = document.createElement('button');
+                btnRemove.textContent = '🗑️';
+                btnRemove.style.padding = '5px 10px';
+                btnRemove.style.fontSize = '14px';
+                btnRemove.style.background = '#E74C3C';
+                btnRemove.onclick = function() {
+                    tempMilestones.splice(index, 1);
+                    updateMilestoneList();
+                };
+                
+                item.appendChild(info);
+                item.appendChild(btnRemove);
+                container.appendChild(item);
+            });
+        }
+
+        function saveMilestones() {
+            if (tempMilestones.length < 2) {
+                alert('Serve almeno una data di inizio e una di fine (minimo 2 milestone)!');
+                return;
+            }
+            
+            // Blocca modifica se obiettivo chiuso
+            if (userData.currentObjective && (userData.currentObjective.status === 'success' || userData.currentObjective.status === 'failed')) {
+                alert('Questo obiettivo è chiuso e non può essere modificato!');
+                return;
+            }
+            
+            doSaveMilestones();
+        }
+
+        function doSaveMilestones() {
+            var objectiveName = document.getElementById('objectiveName').value.trim();
+            if (!objectiveName) { alert('Inserisci un nome per l\'obiettivo!'); return; }
+
+            var dailyBonus = parseInt(document.getElementById('objectiveDailyBonus').value) || 10;
+            var dailyMalus = parseInt(document.getElementById('objectiveDailyMalus').value) || 5;
+            var finalBonus = parseInt(document.getElementById('objectiveFinalBonus').value) || 100;
+            var finalMalus = parseInt(document.getElementById('objectiveFinalMalus').value) || 50;
+
+            var firstMilestone = tempMilestones[0];
+            var lastMilestone  = tempMilestones[tempMilestones.length - 1];
+
+            var payload = {
+                objective_name: objectiveName,
+                start_date:     firstMilestone.date,
+                start_weight:   firstMilestone.weight,
+                end_date:       lastMilestone.date,
+                end_weight:     lastMilestone.weight,
+                daily_bonus:    dailyBonus,
+                daily_malus:    dailyMalus,
+                final_bonus:    finalBonus,
+                final_malus:    finalMalus,
+                milestones:     JSON.stringify(tempMilestones),
+                status:         'active'
+            };
+
+            var isNew   = !userData.currentObjective;
+            var url     = supabase.url + '/rest/v1/ps_objectives' + (isNew ? '' : '?id=eq.' + userData.currentObjective.id);
+            var method  = isNew ? 'POST' : 'PATCH';
+
+            log((isNew ? 'INSERT' : 'UPDATE') + ' obiettivo: ' + objectiveName);
+
+            fetch(url, {
+                method: method,
+                headers: {
+                    'apikey': supabase.key,
+                    'Authorization': 'Bearer ' + supabase.key,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r) {
+                if (!r.ok) return r.text().then(function(t) { throw new Error('HTTP ' + r.status + ': ' + t); });
+                return r.json();
+            })
+            .then(function(data) {
+                var saved = Array.isArray(data) ? data[0] : data;
+                userData.currentObjective = saved;
+                userData.milestones = tempMilestones.slice();
+                log('Obiettivo salvato id=' + (saved ? saved.id : '?'));
+                updateMultiplierDisplay();
+                updateObjectiveStatusBar(saved ? saved.status : 'active');
+                loadAllObjectives(); // Ricarica dropdown
+                
+                // Ricarica dati peso per aggiornare target e punteggi
+                reloadWeightData();
+                
+                alert('Obiettivo "' + objectiveName + '" ' + (isNew ? 'creato' : 'aggiornato') + '!');
+            })
+            .catch(function(e) { log('ERROR save: ' + e.message); alert('Errore: ' + e.message); });
+        }
+        // ============================================================
+        // GESTIONE OBIETTIVI
+        // ============================================================
+
+        var allObjectives = []; // Cache di tutti gli obiettivi
+
+        function loadAllObjectives() {
+            if (!googleToken) return Promise.reject('no token');
+
+            log('Caricamento tutti gli obiettivi...');
+
+            return fetch(supabase.url + '/rest/v1/ps_objectives?order=created_at.desc', {
+                headers: { 'apikey': supabase.key, 'Authorization': 'Bearer ' + supabase.key }
+            })
+            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function(data) {
+                allObjectives = data || [];
+                log('Obiettivi caricati: ' + allObjectives.length);
+                populateObjectiveDropdown();
+                return allObjectives;
+            })
+            .catch(function(e) { log('ERROR loadAllObjectives: ' + e.message); return Promise.reject(e); });
+        }
+
+        function populateObjectiveDropdown() {
+            var sel = document.getElementById('objectiveSelect');
+            if (!sel) {
+                log('WARN: objectiveSelect non trovato, skip populate');
+                return;
+            }
+            
+            sel.innerHTML = '';
+
+            // Prima voce: Nuovo obiettivo
+            var optNew = document.createElement('option');
+            optNew.value = '__new__';
+            optNew.textContent = '✨ Nuovo obiettivo...';
+            sel.appendChild(optNew);
+
+            allObjectives.forEach(function(obj) {
+                var opt = document.createElement('option');
+                opt.value = obj.id;
+                var statusIcon = obj.status === 'success' ? '🏆' : obj.status === 'failed' ? '💀' : '🎯';
+                opt.textContent = statusIcon + ' ' + obj.objective_name + ' (' + obj.start_date + ' → ' + obj.end_date + ')';
+                sel.appendChild(opt);
+            });
+
+            // Seleziona il più recente (primo dopo "Nuovo")
+            if (allObjectives.length > 0) {
+                sel.value = allObjectives[0].id;
+                loadObjectiveById(allObjectives[0].id);
+            } else {
+                loadNewObjectiveForm();
+            }
+        }
+
+        function onObjectiveSelectChange() {
+            var val = document.getElementById('objectiveSelect').value;
+            if (val === '__new__') {
+                loadNewObjectiveForm();
+            } else {
+                loadObjectiveById(parseInt(val));
+            }
+        }
+
+        function loadNewObjectiveForm() {
+            userData.currentObjective = null;
+            userData.milestones = [];
+            tempMilestones = [];
+            document.getElementById('objectiveName').value = '';
+            document.getElementById('objectiveDailyBonus').value = '10';
+            document.getElementById('objectiveDailyMalus').value = '5';
+            document.getElementById('objectiveFinalBonus').value = '100';
+            document.getElementById('objectiveFinalMalus').value = '50';
+            updateMilestoneList();
+            updateObjectiveStatusBar(null);
+            updateUILockState('active'); // Abilita tutto per nuovo obiettivo
+            updateMultiplierDisplay();
+        }
+
+        function loadObjectiveById(id) {
+            var obj = allObjectives.find(function(o) { return o.id === id; });
+            if (!obj) return;
+
+            var milestones = obj.milestones;
+            if (typeof milestones === 'string') milestones = JSON.parse(milestones);
+
+            userData.currentObjective = obj;
+            userData.milestones = milestones;
+            tempMilestones = milestones.slice();
+
+            document.getElementById('objectiveName').value = obj.objective_name || '';
+            document.getElementById('objectiveDailyBonus').value = obj.daily_bonus || 10;
+            document.getElementById('objectiveDailyMalus').value = obj.daily_malus || 5;
+            document.getElementById('objectiveFinalBonus').value = obj.final_bonus || 100;
+            document.getElementById('objectiveFinalMalus').value = obj.final_malus || 50;
+
+            updateMilestoneList();
+            updateObjectiveStatusBar(obj.status);
+            updateUILockState(obj.status);
+            updateMultiplierDisplay();
+
+            log('Obiettivo caricato: "' + obj.objective_name + '" stato=' + obj.status);
+            
+            // IMPORTANTE: Ricarica i dati peso per ricalcolare i punteggi con il nuovo obiettivo
+            reloadWeightData();
+        }
+
+        function updateObjectiveStatusBar(status) {
+            var bar = document.getElementById('objectiveStatusBar');
+            if (!status || status === 'active') {
+                bar.style.display = 'none';
+                return;
+            }
+            bar.style.display = 'block';
+            if (status === 'success') {
+                bar.style.background = '#d4edda';
+                bar.style.color = '#155724';
+                bar.style.border = '1px solid #c3e6cb';
+                bar.textContent = '🏆 OBIETTIVO CHIUSO CON SUCCESSO';
+            } else if (status === 'failed') {
+                bar.style.background = '#f8d7da';
+                bar.style.color = '#721c24';
+                bar.style.border = '1px solid #f5c6cb';
+                bar.textContent = '💀 OBIETTIVO FALLITO';
+            }
+        }
+
+        function updateUILockState(status) {
+            var isClosed = (status === 'success' || status === 'failed');
+            
+            // Disabilita campi di input
+            document.getElementById('objectiveName').disabled = isClosed;
+            document.getElementById('objectiveDailyBonus').disabled = isClosed;
+            document.getElementById('objectiveDailyMalus').disabled = isClosed;
+            document.getElementById('objectiveFinalBonus').disabled = isClosed;
+            document.getElementById('objectiveFinalMalus').disabled = isClosed;
+            
+            // Disabilita bottoni di modifica
+            document.getElementById('btnAddMilestone').disabled = isClosed;
+            document.getElementById('btnSaveObjective').disabled = isClosed;
+            document.getElementById('btnCloseSuccess').disabled = isClosed;
+            document.getElementById('btnCloseFailed').disabled = isClosed;
+            
+            // Cambia stile visivo
+            var opacity = isClosed ? '0.5' : '1';
+            var cursor = isClosed ? 'not-allowed' : 'pointer';
+            
+            document.getElementById('btnAddMilestone').style.opacity = opacity;
+            document.getElementById('btnSaveObjective').style.opacity = opacity;
+            document.getElementById('btnCloseSuccess').style.opacity = opacity;
+            document.getElementById('btnCloseFailed').style.opacity = opacity;
+            
+            document.getElementById('btnAddMilestone').style.cursor = cursor;
+            document.getElementById('btnSaveObjective').style.cursor = cursor;
+            document.getElementById('btnCloseSuccess').style.cursor = cursor;
+            document.getElementById('btnCloseFailed').style.cursor = cursor;
+        }
+
+        function loadActiveObjective() {
+            return loadAllObjectives().then(function() {
+                updateDashboardStats();
+                // loadAllObjectives già seleziona il più recente
+            });
+        }
+
+        function closeObjective(newStatus) {
+            if (!userData.currentObjective) {
+                alert('Nessun obiettivo selezionato!');
+                return;
+            }
+            
+            // Blocca se già chiuso
+            if (userData.currentObjective.status === 'success' || userData.currentObjective.status === 'failed') {
+                alert('Questo obiettivo è già chiuso!');
+                return;
+            }
+            
+            // Verifica data per chiusura con successo
+            if (newStatus === 'success') {
+                var today = new Date();
+                today.setHours(0, 0, 0, 0); // Azzera ore per confronto solo date
+                
+                var endDate = new Date(userData.currentObjective.end_date);
+                endDate.setHours(0, 0, 0, 0);
+                
+                if (today < endDate) {
+                    alert('Non puoi chiudere con SUCCESSO prima della data di fine obiettivo!\n\n' +
+                          'Data fine: ' + userData.currentObjective.end_date + '\n' +
+                          'Oggi: ' + today.toISOString().split('T')[0] + '\n\n' +
+                          'Puoi solo chiudere come FALLITO prima della fine.');
+                    return;
+                }
+            }
+            
+            var label = newStatus === 'success' ? 'SUCCESSO' : 'FALLITO';
+            
+            // Punteggio giornaliero accumulato fino ad ora
+            var dailyScore = parseInt(document.getElementById('scoreValue').textContent) || 0;
+            
+            // Aggiungi bonus/malus finale in base allo stato di chiusura
+            var finalBonus = userData.currentObjective.final_bonus || 100;
+            var finalMalus = userData.currentObjective.final_malus || 50;
+            
+            var finalScore = dailyScore;
+            if (newStatus === 'success') {
+                finalScore += finalBonus;
+            } else if (newStatus === 'failed') {
+                finalScore -= finalMalus;
+            }
+            
+            var confirmMsg = 'Vuoi chiudere questo obiettivo come ' + label + '?\n\n' +
+                           'Punti giornalieri: ' + dailyScore + '\n' +
+                           'Punti chiusura: ' + (newStatus === 'success' ? '+' + finalBonus : '-' + finalMalus) + '\n' +
+                           'TOTALE FINALE: ' + finalScore;
+            
+            if (!confirm(confirmMsg)) return;
+
+            fetch(supabase.url + '/rest/v1/ps_objectives?id=eq.' + userData.currentObjective.id, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': supabase.key,
+                    'Authorization': 'Bearer ' + supabase.key,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({ status: newStatus, total_score: finalScore })
+            })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                log('Obiettivo chiuso come: ' + newStatus + ' con punteggio: ' + finalScore);
+                userData.currentObjective.status = newStatus;
+                userData.currentObjective.total_score = finalScore;
+                
+                // Aggiorna UI per mostrare il punteggio finale
+                document.getElementById('scoreValue').textContent = finalScore;
+                
+                updateObjectiveStatusBar(newStatus);
+                updateUILockState(newStatus); // Blocca UI dopo chiusura
+                loadAllObjectives(); // Ricarica dropdown
+                
+                alert('Obiettivo chiuso!\nPunteggio finale salvato: ' + finalScore);
+            })
+            .catch(function(e) { log('ERROR closeObjective: ' + e.message); alert('Errore: ' + e.message); });
+        }
+
+        function deleteObjective() {
+            if (!userData.currentObjective) {
+                alert('Nessun obiettivo selezionato!');
+                return;
+            }
+            if (!confirm('Sei sicuro di voler cancellare "' + userData.currentObjective.objective_name + '"?\nQuesta azione è irreversibile!')) return;
+
+            fetch(supabase.url + '/rest/v1/ps_objectives?id=eq.' + userData.currentObjective.id, {
+                method: 'DELETE',
+                headers: { 'apikey': supabase.key, 'Authorization': 'Bearer ' + supabase.key }
+            })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                log('Obiettivo cancellato: ' + userData.currentObjective.id);
+                userData.currentObjective = null;
+                userData.milestones = [];
+                tempMilestones = [];
+                loadAllObjectives(); // Ricarica dropdown
+            })
+            .catch(function(e) { log('ERROR deleteObjective: ' + e.message); alert('Errore: ' + e.message); });
+        }
+        
+        function updateMultiplierDisplay() {
+            if (userData.currentObjective) {
+                var dailyBonus = userData.currentObjective.daily_bonus || 10;
+                var dailyMalus = userData.currentObjective.daily_malus || 5;
+                document.getElementById('bonusMultiplier').textContent = '+' + dailyBonus;
+                document.getElementById('penaltyMultiplier').textContent = '-' + dailyMalus;
+            }
+        }
+
+        function getInterpolatedTarget(date) {
+            if (!userData.milestones || userData.milestones.length < 2) {
+                return null;
+            }
+            
+            var targetDate = new Date(date);
+            var milestones = userData.milestones;
+            
+            // Se la data è prima della prima milestone o dopo l'ultima, usa il valore estremo
+            var firstDate = new Date(milestones[0].date);
+            var lastDate = new Date(milestones[milestones.length - 1].date);
+            
+            if (targetDate < firstDate) {
+                return milestones[0].weight;
+            }
+            if (targetDate > lastDate) {
+                return milestones[milestones.length - 1].weight;
+            }
+            
+            // Trova le due milestone tra cui interpolare
+            for (var i = 0; i < milestones.length - 1; i++) {
+                var m1 = milestones[i];
+                var m2 = milestones[i + 1];
+                var d1 = new Date(m1.date);
+                var d2 = new Date(m2.date);
+                
+                if (targetDate >= d1 && targetDate <= d2) {
+                    // Interpolazione lineare
+                    var totalDays = (d2 - d1) / (1000 * 60 * 60 * 24);
+                    var elapsedDays = (targetDate - d1) / (1000 * 60 * 60 * 24);
+                    var progress = elapsedDays / totalDays;
+                    var interpolated = m1.weight + (m2.weight - m1.weight) * progress;
+                    return parseFloat(interpolated.toFixed(2));
+                }
+            }
+            
+            return null;
+        }
+
+        function syncFit() {
+            if (!googleToken) {
+                alert('Devi prima effettuare il login!');
+                return;
+            }
+            if (!userData.milestones || userData.milestones.length < 2) {
+                alert('Imposta prima gli obiettivi progressivi (minimo 2 tappe)!');
+                return;
+            }
+            
+            log('Inizio sincronizzazione Google Fit...');
+            log('Recupero TUTTE le singole pesate degli ultimi 3 mesi');
+            
+            var endTime = Date.now() * 1000000; // Converti in nanosecondi
+            var startTime = (Date.now() - (90 * 24 * 60 * 60 * 1000)) * 1000000; // Ultimi 90 giorni in nanosecondi
+
+            // Usa l'endpoint datasources per ottenere TUTTE le singole pesate
+            fetch('https://www.googleapis.com/fitness/v1/users/me/dataSources', {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + googleToken
+                }
+            })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Errore nel recupero datasources');
+                return response.json();
+            })
+            .then(function(sources) {
+                log('DataSources ricevute: ' + sources.dataSource.length);
+                
+                // Trova tutte le fonti di peso
+                var weightSources = sources.dataSource.filter(function(ds) {
+                    return ds.dataType && ds.dataType.name === 'com.google.weight';
+                });
+                
+                log('Fonti di peso trovate: ' + weightSources.length);
+                
+                // Recupera dati da TUTTE le fonti
+                var promises = weightSources.map(function(source) {
+                    var datasetId = startTime + '-' + endTime;
+                    var url = 'https://www.googleapis.com/fitness/v1/users/me/dataSources/' + 
+                              source.dataStreamId + '/datasets/' + datasetId;
+                    
+                    log('Recupero dati da: ' + source.dataStreamName);
+                    
+                    return fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + googleToken
+                        }
+                    }).then(function(r) {
+                        if (!r.ok) {
+                            log('Errore da fonte: ' + source.dataStreamName);
+                            return { point: [] };
+                        }
+                        return r.json();
+                    });
+                });
+                
+                return Promise.all(promises);
+            })
+            .then(function(allDatasets) {
+                log('Dataset ricevuti: ' + allDatasets.length);
+                
+                // Combina tutti i punti da tutte le fonti
+                var allPoints = [];
+                allDatasets.forEach(function(dataset) {
+                    if (dataset.point && dataset.point.length > 0) {
+                        allPoints = allPoints.concat(dataset.point);
+                    }
+                });
+                
+                log('Punti dati totali trovati: ' + allPoints.length);
+                
+                return processWeights({ point: allPoints });
+            })
+            .then(function() {
+                log('Sync completata!');
+                alert('Sincronizzazione completata!');
+                loadData();
+            })
+            .catch(function(error) {
+                log('ERROR SYNC: ' + error.message);
+                alert('Errore sincronizzazione: ' + error.message);
+            });
+        }
+
+        function processWeights(data) {
+            if (!data.point || data.point.length === 0) {
+                log('Nessun dato peso trovato');
+                alert('Nessuna pesata trovata negli ultimi 3 mesi in Google Fit');
+                return Promise.resolve();
+            }
+
+            var weights = [];
+            
+            // Estrai tutte le singole pesate
+            data.point.forEach(function(point) {
+                if (point.value && point.value[0].fpVal) {
+                    var weight = point.value[0].fpVal;
+                    var timestamp = parseInt(point.startTimeNanos) / 1000000; // Converti in millisecondi
+                    var date = new Date(timestamp);
+                    
+                    weights.push({
+                        date: date.toISOString().split('T')[0],
+                        time: date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                        timestamp: Math.floor(timestamp),
+                        weight: parseFloat(weight.toFixed(2))
+                    });
+                }
+            });
+
+            // Rimuovi duplicati basati su timestamp
+            var uniqueWeights = [];
+            var seenTimestamps = {};
+            weights.forEach(function(w) {
+                if (!seenTimestamps[w.timestamp]) {
+                    seenTimestamps[w.timestamp] = true;
+                    uniqueWeights.push(w);
+                }
+            });
+
+            // Ordina per timestamp crescente
+            uniqueWeights.sort(function(a, b) {
+                return a.timestamp - b.timestamp;
+            });
+
+            log('Trovate ' + uniqueWeights.length + ' pesate uniche');
+
+            // Inserisci usando singole chiamate HTTP dirette
+            var url = supabase.url + '/rest/v1/ps_weight_tracking';
+            var headers = {
+                'apikey': supabase.key,
+                'Authorization': 'Bearer ' + supabase.key,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal,resolution=merge-duplicates'
+            };
+
+            // Prepara tutti i record
+            var records = uniqueWeights.map(function(entry) {
+                var interpolatedTarget = getInterpolatedTarget(entry.date);
+                return {
+                    date: entry.date,
+                    time: entry.time,
+                    timestamp: entry.timestamp,
+                    weight: entry.weight,
+                    target_weight: interpolatedTarget
+                };
+            });
+
+            // Inserisci tutto in una volta con upsert
+            log('Salvataggio ' + records.length + ' pesate...');
+            
+            return fetch(url + '?on_conflict=timestamp', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(records)
+            })
+            .then(function(response) {
+                if (!response.ok) {
+                    return response.text().then(function(text) {
+                        log('Errore inserimento: ' + text);
+                        throw new Error('Errore salvataggio: ' + response.status);
+                    });
+                }
+                log('Tutte le pesate salvate! Status: ' + response.status);
+                // Non parsare JSON se la risposta è vuota (return=minimal)
+                return null;
+            })
+            .catch(function(error) {
+                log('Errore: ' + error.message);
+                throw error;
+            });
+        }
+
+        function loadData() {
+            if (isLoadingData) {
+                log('SKIP loadData: caricamento già in corso');
+                return;
+            }
+            
+            isLoadingData = true;
+            log('Caricamento dati da Supabase...');
+            
+            supabase
+                .from('ps_weight_tracking')
+                .select('*')
+                .order('date', { ascending: false })
+                .limit(100)
+                .then(function(response) {
+                    if (response.error) {
+                        log('ERROR: ' + response.error.message);
+                        isLoadingData = false;
+                        return;
+                    }
+                    log('Dati caricati: ' + (response.data ? response.data.length : 0) + ' record');
+                    if (response.data && response.data.length > 0) {
+                        // Salva dati in userData per uso successivo
+                        userData.weights = response.data;
+                        
+                        var latest = response.data[0];
+                        document.getElementById('weightValue').textContent = latest.weight.toFixed(1);
+                        
+                        // Calcola punteggi totali e medi
+                        calculateTotalScores(response.data);
+                        
+                        // Aggiorna visualizzazione moltiplicatori
+                        updateMultiplierDisplay();
+                        
+                        // Aggiorna tabella e grafico
+                        updateWeightTable(response.data);
+                        updateWeightChart(response.data);
+                    }
+                    isLoadingData = false;
+                })
+                .catch(function(error) {
+                    log('ERROR catch: ' + error.message);
+                    isLoadingData = false;
+                });
+        }
+
+        function reloadWeightData() {
+            if (!userData.currentObjective || !userData.milestones || userData.milestones.length < 2) {
+                log('Nessun obiettivo valido per ricaricare i dati');
+                return;
+            }
+            
+            log('Aggiornamento target_weight per nuovo obiettivo...');
+            
+            // Prima rileggi tutti i record esistenti per aggiornarli
+            supabase
+                .from('ps_weight_tracking')
+                .select('*')
+                .order('date', { ascending: false })
+                .limit(100)
+                .then(function(response) {
+                    if (response.error) {
+                        log('ERROR reload select: ' + response.error.message);
+                        return;
+                    }
+                    
+                    if (!response.data || response.data.length === 0) {
+                        log('Nessun dato peso da aggiornare');
+                        return;
+                    }
+                    
+                    log('Aggiornamento target su ' + response.data.length + ' record...');
+                    
+                    // Aggiorna i target_weight in batch - IMPORTANTE: serve TUTTA la riga per l'upsert
+                    var updates = response.data.map(function(row) {
+                        var newTarget = getInterpolatedTarget(row.date);
+                        return {
+                            timestamp: row.timestamp,
+                            date: row.date,
+                            time: row.time,
+                            weight: row.weight,
+                            target_weight: newTarget
+                        };
+                    });
+                    
+                    // Esegue UPDATE per ogni record (Supabase upsert con timestamp come chiave)
+                    var url = supabase.url + '/rest/v1/ps_weight_tracking?on_conflict=timestamp';
+                    
+                    return fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': supabase.key,
+                            'Authorization': 'Bearer ' + supabase.key,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'resolution=merge-duplicates,return=minimal'
+                        },
+                        body: JSON.stringify(updates)
+                    });
+                })
+                .then(function(updateResponse) {
+                    if (!updateResponse || !updateResponse.ok) {
+                        log('WARNING: Aggiornamento target parziale o fallito');
+                    } else {
+                        log('Target aggiornati nel DB');
+                    }
+                    
+                    // Ora ricarica i dati aggiornati
+                    return supabase
+                        .from('ps_weight_tracking')
+                        .select('*')
+                        .order('date', { ascending: false })
+                        .limit(100);
+                })
+                .then(function(response) {
+                    if (response.error) {
+                        log('ERROR reload final: ' + response.error.message);
+                        return;
+                    }
+                    
+                    if (response.data && response.data.length > 0) {
+                        var latest = response.data[0];
+                        document.getElementById('weightValue').textContent = latest.weight.toFixed(1);
+                        
+                        // Ricalcola punteggi con il nuovo obiettivo
+                        calculateTotalScores(response.data);
+                        updateMultiplierDisplay();
+                        updateWeightTable(response.data);
+                        updateWeightChart(response.data);
+                        
+                        log('✓ Dati ricaricati, target e punteggi aggiornati');
+                    }
+                })
+                .catch(function(error) {
+                    log('ERROR reload: ' + error.message);
+                });
+        }
+
+        function calculateTotalScores(data) {
+            if (!data || data.length === 0 || !userData.milestones || userData.milestones.length < 2 || !userData.currentObjective) {
+                document.getElementById('scoreValue').textContent = '0';
+                document.getElementById('avgScoreValue').textContent = '0.0';
+                return;
+            }
+            
+            var obj = userData.currentObjective;
+            
+            // Se l'obiettivo è chiuso (success o failed), mostra il punteggio salvato nel DB
+            if (obj.status === 'success' || obj.status === 'failed') {
+                var savedScore = obj.total_score || 0;
+                document.getElementById('scoreValue').textContent = savedScore;
+                
+                // Calcola comunque la media giornaliera per info
+                var daysCount = Math.ceil((new Date(obj.end_date) - new Date(obj.start_date)) / (1000 * 60 * 60 * 24)) + 1;
+                var avgScore = daysCount > 0 ? savedScore / daysCount : 0;
+                document.getElementById('avgScoreValue').textContent = avgScore.toFixed(1);
+                
+                log('Obiettivo chiuso: mostro punteggio salvato = ' + savedScore);
+                return;
+            }
+            
+            // Se l'obiettivo è attivo, calcola i punti in tempo reale
+            var dailyBonus = obj.daily_bonus || 10;
+            var dailyMalus = obj.daily_malus || 5;
+            var finalBonus = obj.final_bonus || 100;
+            var finalMalus = obj.final_malus || 50;
+            
+            var startDateStr = obj.start_date;
+            var endDateStr   = obj.end_date;
+            var startDate    = new Date(startDateStr);
+            var endDate      = new Date(endDateStr);
+            
+            // Aggrega peso MIN per ogni giorno con pesata
+            var dayMin = {};
+            data.forEach(function(row) {
+                var d = row.date;
+                if (dayMin[d] === undefined || row.weight < dayMin[d]) {
+                    dayMin[d] = row.weight;
+                }
+            });
+            
+            var totalScore = 0;
+            var daysCount  = 0;
+            var cursor     = new Date(startDate);
+            
+            while (cursor <= endDate) {
+                var dateStr = cursor.toISOString().split('T')[0];
+                
+                if (dayMin[dateStr] !== undefined) {
+                    var weight    = dayMin[dateStr];
+                    var target    = getInterpolatedTarget(dateStr);
+                    var isLastDay = (dateStr === endDateStr);
+                    
+                    if (target !== null) {
+                        if (weight <= target) {
+                            // Sotto target: somma BONUS (fisso, non moltiplicato)
+                            totalScore += dailyBonus;
+                            if (isLastDay) totalScore += finalBonus;
+                        } else {
+                            // Sopra target: sottrai MALUS (fisso, non moltiplicato)
+                            totalScore -= dailyMalus;
+                            if (isLastDay) totalScore -= finalMalus;
+                        }
+                        daysCount++;
+                    }
+                }
+                
+                cursor.setDate(cursor.getDate() + 1);
+            }
+            
+            var avgScore = daysCount > 0 ? totalScore / daysCount : 0;
+            
+            document.getElementById('scoreValue').textContent = totalScore;
+            document.getElementById('avgScoreValue').textContent = avgScore.toFixed(1);
+        }
+
+        var weightChart = null;
+
+        function fillMissingDays(dayGroups) {
+            // Ottieni tutte le date con pesate
+            var dates = Object.keys(dayGroups).sort();
+            
+            if (dates.length < 2) {
+                return dayGroups; // Non abbastanza dati per interpolare
+            }
+            
+            // Determina l'intervallo delle milestone
+            var milestoneStartDate = null;
+            var milestoneEndDate = null;
+            
+            if (userData.milestones && userData.milestones.length >= 2) {
+                milestoneStartDate = new Date(userData.milestones[0].date);
+                milestoneEndDate = new Date(userData.milestones[userData.milestones.length - 1].date);
+            } else {
+                // Senza milestone, non interpolare
+                return dayGroups;
+            }
+            
+            var filledGroups = Object.assign({}, dayGroups);
+            
+            // Itera solo sui giorni dentro l'intervallo delle milestone
+            var currentDate = new Date(milestoneStartDate);
+            while (currentDate <= milestoneEndDate) {
+                var dateStr = currentDate.toISOString().split('T')[0];
+                
+                // Se non ci sono pesate per questo giorno, interpola
+                if (!filledGroups[dateStr]) {
+                    // Trova il giorno precedente e successivo con pesate
+                    var prevDate = null;
+                    var nextDate = null;
+                    
+                    // Cerca il giorno precedente
+                    for (var i = dates.length - 1; i >= 0; i--) {
+                        if (dates[i] < dateStr) {
+                            prevDate = dates[i];
+                            break;
+                        }
+                    }
+                    
+                    // Cerca il giorno successivo
+                    for (var i = 0; i < dates.length; i++) {
+                        if (dates[i] > dateStr) {
+                            nextDate = dates[i];
+                            break;
+                        }
+                    }
+                    
+                    // Interpola se abbiamo entrambi i giorni
+                    if (prevDate && nextDate) {
+                        var prevData = dayGroups[prevDate];
+                        var nextData = dayGroups[nextDate];
+                        
+                        // Trova MIN e MAX dei giorni adiacenti
+                        var prevMin = prevData[0].weight;
+                        var prevMax = prevData[0].weight;
+                        prevData.forEach(function(entry) {
+                            if (entry.weight < prevMin) prevMin = entry.weight;
+                            if (entry.weight > prevMax) prevMax = entry.weight;
+                        });
+                        
+                        var nextMin = nextData[0].weight;
+                        var nextMax = nextData[0].weight;
+                        nextData.forEach(function(entry) {
+                            if (entry.weight < nextMin) nextMin = entry.weight;
+                            if (entry.weight > nextMax) nextMax = entry.weight;
+                        });
+                        
+                        // Calcola interpolazione lineare
+                        var d1 = new Date(prevDate);
+                        var d2 = new Date(nextDate);
+                        var dCurrent = new Date(dateStr);
+                        
+                        var totalDays = (d2 - d1) / (1000 * 60 * 60 * 24);
+                        var elapsedDays = (dCurrent - d1) / (1000 * 60 * 60 * 24);
+                        var progress = elapsedDays / totalDays;
+                        
+                        var interpolatedMin = prevMin + (nextMin - prevMin) * progress;
+                        var interpolatedMax = prevMax + (nextMax - prevMax) * progress;
+                        var interpolatedTarget = getInterpolatedTarget(dateStr);
+                        
+                        // Crea entry stimata
+                        filledGroups[dateStr] = [{
+                            date: dateStr,
+                            time: '--',
+                            weight: interpolatedMin,
+                            target_weight: interpolatedTarget,
+                            estimated: true,
+                            estimatedMin: parseFloat(interpolatedMin.toFixed(2)),
+                            estimatedMax: parseFloat(interpolatedMax.toFixed(2))
+                        }];
+                    }
+                }
+                
+                // Prossimo giorno
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            
+            return filledGroups;
+        }
+
+        function updateWeightChart(data) {
+            try {
+                log('updateWeightChart chiamata con ' + (data ? data.length : 0) + ' record');
+                
+                var canvas = document.getElementById('weightChart');
+                if (!canvas) {
+                    log('ERROR: Canvas #weightChart non trovato!');
+                    return;
+                }
+                
+                var ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    log('ERROR: Impossibile ottenere context 2d dal canvas');
+                    return;
+                }
+                
+                log('Canvas trovato: ' + canvas.width + 'x' + canvas.height);
+                
+                // TEST: Se non ci sono dati, disegna un grafico di test
+                if (!data || data.length === 0) {
+                    log('NESSUN DATO - Disegno grafico di TEST');
+                    if (weightChart) weightChart.destroy();
+                    weightChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['Giorno 1', 'Giorno 2', 'Giorno 3'],
+                            datasets: [{
+                                label: 'Test',
+                                data: [80, 79, 78],
+                                borderColor: '#E74C3C',
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    log('Grafico di TEST disegnato');
+                    return;
+                }
+                
+                // Controllo milestone
+                if (!userData.milestones || userData.milestones.length < 2) {
+                    log('WARN: Nessuna milestone, grafico non può essere disegnato');
+                    // Non bloccare, prova comunque a disegnare
+                }
+                
+                // Determina l'intervallo delle milestone
+                var milestoneStartDate = null;
+                var milestoneEndDate = null;
+                
+                if (userData.milestones && userData.milestones.length >= 2) {
+                    milestoneStartDate = new Date(userData.milestones[0].date);
+                    milestoneEndDate = new Date(userData.milestones[userData.milestones.length - 1].date);
+                    log('Milestone range: ' + userData.milestones[0].date + ' → ' + userData.milestones[userData.milestones.length - 1].date);
+                }
+            } catch (error) {
+                log('ERROR updateWeightChart: ' + error.message);
+                console.error('updateWeightChart error:', error);
+                return;
+            }
+            
+            var labels = [];
+            var targetData = [];
+            var minWeightData = [];
+            var maxWeightData = [];
+            var minWeightEstimatedData = [];
+            var maxWeightEstimatedData = [];
+            
+            // Aggrega i dati per giorno
+            var dayGroups = {};
+            if (data && data.length > 0) {
+                data.forEach(function(row) {
+                    var date = row.date;
+                    if (!dayGroups[date]) {
+                        dayGroups[date] = [];
+                    }
+                    dayGroups[date].push(row);
+                });
+            }
+            
+            // Trova la prima e ultima data con dati
+            var allDataDates = Object.keys(dayGroups).sort();
+            if (allDataDates.length === 0 && milestoneStartDate && milestoneEndDate) {
+                // Se non ci sono dati ma ci sono milestone, usa l'intervallo milestone
+                allDataDates = [
+                    milestoneStartDate.toISOString().split('T')[0],
+                    milestoneEndDate.toISOString().split('T')[0]
+                ];
+            }
+            
+            if (allDataDates.length > 0) {
+                var firstDataDate = new Date(allDataDates[0]);
+                var lastDataDate = new Date(allDataDates[allDataDates.length - 1]);
+                
+                // Espandi il range per includere le milestone se necessario
+                if (milestoneStartDate && firstDataDate > milestoneStartDate) {
+                    firstDataDate = milestoneStartDate;
+                }
+                if (milestoneEndDate && lastDataDate < milestoneEndDate) {
+                    lastDataDate = milestoneEndDate;
+                }
+                
+                // Genera TUTTE le date dal primo all'ultimo giorno
+                var currentDate = new Date(firstDataDate);
+                var allCalendarDates = [];
+                
+                while (currentDate <= lastDataDate) {
+                    allCalendarDates.push(currentDate.toISOString().split('T')[0]);
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+                
+                // Per i giorni DENTRO l'intervallo milestone, calcola le interpolazioni
+                var filledDayGroups = {};
+                if (milestoneStartDate && milestoneEndDate) {
+                    // Copia i dati reali
+                    for (var date in dayGroups) {
+                        filledDayGroups[date] = dayGroups[date];
+                    }
+                    // Aggiungi stime solo DENTRO l'intervallo milestone
+                    var tempGroups = {};
+                    for (var date in dayGroups) {
+                        tempGroups[date] = dayGroups[date];
+                    }
+                    var filled = fillMissingDays(tempGroups);
+                    for (var date in filled) {
+                        if (!filledDayGroups[date]) {
+                            filledDayGroups[date] = filled[date];
+                        }
+                    }
+                } else {
+                    filledDayGroups = dayGroups;
+                }
+                
+                // Processa TUTTE le date del calendario
+                allCalendarDates.forEach(function(date) {
+                    // Converti data in formato MM-GG
+                    var parts = date.split('-');
+                    var month = parts[1];
+                    var day = parts[2];
+                    var formattedLabel = month + '-' + day;
+                    
+                    labels.push(formattedLabel);
+                    
+                    var currentDate = new Date(date);
+                    var isInMilestoneRange = milestoneStartDate && milestoneEndDate && 
+                                            currentDate >= milestoneStartDate && 
+                                            currentDate <= milestoneEndDate;
+                    
+                    // Target: solo dentro l'intervallo milestone
+                    if (isInMilestoneRange) {
+                        var interpolatedTarget = getInterpolatedTarget(date);
+                        targetData.push(interpolatedTarget);
+                    } else {
+                        targetData.push(null);
+                    }
+                    
+                    // Controlla se abbiamo dati per questa data
+                    if (dayGroups[date]) {
+                        // Dati REALI (verde/rosso) - sempre mostrati
+                        var dayData = dayGroups[date];
+                        var minEntry = dayData[0];
+                        var maxEntry = dayData[0];
+                        
+                        dayData.forEach(function(entry) {
+                            if (entry.weight < minEntry.weight) {
+                                minEntry = entry;
+                            }
+                            if (entry.weight > maxEntry.weight) {
+                                maxEntry = entry;
+                            }
+                        });
+                        
+                        minWeightData.push(minEntry.weight);
+                        maxWeightData.push(maxEntry.weight);
+                        minWeightEstimatedData.push(null);
+                        maxWeightEstimatedData.push(null);
+                    } else if (isInMilestoneRange && filledDayGroups[date] && filledDayGroups[date][0].estimated) {
+                        // Dati STIMATI (gialli) - solo dentro l'intervallo milestone
+                        var estimatedData = filledDayGroups[date][0];
+                        minWeightData.push(null);
+                        maxWeightData.push(null);
+                        minWeightEstimatedData.push(estimatedData.estimatedMin);
+                        maxWeightEstimatedData.push(estimatedData.estimatedMax);
+                    } else {
+                        // Nessun dato
+                        minWeightData.push(null);
+                        maxWeightData.push(null);
+                        minWeightEstimatedData.push(null);
+                        maxWeightEstimatedData.push(null);
+                    }
+                });
+            }
+            
+            // Calcola il range dinamico dell'asse Y
+            // Include TUTTI i valori: target, pesi reali e stimati
+            var allValues = [];
+            
+            // Raccogli TUTTI i valori incluso il target
+            targetData.forEach(function(v) { if (v !== null) allValues.push(v); });
+            minWeightData.forEach(function(v) { if (v !== null) allValues.push(v); });
+            maxWeightData.forEach(function(v) { if (v !== null) allValues.push(v); });
+            minWeightEstimatedData.forEach(function(v) { if (v !== null) allValues.push(v); });
+            maxWeightEstimatedData.forEach(function(v) { if (v !== null) allValues.push(v); });
+            
+            var yMin = null;
+            var yMax = null;
+            
+            if (allValues.length > 0) {
+                var minVal = Math.min.apply(null, allValues);
+                var maxVal = Math.max.apply(null, allValues);
+                
+                // Padding fisso di 2 kg sopra e sotto
+                yMin = minVal - 2;
+                yMax = maxVal + 2;
+            }
+            
+            // Calcola larghezza dinamica in base al numero di giorni
+            // ~50 pixel per giorno per avere ottima leggibilità
+            var chartWidth = Math.max(labels.length * 50, 1000);
+            var chartHeight = 400;
+            
+            // Se il grafico esiste già, distruggilo PRIMA di cambiare dimensioni
+            if (weightChart) {
+                log('Distruzione grafico esistente prima di ricrearlo');
+                try {
+                    weightChart.destroy();
+                    weightChart = null;
+                    log('Grafico distrutto con successo');
+                } catch (e) {
+                    log('WARN: Errore durante destroy: ' + e.message);
+                    weightChart = null; // Forza null anche in caso di errore
+                }
+            }
+            
+            log('Impostazione dimensioni container: ' + chartWidth + 'x' + chartHeight);
+            
+            var chartContainer = document.getElementById('chartContainer');
+            
+            // Imposta solo le dimensioni del container
+            if (chartContainer) {
+                chartContainer.style.width = chartWidth + 'px';
+                chartContainer.style.height = chartHeight + 'px';
+            }
+            
+            // SEMPRE ricrea il grafico da zero (evita problemi di resize)
+            // Plugin personalizzato per disegnare punti divisi a metà
+            var customPointPlugin = {
+                id: 'customPoints',
+                afterDatasetsDraw: function(chart) {
+                    var ctx = chart.ctx;
+                    
+                    chart.data.datasets.forEach(function(dataset, datasetIndex) {
+                        var meta = chart.getDatasetMeta(datasetIndex);
+                        
+                        if (!meta.hidden && dataset.label.indexOf('(reale)') !== -1) {
+                            meta.data.forEach(function(point, index) {
+                                if (point && point.x !== undefined && point.y !== undefined) {
+                                    var minValue = minWeightData[index];
+                                    var maxValue = maxWeightData[index];
+                                    
+                                    if (minValue !== null && maxValue !== null) {
+                                        var radius = 6;
+                                        var x = point.x;
+                                        
+                                        // Trova le posizioni Y per MIN e MAX
+                                        var yMin = chart.scales.y.getPixelForValue(minValue);
+                                        var yMax = chart.scales.y.getPixelForValue(maxValue);
+                                        
+                                        ctx.save();
+                                        
+                                        if (minValue === maxValue) {
+                                            // Stesso peso: pallino metà rosso/metà verde
+                                            var y = point.y;
+                                            
+                                            // Metà superiore rossa
+                                            ctx.beginPath();
+                                            ctx.arc(x, y, radius, Math.PI, 0, false);
+                                            ctx.closePath();
+                                            ctx.fillStyle = '#E74C3C';
+                                            ctx.fill();
+                                            
+                                            // Metà inferiore verde
+                                            ctx.beginPath();
+                                            ctx.arc(x, y, radius, 0, Math.PI, false);
+                                            ctx.closePath();
+                                            ctx.fillStyle = '#00B894';
+                                            ctx.fill();
+                                            
+                                            // Bordo
+                                            ctx.beginPath();
+                                            ctx.arc(x, y, radius, 0, Math.PI * 2);
+                                            ctx.strokeStyle = '#333';
+                                            ctx.lineWidth = 1;
+                                            ctx.stroke();
+                                        } else {
+                                            // Pesi diversi: semicerchi separati
+                                            
+                                            // Mezzo pallino ROSSO (alto) per MAX
+                                            ctx.beginPath();
+                                            ctx.arc(x, yMax, radius, Math.PI, 0, false);
+                                            ctx.closePath();
+                                            ctx.fillStyle = '#E74C3C';
+                                            ctx.fill();
+                                            ctx.beginPath();
+                                            ctx.arc(x, yMax, radius, Math.PI, 0, false);
+                                            ctx.strokeStyle = '#333';
+                                            ctx.lineWidth = 1;
+                                            ctx.stroke();
+                                            
+                                            // Mezzo pallino VERDE (basso) per MIN
+                                            ctx.beginPath();
+                                            ctx.arc(x, yMin, radius, 0, Math.PI, false);
+                                            ctx.closePath();
+                                            ctx.fillStyle = '#00B894';
+                                            ctx.fill();
+                                            ctx.beginPath();
+                                            ctx.arc(x, yMin, radius, 0, Math.PI, false);
+                                            ctx.strokeStyle = '#333';
+                                            ctx.lineWidth = 1;
+                                            ctx.stroke();
+                                        }
+                                        
+                                        ctx.restore();
+                                    }
+                                }
+                            });
+                        }
+                        
+                        // Disegna triangoli per i dati STIMATI
+                        if (!meta.hidden && dataset.label.indexOf('(stimato)') !== -1) {
+                            meta.data.forEach(function(point, index) {
+                                if (point && point.x !== undefined && point.y !== undefined) {
+                                    var minEstimated = minWeightEstimatedData[index];
+                                    var maxEstimated = maxWeightEstimatedData[index];
+                                    
+                                    var x = point.x;
+                                    var size = 4; // Dimensione triangolo (dimezzata)
+                                    
+                                    ctx.save();
+                                    
+                                    if (minEstimated !== null) {
+                                        // Triangolo VERDE CHIARO con punta in BASSO per MIN stimato
+                                        var yMin = chart.scales.y.getPixelForValue(minEstimated);
+                                        
+                                        ctx.beginPath();
+                                        ctx.moveTo(x, yMin + size);           // Punta in basso
+                                        ctx.lineTo(x - size, yMin - size);    // Vertice sinistro alto
+                                        ctx.lineTo(x + size, yMin - size);    // Vertice destro alto
+                                        ctx.closePath();
+                                        ctx.fillStyle = '#A8E6CF'; // Verde chiaro
+                                        ctx.fill();
+                                        ctx.strokeStyle = '#00B894';
+                                        ctx.lineWidth = 1.5;
+                                        ctx.stroke();
+                                    }
+                                    
+                                    if (maxEstimated !== null) {
+                                        // Triangolo ROSSO CHIARO con punta in ALTO per MAX stimato
+                                        var yMax = chart.scales.y.getPixelForValue(maxEstimated);
+                                        
+                                        ctx.beginPath();
+                                        ctx.moveTo(x, yMax - size);           // Punta in alto
+                                        ctx.lineTo(x - size, yMax + size);    // Vertice sinistro basso
+                                        ctx.lineTo(x + size, yMax + size);    // Vertice destro basso
+                                        ctx.closePath();
+                                        ctx.fillStyle = '#FFB3BA'; // Rosso chiaro
+                                        ctx.fill();
+                                        ctx.strokeStyle = '#E74C3C';
+                                        ctx.lineWidth = 1.5;
+                                        ctx.stroke();
+                                    }
+                                    
+                                    ctx.restore();
+                                }
+                            });
+                        }
+                    });
+                }
+            };
+            
+            log('Creazione grafico con ' + labels.length + ' label, ' + minWeightData.filter(function(v){return v !== null;}).length + ' punti peso');
+            
+            weightChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Target Interpolato',
+                            data: targetData,
+                            borderColor: '#666',
+                            backgroundColor: 'rgba(102, 102, 102, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            tension: 0.3,
+                            order: 3
+                        },
+                        {
+                            label: 'Peso MIN (reale)',
+                            data: minWeightData,
+                            borderColor: '#00B894',
+                            backgroundColor: 'rgba(0, 184, 148, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            tension: 0.3,
+                            spanGaps: false,
+                            order: 1
+                        },
+                        {
+                            label: 'Peso MAX (reale)',
+                            data: maxWeightData,
+                            borderColor: '#E74C3C',
+                            backgroundColor: 'rgba(231, 76, 60, 0.2)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            tension: 0.3,
+                            spanGaps: false,
+                            order: 1
+                        },
+                        {
+                            label: 'Peso MIN (stimato)',
+                            data: minWeightEstimatedData,
+                            borderColor: '#FFA500',
+                            backgroundColor: 'rgba(255, 165, 0, 0.2)',
+                            borderWidth: 2,
+                            borderDash: [3, 3],
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointStyle: 'triangle',
+                            tension: 0.3,
+                            spanGaps: false,
+                            order: 2
+                        },
+                        {
+                            label: 'Peso MAX (stimato)',
+                            data: maxWeightEstimatedData,
+                            borderColor: '#FFD700',
+                            backgroundColor: 'rgba(255, 215, 0, 0.2)',
+                            borderWidth: 2,
+                            borderDash: [3, 3],
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointStyle: 'triangle',
+                            tension: 0.3,
+                            spanGaps: false,
+                            order: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        customPoints: customPointPlugin,
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.parsed.y === null) return null;
+                                    var label = context.dataset.label || '';
+                                    return label + ': ' + context.parsed.y.toFixed(1) + ' kg';
+                                },
+                                title: function(context) {
+                                    return context[0].label;
+                                }
+                            }
+                        },
+                        zoom: {
+                            zoom: {
+                                wheel: {
+                                    enabled: false
+                                },
+                                pinch: {
+                                    enabled: false
+                                },
+                                mode: 'x'
+                            },
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                                modifierKey: null
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: yMin,
+                            max: yMax,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(1) + ' kg';
+                                }
+                            }
+                        },
+                        x: {
+                            type: 'category',
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                },
+                plugins: [customPointPlugin]
+            });
+            
+            // Salva la larghezza iniziale del grafico per il reset
+            initialChartWidth = chartWidth;
+            
+            // Aggiungi event listener per zoom con rotella del mouse
+            canvas.addEventListener('wheel', function(event) {
+                event.preventDefault(); // Previeni scroll della pagina
+                
+                if (event.deltaY < 0) {
+                    // Scroll up = Zoom In
+                    zoomIn();
+                } else {
+                    // Scroll down = Zoom Out
+                    zoomOut();
+                }
+            }, { passive: false });
+            
+            // Posiziona il grafico con OGGI al centro della finestra
+            setTimeout(function() {
+                var scrollContainer = chartContainer.parentElement;
+                if (scrollContainer && labels.length > 0) {
+                    // Trova l'indice della data di oggi
+                    var today = new Date();
+                    var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' + 
+                                   today.getDate().toString().padStart(2, '0');
+                    
+                    var todayIndex = labels.indexOf(todayStr);
+                    
+                    // Se oggi non è nelle label, trova la data più vicina
+                    if (todayIndex === -1) {
+                        // Trova la data più vicina a oggi
+                        var todayTime = today.getTime();
+                        var closestIndex = 0;
+                        var minDiff = Infinity;
+                        
+                        labels.forEach(function(label, index) {
+                            var parts = label.split('-');
+                            var labelDate = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                            var diff = Math.abs(labelDate.getTime() - todayTime);
+                            
+                            if (diff < minDiff) {
+                                minDiff = diff;
+                                closestIndex = index;
+                            }
+                        });
+                        
+                        todayIndex = closestIndex;
+                    }
+                    
+                    // Calcola la posizione per centrare oggi
+                    var pixelPerDay = 50; // Deve corrispondere al valore usato per chartWidth
+                    var todayPosition = todayIndex * pixelPerDay;
+                    var containerWidth = scrollContainer.clientWidth;
+                    
+                    // Scroll per mettere oggi al centro
+                    scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (pixelPerDay / 2);
+                }
+            }, 100);
+        }
+
+        function updateWeightTable(data) {
+            var tbody = document.getElementById('weightTableBody');
+            tbody.innerHTML = '';
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">Nessun dato disponibile</td></tr>';
+                return;
+            }
+            
+            // Aggrega i dati per giorno (MIN e MAX)
+            var dayGroups = {};
+            data.forEach(function(row) {
+                var date = row.date;
+                if (!dayGroups[date]) dayGroups[date] = [];
+                dayGroups[date].push(row);
+            });
+            
+            // Ordina per data decrescente (per display)
+            var sortedDays = Object.keys(dayGroups).sort(function(a, b) {
+                return b.localeCompare(a);
+            });
+            
+            // Calcola punteggi cumulativi in ordine CRESCENTE
+            // (partendo da start_date, sommando giorno per giorno)
+            var obj          = userData.currentObjective || null;
+            var startDateStr = obj ? obj.start_date : null;
+            var endDateStr   = obj ? obj.end_date   : null;
+            var dailyBonus   = obj ? (obj.daily_bonus || 10)  : 10;
+            var dailyMalus   = obj ? (obj.daily_malus || 5)   : 5;
+            var finalBonus   = obj ? (obj.final_bonus || 100) : 100;
+            var finalMalus   = obj ? (obj.final_malus || 50)  : 50;
+            
+            // Costruisce mappa data→punteggio cumulativo in ordine cronologico
+            var cumulativeMap = {};
+            var cumulative = 0;
+            
+            if (obj) {
+                var sortedAsc = Object.keys(dayGroups).sort();
+                sortedAsc.forEach(function(date) {
+                    var inRange = (date >= startDateStr && date <= endDateStr);
+                    if (!inRange) return;
+                    
+                    var dayData  = dayGroups[date];
+                    var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
+                    var target   = minEntry.target_weight || getInterpolatedTarget(date);
+                    if (target === null) return;
+                    
+                    var isLastDay = (date === endDateStr);
+                    
+                    if (minEntry.weight <= target) {
+                        cumulative += dailyBonus;
+                        if (isLastDay) cumulative += finalBonus;
+                    } else {
+                        cumulative -= dailyMalus;
+                        if (isLastDay) cumulative -= finalMalus;
+                    }
+                    cumulativeMap[date] = cumulative;
+                });
+            }
+            
+            // Render righe in ordine decrescente
+            sortedDays.forEach(function(date) {
+                var dayData  = dayGroups[date];
+                var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
+                var maxEntry = dayData.reduce(function(a, b) { return a.weight > b.weight ? a : b; });
+                
+                var minWeight = minEntry.weight;
+                var maxWeight = maxEntry.weight;
+                var minTime   = minEntry.time || '--';
+                var maxTime   = maxEntry.time || '--';
+                var target    = minEntry.target_weight || getInterpolatedTarget(date);
+                
+                var inRange   = obj && (date >= startDateStr && date <= endDateStr);
+                var isLastDay = obj && (date === endDateStr);
+                
+                // Calcolo punteggio giornaliero (fisso, non moltiplicato)
+                var dailyScore = null;
+                if (inRange && target !== null) {
+                    if (minWeight <= target) {
+                        dailyScore = dailyBonus;
+                        if (isLastDay) dailyScore += finalBonus;
+                    } else {
+                        dailyScore = -dailyMalus;
+                        if (isLastDay) dailyScore -= finalMalus;
+                    }
+                }
+                
+                var tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #eee';
+                
+                // Righe fuori dall'intervallo: opacità ridotta
+                if (!inRange) {
+                    tr.style.opacity = '0.4';
+                }
+                
+                // -- DATA --
+                var tdDate = document.createElement('td');
+                tdDate.style.padding = '10px';
+                tdDate.style.fontWeight = 'bold';
+                tdDate.textContent = date;
+                tr.appendChild(tdDate);
+                
+                // -- TARGET --
+                var tdTarget = document.createElement('td');
+                tdTarget.style.padding = '10px';
+                tdTarget.style.textAlign = 'center';
+                tdTarget.style.color = '#666';
+                tdTarget.style.fontWeight = 'bold';
+                tdTarget.textContent = target ? target.toFixed(1) + ' kg' : '--';
+                tr.appendChild(tdTarget);
+                
+                // -- PESO MIN --
+                var tdMin = document.createElement('td');
+                tdMin.style.padding = '10px';
+                tdMin.style.textAlign = 'center';
+                tdMin.style.fontWeight = 'bold';
+                tdMin.style.fontSize = '1.1em';
+                tdMin.style.color = (target && minWeight <= target) ? '#00B894' : '#E74C3C';
+                tdMin.textContent = minWeight.toFixed(1) + ' kg';
+                tr.appendChild(tdMin);
+                
+                // -- ORA MIN --
+                var tdMinTime = document.createElement('td');
+                tdMinTime.style.padding = '10px';
+                tdMinTime.style.textAlign = 'center';
+                tdMinTime.style.color = '#666';
+                tdMinTime.style.fontSize = '0.9em';
+                tdMinTime.textContent = minTime;
+                tr.appendChild(tdMinTime);
+                
+                // -- PESO MAX --
+                var tdMax = document.createElement('td');
+                tdMax.style.padding = '10px';
+                tdMax.style.textAlign = 'center';
+                tdMax.style.fontWeight = 'bold';
+                tdMax.style.fontSize = '1.1em';
+                tdMax.style.color = (target && maxWeight <= target) ? '#00B894' : '#E74C3C';
+                tdMax.textContent = maxWeight.toFixed(1) + ' kg';
+                tr.appendChild(tdMax);
+                
+                // -- ORA MAX --
+                var tdMaxTime = document.createElement('td');
+                tdMaxTime.style.padding = '10px';
+                tdMaxTime.style.textAlign = 'center';
+                tdMaxTime.style.color = '#666';
+                tdMaxTime.style.fontSize = '0.9em';
+                tdMaxTime.textContent = maxTime;
+                tr.appendChild(tdMaxTime);
+                
+                // -- PUNTI GIORNALIERI --
+                var tdScore = document.createElement('td');
+                tdScore.style.padding = '10px';
+                tdScore.style.textAlign = 'center';
+                tdScore.style.fontWeight = 'bold';
+                tdScore.style.fontSize = '1.1em';
+                if (dailyScore === null) {
+                    tdScore.textContent = '--';
+                    tdScore.style.color = '#ccc';
+                } else if (dailyScore > 0) {
+                    tdScore.textContent = '+' + dailyScore;
+                    tdScore.style.color = '#00B894';
+                } else {
+                    tdScore.textContent = dailyScore;
+                    tdScore.style.color = '#E74C3C';
+                }
+                tr.appendChild(tdScore);
+                
+                // -- PUNTEGGIO CUMULATIVO --
+                var tdCumulative = document.createElement('td');
+                tdCumulative.style.padding = '10px';
+                tdCumulative.style.textAlign = 'center';
+                tdCumulative.style.fontWeight = 'bold';
+                tdCumulative.style.fontSize = '1.1em';
+                if (cumulativeMap[date] !== undefined) {
+                    var cum = cumulativeMap[date];
+                    tdCumulative.textContent = (cum > 0 ? '+' : '') + cum;
+                    tdCumulative.style.color = cum >= 0 ? '#00B894' : '#E74C3C';
+                } else {
+                    tdCumulative.textContent = '--';
+                    tdCumulative.style.color = '#ccc';
+                }
+                tr.appendChild(tdCumulative);
+                
+                tbody.appendChild(tr);
+            });
+        }
+
+        var initialChartWidth = null; // Salva larghezza iniziale
+
+        function zoomIn() {
+            if (weightChart) {
+                var chartContainer = document.getElementById('chartContainer');
+                if (!chartContainer) return;
+                
+                // Salva larghezza iniziale se non salvata
+                if (initialChartWidth === null) {
+                    initialChartWidth = parseInt(chartContainer.style.width);
+                }
+                
+                // Aumenta la larghezza del 25% (zoom in = grafico più largo)
+                var currentWidth = parseInt(chartContainer.style.width);
+                var newWidth = currentWidth * 1.25;
+                
+                chartContainer.style.width = newWidth + 'px';
+                weightChart.resize();
+            }
+        }
+
+        function zoomOut() {
+            if (weightChart) {
+                var chartContainer = document.getElementById('chartContainer');
+                if (!chartContainer) return;
+                
+                // Salva larghezza iniziale se non salvata
+                if (initialChartWidth === null) {
+                    initialChartWidth = parseInt(chartContainer.style.width);
+                }
+                
+                // Riduci la larghezza del 20% (zoom out = grafico più stretto)
+                var currentWidth = parseInt(chartContainer.style.width);
+                var newWidth = Math.max(currentWidth * 0.8, 500); // Minimo 500px
+                
+                chartContainer.style.width = newWidth + 'px';
+                weightChart.resize();
+            }
+        }
+
+        function resetZoom() {
+            if (weightChart && initialChartWidth) {
+                var chartContainer = document.getElementById('chartContainer');
+                if (!chartContainer) return;
+                
+                // Ripristina larghezza iniziale
+                chartContainer.style.width = initialChartWidth + 'px';
+                weightChart.resize();
+                
+                // Ricentra su oggi dopo il reset
+                setTimeout(function() {
+                    var chartContainer = document.getElementById('chartContainer');
+                    var scrollContainer = chartContainer ? chartContainer.parentElement : null;
+                    
+                    if (scrollContainer && weightChart.data.labels.length > 0) {
+                        var labels = weightChart.data.labels;
+                        var today = new Date();
+                        var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' + 
+                                       today.getDate().toString().padStart(2, '0');
+                        
+                        var todayIndex = labels.indexOf(todayStr);
+                        
+                        if (todayIndex === -1) {
+                            var todayTime = today.getTime();
+                            var closestIndex = 0;
+                            var minDiff = Infinity;
+                            
+                            labels.forEach(function(label, index) {
+                                var parts = label.split('-');
+                                var labelDate = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                                var diff = Math.abs(labelDate.getTime() - todayTime);
+                                
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    closestIndex = index;
+                                }
+                            });
+                            
+                            todayIndex = closestIndex;
+                        }
+                        
+                        var pixelPerDay = 50;
+                        var todayPosition = todayIndex * pixelPerDay;
+                        var containerWidth = scrollContainer.clientWidth;
+                        
+                        scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (pixelPerDay / 2);
+                    }
+                }, 100);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('googleToken');
+            window.location.reload();
+        }
+
+        // START
+        log('===========================================');
+        log('WEIGHT QUEST ' + APP_VERSION);
+        log('===========================================');
+        log('Script caricato');
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    </script>
+</body>
+</html>
+</script>
+</body>
+</html>
+
+        // ============================================
+        // NAVIGATION & SIDEBAR v2.4.1
+        // ============================================
+
+    </script>
+</body>
+</html>
+
+        // ============================================
+        // SIDEBAR & DASHBOARD FUNCTIONS
+        // ============================================
+
+    </script>
+</body>
+</html>

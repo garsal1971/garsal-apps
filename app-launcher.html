@@ -450,9 +450,7 @@ function makeDraggable(node) {
 }
 
 function launchApp(app) {
-  const blob = new Blob([app.html], { type: 'text/html; charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, '_blank');
+  const win = window.open(app.html_file, '_blank');
 
   // Passa il token Google all'app figlia via postMessage
   const googleToken = sessionStorage.getItem('google_token');
@@ -533,7 +531,7 @@ async function loadApps() {
 
   // 1. Leggi tutte le app attive
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/cm_apps?active=eq.true&select=id,title,description,score_query,html_content,color&order=id.asc`,
+    `${SUPABASE_URL}/rest/v1/cm_apps?active=eq.true&select=id,title,description,score_query,html_file,color&order=id.asc`,
     {
       headers: {
         'apikey': SUPABASE_KEY,
@@ -574,7 +572,7 @@ async function loadApps() {
       description: row.description || '',
       score:       score,
       color:       row.color || OLYMPIC[i % OLYMPIC.length],
-      html:        row.html_content,
+      html_file:   row.html_file,
     };
   }));
 
