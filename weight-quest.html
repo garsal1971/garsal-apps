@@ -399,6 +399,50 @@
             /* la larghezza viene impostata via JS */
         }
 
+        /* MOBILE CHART NAVIGATION */
+        .chart-nav-wrapper {
+            position: relative;
+        }
+        .chart-nav-btn {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            #chartScrollWrapper {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+            #chartScrollWrapper::-webkit-scrollbar {
+                display: none;
+            }
+            .chart-nav-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 40px;
+                height: 56px;
+                background: rgba(255, 51, 102, 0.85);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 22px;
+                font-weight: bold;
+                cursor: pointer;
+                z-index: 10;
+                padding: 0;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+                line-height: 1;
+            }
+            .chart-nav-btn:active {
+                background: rgba(230, 41, 88, 0.95);
+                transform: translateY(-50%) scale(0.95);
+            }
+            #chartNavLeft  { left: 2px; }
+            #chartNavRight { right: 2px; }
+        }
+
         /* UTILITIES */
         .hidden { display: none !important; }
 
@@ -731,10 +775,14 @@
             <div id="graficoPage" class="page">
                 <div class="card">
                     <h3>📈 Andamento Peso</h3>
-                    <div id="chartScrollWrapper">
-                        <div id="chartContainer" style="position: relative; height: 400px;">
-                            <canvas id="weightChart" width="1000" height="400"></canvas>
+                    <div class="chart-nav-wrapper">
+                        <button class="chart-nav-btn" id="chartNavLeft">&#8249;</button>
+                        <div id="chartScrollWrapper">
+                            <div id="chartContainer" style="position: relative; height: 400px;">
+                                <canvas id="weightChart" width="1000" height="400"></canvas>
+                            </div>
                         </div>
+                        <button class="chart-nav-btn" id="chartNavRight">&#8250;</button>
                     </div>
                     <div style="margin-top: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                         <button id="btnZoomIn" style="padding: 10px 20px;">🔍 Zoom In</button>
@@ -1067,6 +1115,42 @@
                 document.getElementById('btnZoomIn').onclick = zoomIn;
                 document.getElementById('btnResetZoom').onclick = resetZoom;
                 document.getElementById('btnZoomOut').onclick = zoomOut;
+
+                // Mobile chart navigation buttons
+                (function() {
+                    var scrollStep = 200;
+                    var scrollInterval = null;
+
+                    function startScroll(direction) {
+                        var wrapper = document.getElementById('chartScrollWrapper');
+                        wrapper.scrollLeft += direction * scrollStep;
+                        scrollInterval = setInterval(function() {
+                            wrapper.scrollLeft += direction * scrollStep;
+                        }, 300);
+                    }
+
+                    function stopScroll() {
+                        clearInterval(scrollInterval);
+                        scrollInterval = null;
+                    }
+
+                    var btnLeft  = document.getElementById('chartNavLeft');
+                    var btnRight = document.getElementById('chartNavRight');
+
+                    btnLeft.addEventListener('touchstart',  function(e) { e.preventDefault(); startScroll(-1); }, { passive: false });
+                    btnLeft.addEventListener('touchend',    stopScroll);
+                    btnLeft.addEventListener('mousedown',   function() { startScroll(-1); });
+                    btnLeft.addEventListener('mouseup',     stopScroll);
+                    btnLeft.addEventListener('mouseleave',  stopScroll);
+                    btnLeft.addEventListener('click',       function() { document.getElementById('chartScrollWrapper').scrollLeft -= scrollStep; });
+
+                    btnRight.addEventListener('touchstart', function(e) { e.preventDefault(); startScroll(1); }, { passive: false });
+                    btnRight.addEventListener('touchend',   stopScroll);
+                    btnRight.addEventListener('mousedown',  function() { startScroll(1); });
+                    btnRight.addEventListener('mouseup',    stopScroll);
+                    btnRight.addEventListener('mouseleave', stopScroll);
+                    btnRight.addEventListener('click',      function() { document.getElementById('chartScrollWrapper').scrollLeft += scrollStep; });
+                })();
                 document.getElementById('btnCloseSuccess').onclick = function() { closeObjective('success'); };
                 document.getElementById('btnCloseFailed').onclick    = function() { closeObjective('failed');  };
                 document.getElementById('btnDeleteObjective').onclick  = deleteObjective;
