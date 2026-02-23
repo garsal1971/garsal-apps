@@ -1885,6 +1885,7 @@
             </div>
             <div id="viewTaskContent"></div>
             <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn btn-secondary" onclick="cloneTaskFromView()">📋 Clona</button>
                 <button class="btn btn-primary" onclick="editTaskFromView()">✏️ Modifica</button>
                 <button class="btn btn-secondary" onclick="archiveTaskFromView()">📦 Archivia</button>
                 <button class="btn btn-danger" onclick="deleteTaskFromView()">🗑️ Elimina</button>
@@ -3737,6 +3738,24 @@
                         
                         <!-- Action Buttons in basso a sinistra -->
                         <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
+                            <button onclick="cloneTask('${task.id}')" style="
+                                background: #6c757d;
+                                color: white;
+                                border: none;
+                                padding: 0.25rem 0.6rem;
+                                border-radius: 0;
+                                font-size: 0.9rem;
+                                font-weight: 600;
+                                cursor: pointer;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                gap: 0.4rem;
+                                transition: all 0.2s ease;
+                                white-space: nowrap;
+                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                                📋 Clona
+                            </button>
                             <button onclick="viewTask('${task.id}')" style="
                                 background: var(--accent);
                                 color: white;
@@ -4722,6 +4741,35 @@
             const taskId = currentViewTaskId;
             closeViewTaskModal();
             archiveTask(taskId);
+        }
+
+        function cloneTaskFromView() {
+            const taskId = currentViewTaskId;
+            closeViewTaskModal();
+            cloneTask(taskId);
+        }
+
+        function cloneTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+
+            // Calcola il titolo con suffisso (n) incrementato
+            const baseTitle = task.title.replace(/\s*\(\d+\)$/, '');
+            const maxN = tasks.reduce((max, t) => {
+                if (t.title === baseTitle) return Math.max(max, 1);
+                const match = t.title.match(/^(.+?)\s*\((\d+)\)$/);
+                if (match && match[1] === baseTitle) return Math.max(max, parseInt(match[2]));
+                return max;
+            }, 0);
+            const newTitle = `${baseTitle} (${Math.max(maxN, 1) + 1})`;
+
+            // Usa editTask per popolare tutti i campi del form
+            editTask(id);
+
+            // Override: nessun id (crea nuovo), nuovo titolo, titolo modale
+            document.getElementById('editTaskId').value = '';
+            document.getElementById('taskModalTitle').textContent = 'Clona Task';
+            document.getElementById('taskTitle').value = newTitle;
         }
 
         async function archiveTask(id) {
