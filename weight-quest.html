@@ -1681,8 +1681,10 @@
             if (userData.currentObjective) {
                 var dailyBonus = userData.currentObjective.daily_bonus || 10;
                 var dailyMalus = userData.currentObjective.daily_malus || 5;
-                document.getElementById('bonusMultiplier').textContent = '+' + dailyBonus;
-                document.getElementById('penaltyMultiplier').textContent = '-' + dailyMalus;
+                var elBonus = document.getElementById('bonusMultiplier');
+                var elMalus = document.getElementById('penaltyMultiplier');
+                if (elBonus) elBonus.textContent = '+' + dailyBonus;
+                if (elMalus) elMalus.textContent = '-' + dailyMalus;
             }
         }
 
