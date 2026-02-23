@@ -388,10 +388,15 @@
         }
 
         /* CHART */
-        #chartContainer {
+        #chartScrollWrapper {
             overflow-x: auto;
             overflow-y: hidden;
             -webkit-overflow-scrolling: touch;
+            width: 100%;
+            border-radius: 4px;
+        }
+        #chartContainer {
+            /* la larghezza viene impostata via JS */
         }
 
         /* UTILITIES */
@@ -726,8 +731,10 @@
             <div id="graficoPage" class="page">
                 <div class="card">
                     <h3>📈 Andamento Peso</h3>
-                    <div id="chartContainer" style="position: relative; height: 400px; min-width: 100%;">
-                        <canvas id="weightChart" width="1000" height="400"></canvas>
+                    <div id="chartScrollWrapper">
+                        <div id="chartContainer" style="position: relative; height: 400px;">
+                            <canvas id="weightChart" width="1000" height="400"></canvas>
+                        </div>
                     </div>
                     <div style="margin-top: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                         <button id="btnZoomIn" style="padding: 10px 20px;">🔍 Zoom In</button>
@@ -2427,8 +2434,7 @@
             
             // Calcola pixelPerDay in modo che 30 giorni (±2 settimane da oggi)
             // riempiano esattamente la larghezza visibile del contenitore
-            var scrollWrapper = document.getElementById('chartContainer') &&
-                                document.getElementById('chartContainer').parentElement;
+            var scrollWrapper = document.getElementById('chartScrollWrapper');
             var visibleWidth = (scrollWrapper ? scrollWrapper.clientWidth : 0) || 400;
             var daysToShow = 30;
             var pixelPerDay = Math.max(Math.floor(visibleWidth / daysToShow), 20);
@@ -2751,7 +2757,7 @@
             
             // Posiziona il grafico con OGGI al centro della finestra
             setTimeout(function() {
-                var scrollContainer = chartContainer.parentElement;
+                var scrollContainer = document.getElementById('chartScrollWrapper');
                 if (scrollContainer && labels.length > 0) {
                     var today = new Date();
                     var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
@@ -3017,27 +3023,26 @@
                 
                 // Ricentra su oggi dopo il reset
                 setTimeout(function() {
-                    var chartContainer = document.getElementById('chartContainer');
-                    var scrollContainer = chartContainer ? chartContainer.parentElement : null;
-                    
+                    var scrollContainer = document.getElementById('chartScrollWrapper');
+
                     if (scrollContainer && weightChart.data.labels.length > 0) {
                         var labels = weightChart.data.labels;
                         var today = new Date();
-                        var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' + 
+                        var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
                                        today.getDate().toString().padStart(2, '0');
-                        
+
                         var todayIndex = labels.indexOf(todayStr);
-                        
+
                         if (todayIndex === -1) {
                             var todayTime = today.getTime();
                             var closestIndex = 0;
                             var minDiff = Infinity;
-                            
+
                             labels.forEach(function(label, index) {
                                 var parts = label.split('-');
                                 var labelDate = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
                                 var diff = Math.abs(labelDate.getTime() - todayTime);
-                                
+
                                 if (diff < minDiff) {
                                     minDiff = diff;
                                     closestIndex = index;
@@ -3047,10 +3052,10 @@
                             todayIndex = closestIndex;
                         }
                         
-                        var pixelPerDay = 50;
+                        var pixelPerDay = Math.max(Math.floor(scrollContainer.clientWidth / 30), 20);
                         var todayPosition = todayIndex * pixelPerDay;
                         var containerWidth = scrollContainer.clientWidth;
-                        
+
                         scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (pixelPerDay / 2);
                     }
                 }, 100);
