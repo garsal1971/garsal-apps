@@ -2432,10 +2432,12 @@
                 yMax = maxVal + 2;
             }
             
-            // Calcola pixelPerDay in modo che 30 giorni (±2 settimane da oggi)
-            // riempiano esattamente la larghezza visibile del contenitore
+            // Calcola pixelPerDay in modo che 30 giorni riempiano la finestra visibile.
+            // Usa window.innerWidth come fallback robusto se la tab non è ancora attiva.
             var scrollWrapper = document.getElementById('chartScrollWrapper');
-            var visibleWidth = (scrollWrapper ? scrollWrapper.clientWidth : 0) || 400;
+            var visibleWidth = (scrollWrapper && scrollWrapper.clientWidth > 0)
+                                ? scrollWrapper.clientWidth
+                                : (window.innerWidth || 400);
             var daysToShow = 30;
             var pixelPerDay = Math.max(Math.floor(visibleWidth / daysToShow), 20);
             var chartWidth = Math.max(labels.length * pixelPerDay, visibleWidth);
@@ -2758,31 +2760,45 @@
             // Posiziona il grafico con OGGI al centro della finestra
             setTimeout(function() {
                 var scrollContainer = document.getElementById('chartScrollWrapper');
-                if (scrollContainer && labels.length > 0) {
-                    var today = new Date();
-                    var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
-                                   today.getDate().toString().padStart(2, '0');
+                var chartCont = document.getElementById('chartContainer');
+                if (!scrollContainer || !chartCont || labels.length === 0) return;
 
-                    var todayIndex = labels.indexOf(todayStr);
+                // Ricalcola pixelPerDay dalla larghezza effettiva del container
+                // (sempre affidabile, è il valore che abbiamo impostato sopra)
+                var totalChartWidth = parseFloat(chartCont.style.width) || (labels.length * pixelPerDay);
+                var actualPixelPerDay = totalChartWidth / labels.length;
 
-                    if (todayIndex === -1) {
-                        var todayTime = today.getTime();
-                        var closestIndex = 0;
-                        var minDiff = Infinity;
-                        labels.forEach(function(label, index) {
-                            var parts = label.split('-');
-                            var labelDate = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
-                            var diff = Math.abs(labelDate.getTime() - todayTime);
-                            if (diff < minDiff) { minDiff = diff; closestIndex = index; }
-                        });
-                        todayIndex = closestIndex;
-                    }
+                // Trova l'indice di oggi
+                var today = new Date();
+                var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
+                               today.getDate().toString().padStart(2, '0');
+                var todayIndex = labels.indexOf(todayStr);
 
-                    var containerWidth = scrollContainer.clientWidth;
-                    var todayPosition = todayIndex * pixelPerDay;
-                    scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (pixelPerDay / 2);
+                // Fallback: data più vicina a oggi
+                if (todayIndex === -1) {
+                    var todayTime = today.getTime();
+                    var closestIndex = 0;
+                    var minDiff = Infinity;
+                    labels.forEach(function(label, index) {
+                        var parts = label.split('-');
+                        // Prova prima anno corrente, poi anno precedente per date tipo "12-xx"
+                        var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var diff = Math.min(
+                            Math.abs(d1.getTime() - todayTime),
+                            Math.abs(d2.getTime() - todayTime)
+                        );
+                        if (diff < minDiff) { minDiff = diff; closestIndex = index; }
+                    });
+                    todayIndex = closestIndex;
                 }
-            }, 300);
+
+                var containerWidth = (scrollContainer.clientWidth > 0)
+                                     ? scrollContainer.clientWidth
+                                     : (window.innerWidth || 400);
+                var todayPosition = todayIndex * actualPixelPerDay;
+                scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (actualPixelPerDay / 2);
+            }, 500);
         }
 
         function updateWeightTable(data) {
