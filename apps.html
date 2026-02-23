@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppSphere</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e8e8e4;
+    --text: #111110;
+    --muted: #8a8a85;
+    --accent: #111110;
+  }
+
+  body {
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 28px 32px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .logo span {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 8px;
+  }
+
+  #user-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #user-bar.visible { display: flex; }
+  #logout-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  #logout-btn:hover { border-color: #aaa; color: var(--text); }
+
+  /* ── LOGIN ── */
+  #login-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.4s ease;
+  }
+  #login-screen.hidden { opacity: 0; pointer-events: none; }
+  .login-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+  }
+  .login-wordmark {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .login-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 40px;
+  }
+  .google-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 24px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .google-btn:hover {
+    border-color: #aaa;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+  }
+  .google-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+  /* ── MAIN ── */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 20px;
+  }
+
+  /* ── APP GRID ── */
+  .app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .app-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    text-decoration: none;
+    color: var(--text);
+    transition: box-shadow 0.2s, border-color 0.2s, transform 0.15s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .app-card:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    border-color: #d0d0cc;
+    transform: translateY(-2px);
+  }
+  .app-card:active { transform: translateY(0); }
+
+  .app-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  .app-name {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+
+  .app-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  .app-arrow {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: var(--border);
+    font-size: 16px;
+    transition: color 0.2s, transform 0.2s;
+  }
+  .app-card:hover .app-arrow {
+    color: var(--muted);
+    transform: translate(2px, -2px);
+  }
+
+  /* ── LOADING STATE ── */
+  #app-grid-container.loading .app-grid {
+    display: none;
+  }
+  .loading-text {
+    display: none;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 20px 0;
+  }
+  #app-grid-container.loading .loading-text {
+    display: block;
+  }
+
+  /* ── LAUNCHER LINK ── */
+  .launcher-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 32px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .launcher-link:hover { color: var(--text); border-bottom-color: var(--text); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 480px) {
+    header { padding: 20px; }
+    main { padding: 28px 16px 60px; }
+    .app-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .app-card { padding: 18px; }
+    .app-icon { width: 40px; height: 40px; font-size: 18px; margin-bottom: 12px; }
+    .app-name { font-size: 14px; }
+    .app-desc { font-size: 12px; }
+  }
+  @media (max-width: 320px) {
+    .app-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-wordmark">AppSphere</div>
+    <div class="login-sub">// il tuo universo di applicazioni</div>
+    <button class="google-btn" onclick="loginWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Accedi con Google
+    </button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <a class="logo" href="apps.html">AppSphere <span>// le tue app</span></a>
+  <div id="user-bar">
+    <span id="user-name"></span>
+    <button id="logout-btn" onclick="logout()">Esci</button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main>
+  <div id="app-grid-container" class="loading">
+    <p class="section-label">Applicazioni</p>
+    <div class="loading-text">caricamento...</div>
+    <div class="app-grid" id="app-grid"></div>
+  </div>
+
+  <a class="launcher-link" href="app-launcher.html">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/>
+      <circle cx="6" cy="6" r="2" fill="currentColor"/>
+    </svg>
+    Apri AppSphere bubble view
+  </a>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+const COLORS = [
+  { bg: '#EBF3FF', icon: '#2563EB' },
+  { bg: '#FFF3E0', icon: '#E65100' },
+  { bg: '#F3E8FF', icon: '#7C3AED' },
+  { bg: '#E6F7EE', icon: '#059669' },
+  { bg: '#FFF0F3', icon: '#E11D48' },
+];
+
+const EMOJI_MAP = {
+  'tasks':   '✅',
+  'habit':   '🔥',
+  'weight':  '⚖️',
+  'events':  '📋',
+  'default': '⬡',
+};
+
+function emojiFor(filename = '') {
+  const f = filename.toLowerCase();
+  if (f.includes('task'))   return EMOJI_MAP.tasks;
+  if (f.includes('habit'))  return EMOJI_MAP.habit;
+  if (f.includes('weight')) return EMOJI_MAP.weight;
+  if (f.includes('event'))  return EMOJI_MAP.events;
+  return EMOJI_MAP.default;
+}
+
+// ── AUTH ──
+function loginWithGoogle() {
+  const redirect = window.location.href.split('#')[0].split('?')[0];
+  const scopes = [
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/fitness.activity.read',
+    'https://www.googleapis.com/auth/fitness.body.read',
+    'https://www.googleapis.com/auth/fitness.nutrition.read',
+  ].join(' ');
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google`
+    + `&redirect_to=${encodeURIComponent(redirect)}`
+    + `&scopes=${encodeURIComponent(scopes)}`
+    + `&access_type=offline`;
+}
+
+async function logout() {
+  const token = sessionStorage.getItem('sb_token');
+  if (token) {
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+    }).catch(() => {});
+  }
+  sessionStorage.removeItem('sb_token');
+  sessionStorage.removeItem('google_token');
+  document.getElementById('user-bar').classList.remove('visible');
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+function parseHash() {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return null;
+  const p = {};
+  hash.split('&').forEach(kv => {
+    const [k, v] = kv.split('=');
+    p[decodeURIComponent(k)] = decodeURIComponent(v || '');
+  });
+  if (p.access_token) {
+    sessionStorage.setItem('sb_token', p.access_token);
+    if (p.provider_token) sessionStorage.setItem('google_token', p.provider_token);
+    history.replaceState(null, '', window.location.pathname);
+    return p.access_token;
+  }
+  return null;
+}
+
+async function getUserInfo(token) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+  });
+  return res.ok ? res.json() : null;
+}
+
+function showApp(user) {
+  const name = user?.user_metadata?.full_name || user?.email || 'Utente';
+  document.getElementById('user-name').textContent = name.split(' ')[0];
+  document.getElementById('user-bar').classList.add('visible');
+  const ls = document.getElementById('login-screen');
+  ls.classList.add('hidden');
+  setTimeout(() => { ls.style.display = 'none'; loadApps(); }, 400);
+}
+
+// ── LOAD APPS FROM SUPABASE ──
+async function loadApps() {
+  const token = sessionStorage.getItem('sb_token');
+  const container = document.getElementById('app-grid-container');
+  const grid = document.getElementById('app-grid');
+
+  let apps = [];
+
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/cm_apps?active=eq.true&select=id,title,description,html_file,score_query&order=id.asc`,
+      {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    if (res.ok) {
+      const rows = await res.json();
+
+      // Load scores in parallel
+      apps = await Promise.all(rows.map(async (row, i) => {
+        let score = null;
+        try {
+          const rpc = await fetch(`${SUPABASE_URL}/rest/v1/rpc/run_score_query`, {
+            method: 'POST',
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': 'Bearer ' + token,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ query: row.score_query })
+          });
+          if (rpc.ok) score = Number(await rpc.json()) || 0;
+        } catch (e) { /* score remains null */ }
+
+        return { id: row.id, name: row.title, desc: row.description || '', file: row.html_file, score, index: i };
+      }));
+    }
+  } catch (e) {
+    console.warn('Supabase fetch failed, using local fallback', e);
+  }
+
+  // Fallback: local HTML files
+  if (!apps.length) {
+    apps = [
+      { id: 1, name: 'Tasks',              desc: 'Gestisci le tue attività',    file: 'tasks.html',         score: null, index: 0 },
+      { id: 2, name: 'Habit Tracker',      desc: 'Segui le tue abitudini',      file: 'habit-tracker.html', score: null, index: 1 },
+      { id: 3, name: 'Weight Quest',       desc: 'Monitora il tuo peso',        file: 'weight-quest.html',  score: null, index: 2 },
+      { id: 4, name: 'Events Log',         desc: 'Registra i tuoi eventi',      file: 'events-log.html',    score: null, index: 3 },
+    ];
+  }
+
+  renderGrid(apps, grid);
+  container.classList.remove('loading');
+}
+
+function renderGrid(apps, grid) {
+  grid.innerHTML = '';
+
+  apps.forEach((app, i) => {
+    const c = COLORS[i % COLORS.length];
+    const emoji = emojiFor(app.file);
+    const scoreText = app.score !== null ? `<span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:12px;display:block">${app.score} pts</span>` : '';
+
+    const card = document.createElement('a');
+    card.className = 'app-card';
+    card.href = app.file;
+    card.innerHTML = `
+      <div class="app-icon" style="background:${c.bg};color:${c.icon}">${emoji}</div>
+      <div class="app-name">${app.name}</div>
+      <div class="app-desc">${app.desc}</div>
+      ${scoreText}
+      <span class="app-arrow">↗</span>
+    `;
+
+    // Pass Google token to child windows
+    card.addEventListener('click', e => {
+      const googleToken = sessionStorage.getItem('google_token');
+      if (googleToken) {
+        e.preventDefault();
+        const win = window.open(app.file, '_blank');
+        if (win) {
+          setTimeout(() => win.postMessage({ type: 'GOOGLE_TOKEN', token: googleToken }, '*'), 1000);
+        }
+      }
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+// ── INIT ──
+async function init() {
+  const token = parseHash() || sessionStorage.getItem('sb_token');
+  if (token) {
+    const user = await getUserInfo(token);
+    if (user) { showApp(user); return; }
+    sessionStorage.removeItem('sb_token');
+  }
+  // show login
+}
+
+init();
+</script>
+</body>
+</html>
