@@ -272,16 +272,19 @@
 
         /* STATS GRID */
         .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
             margin-bottom: 15px;
+            overflow-x: auto;
         }
 
         .stat-box {
+            flex: 1;
+            min-width: 0;
             background: white;
             border-radius: 12px;
-            padding: 20px;
+            padding: 10px 6px;
             text-align: center;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
@@ -304,10 +307,10 @@
         }
 
         .stat-value {
-            font-size: 42px;
+            font-size: 26px;
             font-weight: bold;
             line-height: 1;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
 
         .stat-box.teal .stat-value { color: #00B894; }
@@ -455,7 +458,7 @@
         /* RESPONSIVE */
         @media (max-width: 600px) {
             .stats-grid {
-                grid-template-columns: 1fr;
+                gap: 6px;
             }
             
             .sidebar-overlay {
@@ -613,8 +616,12 @@
             <div class="content main-content">
             <!-- PAGE 1: OBIETTIVI -->
             <div id="obiettiviPage" class="page active">
-                <!-- Stats Totali -->
+                <!-- Stats + Peso su una sola riga -->
                 <div class="stats-grid">
+                    <div class="stat-box" style="background: linear-gradient(135deg, #FF3366, #ff6b9d); color: white;">
+                        <div class="stat-value" id="weightValue" style="color: white;">--</div>
+                        <div class="stat-label" style="color: rgba(255,255,255,0.85);">⚖️ Peso kg</div>
+                    </div>
                     <div class="stat-box gradient">
                         <div class="stat-value" id="statsScore">0</div>
                         <div class="stat-label">Punteggio</div>
@@ -630,15 +637,6 @@
                     <div class="stat-box yellow">
                         <div class="stat-value" id="statsActive">0</div>
                         <div class="stat-label">Attivi</div>
-                    </div>
-                </div>
-
-                <!-- Peso Attuale -->
-                <div class="card">
-                    <h3>⚖️ Peso Attuale</h3>
-                    <div style="text-align: center;">
-                        <div style="font-size: 56px; font-weight: bold; color: #FF3366;" id="weightValue">--</div>
-                        <div style="font-size: 14px; color: #666;">kg</div>
                     </div>
                 </div>
 
