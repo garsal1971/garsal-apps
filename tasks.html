@@ -3253,6 +3253,13 @@
                                             }
                                         } else if (task.type === 'free_repeat') {
                                             typeLabel = 'Libera ripetizione';
+                                        } else if (task.type === 'single') {
+                                            typeLabel = 'Singolo';
+                                        } else if (task.type === 'workflow') {
+                                            const steps = task.workflow_steps || [];
+                                            const completed = steps.filter(s => s.status === 'completed').length;
+                                            const failed = steps.filter(s => s.status === 'failed').length;
+                                            typeLabel = `Workflow • ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
                                         }
                                         return typeLabel ? `<p style="margin: 0.3rem 0 0 0; font-size: var(--mgmt-meta-size); color: #000;">${typeLabel}</p>` : '';
                                     })()}
