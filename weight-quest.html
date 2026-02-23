@@ -562,15 +562,7 @@
 
     <!-- MAIN APP -->
     <div id="mainSection" class="hidden">
-        <!-- TOP BAR -->
-        <div class="top-bar">
-            <div class="date-calendar">
-                <div class="date-month" id="topMonth">Feb</div>
-                <div class="date-day" id="topDay">18</div>
-            </div>
-            <div class="top-title" id="topTitle">Weight Quest</div>
-            <button style="background: none; border: none; color: white; font-size: 24px; padding: 5px 10px; cursor: pointer;" id="btnSync" title="Sincronizza">🔄</button>
-        </div>
+
 
         <!-- ICON NAVIGATION -->
         <div class="icon-nav">
@@ -1105,8 +1097,8 @@
                             'tabella': 'Tabella Pesi',
                             'grafico': 'Grafico Peso'
                         };
-                        document.getElementById('topTitle').textContent = titles[pageName] || 'Weight Quest';
-                        
+                        var elTitle = document.getElementById('topTitle'); if (elTitle) elTitle.textContent = titles[pageName] || 'Weight Quest';
+
                         // Refresh data when switching to tabella or grafico
                         if (pageName === 'tabella' && userData.weights && userData.weights.length > 0) {
                             updateWeightTable(userData.weights);
@@ -1153,7 +1145,7 @@
                             'tabella': 'Tabella Pesi',
                             'grafico': 'Grafico Peso'
                         };
-                        document.getElementById('topTitle').textContent = titles[pageName] || 'Weight Quest';
+                        var elTitle2 = document.getElementById('topTitle'); if (elTitle2) elTitle2.textContent = titles[pageName] || 'Weight Quest';
 
                         // Refresh data
                         if (pageName === 'tabella' && userData.weights && userData.weights.length > 0) {
@@ -1167,8 +1159,8 @@
                 // Update date display
                 var now = new Date();
                 var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                document.getElementById('topMonth').textContent = months[now.getMonth()];
-                document.getElementById('topDay').textContent = now.getDate();
+                var elMonth = document.getElementById('topMonth'); if (elMonth) elMonth.textContent = months[now.getMonth()];
+                var elDay = document.getElementById('topDay'); if (elDay) elDay.textContent = now.getDate();
 
                 log('Navigation initialized');
                 
