@@ -8505,6 +8505,8 @@ Per attivarle:
                     const completed = steps.filter(s => s.status === 'completed').length;
                     const failed = steps.filter(s => s.status === 'failed').length;
                     typeLabel = `Progresso: ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
+                } else if (task.type === 'single') {
+                    typeLabel = 'Singolo';
                 }
                 
                 // Per workflow, rendering compatto - click apre popup
@@ -9068,7 +9070,32 @@ Per attivarle:
         }
 
         function renderTaskCard(task, isCompleted) {
-            const typeLabel = task.type === 'single' ? '📅 Singolo' : '♾️ ' + getRecurringLabel(task);
+            let typeLabel = '';
+            if (task.type === 'single') {
+                typeLabel = '📅 Singolo';
+            } else if (task.type === 'simple_recurring' || task.type === 'recurring') {
+                typeLabel = '♾️ ' + getDetailedRecurringLabel(task);
+            } else if (task.type === 'multiple') {
+                const allDates = (task.multiple_dates || []);
+                const totalDates = allDates.length;
+                const nextOcc = task.next_occurrence_date ? task.next_occurrence_date.split('T')[0] : null;
+                if (nextOcc) {
+                    const remainingDates = allDates.filter(d => d >= nextOcc).length;
+                    const nextDate = new Date(nextOcc + 'T00:00:00');
+                    const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+                    const nextDateStr = `${nextDate.getDate()} ${monthNames[nextDate.getMonth()]}`;
+                    typeLabel = `📅 Prossima: ${nextDateStr} • ${remainingDates}/${totalDates} date`;
+                } else {
+                    typeLabel = `📅 ${totalDates} date completate`;
+                }
+            } else if (task.type === 'free_repeat') {
+                typeLabel = '🔄 Libera ripetizione';
+            } else if (task.type === 'workflow') {
+                const steps = task.workflow_steps || [];
+                const completed = steps.filter(s => s.status === 'completed').length;
+                const failed = steps.filter(s => s.status === 'failed').length;
+                typeLabel = `🔀 Workflow • ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
+            }
             const categoriesList = task.categories?.map(catId => {
                 const cat = categories.find(c => c.id === catId);
                 return cat ? `<span class="category-pill" style="background: ${cat.color}; color: white;">${cat.icon} ${cat.name}</span>` : '';
