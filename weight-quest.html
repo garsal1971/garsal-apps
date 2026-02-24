@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.1.7</title>
+    <title>Weight Quest v3.1.8</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -654,9 +654,9 @@
                         <div class="stat-value" id="weightValue" style="color: white;">--</div>
                         <div class="stat-label" style="color: rgba(255,255,255,0.85);">⚖️ Peso kg</div>
                     </div>
-                    <div class="stat-box gradient">
-                        <div class="stat-value" id="statsScore">0</div>
-                        <div class="stat-label">Punteggio</div>
+                    <div class="stat-box" style="border: 3px solid #F39C12;">
+                        <div class="stat-value" id="avgScoreValue" style="color: #F39C12;">-</div>
+                        <div class="stat-label" style="color: #F39C12;">Kg alla fine</div>
                     </div>
                     <div class="stat-box teal">
                         <div class="stat-value" id="statsCompleted">0</div>
@@ -670,13 +670,13 @@
                         <div class="stat-value" id="statsActive">0</div>
                         <div class="stat-label">Attivi</div>
                     </div>
-                    <div class="stat-box" style="border: 3px solid #FF3366;">
-                        <div class="stat-value" id="scoreValue" style="color: #FF3366;">0</div>
-                        <div class="stat-label" style="color: #FF3366;">Totale</div>
+                    <div class="stat-box gradient">
+                        <div class="stat-value" id="statsScore">0</div>
+                        <div class="stat-label">Punteggio</div>
                     </div>
-                    <div class="stat-box" style="border: 3px solid #4A90E2;">
-                        <div class="stat-value" id="avgScoreValue" style="color: #4A90E2;">0.0</div>
-                        <div class="stat-label" style="color: #4A90E2;">Media/g</div>
+                    <div class="stat-box" style="border: 3px solid #FF3366;">
+                        <div class="stat-value" id="scoreValue" style="color: #FF3366;">-</div>
+                        <div class="stat-label" style="color: #FF3366;">Punti oggi</div>
                     </div>
                 </div>
 
@@ -819,8 +819,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.7';
-        var BUILD_TIME  = '2026-02-24T23:00:00Z';
+        var APP_VERSION = 'v3.1.8';
+        var BUILD_TIME  = '2026-02-24T23:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2130,81 +2130,99 @@
         }
 
         function calculateTotalScores(data) {
-            if (!data || data.length === 0 || !userData.milestones || userData.milestones.length < 2 || !userData.currentObjective) {
-                document.getElementById('scoreValue').textContent = '0';
-                document.getElementById('avgScoreValue').textContent = '0.0';
-                return;
-            }
-            
+            var scoreEl = document.getElementById('scoreValue');
+            var kgEl    = document.getElementById('avgScoreValue');
+
+            // Nessun obiettivo attivo → trattino su entrambi i badge
             var obj = userData.currentObjective;
-            
-            // Se l'obiettivo è chiuso (success o failed), mostra il punteggio salvato nel DB
-            if (obj.status === 'success' || obj.status === 'failed') {
-                var savedScore = obj.total_score || 0;
-                document.getElementById('scoreValue').textContent = savedScore;
-                
-                // Calcola comunque la media giornaliera per info
-                var daysCount = Math.ceil((new Date(obj.end_date) - new Date(obj.start_date)) / (1000 * 60 * 60 * 24)) + 1;
-                var avgScore = daysCount > 0 ? savedScore / daysCount : 0;
-                document.getElementById('avgScoreValue').textContent = avgScore.toFixed(1);
-                
-                log('Obiettivo chiuso: mostro punteggio salvato = ' + savedScore);
+            var isActive = obj && obj.status !== 'success' && obj.status !== 'failed';
+            if (!isActive || !userData.milestones || userData.milestones.length < 2) {
+                if (scoreEl) scoreEl.textContent = '-';
+                if (kgEl)    kgEl.textContent    = '-';
                 return;
             }
-            
-            // Se l'obiettivo è attivo, calcola i punti in tempo reale
-            var dailyBonus = obj.daily_bonus || 10;
-            var dailyMalus = obj.daily_malus || 5;
-            var finalBonus = obj.final_bonus || 100;
-            var finalMalus = obj.final_malus || 50;
-            
+
+            var dailyBonus  = obj.daily_bonus  || 10;
+            var dailyMalus  = obj.daily_malus  || 5;
+            var finalBonus  = obj.final_bonus  || 100;
+            var finalMalus  = obj.final_malus  || 50;
             var startDateStr = obj.start_date;
             var endDateStr   = obj.end_date;
-            var startDate    = new Date(startDateStr);
-            var endDate      = new Date(endDateStr);
-            
-            // Aggrega peso MIN per ogni giorno con pesata
-            var dayMin = {};
-            data.forEach(function(row) {
-                var d = row.date;
-                if (dayMin[d] === undefined || row.weight < dayMin[d]) {
-                    dayMin[d] = row.weight;
-                }
-            });
-            
-            var totalScore = 0;
-            var daysCount  = 0;
-            var cursor     = new Date(startDate);
-            
-            while (cursor <= endDate) {
+
+            // --- Badge "Punti oggi": punteggio accumulato fino ad oggi
+            //     (stessa logica della tabella: pesate reali + giorni interpolati) ---
+            var dayGroups = {};
+            if (data && data.length > 0) {
+                data.forEach(function(row) {
+                    var d = row.date;
+                    if (!dayGroups[d]) dayGroups[d] = [];
+                    dayGroups[d].push(row);
+                });
+            }
+
+            var todayStr  = new Date().toISOString().split('T')[0];
+            var endLoop   = endDateStr < todayStr ? endDateStr : todayStr;
+
+            // Individua giorni interpolati (nel range obiettivo, senza pesata reale)
+            var interpolatedDays = {};
+            var cursor = new Date(startDateStr);
+            while (true) {
                 var dateStr = cursor.toISOString().split('T')[0];
-                
-                if (dayMin[dateStr] !== undefined) {
-                    var weight    = dayMin[dateStr];
-                    var target    = getInterpolatedTarget(dateStr);
-                    var isLastDay = (dateStr === endDateStr);
-                    
-                    if (target !== null) {
-                        if (weight <= target) {
-                            // Sotto target: somma BONUS (fisso, non moltiplicato)
-                            totalScore += dailyBonus;
-                            if (isLastDay) totalScore += finalBonus;
-                        } else {
-                            // Sopra target: sottrai MALUS (fisso, non moltiplicato)
-                            totalScore -= dailyMalus;
-                            if (isLastDay) totalScore -= finalMalus;
-                        }
-                        daysCount++;
-                    }
+                if (dateStr > endLoop) break;
+                if (!dayGroups[dateStr] && getInterpolatedTarget(dateStr) !== null) {
+                    interpolatedDays[dateStr] = true;
                 }
-                
                 cursor.setDate(cursor.getDate() + 1);
             }
-            
-            var avgScore = daysCount > 0 ? totalScore / daysCount : 0;
-            
-            document.getElementById('scoreValue').textContent = totalScore;
-            document.getElementById('avgScoreValue').textContent = avgScore.toFixed(1);
+
+            // Calcola punteggio cumulativo (reali + interpolati) fino ad oggi
+            var allDaysAsc = Object.keys(dayGroups)
+                .concat(Object.keys(interpolatedDays))
+                .filter(function(d) { return d >= startDateStr && d <= endLoop; })
+                .sort();
+
+            var totalScore = 0;
+            allDaysAsc.forEach(function(date) {
+                var isInterp = !!interpolatedDays[date];
+                var target, effectiveWeight;
+
+                if (isInterp) {
+                    target          = getInterpolatedTarget(date);
+                    effectiveWeight = getInterpolatedWeightFromSeries(date, dayGroups);
+                } else {
+                    var dayData  = dayGroups[date];
+                    var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
+                    target          = minEntry.target_weight || getInterpolatedTarget(date);
+                    effectiveWeight = minEntry.weight;
+                }
+
+                if (target === null || effectiveWeight === null) return;
+
+                var isLastDay = (date === endDateStr);
+                var daily;
+                if (effectiveWeight <= target) {
+                    daily = dailyBonus;
+                    if (isLastDay) daily += finalBonus;
+                } else {
+                    daily = -dailyMalus;
+                    if (isLastDay) daily -= finalMalus;
+                }
+                totalScore += daily;
+            });
+
+            if (scoreEl) scoreEl.textContent = totalScore;
+
+            // --- Badge "Kg alla fine": peso attuale − target alla data fine obiettivo ---
+            var currentWeight  = data && data.length > 0 ? data[0].weight : null;
+            var targetAtEnd    = getInterpolatedTarget(endDateStr);
+            if (currentWeight !== null && targetAtEnd !== null) {
+                var kgMancanti = currentWeight - targetAtEnd;
+                if (kgEl) kgEl.textContent = kgMancanti.toFixed(1);
+            } else {
+                if (kgEl) kgEl.textContent = '-';
+            }
+
+            log('Badge — Punti oggi: ' + totalScore + ' | Kg alla fine: ' + (kgEl ? kgEl.textContent : '-'));
         }
 
         var weightChart = null;
