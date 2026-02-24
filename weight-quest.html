@@ -2807,7 +2807,11 @@
             (function scrollToToday(attempt) {
                 var scrollContainer = document.getElementById('chartScrollWrapper');
                 var chartCont = document.getElementById('chartContainer');
-                if (!scrollContainer || !chartCont || labels.length === 0) return;
+                console.log('[SCROLL] scrollContainer:', scrollContainer, 'chartCont:', chartCont, 'labels.length:', labels.length);
+                if (!scrollContainer || !chartCont || labels.length === 0) {
+                    console.log('[SCROLL] uscita anticipata - dati mancanti');
+                    return;
+                }
 
                 if (scrollContainer.clientWidth === 0 && attempt < 20) {
                     setTimeout(function() { scrollToToday(attempt + 1); }, 100);
@@ -2816,11 +2820,15 @@
 
                 var totalChartWidth = parseFloat(chartCont.style.width) || (labels.length * pixelPerDay);
                 var actualPixelPerDay = totalChartWidth / labels.length;
+                console.log('[SCROLL] totalChartWidth:', totalChartWidth, 'labels.length:', labels.length, 'actualPixelPerDay:', actualPixelPerDay);
+                console.log('[SCROLL] scrollContainer.clientWidth:', scrollContainer.clientWidth, 'scrollContainer.scrollWidth:', scrollContainer.scrollWidth);
 
                 var today = new Date();
                 var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
                                today.getDate().toString().padStart(2, '0');
                 var todayIndex = labels.indexOf(todayStr);
+                console.log('[SCROLL] todayStr:', todayStr, 'todayIndex (diretto):', todayIndex);
+                console.log('[SCROLL] prime 3 label:', labels.slice(0, 3), 'ultime 3 label:', labels.slice(-3));
 
                 if (todayIndex === -1) {
                     var todayTime = today.getTime();
@@ -2837,6 +2845,7 @@
                         if (diff < minDiff) { minDiff = diff; closestIndex = index; }
                     });
                     todayIndex = closestIndex;
+                    console.log('[SCROLL] fallback: closestIndex:', closestIndex, 'label trovata:', labels[closestIndex], 'minDiff (ms):', minDiff);
                 }
 
                 scrollContainer.scrollLeft = Math.max(0, todayIndex * actualPixelPerDay - 14 * actualPixelPerDay);
