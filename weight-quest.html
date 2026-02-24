@@ -819,8 +819,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.4';
-        var BUILD_TIME  = '2026-02-24T21:30:00Z';
+        var APP_VERSION = 'v3.1.5';
+        var BUILD_TIME  = '2026-02-24T22:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1769,6 +1769,51 @@
                 }
             }
             
+            return null;
+        }
+
+        // Interpola il peso per una data senza pesate reali, basandosi sull'andamento
+        // della serie di misurazioni (non sul target delle milestone).
+        // dayGroups: { 'YYYY-MM-DD': [entries...] }
+        function getInterpolatedWeightFromSeries(date, dayGroups) {
+            var sortedDates = Object.keys(dayGroups).sort();
+            if (sortedDates.length === 0) return null;
+
+            // Peso minimo (mattutino) per ogni giorno con pesata reale
+            var measurements = sortedDates.map(function(d) {
+                var entries = dayGroups[d];
+                var minEntry = entries.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
+                return { date: d, weight: minEntry.weight };
+            });
+
+            if (measurements.length === 1) return measurements[0].weight;
+
+            var targetTime = new Date(date).getTime();
+            var before = null, after = null;
+
+            for (var i = 0; i < measurements.length; i++) {
+                var mTime = new Date(measurements[i].date).getTime();
+                if (mTime < targetTime) {
+                    before = measurements[i];
+                } else if (mTime > targetTime && after === null) {
+                    after = measurements[i];
+                    break;
+                }
+            }
+
+            if (before && after) {
+                // Interpolazione lineare tra la pesata precedente e la successiva
+                var t1 = new Date(before.date).getTime();
+                var t2 = new Date(after.date).getTime();
+                var progress = (targetTime - t1) / (t2 - t1);
+                return parseFloat((before.weight + (after.weight - before.weight) * progress).toFixed(2));
+            } else if (before) {
+                // Dopo l'ultima pesata: usa l'ultimo peso noto
+                return before.weight;
+            } else if (after) {
+                // Prima della prima pesata: usa il primo peso noto
+                return after.weight;
+            }
             return null;
         }
 
@@ -3090,6 +3135,11 @@
                     ? (minEntry.target_weight || getInterpolatedTarget(date))
                     : getInterpolatedTarget(date);
 
+                // Per i giorni senza pesate: peso stimato dall'andamento della serie reale
+                var interpWeight = isInterpolated
+                    ? getInterpolatedWeightFromSeries(date, dayGroups)
+                    : null;
+
                 var inRange   = obj && (date >= startDateStr && date <= endDateStr);
                 var isLastDay = obj && (date === endDateStr);
 
@@ -3148,8 +3198,8 @@
                 tdMin.style.fontWeight = 'bold';
                 tdMin.style.fontSize = '1.1em';
                 if (isInterpolated) {
-                    // Mostra il peso interpolato (target) in corsivo grigio
-                    tdMin.textContent = target ? target.toFixed(1) + ' kg' : '—';
+                    // Peso stimato dall'andamento della serie (non dal target milestone)
+                    tdMin.textContent = interpWeight !== null ? interpWeight.toFixed(1) + ' kg' : '—';
                     tdMin.style.color = '#aaa';
                     tdMin.style.fontStyle = 'italic';
                 } else {
@@ -3174,8 +3224,8 @@
                 tdMax.style.fontWeight = 'bold';
                 tdMax.style.fontSize = '1.1em';
                 if (isInterpolated) {
-                    // Mostra il peso interpolato (target) in corsivo grigio
-                    tdMax.textContent = target ? target.toFixed(1) + ' kg' : '—';
+                    // Peso stimato dall'andamento della serie (non dal target milestone)
+                    tdMax.textContent = interpWeight !== null ? interpWeight.toFixed(1) + ' kg' : '—';
                     tdMax.style.color = '#aaa';
                     tdMax.style.fontStyle = 'italic';
                 } else {
