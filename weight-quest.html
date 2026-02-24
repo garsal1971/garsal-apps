@@ -819,8 +819,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.3';
-        var BUILD_TIME  = '2026-02-24T21:00:00Z';
+        var APP_VERSION = 'v3.1.4';
+        var BUILD_TIME  = '2026-02-24T21:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3148,8 +3148,10 @@
                 tdMin.style.fontWeight = 'bold';
                 tdMin.style.fontSize = '1.1em';
                 if (isInterpolated) {
-                    tdMin.textContent = '—';
-                    tdMin.style.color = '#ccc';
+                    // Mostra il peso interpolato (target) in corsivo grigio
+                    tdMin.textContent = target ? target.toFixed(1) + ' kg' : '—';
+                    tdMin.style.color = '#aaa';
+                    tdMin.style.fontStyle = 'italic';
                 } else {
                     tdMin.style.color = (target && minWeight <= target) ? '#00B894' : '#E74C3C';
                     tdMin.textContent = minWeight.toFixed(1) + ' kg';
@@ -3172,8 +3174,10 @@
                 tdMax.style.fontWeight = 'bold';
                 tdMax.style.fontSize = '1.1em';
                 if (isInterpolated) {
-                    tdMax.textContent = '—';
-                    tdMax.style.color = '#ccc';
+                    // Mostra il peso interpolato (target) in corsivo grigio
+                    tdMax.textContent = target ? target.toFixed(1) + ' kg' : '—';
+                    tdMax.style.color = '#aaa';
+                    tdMax.style.fontStyle = 'italic';
                 } else {
                     tdMax.style.color = (target && maxWeight <= target) ? '#00B894' : '#E74C3C';
                     tdMax.textContent = maxWeight.toFixed(1) + ' kg';
