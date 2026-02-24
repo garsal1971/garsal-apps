@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v2.4.1</title>
+    <title>Weight Quest v3.1.2</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -819,12 +819,13 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.1';
-        var BUILD_TIME = '2026-02-24T13:57:45Z';
+        var APP_VERSION = 'v3.1.2';
+        var BUILD_TIME  = '2026-02-24T20:15:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
-        
+
+
         // Supabase client minimale senza CDN
         class SupabaseClient {
             constructor(url, key) {
@@ -2679,7 +2680,8 @@
                             data: minWeightData,
                             borderColor: '#00B894',
                             backgroundColor: 'rgba(0, 184, 148, 0.2)',
-                            borderWidth: 2,
+                            borderWidth: 0,
+                            showLine: false,
                             pointRadius: 0,
                             pointHoverRadius: 0,
                             tension: 0.3,
@@ -2691,7 +2693,8 @@
                             data: maxWeightData,
                             borderColor: '#E74C3C',
                             backgroundColor: 'rgba(231, 76, 60, 0.2)',
-                            borderWidth: 2,
+                            borderWidth: 0,
+                            showLine: false,
                             pointRadius: 0,
                             pointHoverRadius: 0,
                             tension: 0.3,
@@ -2847,6 +2850,54 @@
                 }
 
                 scrollContainer.scrollLeft = Math.max(0, todayIndex * actualPixelPerDay - 14 * actualPixelPerDay);
+            }(0));
+        }
+
+        // Centra il grafico su oggi senza ricostruirlo
+        function scrollChartToToday() {
+            (function doScroll(attempt) {
+                var scrollContainer = document.getElementById('chartScrollWrapper');
+                var chartCont = document.getElementById('chartContainer');
+                if (!scrollContainer || !chartCont || !weightChart ||
+                    !weightChart.data || !weightChart.data.labels ||
+                    weightChart.data.labels.length === 0) return;
+
+                var containerWidth = scrollContainer.clientWidth;
+                if (containerWidth === 0 && attempt < 20) {
+                    setTimeout(function() { doScroll(attempt + 1); }, 100);
+                    return;
+                }
+
+                var labels = weightChart.data.labels;
+                var totalChartWidth = parseFloat(chartCont.style.width) || 0;
+                if (totalChartWidth === 0) return;
+                var actualPixelPerDay = totalChartWidth / labels.length;
+
+                var today = new Date();
+                var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
+                               today.getDate().toString().padStart(2, '0');
+                var todayIndex = labels.indexOf(todayStr);
+
+                if (todayIndex === -1) {
+                    var todayTime = today.getTime();
+                    var closestIndex = 0;
+                    var minDiff = Infinity;
+                    labels.forEach(function(label, index) {
+                        var parts = label.split('-');
+                        var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var diff = Math.min(
+                            Math.abs(d1.getTime() - todayTime),
+                            Math.abs(d2.getTime() - todayTime)
+                        );
+                        if (diff < minDiff) { minDiff = diff; closestIndex = index; }
+                    });
+                    todayIndex = closestIndex;
+                }
+
+                if (containerWidth === 0) containerWidth = window.innerWidth || 400;
+                var todayPosition = todayIndex * actualPixelPerDay;
+                scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (actualPixelPerDay / 2);
             }(0));
         }
 
@@ -3272,8 +3323,10 @@
         })();
 
         // START
+        console.log('%c⚖ Weight Quest ' + APP_VERSION, 'color:#00B894;font-size:16px;font-weight:bold;');
+        console.log('%cbuild: ' + BUILD_TIME, 'color:#888;font-size:11px;');
         log('===========================================');
-        log('WEIGHT QUEST ' + APP_VERSION);
+        log('WEIGHT QUEST ' + APP_VERSION + ' — build: ' + BUILD_TIME);
         log('===========================================');
         log('Script caricato');
         

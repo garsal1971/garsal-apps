@@ -202,6 +202,43 @@ Push to `master` → Netlify picks it up → live within seconds.
   - `refactor:` — code restructure without behaviour change
   - `chore:` — tooling, config, or non-functional change
 
+### Deploy automatico
+Pushing to a `claude/**` branch triggers `.github/workflows/deploy.yml` which:
+1. Merges the branch into `master` automatically (no PR needed)
+2. Netlify picks up the master push and deploys within seconds
+
+**Claude cannot push directly to `master`** (HTTP 403 — server-side branch protection).
+The only path to production is: push to `claude/**` → GitHub Actions merges → Netlify deploys.
+
+### Versioning — regola obbligatoria
+**Ad ogni modifica a qualsiasi file HTML**, Claude deve:
+
+1. **Incrementare il patch version** (`APP_VERSION`) — es. `v3.1.1` → `v3.1.2`
+2. **Aggiornare `BUILD_TIME`** con il timestamp UTC corrente — es. `'2026-02-24T20:00:00Z'`
+3. **Verificare che la versione compaia in**:
+   - `<title>` tag della pagina
+   - `var APP_VERSION` nello script
+   - `var BUILD_TIME` nello script
+   - `console.log` stilizzato visibile nei DevTools del browser
+   - Log dell'app (funzione `log()`)
+
+Struttura versioning in `weight-quest.html` (righe ~782–787):
+```js
+var APP_VERSION = 'v3.1.2';
+var BUILD_TIME  = '2026-02-24T20:00:00Z';
+console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+```
+
+E nel blocco START (righe ~3280):
+```js
+console.log('%c⚖ Weight Quest ' + APP_VERSION, 'color:#00B894;font-size:16px;font-weight:bold;');
+console.log('%cbuild: ' + BUILD_TIME, 'color:#888;font-size:11px;');
+log('===========================================');
+log('WEIGHT QUEST ' + APP_VERSION + ' — build: ' + BUILD_TIME);
+log('===========================================');
+```
 ---
 
 ## Key Conventions
