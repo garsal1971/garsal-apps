@@ -819,8 +819,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.2';
-        var BUILD_TIME  = '2026-02-24T20:15:00Z';
+        var APP_VERSION = 'v3.1.3';
+        var BUILD_TIME  = '2026-02-24T21:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3000,27 +3000,7 @@
         function updateWeightTable(data) {
             var tbody = document.getElementById('weightTableBody');
             tbody.innerHTML = '';
-            
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">Nessun dato disponibile</td></tr>';
-                return;
-            }
-            
-            // Aggrega i dati per giorno (MIN e MAX)
-            var dayGroups = {};
-            data.forEach(function(row) {
-                var date = row.date;
-                if (!dayGroups[date]) dayGroups[date] = [];
-                dayGroups[date].push(row);
-            });
-            
-            // Ordina per data decrescente (per display)
-            var sortedDays = Object.keys(dayGroups).sort(function(a, b) {
-                return b.localeCompare(a);
-            });
-            
-            // Calcola punteggi cumulativi in ordine CRESCENTE
-            // (partendo da start_date, sommando giorno per giorno)
+
             var obj          = userData.currentObjective || null;
             var startDateStr = obj ? obj.start_date : null;
             var endDateStr   = obj ? obj.end_date   : null;
@@ -3028,24 +3008,61 @@
             var dailyMalus   = obj ? (obj.daily_malus || 5)   : 5;
             var finalBonus   = obj ? (obj.final_bonus || 100) : 100;
             var finalMalus   = obj ? (obj.final_malus || 50)  : 50;
-            
+
+            // Aggrega i dati per giorno (MIN e MAX)
+            var dayGroups = {};
+            if (data && data.length > 0) {
+                data.forEach(function(row) {
+                    var date = row.date;
+                    if (!dayGroups[date]) dayGroups[date] = [];
+                    dayGroups[date].push(row);
+                });
+            }
+
+            // Giorni dell'obiettivo senza pesate reali → mostra peso interpolato
+            var interpolatedDays = {};
+            if (obj && startDateStr && endDateStr) {
+                var todayStr = new Date().toISOString().split('T')[0];
+                var d = new Date(startDateStr);
+                var endLoop = endDateStr < todayStr ? endDateStr : todayStr;
+                while (true) {
+                    var dateStr = d.toISOString().split('T')[0];
+                    if (dateStr > endLoop) break;
+                    if (!dayGroups[dateStr] && getInterpolatedTarget(dateStr) !== null) {
+                        interpolatedDays[dateStr] = true;
+                    }
+                    d.setDate(d.getDate() + 1);
+                }
+            }
+
+            var allDays = Object.keys(dayGroups).concat(Object.keys(interpolatedDays));
+
+            if (allDays.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">Nessun dato disponibile</td></tr>';
+                return;
+            }
+
+            // Ordina per data decrescente (per display)
+            var sortedDays = allDays.sort(function(a, b) { return b.localeCompare(a); });
+
             // Costruisce mappa data→punteggio cumulativo in ordine cronologico
+            // (solo per giorni CON pesate reali nell'intervallo obiettivo)
             var cumulativeMap = {};
             var cumulative = 0;
-            
+
             if (obj) {
                 var sortedAsc = Object.keys(dayGroups).sort();
                 sortedAsc.forEach(function(date) {
                     var inRange = (date >= startDateStr && date <= endDateStr);
                     if (!inRange) return;
-                    
+
                     var dayData  = dayGroups[date];
                     var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
                     var target   = minEntry.target_weight || getInterpolatedTarget(date);
                     if (target === null) return;
-                    
+
                     var isLastDay = (date === endDateStr);
-                    
+
                     if (minEntry.weight <= target) {
                         cumulative += dailyBonus;
                         if (isLastDay) cumulative += finalBonus;
@@ -3056,25 +3073,29 @@
                     cumulativeMap[date] = cumulative;
                 });
             }
-            
+
             // Render righe in ordine decrescente
             sortedDays.forEach(function(date) {
-                var dayData  = dayGroups[date];
-                var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
-                var maxEntry = dayData.reduce(function(a, b) { return a.weight > b.weight ? a : b; });
-                
-                var minWeight = minEntry.weight;
-                var maxWeight = maxEntry.weight;
-                var minTime   = minEntry.time || '--';
-                var maxTime   = maxEntry.time || '--';
-                var target    = minEntry.target_weight || getInterpolatedTarget(date);
-                
+                var isInterpolated = !!interpolatedDays[date];
+                var dayData  = isInterpolated ? null : dayGroups[date];
+
+                var minEntry = dayData ? dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; }) : null;
+                var maxEntry = dayData ? dayData.reduce(function(a, b) { return a.weight > b.weight ? a : b; }) : null;
+
+                var minWeight = minEntry ? minEntry.weight : null;
+                var maxWeight = maxEntry ? maxEntry.weight : null;
+                var minTime   = minEntry ? (minEntry.time || '--') : '—';
+                var maxTime   = maxEntry ? (maxEntry.time || '--') : '—';
+                var target    = minEntry
+                    ? (minEntry.target_weight || getInterpolatedTarget(date))
+                    : getInterpolatedTarget(date);
+
                 var inRange   = obj && (date >= startDateStr && date <= endDateStr);
                 var isLastDay = obj && (date === endDateStr);
-                
-                // Calcolo punteggio giornaliero (fisso, non moltiplicato)
+
+                // Calcolo punteggio giornaliero solo per giorni con pesate reali
                 var dailyScore = null;
-                if (inRange && target !== null) {
+                if (!isInterpolated && inRange && target !== null && minWeight !== null) {
                     if (minWeight <= target) {
                         dailyScore = dailyBonus;
                         if (isLastDay) dailyScore += finalBonus;
@@ -3083,22 +3104,34 @@
                         if (isLastDay) dailyScore -= finalMalus;
                     }
                 }
-                
+
                 var tr = document.createElement('tr');
                 tr.style.borderBottom = '1px solid #eee';
-                
-                // Righe fuori dall'intervallo: opacità ridotta
-                if (!inRange) {
+
+                if (isInterpolated) {
+                    // Riga senza pesata reale: sfondo leggermente diverso, corsivo
+                    tr.style.background = '#f9f9f9';
+                    tr.style.fontStyle = 'italic';
+                    tr.style.opacity = '0.7';
+                } else if (!inRange) {
                     tr.style.opacity = '0.4';
                 }
-                
+
                 // -- DATA --
                 var tdDate = document.createElement('td');
                 tdDate.style.padding = '10px';
                 tdDate.style.fontWeight = 'bold';
                 tdDate.textContent = date;
+                if (isInterpolated) {
+                    var badge = document.createElement('span');
+                    badge.textContent = ' ○';
+                    badge.title = 'Nessuna pesata — solo target interpolato';
+                    badge.style.color = '#bbb';
+                    badge.style.fontSize = '0.8em';
+                    tdDate.appendChild(badge);
+                }
                 tr.appendChild(tdDate);
-                
+
                 // -- TARGET --
                 var tdTarget = document.createElement('td');
                 tdTarget.style.padding = '10px';
@@ -3107,17 +3140,22 @@
                 tdTarget.style.fontWeight = 'bold';
                 tdTarget.textContent = target ? target.toFixed(1) + ' kg' : '--';
                 tr.appendChild(tdTarget);
-                
+
                 // -- PESO MIN --
                 var tdMin = document.createElement('td');
                 tdMin.style.padding = '10px';
                 tdMin.style.textAlign = 'center';
                 tdMin.style.fontWeight = 'bold';
                 tdMin.style.fontSize = '1.1em';
-                tdMin.style.color = (target && minWeight <= target) ? '#00B894' : '#E74C3C';
-                tdMin.textContent = minWeight.toFixed(1) + ' kg';
+                if (isInterpolated) {
+                    tdMin.textContent = '—';
+                    tdMin.style.color = '#ccc';
+                } else {
+                    tdMin.style.color = (target && minWeight <= target) ? '#00B894' : '#E74C3C';
+                    tdMin.textContent = minWeight.toFixed(1) + ' kg';
+                }
                 tr.appendChild(tdMin);
-                
+
                 // -- ORA MIN --
                 var tdMinTime = document.createElement('td');
                 tdMinTime.style.padding = '10px';
@@ -3126,17 +3164,22 @@
                 tdMinTime.style.fontSize = '0.9em';
                 tdMinTime.textContent = minTime;
                 tr.appendChild(tdMinTime);
-                
+
                 // -- PESO MAX --
                 var tdMax = document.createElement('td');
                 tdMax.style.padding = '10px';
                 tdMax.style.textAlign = 'center';
                 tdMax.style.fontWeight = 'bold';
                 tdMax.style.fontSize = '1.1em';
-                tdMax.style.color = (target && maxWeight <= target) ? '#00B894' : '#E74C3C';
-                tdMax.textContent = maxWeight.toFixed(1) + ' kg';
+                if (isInterpolated) {
+                    tdMax.textContent = '—';
+                    tdMax.style.color = '#ccc';
+                } else {
+                    tdMax.style.color = (target && maxWeight <= target) ? '#00B894' : '#E74C3C';
+                    tdMax.textContent = maxWeight.toFixed(1) + ' kg';
+                }
                 tr.appendChild(tdMax);
-                
+
                 // -- ORA MAX --
                 var tdMaxTime = document.createElement('td');
                 tdMaxTime.style.padding = '10px';
@@ -3145,7 +3188,7 @@
                 tdMaxTime.style.fontSize = '0.9em';
                 tdMaxTime.textContent = maxTime;
                 tr.appendChild(tdMaxTime);
-                
+
                 // -- PUNTI GIORNALIERI --
                 var tdScore = document.createElement('td');
                 tdScore.style.padding = '10px';
@@ -3163,7 +3206,7 @@
                     tdScore.style.color = '#E74C3C';
                 }
                 tr.appendChild(tdScore);
-                
+
                 // -- PUNTEGGIO CUMULATIVO --
                 var tdCumulative = document.createElement('td');
                 tdCumulative.style.padding = '10px';
@@ -3179,7 +3222,7 @@
                     tdCumulative.style.color = '#ccc';
                 }
                 tr.appendChild(tdCumulative);
-                
+
                 tbody.appendChild(tr);
             });
         }
