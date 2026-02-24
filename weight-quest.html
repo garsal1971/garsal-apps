@@ -2832,11 +2832,9 @@
                     todayIndex = closestIndex;
                 }
 
-                var containerWidth = (scrollContainer.clientWidth > 0)
-                                     ? scrollContainer.clientWidth
-                                     : (window.innerWidth || 400);
+                // Mostra il grafico a partire da oggi - 14 giorni (bordo sinistro della vista)
                 var todayPosition = todayIndex * actualPixelPerDay;
-                scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (actualPixelPerDay / 2);
+                scrollContainer.scrollLeft = Math.max(0, todayPosition - 14 * actualPixelPerDay);
             }, 500);
         }
 
@@ -3109,9 +3107,9 @@
                         
                         var pixelPerDay = Math.max(Math.floor(scrollContainer.clientWidth / 30), 20);
                         var todayPosition = todayIndex * pixelPerDay;
-                        var containerWidth = scrollContainer.clientWidth;
 
-                        scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (pixelPerDay / 2);
+                        // Reset: mostra da oggi - 14 giorni (bordo sinistro)
+                        scrollContainer.scrollLeft = Math.max(0, todayPosition - 14 * pixelPerDay);
                     }
                 }, 100);
             }
