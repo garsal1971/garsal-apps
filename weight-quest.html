@@ -819,7 +819,11 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.0';
+        var APP_VERSION = 'v3.1.1';
+        var BUILD_TIME = '2026-02-24T13:57:45Z';
+        console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+            'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+            'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
         
         // Supabase client minimale senza CDN
         class SupabaseClient {
@@ -2799,8 +2803,8 @@
                 }
             }, { passive: false });
             
-            // Posiziona il grafico con OGGI al centro della finestra
-            setTimeout(function() {
+            // Posiziona il grafico con OGGI visibile (polling finché clientWidth > 0)
+            (function scrollToToday(attempt) {
                 var scrollContainer = document.getElementById('chartScrollWrapper');
                 var chartCont = document.getElementById('chartContainer');
                 console.log('[SCROLL] scrollContainer:', scrollContainer, 'chartCont:', chartCont, 'labels.length:', labels.length);
@@ -2809,14 +2813,16 @@
                     return;
                 }
 
-                // Ricalcola pixelPerDay dalla larghezza effettiva del container
-                // (sempre affidabile, è il valore che abbiamo impostato sopra)
+                if (scrollContainer.clientWidth === 0 && attempt < 20) {
+                    setTimeout(function() { scrollToToday(attempt + 1); }, 100);
+                    return;
+                }
+
                 var totalChartWidth = parseFloat(chartCont.style.width) || (labels.length * pixelPerDay);
                 var actualPixelPerDay = totalChartWidth / labels.length;
                 console.log('[SCROLL] totalChartWidth:', totalChartWidth, 'labels.length:', labels.length, 'actualPixelPerDay:', actualPixelPerDay);
                 console.log('[SCROLL] scrollContainer.clientWidth:', scrollContainer.clientWidth, 'scrollContainer.scrollWidth:', scrollContainer.scrollWidth);
 
-                // Trova l'indice di oggi
                 var today = new Date();
                 var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
                                today.getDate().toString().padStart(2, '0');
@@ -2824,14 +2830,12 @@
                 console.log('[SCROLL] todayStr:', todayStr, 'todayIndex (diretto):', todayIndex);
                 console.log('[SCROLL] prime 3 label:', labels.slice(0, 3), 'ultime 3 label:', labels.slice(-3));
 
-                // Fallback: data più vicina a oggi
                 if (todayIndex === -1) {
                     var todayTime = today.getTime();
                     var closestIndex = 0;
                     var minDiff = Infinity;
                     labels.forEach(function(label, index) {
                         var parts = label.split('-');
-                        // Prova prima anno corrente, poi anno precedente per date tipo "12-xx"
                         var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
                         var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
                         var diff = Math.min(
@@ -2844,13 +2848,8 @@
                     console.log('[SCROLL] fallback: closestIndex:', closestIndex, 'label trovata:', labels[closestIndex], 'minDiff (ms):', minDiff);
                 }
 
-                // Mostra il grafico a partire da oggi - 14 giorni (bordo sinistro della vista)
-                var todayPosition = todayIndex * actualPixelPerDay;
-                var targetScrollLeft = Math.max(0, todayPosition - 14 * actualPixelPerDay);
-                console.log('[SCROLL] todayIndex:', todayIndex, 'todayPosition px:', todayPosition, 'targetScrollLeft:', targetScrollLeft);
-                scrollContainer.scrollLeft = targetScrollLeft;
-                console.log('[SCROLL] scrollLeft effettivo dopo assegnazione:', scrollContainer.scrollLeft);
-            }, 500);
+                scrollContainer.scrollLeft = Math.max(0, todayIndex * actualPixelPerDay - 14 * actualPixelPerDay);
+            }(0));
         }
 
         function updateWeightTable(data) {
