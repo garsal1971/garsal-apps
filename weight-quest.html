@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.1.2</title>
+    <title>Weight Quest v3.1.7</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -819,8 +819,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.6';
-        var BUILD_TIME  = '2026-02-24T22:30:00Z';
+        var APP_VERSION = 'v3.1.7';
+        var BUILD_TIME  = '2026-02-24T23:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2656,44 +2656,74 @@
                                 if (point && point.x !== undefined && point.y !== undefined) {
                                     var minEstimated = minWeightEstimatedData[index];
                                     var maxEstimated = maxWeightEstimatedData[index];
-                                    
+
                                     var x = point.x;
-                                    var size = 4; // Dimensione triangolo (dimezzata)
-                                    
+                                    var size = 6; // Dimensione triangolo
+
                                     ctx.save();
-                                    
-                                    if (minEstimated !== null) {
-                                        // Triangolo VERDE CHIARO con punta in BASSO per MIN stimato
-                                        var yMin = chart.scales.y.getPixelForValue(minEstimated);
-                                        
+
+                                    if (minEstimated !== null && maxEstimated !== null && minEstimated === maxEstimated) {
+                                        // MIN = MAX: diamante (rombo) rosso+verde
+                                        var yCenter = chart.scales.y.getPixelForValue(minEstimated);
+
+                                        // Metà superiore: triangolo ROSSO con punta in ALTO
                                         ctx.beginPath();
-                                        ctx.moveTo(x, yMin + size);           // Punta in basso
-                                        ctx.lineTo(x - size, yMin - size);    // Vertice sinistro alto
-                                        ctx.lineTo(x + size, yMin - size);    // Vertice destro alto
+                                        ctx.moveTo(x, yCenter - size);   // Punta in alto
+                                        ctx.lineTo(x - size, yCenter);   // Vertice sinistro centro
+                                        ctx.lineTo(x + size, yCenter);   // Vertice destro centro
                                         ctx.closePath();
-                                        ctx.fillStyle = '#A8E6CF'; // Verde chiaro
+                                        ctx.fillStyle = '#E74C3C';
                                         ctx.fill();
-                                        ctx.strokeStyle = '#00B894';
-                                        ctx.lineWidth = 1.5;
-                                        ctx.stroke();
-                                    }
-                                    
-                                    if (maxEstimated !== null) {
-                                        // Triangolo ROSSO CHIARO con punta in ALTO per MAX stimato
-                                        var yMax = chart.scales.y.getPixelForValue(maxEstimated);
-                                        
+
+                                        // Metà inferiore: triangolo VERDE con punta in BASSO
                                         ctx.beginPath();
-                                        ctx.moveTo(x, yMax - size);           // Punta in alto
-                                        ctx.lineTo(x - size, yMax + size);    // Vertice sinistro basso
-                                        ctx.lineTo(x + size, yMax + size);    // Vertice destro basso
+                                        ctx.moveTo(x, yCenter + size);   // Punta in basso
+                                        ctx.lineTo(x - size, yCenter);   // Vertice sinistro centro
+                                        ctx.lineTo(x + size, yCenter);   // Vertice destro centro
                                         ctx.closePath();
-                                        ctx.fillStyle = '#FFB3BA'; // Rosso chiaro
+                                        ctx.fillStyle = '#00B894';
                                         ctx.fill();
-                                        ctx.strokeStyle = '#E74C3C';
-                                        ctx.lineWidth = 1.5;
+
+                                        // Bordo diamante
+                                        ctx.beginPath();
+                                        ctx.moveTo(x, yCenter - size);
+                                        ctx.lineTo(x + size, yCenter);
+                                        ctx.lineTo(x, yCenter + size);
+                                        ctx.lineTo(x - size, yCenter);
+                                        ctx.closePath();
+                                        ctx.strokeStyle = '#333';
+                                        ctx.lineWidth = 1;
                                         ctx.stroke();
+
+                                    } else {
+
+                                        if (minEstimated !== null) {
+                                            // Triangolo VERDE con punta in BASSO per MIN stimato
+                                            var yMin = chart.scales.y.getPixelForValue(minEstimated);
+
+                                            ctx.beginPath();
+                                            ctx.moveTo(x, yMin + size);           // Punta in basso
+                                            ctx.lineTo(x - size, yMin - size);    // Vertice sinistro alto
+                                            ctx.lineTo(x + size, yMin - size);    // Vertice destro alto
+                                            ctx.closePath();
+                                            ctx.fillStyle = '#00B894'; // Verde solido
+                                            ctx.fill();
+                                        }
+
+                                        if (maxEstimated !== null) {
+                                            // Triangolo ROSSO con punta in ALTO per MAX stimato
+                                            var yMax = chart.scales.y.getPixelForValue(maxEstimated);
+
+                                            ctx.beginPath();
+                                            ctx.moveTo(x, yMax - size);           // Punta in alto
+                                            ctx.lineTo(x - size, yMax + size);    // Vertice sinistro basso
+                                            ctx.lineTo(x + size, yMax + size);    // Vertice destro basso
+                                            ctx.closePath();
+                                            ctx.fillStyle = '#E74C3C'; // Rosso solido
+                                            ctx.fill();
+                                        }
                                     }
-                                    
+
                                     ctx.restore();
                                 }
                             });
