@@ -388,6 +388,9 @@
         }
 
         /* CHART */
+        #chartNavWrapper {
+            position: relative;
+        }
         #chartScrollWrapper {
             overflow-x: auto;
             overflow-y: hidden;
@@ -397,6 +400,38 @@
         }
         #chartContainer {
             /* la larghezza viene impostata via JS */
+        }
+
+        /* Bottoni scroll grafico - solo mobile */
+        .chart-scroll-btn {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .chart-scroll-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 10;
+                width: 40px;
+                height: 60px;
+                background: rgba(0, 0, 0, 0.45);
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                font-size: 20px;
+                cursor: pointer;
+                user-select: none;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            .chart-scroll-btn:active {
+                background: rgba(0, 0, 0, 0.7);
+            }
+            #chartScrollLeft  { left: 2px; }
+            #chartScrollRight { right: 2px; }
         }
 
         /* UTILITIES */
@@ -731,10 +766,14 @@
             <div id="graficoPage" class="page">
                 <div class="card">
                     <h3>📈 Andamento Peso</h3>
-                    <div id="chartScrollWrapper">
-                        <div id="chartContainer" style="position: relative; height: 400px;">
-                            <canvas id="weightChart" width="1000" height="400"></canvas>
+                    <div id="chartNavWrapper">
+                        <button class="chart-scroll-btn" id="chartScrollLeft">&#8249;</button>
+                        <div id="chartScrollWrapper">
+                            <div id="chartContainer" style="position: relative; height: 400px;">
+                                <canvas id="weightChart" width="1000" height="400"></canvas>
+                            </div>
                         </div>
+                        <button class="chart-scroll-btn" id="chartScrollRight">&#8250;</button>
                     </div>
                     <div style="margin-top: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                         <button id="btnZoomIn" style="padding: 10px 20px;">🔍 Zoom In</button>
@@ -785,6 +824,7 @@
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
 
         // Supabase client minimale senza CDN
         class SupabaseClient {
@@ -2330,11 +2370,14 @@
                     lastDataDate = milestoneEndDate;
                 }
                 
-                // Genera TUTTE le date dal primo all'ultimo giorno
+                // Genera TUTTE le date dal primo giorno fino a OGGI (o all'ultimo dato se più recente)
+                var todayForRange = new Date();
+                todayForRange.setHours(0, 0, 0, 0);
+                var rangeEnd = lastDataDate > todayForRange ? lastDataDate : todayForRange;
                 var currentDate = new Date(firstDataDate);
                 var allCalendarDates = [];
-                
-                while (currentDate <= lastDataDate) {
+
+                while (currentDate <= rangeEnd) {
                     allCalendarDates.push(currentDate.toISOString().split('T')[0]);
                     currentDate.setDate(currentDate.getDate() + 1);
                 }
@@ -2761,31 +2804,86 @@
             initialChartWidth = chartWidth;
             
             
-            // Posiziona il grafico con OGGI al centro della finestra
-            setTimeout(function() {
+            // Posiziona il grafico con OGGI visibile (polling finché clientWidth > 0)
+            (function scrollToToday(attempt) {
                 var scrollContainer = document.getElementById('chartScrollWrapper');
                 var chartCont = document.getElementById('chartContainer');
-                if (!scrollContainer || !chartCont || labels.length === 0) return;
+                console.log('[SCROLL] scrollContainer:', scrollContainer, 'chartCont:', chartCont, 'labels.length:', labels.length);
+                if (!scrollContainer || !chartCont || labels.length === 0) {
+                    console.log('[SCROLL] uscita anticipata - dati mancanti');
+                    return;
+                }
 
-                // Ricalcola pixelPerDay dalla larghezza effettiva del container
-                // (sempre affidabile, è il valore che abbiamo impostato sopra)
+                if (scrollContainer.clientWidth === 0 && attempt < 20) {
+                    setTimeout(function() { scrollToToday(attempt + 1); }, 100);
+                    return;
+                }
+
                 var totalChartWidth = parseFloat(chartCont.style.width) || (labels.length * pixelPerDay);
                 var actualPixelPerDay = totalChartWidth / labels.length;
+                console.log('[SCROLL] totalChartWidth:', totalChartWidth, 'labels.length:', labels.length, 'actualPixelPerDay:', actualPixelPerDay);
+                console.log('[SCROLL] scrollContainer.clientWidth:', scrollContainer.clientWidth, 'scrollContainer.scrollWidth:', scrollContainer.scrollWidth);
 
-                // Trova l'indice di oggi
                 var today = new Date();
                 var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
                                today.getDate().toString().padStart(2, '0');
                 var todayIndex = labels.indexOf(todayStr);
+                console.log('[SCROLL] todayStr:', todayStr, 'todayIndex (diretto):', todayIndex);
+                console.log('[SCROLL] prime 3 label:', labels.slice(0, 3), 'ultime 3 label:', labels.slice(-3));
 
-                // Fallback: data più vicina a oggi
                 if (todayIndex === -1) {
                     var todayTime = today.getTime();
                     var closestIndex = 0;
                     var minDiff = Infinity;
                     labels.forEach(function(label, index) {
                         var parts = label.split('-');
-                        // Prova prima anno corrente, poi anno precedente per date tipo "12-xx"
+                        var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var diff = Math.min(
+                            Math.abs(d1.getTime() - todayTime),
+                            Math.abs(d2.getTime() - todayTime)
+                        );
+                        if (diff < minDiff) { minDiff = diff; closestIndex = index; }
+                    });
+                    todayIndex = closestIndex;
+                    console.log('[SCROLL] fallback: closestIndex:', closestIndex, 'label trovata:', labels[closestIndex], 'minDiff (ms):', minDiff);
+                }
+
+                scrollContainer.scrollLeft = Math.max(0, todayIndex * actualPixelPerDay - 14 * actualPixelPerDay);
+            }(0));
+        }
+
+        // Centra il grafico su oggi senza ricostruirlo
+        function scrollChartToToday() {
+            (function doScroll(attempt) {
+                var scrollContainer = document.getElementById('chartScrollWrapper');
+                var chartCont = document.getElementById('chartContainer');
+                if (!scrollContainer || !chartCont || !weightChart ||
+                    !weightChart.data || !weightChart.data.labels ||
+                    weightChart.data.labels.length === 0) return;
+
+                var containerWidth = scrollContainer.clientWidth;
+                if (containerWidth === 0 && attempt < 20) {
+                    setTimeout(function() { doScroll(attempt + 1); }, 100);
+                    return;
+                }
+
+                var labels = weightChart.data.labels;
+                var totalChartWidth = parseFloat(chartCont.style.width) || 0;
+                if (totalChartWidth === 0) return;
+                var actualPixelPerDay = totalChartWidth / labels.length;
+
+                var today = new Date();
+                var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
+                               today.getDate().toString().padStart(2, '0');
+                var todayIndex = labels.indexOf(todayStr);
+
+                if (todayIndex === -1) {
+                    var todayTime = today.getTime();
+                    var closestIndex = 0;
+                    var minDiff = Infinity;
+                    labels.forEach(function(label, index) {
+                        var parts = label.split('-');
                         var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
                         var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
                         var diff = Math.min(
@@ -2797,12 +2895,58 @@
                     todayIndex = closestIndex;
                 }
 
-                var containerWidth = (scrollContainer.clientWidth > 0)
-                                     ? scrollContainer.clientWidth
-                                     : (window.innerWidth || 400);
+                if (containerWidth === 0) containerWidth = window.innerWidth || 400;
                 var todayPosition = todayIndex * actualPixelPerDay;
                 scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (actualPixelPerDay / 2);
-            }, 500);
+            }(0));
+        }
+
+        // Centra il grafico su oggi senza ricostruirlo
+        function scrollChartToToday() {
+            (function doScroll(attempt) {
+                var scrollContainer = document.getElementById('chartScrollWrapper');
+                var chartCont = document.getElementById('chartContainer');
+                if (!scrollContainer || !chartCont || !weightChart ||
+                    !weightChart.data || !weightChart.data.labels ||
+                    weightChart.data.labels.length === 0) return;
+
+                var containerWidth = scrollContainer.clientWidth;
+                if (containerWidth === 0 && attempt < 20) {
+                    setTimeout(function() { doScroll(attempt + 1); }, 100);
+                    return;
+                }
+
+                var labels = weightChart.data.labels;
+                var totalChartWidth = parseFloat(chartCont.style.width) || 0;
+                if (totalChartWidth === 0) return;
+                var actualPixelPerDay = totalChartWidth / labels.length;
+
+                var today = new Date();
+                var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
+                               today.getDate().toString().padStart(2, '0');
+                var todayIndex = labels.indexOf(todayStr);
+
+                if (todayIndex === -1) {
+                    var todayTime = today.getTime();
+                    var closestIndex = 0;
+                    var minDiff = Infinity;
+                    labels.forEach(function(label, index) {
+                        var parts = label.split('-');
+                        var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var diff = Math.min(
+                            Math.abs(d1.getTime() - todayTime),
+                            Math.abs(d2.getTime() - todayTime)
+                        );
+                        if (diff < minDiff) { minDiff = diff; closestIndex = index; }
+                    });
+                    todayIndex = closestIndex;
+                }
+
+                if (containerWidth === 0) containerWidth = window.innerWidth || 400;
+                var todayPosition = todayIndex * actualPixelPerDay;
+                scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (actualPixelPerDay / 2);
+            }(0));
         }
 
         // Centra il grafico su oggi senza ricostruirlo
@@ -3122,9 +3266,9 @@
                         
                         var pixelPerDay = Math.max(Math.floor(scrollContainer.clientWidth / 30), 20);
                         var todayPosition = todayIndex * pixelPerDay;
-                        var containerWidth = scrollContainer.clientWidth;
 
-                        scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (pixelPerDay / 2);
+                        // Reset: mostra da oggi - 14 giorni (bordo sinistro)
+                        scrollContainer.scrollLeft = Math.max(0, todayPosition - 14 * pixelPerDay);
                     }
                 }, 100);
             }
@@ -3134,6 +3278,49 @@
             localStorage.removeItem('googleToken');
             window.location.reload();
         }
+
+        // Bottoni scroll grafico (solo mobile)
+        (function() {
+            var scrollInterval = null;
+            var SCROLL_STEP = 120;
+            var SCROLL_INTERVAL = 80;
+
+            function startScroll(direction) {
+                var wrapper = document.getElementById('chartScrollWrapper');
+                if (!wrapper) return;
+                wrapper.scrollLeft += direction * SCROLL_STEP;
+                clearInterval(scrollInterval);
+                scrollInterval = setInterval(function() {
+                    wrapper.scrollLeft += direction * SCROLL_STEP;
+                }, SCROLL_INTERVAL);
+            }
+
+            function stopScroll() {
+                clearInterval(scrollInterval);
+                scrollInterval = null;
+            }
+
+            function bindBtn(id, direction) {
+                var btn = document.getElementById(id);
+                if (!btn) return;
+                btn.addEventListener('touchstart', function(e) { e.preventDefault(); startScroll(direction); }, { passive: false });
+                btn.addEventListener('touchend',   function(e) { e.preventDefault(); stopScroll(); },           { passive: false });
+                btn.addEventListener('touchcancel',function(e) { e.preventDefault(); stopScroll(); },           { passive: false });
+                btn.addEventListener('mousedown',  function() { startScroll(direction); });
+                btn.addEventListener('mouseup',    stopScroll);
+                btn.addEventListener('mouseleave', stopScroll);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    bindBtn('chartScrollLeft',  -1);
+                    bindBtn('chartScrollRight',  1);
+                });
+            } else {
+                bindBtn('chartScrollLeft',  -1);
+                bindBtn('chartScrollRight',  1);
+            }
+        })();
 
         // START
         console.log('%c⚖ Weight Quest ' + APP_VERSION, 'color:#00B894;font-size:16px;font-weight:bold;');
