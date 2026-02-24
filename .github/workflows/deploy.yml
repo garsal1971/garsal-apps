@@ -1,0 +1,44 @@
+name: Deploy claude branch → master
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge branch into master and push
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          git checkout master
+          git merge "origin/$BRANCH" --no-ff -m "deploy: $BRANCH → master [$(date -u '+%Y-%m-%dT%H:%M:%SZ')]"
+
+          # Rimuove i vecchi workflow PR/merge se ancora presenti
+          CHANGED=0
+          for F in .github/workflows/auto-pr-claude.yml .github/workflows/auto-merge-claude.yml; do
+            if [ -f "$F" ]; then
+              git rm "$F"
+              CHANGED=1
+            fi
+          done
+          if [ "$CHANGED" = "1" ]; then
+            git commit -m "chore: rimuove vecchi workflow auto-pr e auto-merge"
+          fi
+
+          git push origin master
