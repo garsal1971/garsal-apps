@@ -819,8 +819,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.5';
-        var BUILD_TIME  = '2026-02-24T22:00:00Z';
+        var APP_VERSION = 'v3.1.6';
+        var BUILD_TIME  = '2026-02-24T22:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3091,30 +3091,48 @@
             var sortedDays = allDays.sort(function(a, b) { return b.localeCompare(a); });
 
             // Costruisce mappa data→punteggio cumulativo in ordine cronologico
-            // (solo per giorni CON pesate reali nell'intervallo obiettivo)
+            // (pesate reali + giorni interpolati, entrambi contribuiscono al punteggio)
             var cumulativeMap = {};
+            var dailyScoreMap = {};
             var cumulative = 0;
 
             if (obj) {
-                var sortedAsc = Object.keys(dayGroups).sort();
-                sortedAsc.forEach(function(date) {
-                    var inRange = (date >= startDateStr && date <= endDateStr);
-                    if (!inRange) return;
+                // Unisce giorni reali e interpolati, ordina cronologicamente
+                var allDaysAsc = Object.keys(dayGroups)
+                    .concat(Object.keys(interpolatedDays))
+                    .filter(function(d) { return d >= startDateStr && d <= endDateStr; })
+                    .sort();
 
-                    var dayData  = dayGroups[date];
-                    var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
-                    var target   = minEntry.target_weight || getInterpolatedTarget(date);
-                    if (target === null) return;
+                allDaysAsc.forEach(function(date) {
+                    var isInterp = !!interpolatedDays[date];
+                    var target;
+                    var effectiveWeight;
+
+                    if (isInterp) {
+                        target = getInterpolatedTarget(date);
+                        effectiveWeight = getInterpolatedWeightFromSeries(date, dayGroups);
+                    } else {
+                        var dayData  = dayGroups[date];
+                        var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
+                        target = minEntry.target_weight || getInterpolatedTarget(date);
+                        effectiveWeight = minEntry.weight;
+                    }
+
+                    if (target === null || effectiveWeight === null) return;
 
                     var isLastDay = (date === endDateStr);
+                    var daily;
 
-                    if (minEntry.weight <= target) {
-                        cumulative += dailyBonus;
-                        if (isLastDay) cumulative += finalBonus;
+                    if (effectiveWeight <= target) {
+                        daily = dailyBonus;
+                        if (isLastDay) daily += finalBonus;
                     } else {
-                        cumulative -= dailyMalus;
-                        if (isLastDay) cumulative -= finalMalus;
+                        daily = -dailyMalus;
+                        if (isLastDay) daily -= finalMalus;
                     }
+
+                    cumulative += daily;
+                    dailyScoreMap[date] = daily;
                     cumulativeMap[date] = cumulative;
                 });
             }
@@ -3143,17 +3161,10 @@
                 var inRange   = obj && (date >= startDateStr && date <= endDateStr);
                 var isLastDay = obj && (date === endDateStr);
 
-                // Calcolo punteggio giornaliero solo per giorni con pesate reali
-                var dailyScore = null;
-                if (!isInterpolated && inRange && target !== null && minWeight !== null) {
-                    if (minWeight <= target) {
-                        dailyScore = dailyBonus;
-                        if (isLastDay) dailyScore += finalBonus;
-                    } else {
-                        dailyScore = -dailyMalus;
-                        if (isLastDay) dailyScore -= finalMalus;
-                    }
-                }
+                // Punteggio giornaliero (pesate reali e giorni interpolati)
+                var dailyScore = (inRange && dailyScoreMap[date] !== undefined)
+                    ? dailyScoreMap[date]
+                    : null;
 
                 var tr = document.createElement('tr');
                 tr.style.borderBottom = '1px solid #eee';
