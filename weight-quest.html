@@ -2357,11 +2357,14 @@
                     lastDataDate = milestoneEndDate;
                 }
                 
-                // Genera TUTTE le date dal primo all'ultimo giorno
+                // Genera TUTTE le date dal primo giorno fino a OGGI (o all'ultimo dato se più recente)
+                var todayForRange = new Date();
+                todayForRange.setHours(0, 0, 0, 0);
+                var rangeEnd = lastDataDate > todayForRange ? lastDataDate : todayForRange;
                 var currentDate = new Date(firstDataDate);
                 var allCalendarDates = [];
-                
-                while (currentDate <= lastDataDate) {
+
+                while (currentDate <= rangeEnd) {
                     allCalendarDates.push(currentDate.toISOString().split('T')[0]);
                     currentDate.setDate(currentDate.getDate() + 1);
                 }
