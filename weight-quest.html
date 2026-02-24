@@ -1152,8 +1152,12 @@
                         // Refresh data when switching to tabella or grafico
                         if (pageName === 'tabella' && userData.weights && userData.weights.length > 0) {
                             updateWeightTable(userData.weights);
-                        } else if (pageName === 'grafico' && userData.weights && userData.weights.length > 0) {
-                            updateWeightChart(userData.weights);
+                        } else if (pageName === 'grafico') {
+                            if (weightChart) {
+                                scrollChartToToday();
+                            } else if (userData.weights && userData.weights.length > 0) {
+                                updateWeightChart(userData.weights);
+                            }
                         }
                     });
                 });
@@ -1200,8 +1204,12 @@
                         // Refresh data
                         if (pageName === 'tabella' && userData.weights && userData.weights.length > 0) {
                             updateWeightTable(userData.weights);
-                        } else if (pageName === 'grafico' && userData.weights && userData.weights.length > 0) {
-                            updateWeightChart(userData.weights);
+                        } else if (pageName === 'grafico') {
+                            if (weightChart) {
+                                scrollChartToToday();
+                            } else if (userData.weights && userData.weights.length > 0) {
+                                updateWeightChart(userData.weights);
+                            }
                         }
                     });
                 });
@@ -2849,6 +2857,54 @@
                 }
 
                 scrollContainer.scrollLeft = Math.max(0, todayIndex * actualPixelPerDay - 14 * actualPixelPerDay);
+            }(0));
+        }
+
+        // Centra il grafico su oggi senza ricostruirlo
+        function scrollChartToToday() {
+            (function doScroll(attempt) {
+                var scrollContainer = document.getElementById('chartScrollWrapper');
+                var chartCont = document.getElementById('chartContainer');
+                if (!scrollContainer || !chartCont || !weightChart ||
+                    !weightChart.data || !weightChart.data.labels ||
+                    weightChart.data.labels.length === 0) return;
+
+                var containerWidth = scrollContainer.clientWidth;
+                if (containerWidth === 0 && attempt < 20) {
+                    setTimeout(function() { doScroll(attempt + 1); }, 100);
+                    return;
+                }
+
+                var labels = weightChart.data.labels;
+                var totalChartWidth = parseFloat(chartCont.style.width) || 0;
+                if (totalChartWidth === 0) return;
+                var actualPixelPerDay = totalChartWidth / labels.length;
+
+                var today = new Date();
+                var todayStr = (today.getMonth() + 1).toString().padStart(2, '0') + '-' +
+                               today.getDate().toString().padStart(2, '0');
+                var todayIndex = labels.indexOf(todayStr);
+
+                if (todayIndex === -1) {
+                    var todayTime = today.getTime();
+                    var closestIndex = 0;
+                    var minDiff = Infinity;
+                    labels.forEach(function(label, index) {
+                        var parts = label.split('-');
+                        var d1 = new Date(today.getFullYear(), parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var d2 = new Date(today.getFullYear() - 1, parseInt(parts[0]) - 1, parseInt(parts[1]));
+                        var diff = Math.min(
+                            Math.abs(d1.getTime() - todayTime),
+                            Math.abs(d2.getTime() - todayTime)
+                        );
+                        if (diff < minDiff) { minDiff = diff; closestIndex = index; }
+                    });
+                    todayIndex = closestIndex;
+                }
+
+                if (containerWidth === 0) containerWidth = window.innerWidth || 400;
+                var todayPosition = todayIndex * actualPixelPerDay;
+                scrollContainer.scrollLeft = todayPosition - (containerWidth / 2) + (actualPixelPerDay / 2);
             }(0));
         }
 
