@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.12</title>
+    <title>Tasks v19.17.13</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -2709,7 +2709,14 @@
             const yyyy = d.getFullYear();
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
-            return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+            return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+        }
+
+        function fmtDate(d) {
+            if (!d) return '';
+            const dt = (d instanceof Date) ? d : new Date(d);
+            if (isNaN(dt.getTime())) return '';
+            return String(dt.getDate()).padStart(2, '0') + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + dt.getFullYear();
         }
         
         function euToIso(euStr) {
@@ -4477,12 +4484,12 @@
                 details += `
                     <div class="task-detail-row">
                         <span class="task-detail-label">Inizio:</span>
-                        <span>${new Date(task.start_date).toLocaleString('it-IT')}</span>
+                        <span>${isoToEu(task.start_date)}</span>
                     </div>
                     ${task.deadline ? `
                         <div class="task-detail-row">
                             <span class="task-detail-label">Scadenza:</span>
-                            <span>${new Date(task.deadline).toLocaleString('it-IT')}</span>
+                            <span>${isoToEu(task.deadline)}</span>
                         </div>
                     ` : ''}
                 `;
@@ -4490,7 +4497,7 @@
                 details += `
                     <div class="task-detail-row">
                         <span class="task-detail-label">Prima occorrenza:</span>
-                        <span>${new Date(task.start_date).toLocaleString('it-IT')}</span>
+                        <span>${isoToEu(task.start_date)}</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Ripeti dopo:</span>
@@ -4499,13 +4506,13 @@
                     ${task.next_occurrence_date ? `
                         <div class="task-detail-row">
                             <span class="task-detail-label">Prossima occorrenza:</span>
-                            <span>${new Date(task.next_occurrence_date).toLocaleString('it-IT')}</span>
+                            <span>${isoToEu(task.next_occurrence_date)}</span>
                         </div>
                     ` : ''}
                     ${task.last_completed_date ? `
                         <div class="task-detail-row">
                             <span class="task-detail-label">Ultimo completamento:</span>
-                            <span>${new Date(task.last_completed_date).toLocaleString('it-IT')}</span>
+                            <span>${isoToEu(task.last_completed_date)}</span>
                         </div>
                     ` : ''}
                 `;
@@ -4629,12 +4636,12 @@
                     
                     let dateInfo = '';
                     if (step.start_date) {
-                        dateInfo += `<span style="font-size: 0.7rem; color: #888;">inizio: ${new Date(step.start_date).toLocaleDateString('it-IT')}</span>`;
+                        dateInfo += `<span style="font-size: 0.7rem; color: #888;">inizio: ${fmtDate(step.start_date)}</span>`;
                     }
                     if (step.completed_at) {
                         const label = step.status === 'failed' ? 'fallito' : 'completato';
                         const color = step.status === 'failed' ? 'var(--danger)' : 'var(--success)';
-                        dateInfo += `<span style="font-size: 0.7rem; color: ${color};">${label}: ${new Date(step.completed_at).toLocaleDateString('it-IT')}</span>`;
+                        dateInfo += `<span style="font-size: 0.7rem; color: ${color};">${label}: ${fmtDate(step.completed_at)}</span>`;
                     }
                     
                     details += `
@@ -6260,9 +6267,9 @@
                 // Data
                 let dateText = '';
                 if (step.completed_at) {
-                    dateText = (step.status === 'failed' ? '✗ ' : '✓ ') + new Date(step.completed_at).toLocaleDateString('it-IT');
+                    dateText = (step.status === 'failed' ? '✗ ' : '✓ ') + fmtDate(step.completed_at);
                 } else if (step.start_date) {
-                    dateText = '📅 ' + new Date(step.start_date).toLocaleDateString('it-IT');
+                    dateText = '📅 ' + fmtDate(step.start_date);
                 }
                 if (dateText) {
                     svg += `<text x="${x + 34}" y="${y + 30}" fill="${c.text}" font-size="8" opacity="0.7">${dateText}</text>`;
@@ -9171,7 +9178,7 @@ Per attivarle:
                 return `${day} ${months[month]} ${year}`;
             }
             
-            return date.toLocaleDateString('it-IT');
+            return fmtDate(date);
         }
 
         window.addEventListener('load', init);
