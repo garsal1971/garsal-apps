@@ -388,6 +388,9 @@
         }
 
         /* CHART */
+        #chartNavWrapper {
+            position: relative;
+        }
         #chartScrollWrapper {
             overflow-x: auto;
             overflow-y: hidden;
@@ -397,6 +400,38 @@
         }
         #chartContainer {
             /* la larghezza viene impostata via JS */
+        }
+
+        /* Bottoni scroll grafico - solo mobile */
+        .chart-scroll-btn {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .chart-scroll-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 10;
+                width: 40px;
+                height: 60px;
+                background: rgba(0, 0, 0, 0.45);
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                font-size: 20px;
+                cursor: pointer;
+                user-select: none;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            .chart-scroll-btn:active {
+                background: rgba(0, 0, 0, 0.7);
+            }
+            #chartScrollLeft  { left: 2px; }
+            #chartScrollRight { right: 2px; }
         }
 
         /* UTILITIES */
@@ -731,10 +766,14 @@
             <div id="graficoPage" class="page">
                 <div class="card">
                     <h3>📈 Andamento Peso</h3>
-                    <div id="chartScrollWrapper">
-                        <div id="chartContainer" style="position: relative; height: 400px;">
-                            <canvas id="weightChart" width="1000" height="400"></canvas>
+                    <div id="chartNavWrapper">
+                        <button class="chart-scroll-btn" id="chartScrollLeft">&#8249;</button>
+                        <div id="chartScrollWrapper">
+                            <div id="chartContainer" style="position: relative; height: 400px;">
+                                <canvas id="weightChart" width="1000" height="400"></canvas>
+                            </div>
                         </div>
+                        <button class="chart-scroll-btn" id="chartScrollRight">&#8250;</button>
                     </div>
                     <div style="margin-top: 15px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
                         <button id="btnZoomIn" style="padding: 10px 20px;">🔍 Zoom In</button>
@@ -3082,6 +3121,49 @@
             localStorage.removeItem('googleToken');
             window.location.reload();
         }
+
+        // Bottoni scroll grafico (solo mobile)
+        (function() {
+            var scrollInterval = null;
+            var SCROLL_STEP = 120;
+            var SCROLL_INTERVAL = 80;
+
+            function startScroll(direction) {
+                var wrapper = document.getElementById('chartScrollWrapper');
+                if (!wrapper) return;
+                wrapper.scrollLeft += direction * SCROLL_STEP;
+                clearInterval(scrollInterval);
+                scrollInterval = setInterval(function() {
+                    wrapper.scrollLeft += direction * SCROLL_STEP;
+                }, SCROLL_INTERVAL);
+            }
+
+            function stopScroll() {
+                clearInterval(scrollInterval);
+                scrollInterval = null;
+            }
+
+            function bindBtn(id, direction) {
+                var btn = document.getElementById(id);
+                if (!btn) return;
+                btn.addEventListener('touchstart', function(e) { e.preventDefault(); startScroll(direction); }, { passive: false });
+                btn.addEventListener('touchend',   function(e) { e.preventDefault(); stopScroll(); },           { passive: false });
+                btn.addEventListener('touchcancel',function(e) { e.preventDefault(); stopScroll(); },           { passive: false });
+                btn.addEventListener('mousedown',  function() { startScroll(direction); });
+                btn.addEventListener('mouseup',    stopScroll);
+                btn.addEventListener('mouseleave', stopScroll);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    bindBtn('chartScrollLeft',  -1);
+                    bindBtn('chartScrollRight',  1);
+                });
+            } else {
+                bindBtn('chartScrollLeft',  -1);
+                bindBtn('chartScrollRight',  1);
+            }
+        })();
 
         // START
         log('===========================================');
