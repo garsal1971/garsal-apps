@@ -390,9 +390,7 @@
             .top-title {
                 display: none;
             }
-            #btnSync {
-                display: none;
-            }
+
             .sidebar-desktop {
                 display: flex;
                 flex-direction: column;
@@ -433,12 +431,6 @@
             .sidebar-nav-item .nav-icon {
                 font-size: 1.1rem;
             }
-            .sidebar-sync-box {
-                margin-top: auto;
-                padding: 0.75rem;
-                background: rgba(0,217,163,0.1);
-                border: 2px solid #00B894;
-            }
         }
         @media (max-width: 768px) {
             .sidebar-desktop {
@@ -475,6 +467,10 @@
                 <span class="icon">📈</span>
                 <span class="label">Grafico</span>
             </div>
+            <div class="icon-nav-item" data-action="sync">
+                <span class="icon">🔄</span>
+                <span class="label">Sync</span>
+            </div>
         </div>
 
         <!-- CONTENT WRAPPER -->
@@ -495,10 +491,11 @@
                         <span class="nav-icon">📈</span>
                         <span>Grafico</span>
                     </div>
+                    <div class="sidebar-nav-item" data-action="sync">
+                        <span class="nav-icon">🔄</span>
+                        <span>Sincronizza</span>
+                    </div>
                 </nav>
-                <div class="sidebar-sync-box">
-                    <button id="btnSyncDesktop" style="width:100%; background:#00B894; color:white; border:none; padding:10px; font-size:14px; font-weight:bold; cursor:pointer;">🔄 Sincronizza</button>
-                </div>
             </div>
 
             <!-- MAIN CONTENT -->
@@ -671,8 +668,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.2.9';
-        var BUILD_TIME  = '2026-02-25T11:15:00Z';
+        var APP_VERSION = 'v3.3.0';
+        var BUILD_TIME  = '2026-02-25T11:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1086,8 +1083,6 @@
                 document.getElementById('btnLogin').onclick = loginGoogle;
                 document.getElementById('btnAddMilestone').onclick = addMilestone;
                 document.getElementById('btnSaveObjective').onclick = doSaveMilestones;
-                var elBtnSync = document.getElementById('btnSync'); if (elBtnSync) elBtnSync.onclick = syncFit;
-                document.getElementById('btnSyncDesktop').onclick = syncFit;
                 document.getElementById('btnZoomIn').onclick = zoomIn;
                 document.getElementById('btnResetZoom').onclick = resetZoom;
                 document.getElementById('btnZoomOut').onclick = zoomOut;
@@ -1108,6 +1103,7 @@
                 // Icon Navigation
                 document.querySelectorAll('.icon-nav-item').forEach(function(item) {
                     item.addEventListener('click', function() {
+                        if (this.getAttribute('data-action') === 'sync') { syncFit(); return; }
                         var pageName = this.getAttribute('data-page');
                         
                         // Update active tab
@@ -1146,6 +1142,7 @@
                 // Desktop sidebar navigation
                 document.querySelectorAll('.sidebar-nav-item').forEach(function(item) {
                     item.addEventListener('click', function() {
+                        if (this.getAttribute('data-action') === 'sync') { syncFit(); return; }
                         var pageName = this.getAttribute('data-page');
 
                         // Update active state
