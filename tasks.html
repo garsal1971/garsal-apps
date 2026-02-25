@@ -1445,6 +1445,7 @@
                 <div class="card" style="margin-bottom: 1.5rem;">
                     <div style="display: flex; gap: 0.5rem;">
                         <button class="btn btn-primary" onclick="switchRemindersView('active')" id="btnActiveRemindersView" style="flex: 1; min-width: 0;">Promemoria Attivi</button>
+                        <button class="btn btn-secondary" onclick="switchRemindersView('upcoming')" id="btnUpcomingRemindersView" style="flex: 1; min-width: 0;">📅 Prossimi</button>
                         <button class="btn btn-secondary" onclick="switchRemindersView('history')" id="btnHistoryRemindersView" style="flex: 1; min-width: 0;">Storico</button>
                     </div>
                 </div>
@@ -1541,7 +1542,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.12</span>
+                        <span>Tasks v19.17.13</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2066,7 +2067,7 @@
 
         async function init() {
             debugLog('🔥🔥🔥 TASKS v19.15 🔥🔥🔥');
-            console.log('🚀 Tasks v19.17.12 - Init function started');
+            console.log('🚀 Tasks v19.17.13 - Init function started');
             
             // Reset sidebar state on desktop
             if (window.innerWidth > 768) {
@@ -4249,9 +4250,13 @@
                 task.reminders.forEach(reminder => {
                     const reminderTime = calculateReminderTime(targetDate, reminder);
                     if (!reminderTime) return;
-                    
+
                     // Verifica se il promemoria è scaduto nelle ultime 24 ore
                     if (reminderTime >= twentyFourHoursAgo && reminderTime <= now) {
+                        // Salta i promemoria nascosti manualmente
+                        const dateKey = targetDate.toISOString().split('T')[0];
+                        if (localStorage.getItem(`dismissed_${task.id}_${reminder}_${dateKey}`)) return;
+
                         expiredReminders.push({
                             task: task,
                             reminder: reminder,
@@ -4336,6 +4341,7 @@
                                 ${taskRemindersCount > 1 ? `
                                     <button class="btn btn-warning btn-small" onclick="completeAllRemindersForTask('${item.task.id}')" title="Completa tutti i ${taskRemindersCount} promemoria di questo task">✓✓ Completa Tutti</button>
                                 ` : ''}
+                                <button class="btn btn-secondary btn-small" onclick="dismissReminder('${item.task.id}', '${item.reminder}', '${item.targetDate.toISOString().split('T')[0]}')">✕ Nascondi</button>
                             </div>
                         </div>
                     </div>
@@ -4413,7 +4419,106 @@
             
             showToast(`🗑️ ${keysToRemove.length} promemoria cancellati`);
         }
-        
+
+        function dismissReminder(taskId, reminder, dateKey) {
+            localStorage.setItem(`dismissed_${taskId}_${reminder}_${dateKey}`, '1');
+            renderRemindersPage();
+            showToast('🔕 Promemoria nascosto');
+        }
+
+        function renderUpcomingReminders() {
+            const container = document.getElementById('remindersContainer');
+            if (!container) return;
+
+            const now = new Date();
+            const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+            const upcomingReminders = [];
+
+            tasks.filter(t => t.status === 'active' && t.reminders && t.reminders.length > 0).forEach(task => {
+                let targetDate = null;
+
+                if (task.type === 'single') {
+                    targetDate = new Date(task.start_date);
+                } else if (task.type === 'recurring' || task.type === 'simple_recurring') {
+                    if (task.next_occurrence_date) {
+                        targetDate = new Date(task.next_occurrence_date);
+                    }
+                } else if (task.type === 'multiple') {
+                    if (task.next_occurrence_date) {
+                        targetDate = new Date(task.next_occurrence_date);
+                    }
+                }
+
+                if (!targetDate) return;
+
+                task.reminders.forEach(reminder => {
+                    const reminderTime = calculateReminderTime(targetDate, reminder);
+                    if (!reminderTime) return;
+
+                    if (reminderTime > now && reminderTime <= sevenDaysFromNow) {
+                        upcomingReminders.push({
+                            task: task,
+                            reminder: reminder,
+                            reminderTime: reminderTime,
+                            targetDate: targetDate
+                        });
+                    }
+                });
+            });
+
+            upcomingReminders.sort((a, b) => a.reminderTime - b.reminderTime);
+
+            if (upcomingReminders.length === 0) {
+                container.innerHTML = `
+                    <div class="card" style="text-align: center; padding: 1.5rem;">
+                        <h2 style="font-size: 3rem; margin-bottom: 1rem;">📅</h2>
+                        <h3 style="margin-bottom: 1rem;">Nessun promemoria nei prossimi 7 giorni</h3>
+                        <p style="opacity: 0.7;">Non ci sono promemoria programmati per i prossimi 7 giorni</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = upcomingReminders.map(item => {
+                const cats = categories.filter(c => item.task.categories?.includes(c.id));
+                const timeUntilReminder = getTimeUntil(item.reminderTime);
+                const timeUntilTask = getTimeUntil(item.targetDate);
+
+                return `
+                    <div class="card" style="border-left: 4px solid var(--accent);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <span style="font-size: 1.5rem;">🔔</span>
+                                    <h3 style="margin: 0;">${item.task.title}</h3>
+                                </div>
+                                <p style="opacity: 0.8; margin: 0.5rem 0; font-size: 0.95rem;">
+                                    📋 <strong>Promemoria:</strong> ${item.reminder} prima
+                                </p>
+                                <p style="opacity: 0.7; font-size: 0.9rem; margin: 0.3rem 0;">
+                                    ⏰ Scatta tra: <strong>${timeUntilReminder}</strong>
+                                </p>
+                                <p style="opacity: 0.7; font-size: 0.9rem; margin: 0.3rem 0;">
+                                    📅 Scadenza task: ${formatDateTime(item.targetDate)} (${timeUntilTask})
+                                </p>
+                                ${cats.length > 0 ? `
+                                    <div class="category-pills" style="margin-top: 0.5rem;">
+                                        ${cats.map(c => `<span class="category-pill" style="background: ${c.color}20; color: ${c.color}">${c.icon} ${c.name}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <button class="btn btn-primary btn-small" onclick="viewTask('${item.task.id}')">👁️ Vedi</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
         function updateRemindersBadge(count) {
             const menuItem = document.getElementById('remindersMenuItem');
             if (!menuItem) return;
@@ -7980,21 +8085,24 @@ Per attivarle:
 
         function switchRemindersView(view) {
             currentRemindersView = view;
-            
+
             // Aggiorna i bottoni
             document.getElementById('btnActiveRemindersView').className = view === 'active' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('btnUpcomingRemindersView').className = view === 'upcoming' ? 'btn btn-primary' : 'btn btn-secondary';
             document.getElementById('btnHistoryRemindersView').className = view === 'history' ? 'btn btn-primary' : 'btn btn-secondary';
-            
+
             renderRemindersContainer();
         }
         
         function renderRemindersContainer() {
             const container = document.getElementById('remindersContainer');
             if (!container) return;
-            
+
             if (currentRemindersView === 'active') {
                 container.innerHTML = '<div id="remindersPageList"></div>';
                 renderRemindersPage();
+            } else if (currentRemindersView === 'upcoming') {
+                renderUpcomingReminders();
             } else if (currentRemindersView === 'history') {
                 renderHistoryPage();
             }
