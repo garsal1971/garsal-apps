@@ -365,6 +365,9 @@
                 flex: 0 0 calc(25% - 5px);
                 min-width: calc(25% - 5px);
             }
+            .row-detail-inline { display: none !important; }
+            .weight-table-row { cursor: pointer; }
+            .weight-table-row:active { background: #f0f7ff !important; }
         }
         .content-wrapper {
             display: flex;
@@ -654,13 +657,22 @@
         </div>
     </div>
 
+    <!-- ROW DETAIL MODAL (mobile) -->
+    <div id="rowDetailModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:2100; align-items:flex-end; justify-content:center;">
+        <div style="background:white; border-radius:16px 16px 0 0; padding:20px 20px 32px; width:100%; max-width:480px; box-shadow:0 -4px 32px rgba(0,0,0,0.25);">
+            <div style="width:40px; height:4px; background:#ddd; border-radius:2px; margin:0 auto 18px;"></div>
+            <div id="rowDetailContent"></div>
+            <button onclick="closeRowDetailModal()" style="width:100%; margin-top:14px; background:#f0f0f0; color:#333; border:none; padding:13px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:1em;">✕ Chiudi</button>
+        </div>
+    </div>
+
     <!-- DEBUG -->
     <button id="debugBtn">🐛</button>
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.2.6';
-        var BUILD_TIME  = '2026-02-25T10:30:00Z';
+        var APP_VERSION = 'v3.2.7';
+        var BUILD_TIME  = '2026-02-25T10:45:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -895,6 +907,94 @@
             document.getElementById('insertWeightModal').style.display = 'none';
             insertWeightTargetDate = null;
             insertWeightTargetTimestamp = null;
+        }
+
+        function closeRowDetailModal() {
+            document.getElementById('rowDetailModal').style.display = 'none';
+        }
+
+        function _rdStat(label, value, color) {
+            return '<div style="background:#f5f5f5; border-radius:10px; padding:12px 8px; text-align:center;">'
+                + '<div style="color:#999; font-size:0.72em; margin-bottom:4px;">' + label + '</div>'
+                + '<div style="font-weight:bold; font-size:1.05em; color:' + color + ';">' + value + '</div>'
+                + '</div>';
+        }
+
+        function showWeightRowDetail(info) {
+            var parts = info.date.split('-');
+            var dateLabel = parts[2] + '/' + parts[1] + '/' + parts[0];
+
+            var typeIcon, typeLabel;
+            if (info.isInterpolated) {
+                typeIcon = '○'; typeLabel = 'Interpolato';
+            } else if (info.hasSync) {
+                typeIcon = '📲'; typeLabel = 'Google Fit';
+            } else {
+                typeIcon = '✏️'; typeLabel = 'Manuale';
+            }
+
+            var weightMin = info.isInterpolated
+                ? (info.interpWeight !== null ? info.interpWeight.toFixed(1) + ' kg' : '—')
+                : info.minWeight.toFixed(1) + ' kg';
+            var weightMax = info.isInterpolated
+                ? (info.interpWeight !== null ? info.interpWeight.toFixed(1) + ' kg' : '—')
+                : info.maxWeight.toFixed(1) + ' kg';
+            var minOk = !info.isInterpolated && info.target && info.minWeight <= info.target;
+            var maxOk = !info.isInterpolated && info.target && info.maxWeight <= info.target;
+
+            var targetText = info.target ? info.target.toFixed(1) + ' kg' : '--';
+            var scoreColor = (info.dailyScore !== null && info.dailyScore > 0) ? '#00B894' : '#E74C3C';
+            var scoreText = info.dailyScore === null ? '--'
+                : (info.dailyScore > 0 ? '+' + info.dailyScore : String(info.dailyScore));
+            var cumText = (info.cumulativeScore !== undefined && info.cumulativeScore !== null)
+                ? ((info.cumulativeScore > 0 ? '+' : '') + info.cumulativeScore)
+                : '--';
+            var cumColor = (info.cumulativeScore !== undefined && info.cumulativeScore !== null && info.cumulativeScore >= 0) ? '#00B894' : '#E74C3C';
+
+            var html = '<div style="text-align:center; margin-bottom:16px;">'
+                + '<div style="font-size:2.2em; line-height:1;">' + typeIcon + '</div>'
+                + '<div style="font-size:1.3em; font-weight:bold; margin:6px 0 2px;">' + dateLabel + '</div>'
+                + '<div style="color:#aaa; font-size:0.85em;">' + typeLabel + '</div>'
+                + '</div>';
+
+            html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px;">';
+            html += _rdStat('🎯 Target', targetText, '#666');
+            html += _rdStat('⬇️ Min', weightMin, info.isInterpolated ? '#aaa' : (minOk ? '#00B894' : '#E74C3C'));
+            html += _rdStat('⬆️ Max', weightMax, info.isInterpolated ? '#aaa' : (maxOk ? '#00B894' : '#E74C3C'));
+            html += _rdStat('⭐ Punti', scoreText, info.dailyScore === null ? '#ccc' : scoreColor);
+            html += _rdStat('📊 Totale', cumText, cumColor);
+            if (!info.isInterpolated && info.minTime && info.minTime !== '—') {
+                html += _rdStat('🕐 Ora', info.minTime, '#666');
+            }
+            html += '</div>';
+
+            var content = document.getElementById('rowDetailContent');
+            content.innerHTML = html;
+
+            // Bottoni azione
+            var btnArea = document.createElement('div');
+            if (info.isInterpolated) {
+                var bIns = document.createElement('button');
+                bIns.textContent = '📝 Inserisci peso reale';
+                bIns.style.cssText = 'width:100%; margin-bottom:8px; background:#00B894; color:white; border:none; padding:13px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:1em;';
+                bIns.addEventListener('click', function() { closeRowDetailModal(); showInsertWeightModal(info.date); });
+                btnArea.appendChild(bIns);
+            } else if (info.hasManual && !info.hasSync) {
+                var bEdit = document.createElement('button');
+                bEdit.textContent = '✏️ Modifica pesata';
+                bEdit.style.cssText = 'width:100%; margin-bottom:8px; background:#2563EB; color:white; border:none; padding:13px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:1em;';
+                bEdit.addEventListener('click', function() { closeRowDetailModal(); showInsertWeightModal(info.date, info.manualEntry.weight); });
+                btnArea.appendChild(bEdit);
+
+                var bDel = document.createElement('button');
+                bDel.textContent = '🗑️ Elimina pesata';
+                bDel.style.cssText = 'width:100%; margin-bottom:8px; background:#E74C3C; color:white; border:none; padding:13px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:1em;';
+                bDel.addEventListener('click', function() { closeRowDetailModal(); deleteManualWeight(info.manualEntry.timestamp, info.date); });
+                btnArea.appendChild(bDel);
+            }
+            content.appendChild(btnArea);
+
+            document.getElementById('rowDetailModal').style.display = 'flex';
         }
 
         async function saveManualWeight() {
@@ -3097,6 +3197,7 @@
                     : null;
 
                 var tr = document.createElement('tr');
+                tr.className = 'weight-table-row';
                 tr.style.borderBottom = '1px solid #eee';
 
                 if (isInterpolated) {
@@ -3121,31 +3222,36 @@
                     manualEntry = hasManual ? dayData.find(function(e) { return e.time === 'Manuale'; }) : null;
                 }
 
-                // -- ICONA TIPO (prima della data) --
+                // -- ICONA TIPO (prima della data, solo desktop) --
+                var iconInline = document.createElement('span');
+                iconInline.className = 'row-detail-inline';
                 if (isInterpolated) {
                     var badge = document.createElement('span');
                     badge.textContent = '○ ';
                     badge.title = 'Peso interpolato — nessuna pesata reale';
                     badge.style.cssText = 'color:#bbb; font-size:0.8em;';
-                    tdDate.appendChild(badge);
+                    iconInline.appendChild(badge);
                 } else if (hasSync) {
                     var syncBadge = document.createElement('span');
                     syncBadge.textContent = '📲 ';
                     syncBadge.title = 'Pesata da sincronizzazione Google Fit';
                     syncBadge.style.fontSize = '0.8em';
-                    tdDate.appendChild(syncBadge);
+                    iconInline.appendChild(syncBadge);
                 } else if (hasManual) {
                     var manBadge = document.createElement('span');
                     manBadge.textContent = '✏️ ';
                     manBadge.title = 'Pesata inserita manualmente';
                     manBadge.style.fontSize = '0.8em';
-                    tdDate.appendChild(manBadge);
+                    iconInline.appendChild(manBadge);
                 }
+                tdDate.appendChild(iconInline);
 
                 // -- TESTO DATA --
                 tdDate.appendChild(document.createTextNode(date));
 
-                // -- BOTTONI AZIONE (dopo la data) --
+                // -- BOTTONI AZIONE (dopo la data, solo desktop) --
+                var btnInline = document.createElement('span');
+                btnInline.className = 'row-detail-inline';
                 if (isInterpolated) {
                     var insertBtn = document.createElement('button');
                     insertBtn.textContent = '📝';
@@ -3154,7 +3260,7 @@
                     insertBtn.addEventListener('click', (function(d) {
                         return function(e) { e.stopPropagation(); showInsertWeightModal(d); };
                     })(date));
-                    tdDate.appendChild(insertBtn);
+                    btnInline.appendChild(insertBtn);
                 } else if (hasManual && !hasSync) {
                     var editBtn = document.createElement('button');
                     editBtn.textContent = '✏️';
@@ -3163,7 +3269,7 @@
                     editBtn.addEventListener('click', (function(d, w) {
                         return function(e) { e.stopPropagation(); showInsertWeightModal(d, w); };
                     })(date, manualEntry.weight));
-                    tdDate.appendChild(editBtn);
+                    btnInline.appendChild(editBtn);
 
                     var delBtn = document.createElement('button');
                     delBtn.textContent = '🗑️';
@@ -3172,8 +3278,31 @@
                     delBtn.addEventListener('click', (function(ts, d) {
                         return function(e) { e.stopPropagation(); deleteManualWeight(ts, d); };
                     })(manualEntry.timestamp, date));
-                    tdDate.appendChild(delBtn);
+                    btnInline.appendChild(delBtn);
                 }
+                tdDate.appendChild(btnInline);
+
+                // -- CLICK SU RIGA → popup mobile --
+                tr.addEventListener('click', (function(rowInfo) {
+                    return function() {
+                        if (window.innerWidth <= 600) showWeightRowDetail(rowInfo);
+                    };
+                })({
+                    date: date,
+                    isInterpolated: isInterpolated,
+                    hasSync: hasSync,
+                    hasManual: hasManual,
+                    manualEntry: manualEntry,
+                    target: target,
+                    minWeight: minWeight,
+                    maxWeight: maxWeight,
+                    minTime: minTime,
+                    maxTime: maxTime,
+                    interpWeight: interpWeight,
+                    dailyScore: dailyScore,
+                    cumulativeScore: cumulativeMap[date]
+                }));
+
                 tr.appendChild(tdDate);
 
                 // -- TARGET --
