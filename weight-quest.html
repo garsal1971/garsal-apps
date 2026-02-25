@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.2.0</title>
+    <title>Weight Quest v3.2.1</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -639,7 +639,7 @@
     <!-- MODAL INSERIMENTO PESO MANUALE -->
     <div id="insertWeightModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
         <div style="background:white; border-radius:12px; padding:24px; max-width:320px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-            <h3 style="margin:0 0 8px 0; color:#333;">📝 Inserisci peso reale</h3>
+            <h3 id="insertWeightModalTitle" style="margin:0 0 8px 0; color:#333;">📝 Inserisci peso reale</h3>
             <p id="insertWeightDateLabel" style="margin:0 0 16px 0; color:#666; font-size:0.9rem;"></p>
             <label style="display:block; font-size:12px; color:#666; margin-bottom:6px;">Peso (kg)</label>
             <input type="number" id="insertWeightInput" step="0.1" min="30" max="300" placeholder="es. 75.3"
@@ -656,8 +656,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.2.0';
-        var BUILD_TIME  = '2026-02-25T00:15:00Z';
+        var APP_VERSION = 'v3.2.1';
+        var BUILD_TIME  = '2026-02-25T00:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -864,16 +864,26 @@
         }
 
         // =====================================================
-        // INSERIMENTO PESO MANUALE PER GIORNI INTERPOLATI
+        // INSERIMENTO / MODIFICA PESO MANUALE
         // =====================================================
         var insertWeightTargetDate = null;
+        var insertWeightTargetTimestamp = null; // null = insert, number = edit (same timestamp)
 
-        function showInsertWeightModal(date) {
+        function showInsertWeightModal(date, currentWeight) {
             insertWeightTargetDate = date;
+            // Timestamp fisso: mezzogiorno del giorno → on_conflict=timestamp aggiorna sempre lo stesso record
+            insertWeightTargetTimestamp = Math.floor(new Date(date + 'T12:00:00').getTime());
+
             var parts = date.split('-');
+            var isEdit = (currentWeight !== undefined && currentWeight !== null);
+            document.getElementById('insertWeightModalTitle').textContent =
+                isEdit ? '✏️ Modifica peso' : '📝 Inserisci peso reale';
             document.getElementById('insertWeightDateLabel').textContent =
                 'Data: ' + parts[2] + '-' + parts[1] + '-' + parts[0];
-            document.getElementById('insertWeightInput').value = '';
+            document.getElementById('insertWeightInput').value = isEdit ? currentWeight : '';
+            var btn = document.getElementById('insertWeightSaveBtn');
+            btn.disabled = false;
+            btn.textContent = '💾 Salva';
             document.getElementById('insertWeightModal').style.display = 'flex';
             setTimeout(function() { document.getElementById('insertWeightInput').focus(); }, 100);
         }
@@ -881,6 +891,7 @@
         function closeInsertWeightModal() {
             document.getElementById('insertWeightModal').style.display = 'none';
             insertWeightTargetDate = null;
+            insertWeightTargetTimestamp = null;
         }
 
         async function saveManualWeight() {
@@ -892,14 +903,12 @@
             }
 
             var date = insertWeightTargetDate;
-            // Timestamp: mezzogiorno del giorno selezionato (ora locale)
-            var noonMs = new Date(date + 'T12:00:00').getTime();
             var target = getInterpolatedTarget(date);
 
             var record = {
                 date: date,
-                time: '12:00',
-                timestamp: Math.floor(noonMs),
+                time: 'Manuale',
+                timestamp: insertWeightTargetTimestamp,
                 weight: parseFloat(weight.toFixed(2)),
                 target_weight: target
             };
@@ -934,6 +943,31 @@
                 alert('Errore nel salvataggio: ' + err.message);
                 btn.disabled = false;
                 btn.textContent = '💾 Salva';
+            }
+        }
+
+        async function deleteManualWeight(timestamp, date) {
+            if (!confirm('Eliminare la pesata manuale del ' + date + '?\nIl giorno tornerà a mostrare il peso interpolato.')) return;
+            log('Eliminazione peso manuale per ' + date + ' (ts=' + timestamp + ')');
+            try {
+                var url = supabase.url + '/rest/v1/ps_weight_tracking?timestamp=eq.' + timestamp;
+                var response = await fetch(url, {
+                    method: 'DELETE',
+                    headers: {
+                        'apikey': supabase.key,
+                        'Authorization': 'Bearer ' + supabase.key,
+                        'Prefer': 'return=minimal'
+                    }
+                });
+                if (!response.ok) {
+                    var text = await response.text();
+                    throw new Error('HTTP ' + response.status + ': ' + text);
+                }
+                log('✓ Peso manuale eliminato per ' + date);
+                loadData();
+            } catch (err) {
+                log('ERROR deleteManualWeight: ' + err.message);
+                alert('Errore nell\'eliminazione: ' + err.message);
             }
         }
 
@@ -1796,9 +1830,28 @@
                 };
             });
 
+            // Prima elimina le pesate manuali per le date che hanno dati reali da sync
+            var syncDates = {};
+            uniqueWeights.forEach(function(w) { syncDates[w.date] = true; });
+            var manualToDelete = (userData.weights || []).filter(function(w) {
+                return syncDates[w.date] && w.time === 'Manuale';
+            });
+            var deletePromises = manualToDelete.map(function(w) {
+                log('Sync: rimozione pesata manuale per ' + w.date + ' (ts=' + w.timestamp + ')');
+                return fetch(supabase.url + '/rest/v1/ps_weight_tracking?timestamp=eq.' + w.timestamp, {
+                    method: 'DELETE',
+                    headers: {
+                        'apikey': supabase.key,
+                        'Authorization': 'Bearer ' + supabase.key,
+                        'Prefer': 'return=minimal'
+                    }
+                });
+            });
+
             // Inserisci tutto in una volta con upsert
             log('Salvataggio ' + records.length + ' pesate...');
-            
+
+            return Promise.all(deletePromises).then(function() {
             return fetch(url + '?on_conflict=timestamp', {
                 method: 'POST',
                 headers: headers,
@@ -1814,11 +1867,8 @@
                 log('Tutte le pesate salvate! Status: ' + response.status);
                 // Non parsare JSON se la risposta è vuota (return=minimal)
                 return null;
-            })
-            .catch(function(error) {
-                log('Errore: ' + error.message);
-                throw error;
             });
+            }); // chiude Promise.all(deletePromises)
         }
 
         function loadData() {
@@ -3060,12 +3110,13 @@
                 tdDate.style.padding = '10px';
                 tdDate.style.fontWeight = 'bold';
                 tdDate.textContent = date;
+                // -- ICONA TIPO + AZIONI --
                 if (isInterpolated) {
+                    // ○ Interpolata: bottone inserimento
                     var badge = document.createElement('span');
                     badge.textContent = ' ○';
-                    badge.title = 'Nessuna pesata — solo target interpolato';
-                    badge.style.color = '#bbb';
-                    badge.style.fontSize = '0.8em';
+                    badge.title = 'Peso interpolato — nessuna pesata reale';
+                    badge.style.cssText = 'color:#bbb; font-size:0.8em;';
                     tdDate.appendChild(badge);
 
                     var insertBtn = document.createElement('button');
@@ -3076,6 +3127,46 @@
                         return function(e) { e.stopPropagation(); showInsertWeightModal(d); };
                     })(date));
                     tdDate.appendChild(insertBtn);
+
+                } else {
+                    // Determina se il giorno ha solo pesate manuali o anche pesate da sync
+                    var hasSync   = dayData.some(function(e) { return e.time !== 'Manuale'; });
+                    var hasManual = dayData.some(function(e) { return e.time === 'Manuale'; });
+                    var manualEntry = hasManual ? dayData.find(function(e) { return e.time === 'Manuale'; }) : null;
+
+                    if (hasSync) {
+                        // 📲 Dato da sincronizzazione Google Fit
+                        var syncBadge = document.createElement('span');
+                        syncBadge.textContent = ' 📲';
+                        syncBadge.title = 'Pesata da sincronizzazione Google Fit';
+                        syncBadge.style.fontSize = '0.8em';
+                        tdDate.appendChild(syncBadge);
+                    } else if (hasManual) {
+                        // ✏️ Dato inserito manualmente — modifica o elimina
+                        var manBadge = document.createElement('span');
+                        manBadge.textContent = ' ✏️';
+                        manBadge.title = 'Pesata inserita manualmente';
+                        manBadge.style.fontSize = '0.8em';
+                        tdDate.appendChild(manBadge);
+
+                        var editBtn = document.createElement('button');
+                        editBtn.textContent = '✏️';
+                        editBtn.title = 'Modifica questa pesata';
+                        editBtn.style.cssText = 'margin-left:4px; background:none; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
+                        editBtn.addEventListener('click', (function(d, w) {
+                            return function(e) { e.stopPropagation(); showInsertWeightModal(d, w); };
+                        })(date, manualEntry.weight));
+                        tdDate.appendChild(editBtn);
+
+                        var delBtn = document.createElement('button');
+                        delBtn.textContent = '🗑️';
+                        delBtn.title = 'Elimina e ripristina interpolazione';
+                        delBtn.style.cssText = 'margin-left:2px; background:none; border:1px solid #ffcccc; border-radius:4px; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
+                        delBtn.addEventListener('click', (function(ts, d) {
+                            return function(e) { e.stopPropagation(); deleteManualWeight(ts, d); };
+                        })(manualEntry.timestamp, date));
+                        tdDate.appendChild(delBtn);
+                    }
                 }
                 tr.appendChild(tdDate);
 
