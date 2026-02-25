@@ -1539,6 +1539,43 @@
                 </div>
                 
                 <div class="card">
+                    <h3 style="margin-bottom: 1.5rem;">📱 Notifiche Telegram</h3>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <div>
+                                <strong>Bot Telegram</strong>
+                                <p style="opacity: 0.7; font-size: 0.9rem; margin: 0.3rem 0 0 0;">
+                                    Ricevi promemoria via messaggio Telegram
+                                </p>
+                            </div>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="telegramEnabled" onchange="saveTelegramSettings()" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span id="telegramEnabledLabel" style="font-weight: 600; min-width: 2.5rem;">Off</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0.75rem;">
+                            <label style="display: block; margin-bottom: 0.3rem; font-weight: 600; font-size: 0.9rem;">Bot Token</label>
+                            <input type="text" id="telegramBotToken" class="form-control" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" oninput="saveTelegramSettings()" autocomplete="off" spellcheck="false">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.3rem; font-weight: 600; font-size: 0.9rem;">Chat ID</label>
+                            <input type="text" id="telegramChatId" class="form-control" placeholder="es. 123456789 o -1001234567890" oninput="saveTelegramSettings()" autocomplete="off" spellcheck="false">
+                        </div>
+
+                        <button class="btn btn-accent" onclick="testTelegramNotification()">📤 Invia Messaggio di Test</button>
+
+                        <small style="opacity: 0.7; display: block; margin-top: 0.75rem;">
+                            • Crea un bot con <strong>@BotFather</strong> su Telegram e copia il token<br>
+                            • Ottieni il tuo Chat ID avviando <strong>@userinfobot</strong><br>
+                            • Le notifiche vengono inviate ogni volta che scatta un promemoria
+                        </small>
+                    </div>
+                </div>
+
+                <div class="card">
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
@@ -6994,6 +7031,9 @@
             
             // Aggiorna stato notifiche
             updateNotificationStatus();
+
+            // Carica impostazioni Telegram
+            loadTelegramSettings();
         }
         
         // ========================================
@@ -7514,9 +7554,13 @@
         function checkAndNotifyReminders() {
             console.log('🔔 ===== CHECK REMINDERS START =====');
             console.log('🔔 Notification permission:', notificationPermission);
-            
-            if (notificationPermission !== 'granted') {
-                console.log('⚠️ Notifications not granted, skipping check');
+
+            const telegramReady = localStorage.getItem('telegram_enabled') === 'true'
+                && !!localStorage.getItem('telegram_bot_token')
+                && !!localStorage.getItem('telegram_chat_id');
+
+            if (notificationPermission !== 'granted' && !telegramReady) {
+                console.log('⚠️ Nessun canale di notifica attivo, skip check');
                 return;
             }
             
@@ -7830,6 +7874,97 @@ Per attivarle:
                 buttonEl.textContent = 'Browser Non Supportato';
                 buttonEl.className = 'btn btn-secondary';
                 buttonEl.disabled = true;
+            }
+        }
+
+        // ========================================
+        // TELEGRAM NOTIFICATIONS
+        // ========================================
+
+        function loadTelegramSettings() {
+            const enabled = localStorage.getItem('telegram_enabled') === 'true';
+            const token = localStorage.getItem('telegram_bot_token') || '';
+            const chatId = localStorage.getItem('telegram_chat_id') || '';
+
+            const enabledEl = document.getElementById('telegramEnabled');
+            const labelEl = document.getElementById('telegramEnabledLabel');
+            const tokenEl = document.getElementById('telegramBotToken');
+            const chatIdEl = document.getElementById('telegramChatId');
+
+            if (enabledEl) enabledEl.checked = enabled;
+            if (labelEl) labelEl.textContent = enabled ? 'On' : 'Off';
+            if (tokenEl) tokenEl.value = token;
+            if (chatIdEl) chatIdEl.value = chatId;
+        }
+
+        function saveTelegramSettings() {
+            const enabled = document.getElementById('telegramEnabled')?.checked || false;
+            const token = document.getElementById('telegramBotToken')?.value.trim() || '';
+            const chatId = document.getElementById('telegramChatId')?.value.trim() || '';
+
+            localStorage.setItem('telegram_enabled', enabled ? 'true' : 'false');
+            localStorage.setItem('telegram_bot_token', token);
+            localStorage.setItem('telegram_chat_id', chatId);
+
+            const labelEl = document.getElementById('telegramEnabledLabel');
+            if (labelEl) labelEl.textContent = enabled ? 'On' : 'Off';
+        }
+
+        async function sendTelegramMessage(text) {
+            const token = localStorage.getItem('telegram_bot_token') || '';
+            const chatId = localStorage.getItem('telegram_chat_id') || '';
+            const enabled = localStorage.getItem('telegram_enabled') === 'true';
+
+            if (!enabled || !token || !chatId) return;
+
+            try {
+                const url = `https://api.telegram.org/bot${token}/sendMessage`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    console.error('❌ Telegram error:', err);
+                } else {
+                    console.log('📱 Telegram message sent');
+                }
+            } catch (e) {
+                console.error('❌ Telegram send failed:', e);
+            }
+        }
+
+        async function testTelegramNotification() {
+            const token = document.getElementById('telegramBotToken')?.value.trim() || '';
+            const chatId = document.getElementById('telegramChatId')?.value.trim() || '';
+
+            if (!token || !chatId) {
+                alert('Inserisci Bot Token e Chat ID prima di fare il test.');
+                return;
+            }
+
+            try {
+                const url = `https://api.telegram.org/bot${token}/sendMessage`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: '✅ <b>Test Notifica Tasks</b>\n\nLe notifiche Telegram funzionano correttamente! 🎉',
+                        parse_mode: 'HTML'
+                    })
+                });
+
+                const result = await response.json();
+                if (result.ok) {
+                    showToast('✅ Messaggio di test inviato!');
+                } else {
+                    alert('Errore Telegram: ' + (result.description || JSON.stringify(result)));
+                }
+            } catch (e) {
+                alert('Errore connessione: ' + e.message);
             }
         }
 
