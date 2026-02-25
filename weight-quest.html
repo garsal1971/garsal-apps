@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.1.9</title>
+    <title>Weight Quest v3.2.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -636,13 +636,28 @@
         </div> <!-- /content-wrapper -->
     </div>
 
+    <!-- MODAL INSERIMENTO PESO MANUALE -->
+    <div id="insertWeightModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:12px; padding:24px; max-width:320px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+            <h3 style="margin:0 0 8px 0; color:#333;">📝 Inserisci peso reale</h3>
+            <p id="insertWeightDateLabel" style="margin:0 0 16px 0; color:#666; font-size:0.9rem;"></p>
+            <label style="display:block; font-size:12px; color:#666; margin-bottom:6px;">Peso (kg)</label>
+            <input type="number" id="insertWeightInput" step="0.1" min="30" max="300" placeholder="es. 75.3"
+                style="width:100%; padding:10px; border:2px solid #E5E7EB; border-radius:8px; font-size:1.2em; box-sizing:border-box; margin-bottom:16px;">
+            <div style="display:flex; gap:8px;">
+                <button id="insertWeightSaveBtn" style="flex:1; background:#00B894; color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:0.95em;">💾 Salva</button>
+                <button onclick="closeInsertWeightModal()" style="flex:1; background:#f0f0f0; color:#333; border:none; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:0.95em;">✕ Annulla</button>
+            </div>
+        </div>
+    </div>
+
     <!-- DEBUG -->
     <button id="debugBtn">🐛</button>
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.1.9';
-        var BUILD_TIME  = '2026-02-24T23:45:00Z';
+        var APP_VERSION = 'v3.2.0';
+        var BUILD_TIME  = '2026-02-25T00:15:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -800,6 +815,16 @@
             document.getElementById('debugLog').classList.toggle('active');
         };
 
+        // MODAL PESO MANUALE
+        document.getElementById('insertWeightSaveBtn').addEventListener('click', saveManualWeight);
+        document.getElementById('insertWeightInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') saveManualWeight();
+            if (e.key === 'Escape') closeInsertWeightModal();
+        });
+        document.getElementById('insertWeightModal').addEventListener('click', function(e) {
+            if (e.target === this) closeInsertWeightModal();
+        });
+
         // INIT
         function updateDashboardStats() {
             if (!allObjectives || allObjectives.length === 0) {
@@ -836,6 +861,80 @@
             
             el = document.getElementById('statsActive');
             if (el) el.textContent = active;
+        }
+
+        // =====================================================
+        // INSERIMENTO PESO MANUALE PER GIORNI INTERPOLATI
+        // =====================================================
+        var insertWeightTargetDate = null;
+
+        function showInsertWeightModal(date) {
+            insertWeightTargetDate = date;
+            var parts = date.split('-');
+            document.getElementById('insertWeightDateLabel').textContent =
+                'Data: ' + parts[2] + '-' + parts[1] + '-' + parts[0];
+            document.getElementById('insertWeightInput').value = '';
+            document.getElementById('insertWeightModal').style.display = 'flex';
+            setTimeout(function() { document.getElementById('insertWeightInput').focus(); }, 100);
+        }
+
+        function closeInsertWeightModal() {
+            document.getElementById('insertWeightModal').style.display = 'none';
+            insertWeightTargetDate = null;
+        }
+
+        async function saveManualWeight() {
+            var input = document.getElementById('insertWeightInput');
+            var weight = parseFloat(input.value);
+            if (isNaN(weight) || weight < 30 || weight > 300) {
+                alert('Inserisci un peso valido (tra 30 e 300 kg)');
+                return;
+            }
+
+            var date = insertWeightTargetDate;
+            // Timestamp: mezzogiorno del giorno selezionato (ora locale)
+            var noonMs = new Date(date + 'T12:00:00').getTime();
+            var target = getInterpolatedTarget(date);
+
+            var record = {
+                date: date,
+                time: '12:00',
+                timestamp: Math.floor(noonMs),
+                weight: parseFloat(weight.toFixed(2)),
+                target_weight: target
+            };
+
+            log('Salvataggio peso manuale: ' + weight + ' kg per ' + date);
+
+            var btn = document.getElementById('insertWeightSaveBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Salvataggio...';
+
+            try {
+                var url = supabase.url + '/rest/v1/ps_weight_tracking?on_conflict=timestamp';
+                var response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': supabase.key,
+                        'Authorization': 'Bearer ' + supabase.key,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'resolution=merge-duplicates,return=minimal'
+                    },
+                    body: JSON.stringify([record])
+                });
+                if (!response.ok) {
+                    var text = await response.text();
+                    throw new Error('HTTP ' + response.status + ': ' + text);
+                }
+                log('✓ Peso manuale salvato: ' + weight + ' kg per ' + date);
+                closeInsertWeightModal();
+                loadData();
+            } catch (err) {
+                log('ERROR saveManualWeight: ' + err.message);
+                alert('Errore nel salvataggio: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = '💾 Salva';
+            }
         }
 
         function init() {
@@ -2968,6 +3067,15 @@
                     badge.style.color = '#bbb';
                     badge.style.fontSize = '0.8em';
                     tdDate.appendChild(badge);
+
+                    var insertBtn = document.createElement('button');
+                    insertBtn.textContent = '📝';
+                    insertBtn.title = 'Inserisci peso reale per questo giorno';
+                    insertBtn.style.cssText = 'margin-left:6px; background:none; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
+                    insertBtn.addEventListener('click', (function(d) {
+                        return function(e) { e.stopPropagation(); showInsertWeightModal(d); };
+                    })(date));
+                    tdDate.appendChild(insertBtn);
                 }
                 tr.appendChild(tdDate);
 
