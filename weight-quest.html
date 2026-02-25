@@ -365,6 +365,8 @@
                 flex: 0 0 calc(25% - 5px);
                 min-width: calc(25% - 5px);
             }
+        }
+        @media (max-width: 768px) {
             .row-detail-inline { display: none !important; }
             .weight-table-row { cursor: pointer; }
             .weight-table-row:active { background: #f0f7ff !important; }
@@ -671,8 +673,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.2.7';
-        var BUILD_TIME  = '2026-02-25T10:45:00Z';
+        var APP_VERSION = 'v3.2.8';
+        var BUILD_TIME  = '2026-02-25T11:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3222,9 +3224,8 @@
                     manualEntry = hasManual ? dayData.find(function(e) { return e.time === 'Manuale'; }) : null;
                 }
 
-                // -- ICONA TIPO (prima della data, solo desktop) --
+                // -- ICONA TIPO (prima della data, sempre visibile) --
                 var iconInline = document.createElement('span');
-                iconInline.className = 'row-detail-inline';
                 if (isInterpolated) {
                     var badge = document.createElement('span');
                     badge.textContent = '○ ';
@@ -3285,7 +3286,7 @@
                 // -- CLICK SU RIGA → popup mobile --
                 tr.addEventListener('click', (function(rowInfo) {
                     return function() {
-                        if (window.innerWidth <= 600) showWeightRowDetail(rowInfo);
+                        if (window.innerWidth <= 768) showWeightRowDetail(rowInfo);
                     };
                 })({
                     date: date,
