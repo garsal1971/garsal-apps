@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.2.1</title>
+    <title>Weight Quest v3.2.2</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -598,9 +598,7 @@
                                     <th>Data</th>
                                     <th>Target</th>
                                     <th>Peso MIN</th>
-                                    <th>Ora</th>
                                     <th>Peso MAX</th>
-                                    <th>Ora</th>
                                     <th>Punti</th>
                                     <th>Cumul.</th>
                                 </tr>
@@ -656,8 +654,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.2.1';
-        var BUILD_TIME  = '2026-02-25T00:30:00Z';
+        var APP_VERSION = 'v3.2.2';
+        var BUILD_TIME  = '2026-02-25T00:45:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3196,15 +3194,6 @@
                 }
                 tr.appendChild(tdMin);
 
-                // -- ORA MIN --
-                var tdMinTime = document.createElement('td');
-                tdMinTime.style.padding = '10px';
-                tdMinTime.style.textAlign = 'center';
-                tdMinTime.style.color = '#666';
-                tdMinTime.style.fontSize = '0.9em';
-                tdMinTime.textContent = minTime;
-                tr.appendChild(tdMinTime);
-
                 // -- PESO MAX --
                 var tdMax = document.createElement('td');
                 tdMax.style.padding = '10px';
@@ -3221,15 +3210,6 @@
                     tdMax.textContent = maxWeight.toFixed(1) + ' kg';
                 }
                 tr.appendChild(tdMax);
-
-                // -- ORA MAX --
-                var tdMaxTime = document.createElement('td');
-                tdMaxTime.style.padding = '10px';
-                tdMaxTime.style.textAlign = 'center';
-                tdMaxTime.style.color = '#666';
-                tdMaxTime.style.fontSize = '0.9em';
-                tdMaxTime.textContent = maxTime;
-                tr.appendChild(tdMaxTime);
 
                 // -- PUNTI GIORNALIERI --
                 var tdScore = document.createElement('td');
