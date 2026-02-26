@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.21</title>
+    <title>Tasks v19.17.22</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.21</span>
+                        <span>Tasks v19.17.22</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -1660,13 +1660,13 @@
 
                 <div class="form-group" id="startDateGroup">
                     <label class="form-label">Data/Ora Inizio</label>
-                    <input type="text" class="form-input" id="taskStartDate" placeholder="GG/MM/AAAA HH:MM" readonly>
+                    <input type="text" class="form-input" id="taskStartDate" placeholder="GG-MM-AAAA HH:MM" readonly>
                 </div>
 
                 <!-- SINGOLO -->
                 <div class="form-group" id="deadlineGroup">
                     <label class="form-label">Scadenza</label>
-                    <input type="text" class="form-input" id="taskDeadline" placeholder="GG/MM/AAAA HH:MM" readonly>
+                    <input type="text" class="form-input" id="taskDeadline" placeholder="GG-MM-AAAA HH:MM" readonly>
                 </div>
 
                 <!-- RICORRENTE -->
@@ -1986,7 +1986,7 @@
                 
                 <div class="form-group">
                     <label class="form-label">Data/Ora</label>
-                    <input type="text" class="form-input" id="noteDate" placeholder="GG/MM/AAAA HH:MM">
+                    <input type="text" class="form-input" id="noteDate" placeholder="GG-MM-AAAA HH:MM">
                 </div>
                 
                 <div class="form-group">
@@ -2017,7 +2017,7 @@
                 
                 <div class="form-group">
                     <label class="form-label">Data/Ora</label>
-                    <input type="text" class="form-input" id="quickNoteDate" placeholder="GG/MM/AAAA HH:MM">
+                    <input type="text" class="form-input" id="quickNoteDate" placeholder="GG-MM-AAAA HH:MM">
                 </div>
                 
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
@@ -2102,30 +2102,32 @@
         let reminderPresets = []; // Preset promemoria da DB
         let fpStart = null;
         let fpDeadline = null;
+        let fpNoteDate = null;
+        let fpQuickNoteDate = null;
+
+        const FP_OPTS_BASE = {
+            locale: 'it',
+            enableTime: true,
+            dateFormat: 'd-m-Y H:i',
+            time_24hr: true,
+            allowInput: false
+        };
 
         function initDatePickers() {
             fpStart = flatpickr(document.getElementById('taskStartDate'), {
-                locale: 'it',
-                enableTime: true,
-                dateFormat: 'd/m/Y H:i',
-                time_24hr: true,
-                allowInput: false,
+                ...FP_OPTS_BASE,
                 onChange: function() {
                     updateRecurringFieldsFromStartDate();
                     autoUpdateDeadline();
                 }
             });
-            fpDeadline = flatpickr(document.getElementById('taskDeadline'), {
-                locale: 'it',
-                enableTime: true,
-                dateFormat: 'd/m/Y H:i',
-                time_24hr: true,
-                allowInput: false
-            });
+            fpDeadline = flatpickr(document.getElementById('taskDeadline'), FP_OPTS_BASE);
+            fpNoteDate = flatpickr(document.getElementById('noteDate'), FP_OPTS_BASE);
+            fpQuickNoteDate = flatpickr(document.getElementById('quickNoteDate'), FP_OPTS_BASE);
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.21 - Init function started');
+            console.log('🚀 Tasks v19.17.22 - Init function started');
 
             initDatePickers();
 
@@ -2857,58 +2859,73 @@
         });
 
         // Conversione date formato europeo ↔ ISO
+        // Converte una data in componenti nel fuso orario italiano (Europe/Rome)
+        function toRomeParts(d) {
+            const dt = (d instanceof Date) ? d : new Date(d);
+            if (!dt || isNaN(dt.getTime())) return null;
+            const fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Europe/Rome',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hour12: false
+            });
+            const p = {};
+            fmt.formatToParts(dt).forEach(({ type, value }) => { p[type] = value; });
+            // hour12:false può restituire '24' a mezzanotte — normalizza a '00'
+            if (p.hour === '24') p.hour = '00';
+            return p; // { day, month, year, hour, minute }
+        }
+
+        // Formatta ISO → "GG-MM-AAAA HH:MM" in orario italiano
         function isoToEu(isoStr) {
             if (!isoStr) return '';
-            const d = new Date(isoStr);
-            if (isNaN(d.getTime())) return '';
-            const dd = String(d.getDate()).padStart(2, '0');
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const yyyy = d.getFullYear();
-            const hh = String(d.getHours()).padStart(2, '0');
-            const min = String(d.getMinutes()).padStart(2, '0');
-            return `${dd}-${mm}-${yyyy} ${hh}:${min}`;
+            const p = toRomeParts(isoStr);
+            if (!p) return '';
+            return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
         }
 
+        // Formatta data → "GG-MM-AAAA" in orario italiano
         function fmtDate(d) {
             if (!d) return '';
-            const dt = (d instanceof Date) ? d : new Date(d);
-            if (isNaN(dt.getTime())) return '';
-            return String(dt.getDate()).padStart(2, '0') + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + dt.getFullYear();
+            const p = toRomeParts(d);
+            if (!p) return '';
+            return `${p.day}-${p.month}-${p.year}`;
         }
         
+        // Converte stringa "GG-MM-AAAA HH:MM" (orario italiano) in ISO UTC
         function euToIso(euStr) {
             if (!euStr || !euStr.trim()) return null;
-            // Accetta: DD/MM/YYYY HH:MM oppure DD/MM/YYYY
+            // Accetta: DD/MM/YYYY HH:MM oppure DD-MM-YYYY HH:MM (con o senza ora)
             const m = euStr.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
             if (!m) return null;
-            const day = parseInt(m[1]);
-            const month = parseInt(m[2]) - 1;
-            const year = parseInt(m[3]);
-            const hours = m[4] ? parseInt(m[4]) : 0;
-            const minutes = m[5] ? parseInt(m[5]) : 0;
-            const d = new Date(year, month, day, hours, minutes);
-            if (isNaN(d.getTime())) return null;
-            return d.toISOString();
+            const pad = n => String(parseInt(n)).padStart(2, '0');
+            const yyyy = m[3];
+            const mm   = pad(m[2]);
+            const dd   = pad(m[1]);
+            const hh   = m[4] ? pad(m[4]) : '00';
+            const min  = m[5] ? pad(m[5]) : '00';
+            // Interpreta come orario italiano: crea UTC approssimato, calcola offset Rome, corregge
+            const approxUTC = new Date(Date.UTC(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd), parseInt(hh), parseInt(min)));
+            if (isNaN(approxUTC.getTime())) return null;
+            // Determina l'offset di Rome per questo istante UTC
+            const romeStr = new Intl.DateTimeFormat('sv-SE', {
+                timeZone: 'Europe/Rome',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            }).format(approxUTC); // "YYYY-MM-DD HH:MM:SS"
+            const romeAsUTC = new Date(romeStr.replace(' ', 'T') + 'Z');
+            const offsetMs = romeAsUTC.getTime() - approxUTC.getTime();
+            const result = new Date(approxUTC.getTime() - offsetMs);
+            if (isNaN(result.getTime())) return null;
+            return result.toISOString();
         }
 
-        // Formatta data in formato leggibile
+        // Formatta data in formato GG-MM-AAAA HH:MM (orario italiano)
         function formatDateTime(date) {
             if (!date) return 'Nessuna data';
-            
-            const d = new Date(date);
-            if (isNaN(d.getTime())) return 'Data non valida';
-            
-            const days = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
-            const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-            
-            const dayName = days[d.getDay()];
-            const day = d.getDate();
-            const month = months[d.getMonth()];
-            const year = d.getFullYear();
-            const hours = String(d.getHours()).padStart(2, '0');
-            const minutes = String(d.getMinutes()).padStart(2, '0');
-            
-            return `${dayName} ${day} ${month} ${year} ${hours}:${minutes}`;
+            const p = toRomeParts(date);
+            if (!p) return 'Data non valida';
+            return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
         }
 
         function getRecurringLabel(task) {
@@ -5693,7 +5710,7 @@
             
             // Se start_date è maggiore di deadline, aggiorna deadline
             if (startDate > deadline) {
-                deadlineInput.value = isoToEu(startDate.toISOString());
+                fpDeadline.setDate(startDate, false);
                 console.log('⚠️ Deadline auto-aggiornata a start_date');
             }
         }
@@ -7273,9 +7290,8 @@
             document.getElementById('noteForm').reset();
             
             // Imposta data/ora corrente
-            const now = new Date();
-            document.getElementById('noteDate').value = isoToEu(now.toISOString());
-            
+            fpNoteDate.setDate(new Date(), false);
+
             document.getElementById('noteModal').classList.add('active');
         }
         
@@ -7286,7 +7302,7 @@
             document.getElementById('noteModalTitle').textContent = 'Modifica Appunto';
             document.getElementById('editNoteId').value = id;
             document.getElementById('noteTitle').value = note.title;
-            document.getElementById('noteDate').value = note.date ? isoToEu(note.date) : '';
+            if (note.date) fpNoteDate.setDate(note.date, false); else fpNoteDate.clear();
             document.getElementById('noteContent').value = note.content || '';
             
             document.getElementById('noteModal').classList.add('active');
@@ -7417,8 +7433,7 @@
             document.getElementById('quickNoteForm').reset();
             
             // Imposta data/ora corrente
-            const now = new Date();
-            document.getElementById('quickNoteDate').value = isoToEu(now.toISOString());
+            fpQuickNoteDate.setDate(new Date(), false);
             
             document.getElementById('quickNoteModal').classList.add('active');
             
