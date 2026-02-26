@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.26</title>
+    <title>Tasks v19.17.27</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.26</span>
+                        <span>Tasks v19.17.27</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2128,7 +2128,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.26 - Init function started');
+            console.log('🚀 Tasks v19.17.27 - Init function started');
 
             initDatePickers();
 
@@ -2173,7 +2173,7 @@
             try {
                 const { data, error } = await sb
                     .from('cm_reminder_presets')
-                    .select('label, offset_minutes, sort_order')
+                    .select('int_id, label, offset_minutes, sort_order')
                     .eq('active', true)
                     .order('sort_order', { ascending: true });
                 if (error) {
@@ -2225,56 +2225,57 @@
                 }
                 const authSb = getAuthSb();
 
-                console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, labels=${JSON.stringify(reminderLabels)}, presets=${reminderPresets.length}`);
+                console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, labels=${JSON.stringify(reminderLabels)}`);
 
-                // Elimina le regole esistenti per questo task (usa client autenticato)
-                const { error: delErr } = await authSb.from('cm_notification_rules')
-                    .delete()
-                    .eq('app', 'tasks')
-                    .eq('entity_id', String(taskId))
-                    .eq('user_id', userId);
-                if (delErr) console.warn('⚠️ syncNotificationRules delete error:', delErr);
-
+                // Se nessun promemoria → elimina il record del task e termina
                 if (!reminderLabels || reminderLabels.length === 0) {
-                    console.log(`ℹ️ syncNotificationRules: nessun promemoria per task ${taskId}`);
+                    const { error: delErr } = await authSb.from('cm_notification_rules')
+                        .delete()
+                        .eq('app', 'tasks')
+                        .eq('entity_id', String(taskId))
+                        .eq('user_id', userId);
+                    if (delErr) console.warn('⚠️ syncNotificationRules delete error:', delErr);
+                    console.log(`ℹ️ syncNotificationRules: nessun promemoria per task ${taskId}, record eliminato`);
                     return;
                 }
 
-                // Mappa le label agli offset_minutes tramite reminderPresets
+                // Mappa le label → int_id (chiave semplice numerica del preset)
                 const unmatched = [];
-                const rulesToInsert = reminderLabels
+                const presetIds = reminderLabels
                     .map(label => {
                         const preset = reminderPresets.find(p => p.label === label);
-                        if (!preset) { unmatched.push(label); return null; }
-                        return {
-                            user_id: userId,
-                            app: 'tasks',
-                            entity_id: String(taskId),
-                            entity_type: taskType,
-                            offset_minutes: preset.offset_minutes,
-                            offset_label: label,
-                            channel: 'telegram',
-                            enabled: true
-                        };
+                        if (!preset || preset.int_id == null) { unmatched.push(label); return null; }
+                        return preset.int_id;
                     })
-                    .filter(Boolean);
+                    .filter(id => id != null);
 
                 if (unmatched.length > 0) {
-                    console.warn('⚠️ syncNotificationRules: label senza preset corrispondente:', unmatched);
+                    console.warn('⚠️ syncNotificationRules: label senza int_id corrispondente:', unmatched);
                     showToast(`⚠️ Promemoria non trovati nei preset: ${unmatched.join(', ')}`);
                 }
 
-                if (rulesToInsert.length > 0) {
-                    const { error } = await authSb.from('cm_notification_rules').insert(rulesToInsert);
-                    if (error) {
-                        console.error('❌ syncNotificationRules insert error:', error);
-                        showToast(`❌ Errore salvataggio promemoria: ${error.message || JSON.stringify(error)}`);
-                    } else {
-                        console.log(`✅ syncNotificationRules: ${rulesToInsert.length} regole per task ${taskId}`);
-                        showToast('🔔 Promemoria salvati');
-                    }
+                // UPSERT: un solo record per task con l'array JSONB degli int_id selezionati
+                // conflict target: (user_id, app, entity_id) → richiede UNIQUE CONSTRAINT sul DB
+                const rule = {
+                    user_id:          userId,
+                    app:              'tasks',
+                    entity_id:        String(taskId),
+                    entity_type:      taskType,
+                    reminder_presets: presetIds,   // JSONB: [1, 3, 5]
+                    channel:          'telegram',
+                    enabled:          true
+                };
+
+                const { error } = await authSb
+                    .from('cm_notification_rules')
+                    .upsert(rule, { onConflict: 'user_id,app,entity_id' });
+
+                if (error) {
+                    console.error('❌ syncNotificationRules upsert error:', error);
+                    showToast(`❌ Errore salvataggio promemoria: ${error.message || JSON.stringify(error)}`);
                 } else {
-                    console.log('ℹ️ syncNotificationRules: rulesToInsert vuoto, nessun insert');
+                    console.log(`✅ syncNotificationRules: task ${taskId} → preset IDs ${JSON.stringify(presetIds)}`);
+                    showToast('🔔 Promemoria salvati');
                 }
             } catch (e) {
                 console.error('❌ syncNotificationRules exception:', e);
