@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL — ts_reminder_presets</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 1rem; }
+  h1 { font-size: 1.1rem; color: #7c83fd; margin-bottom: 1.5rem; }
+  .block { margin-bottom: 1.5rem; }
+  .block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+  .block-title { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .btn-copy {
+    background: #7c83fd;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1.1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-width: 80px;
+  }
+  .btn-copy.ok { background: #00b894; }
+  pre {
+    background: #0d0d1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 1rem;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>
+
+<h1>SQL — ts_reminder_presets</h1>
+
+<div class="block">
+  <div class="block-header">
+    <span class="block-title">1 — CREATE TABLE</span>
+    <button class="btn-copy" onclick="copy(this,'sql1')">Copia</button>
+  </div>
+  <pre id="sql1">CREATE TABLE IF NOT EXISTS ts_reminder_presets (
+    id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    label          text        NOT NULL,
+    offset_minutes int         NOT NULL CHECK (offset_minutes > 0),
+    sort_order     int         NOT NULL DEFAULT 0,
+    active         boolean     NOT NULL DEFAULT true,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_reminder_preset_label UNIQUE (label)
+);</pre>
+</div>
+
+<div class="block">
+  <div class="block-header">
+    <span class="block-title">2 — INSERT (seed)</span>
+    <button class="btn-copy" onclick="copy(this,'sql2')">Copia</button>
+  </div>
+  <pre id="sql2">INSERT INTO ts_reminder_presets (label, offset_minutes, sort_order) VALUES
+('1 minuto',    1,      10),
+('5 minuti',    5,      20),
+('10 minuti',   10,     30),
+('15 minuti',   15,     40),
+('30 minuti',   30,     50),
+('1 ora',       60,     60),
+('2 ore',       120,    70),
+('4 ore',       240,    80),
+('8 ore',       480,    90),
+('1 giorno',    1440,   100),
+('2 giorni',    2880,   110),
+('3 giorni',    4320,   120),
+('1 settimana', 10080,  130),
+('2 settimane', 20160,  140)
+ON CONFLICT (label) DO NOTHING;</pre>
+</div>
+
+<div class="block">
+  <div class="block-header">
+    <span class="block-title">3 — RLS</span>
+    <button class="btn-copy" onclick="copy(this,'sql3')">Copia</button>
+  </div>
+  <pre id="sql3">ALTER TABLE ts_reminder_presets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "reminder_presets_select"
+ON ts_reminder_presets FOR SELECT
+USING (auth.uid() IS NOT NULL);</pre>
+</div>
+
+<div class="block">
+  <div class="block-header">
+    <span class="block-title">Tutto in uno</span>
+    <button class="btn-copy" onclick="copy(this,'sqlAll')">Copia</button>
+  </div>
+  <pre id="sqlAll">CREATE TABLE IF NOT EXISTS ts_reminder_presets (
+    id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    label          text        NOT NULL,
+    offset_minutes int         NOT NULL CHECK (offset_minutes > 0),
+    sort_order     int         NOT NULL DEFAULT 0,
+    active         boolean     NOT NULL DEFAULT true,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_reminder_preset_label UNIQUE (label)
+);
+
+INSERT INTO ts_reminder_presets (label, offset_minutes, sort_order) VALUES
+('1 minuto',    1,      10),
+('5 minuti',    5,      20),
+('10 minuti',   10,     30),
+('15 minuti',   15,     40),
+('30 minuti',   30,     50),
+('1 ora',       60,     60),
+('2 ore',       120,    70),
+('4 ore',       240,    80),
+('8 ore',       480,    90),
+('1 giorno',    1440,   100),
+('2 giorni',    2880,   110),
+('3 giorni',    4320,   120),
+('1 settimana', 10080,  130),
+('2 settimane', 20160,  140)
+ON CONFLICT (label) DO NOTHING;
+
+ALTER TABLE ts_reminder_presets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "reminder_presets_select"
+ON ts_reminder_presets FOR SELECT
+USING (auth.uid() IS NOT NULL);</pre>
+</div>
+
+<script>
+function copy(btn, id) {
+    const text = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '✓ Copiato';
+        btn.classList.add('ok');
+        setTimeout(() => { btn.textContent = 'Copia'; btn.classList.remove('ok'); }, 2000);
+    }).catch(() => {
+        // Fallback per browser più vecchi
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = '✓ Copiato';
+        btn.classList.add('ok');
+        setTimeout(() => { btn.textContent = 'Copia'; btn.classList.remove('ok'); }, 2000);
+    });
+}
+</script>
+</body>
+</html>
