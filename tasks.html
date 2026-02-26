@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.28</title>
+    <title>Tasks v19.17.29</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.28</span>
+                        <span>Tasks v19.17.29</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2128,7 +2128,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.28 - Init function started');
+            console.log('🚀 Tasks v19.17.29 - Init function started');
 
             initDatePickers();
 
@@ -2210,7 +2210,7 @@
             } catch(e) { return null; }
         }
 
-        async function syncNotificationRules(taskId, taskType, reminderLabels) {
+        async function syncNotificationRules(taskId, taskType, reminderLabels, dueDate) {
             try {
                 const token = sbAccessToken;
                 if (!token) {
@@ -2261,7 +2261,7 @@
                     app:              'tasks',
                     entity_id:        String(taskId),
                     entity_type:      taskType,
-                    reminder_presets: { reminders: presetIds },   // JSONB: {"reminders": [1, 3, 5]}
+                    reminder_presets: { reminders: presetIds, due_at: dueDate || null },   // JSONB: {"reminders": [1, 3, 5], "due_at": "2026-02-26T10:00:00"}
                     channel:          'telegram',
                     enabled:          true
                 };
@@ -6228,7 +6228,8 @@
                 }
                 // Sincronizza regole promemoria SEMPRE dopo update riuscito
                 console.log(`🔵 saveTask UPDATE → reminders al momento del save:`, reminders);
-                await syncNotificationRules(taskId, taskType, reminders);
+                const updateDueDate = taskData.next_occurrence_date || taskData.start_date || null;
+                await syncNotificationRules(taskId, taskType, reminders, updateDueDate);
             } else {
                 // INSERT
                 console.log('🔵 INSERTING task:', taskData);
@@ -6247,7 +6248,8 @@
                     console.log('✅ Task inserted:', data[0]);
                     debugLog('✅ Task inserted successfully');
                     tasks.push(data[0]);
-                    await syncNotificationRules(data[0].id, taskType, reminders);
+                    const insertDueDate = data[0].next_occurrence_date || data[0].start_date || null;
+                    await syncNotificationRules(data[0].id, taskType, reminders, insertDueDate);
                 } else {
                     console.warn('⚠️ No data returned from insert');
                     debugLog('⚠️ No data returned from insert');
