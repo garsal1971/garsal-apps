@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.19</title>
+    <title>Tasks v19.17.20</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -585,6 +588,38 @@
             border-color: var(--primary);
             background: #FFFFFF;
             color: var(--dark) !important;
+        }
+
+        /* Flatpickr — integrazione design app */
+        .flatpickr-calendar {
+            font-family: 'Darker Grotesque', sans-serif;
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+        }
+        .flatpickr-day.selected, .flatpickr-day.selected:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        .flatpickr-day:hover {
+            background: var(--border);
+        }
+        .flatpickr-months .flatpickr-month,
+        .flatpickr-weekdays {
+            background: var(--dark);
+            color: #fff;
+        }
+        .flatpickr-current-month .flatpickr-monthDropdown-months,
+        .flatpickr-current-month input.cur-year {
+            color: #fff;
+        }
+        span.flatpickr-weekday {
+            background: var(--dark);
+            color: rgba(255,255,255,0.7);
+        }
+        .flatpickr-time input {
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1rem;
         }
 
         /* Fix per dropdown visibility */
@@ -1542,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.19</span>
+                        <span>Tasks v19.17.20</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -1625,13 +1660,13 @@
 
                 <div class="form-group" id="startDateGroup">
                     <label class="form-label">Data/Ora Inizio</label>
-                    <input type="text" class="form-input" id="taskStartDate" placeholder="GG/MM/AAAA HH:MM" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" onchange="updateRecurringFieldsFromStartDate(); autoUpdateDeadline();">
+                    <input type="text" class="form-input" id="taskStartDate" placeholder="GG/MM/AAAA HH:MM" readonly>
                 </div>
 
                 <!-- SINGOLO -->
                 <div class="form-group" id="deadlineGroup">
                     <label class="form-label">Scadenza</label>
-                    <input type="text" class="form-input" id="taskDeadline" placeholder="GG/MM/AAAA HH:MM" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}">
+                    <input type="text" class="form-input" id="taskDeadline" placeholder="GG/MM/AAAA HH:MM" readonly>
                 </div>
 
                 <!-- RICORRENTE -->
@@ -2065,10 +2100,35 @@
         let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
         let reminderPresets = []; // Preset promemoria da DB
+        let fpStart = null;
+        let fpDeadline = null;
+
+        function initDatePickers() {
+            fpStart = flatpickr(document.getElementById('taskStartDate'), {
+                locale: 'it',
+                enableTime: true,
+                dateFormat: 'd/m/Y H:i',
+                time_24hr: true,
+                allowInput: false,
+                onChange: function() {
+                    updateRecurringFieldsFromStartDate();
+                    autoUpdateDeadline();
+                }
+            });
+            fpDeadline = flatpickr(document.getElementById('taskDeadline'), {
+                locale: 'it',
+                enableTime: true,
+                dateFormat: 'd/m/Y H:i',
+                time_24hr: true,
+                allowInput: false
+            });
+        }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.19 - Init function started');
-            
+            console.log('🚀 Tasks v19.17.20 - Init function started');
+
+            initDatePickers();
+
             // Reset sidebar state on desktop
             if (window.innerWidth > 768) {
                 const sidebar = document.getElementById('sidebar');
@@ -5027,13 +5087,13 @@
             renderReminders(); // Clear reminders display
             console.log('🟢 Called renderReminders()');
             
-            // Imposta data/ora corrente nel campo start_date (formato europeo)
+            // Imposta data/ora corrente nel campo start_date
             const now = new Date();
-            document.getElementById('taskStartDate').value = isoToEu(now.toISOString());
-            
+            fpStart.setDate(now, false);
+
             // Imposta deadline a 23:59 dello stesso giorno
             const deadlineDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
-            document.getElementById('taskDeadline').value = isoToEu(deadlineDate.toISOString());
+            fpDeadline.setDate(deadlineDate, false);
             
             updateTaskFields();
         }
@@ -5049,13 +5109,9 @@
             document.getElementById('taskType').value = task.type;
             document.getElementById('taskPriority').value = task.priority_id || '';
             
-            // Date - converti da UTC a formato europeo
-            if (task.start_date) {
-                document.getElementById('taskStartDate').value = isoToEu(task.start_date);
-            }
-            if (task.deadline) {
-                document.getElementById('taskDeadline').value = isoToEu(task.deadline);
-            }
+            // Date - imposta via Flatpickr
+            fpStart.setDate(task.start_date || null, false);
+            fpDeadline.setDate(task.deadline || null, false);
             
             // Ricorrenza
             if (task.type === 'recurring') {
@@ -7311,7 +7367,7 @@
             
             // Se c'è una data, impostala come start_date
             if (note.date) {
-                document.getElementById('taskStartDate').value = isoToEu(note.date);
+                fpStart.setDate(note.date, false);
             }
             
             // Se c'è contenuto, mettilo nella descrizione
