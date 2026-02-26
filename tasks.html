@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.13</title>
+    <title>Tasks v19.17.14</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -1542,7 +1542,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.13</span>
+                        <span>Tasks v19.17.14</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2064,10 +2064,11 @@
         let currentViewTaskId = null;
         let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
+        let reminderPresets = []; // Preset promemoria da DB
 
         async function init() {
             debugLog('🔥🔥🔥 TASKS v19.15 🔥🔥🔥');
-            console.log('🚀 Tasks v19.17.13 - Init function started');
+            console.log('🚀 Tasks v19.17.14 - Init function started');
             
             // Reset sidebar state on desktop
             if (window.innerWidth > 768) {
@@ -2098,9 +2099,30 @@
             
             // Inizializza sistema notifiche
             await initNotificationSystem();
-            
+
+            // Carica preset promemoria da DB
+            await loadReminderPresets();
+
             // Aggiorna badge promemoria
             updateRemindersCount();
+        }
+
+        async function loadReminderPresets() {
+            try {
+                const { data, error } = await sb
+                    .from('ts_reminder_presets')
+                    .select('label, offset_minutes, sort_order')
+                    .eq('active', true)
+                    .order('sort_order', { ascending: true });
+                if (error) {
+                    console.error('Error loading reminder presets:', error);
+                } else if (data) {
+                    reminderPresets = data;
+                    console.log('Reminder presets loaded:', reminderPresets.length);
+                }
+            } catch (e) {
+                console.error('loadReminderPresets exception:', e);
+            }
         }
 
         async function loadCategories() {
@@ -5639,24 +5661,9 @@
                 padding: 0.5rem;
             `;
             
-            // Lista predefinita di promemoria disponibili
-            const availableReminders = [
-                '1 minuto',
-                '5 minuti',
-                '10 minuti',
-                '15 minuti',
-                '30 minuti',
-                '1 ora',
-                '2 ore',
-                '4 ore',
-                '8 ore',
-                '1 giorno',
-                '2 giorni',
-                '3 giorni',
-                '1 settimana',
-                '2 settimane'
-            ];
-            
+            // Lista promemoria da DB (ts_reminder_presets)
+            const availableReminders = reminderPresets.map(p => p.label);
+
             // Filtra quelli già selezionati
             const available = availableReminders.filter(r => !reminders.includes(r));
             
