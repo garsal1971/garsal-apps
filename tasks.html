@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.17</title>
+    <title>Tasks v19.17.18</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -1542,7 +1542,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.17</span>
+                        <span>Tasks v19.17.18</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2067,7 +2067,7 @@
         let reminderPresets = []; // Preset promemoria da DB
 
         async function init() {
-            console.log('🚀 Tasks v19.17.17 - Init function started');
+            console.log('🚀 Tasks v19.17.18 - Init function started');
             
             // Reset sidebar state on desktop
             if (window.innerWidth > 768) {
@@ -2109,7 +2109,7 @@
         async function loadReminderPresets() {
             try {
                 const { data, error } = await sb
-                    .from('ts_reminder_presets')
+                    .from('cm_reminder_presets')
                     .select('label, offset_minutes, sort_order')
                     .eq('active', true)
                     .order('sort_order', { ascending: true });
@@ -5662,7 +5662,7 @@
                 padding: 0.5rem;
             `;
             
-            // Lista promemoria da DB (ts_reminder_presets)
+            // Lista promemoria da DB (cm_reminder_presets)
             const availableReminders = reminderPresets.map(p => p.label);
 
             // Filtra quelli già selezionati
@@ -5815,7 +5815,7 @@
                 return;
             }
             
-            // Lista promemoria da DB (ts_reminder_presets)
+            // Lista promemoria da DB (cm_reminder_presets)
             const availableReminders = reminderPresets.map(p => p.label);
             
             listEl.innerHTML = `
