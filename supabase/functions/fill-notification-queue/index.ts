@@ -2,22 +2,22 @@
 // Job 1 — fill-notification-queue
 // Frequenza: ogni 6 ore (cron: "0 */6 * * *")
 //
-// Legge cm_notification_rules (enabled=true), calcola fire_at
-// per ogni entità e inserisce in cm_notification_queue.
-// Usa UPSERT con ignoreDuplicates per idempotenza.
+// Legge SOLO cm_notification_rules — nessuna query su altre tabelle.
+// Le app sono responsabili di scrivere entity_title e due_at
+// quando creano/modificano task, habit, ecc.
 //
-// App supportate:
-//   tasks  → ts_tasks (title, type, next_occurrence_date, start_date)
-//   habits → hb_habits (name) — fire daily at DUE_HOUR_UTC
+// Calcolo: fire_at = due_at - offset_minutes
+// Inserisce in cm_notification_queue se:
+//   - fire_at è nel futuro
+//   - fire_at è entro HORIZON_DAYS giorni
+// Usa UPSERT con ignoreDuplicates per idempotenza.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')!
-const SERVICE_ROLE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SUPABASE_URL     = Deno.env.get('SUPABASE_URL')!
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-// Ora di scadenza assunta per task senza ora esplicita (09:00 UTC)
-const DUE_HOUR_UTC = 9
 // Orizzonte massimo: inserisce solo notifiche entro 7 giorni
 const HORIZON_DAYS = 7
 
@@ -27,84 +27,15 @@ const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 // Tipi
 // ---------------------------------------------------------------------------
 interface Rule {
-  id: string
-  user_id: string
-  app: string
-  entity_id: string
-  entity_type: string
+  id:             string
+  user_id:        string
+  app:            string
+  entity_id:      string
+  entity_title:   string
+  due_at:         string     // ISO timestamptz — fornito dall'app
   offset_minutes: number
-  offset_label: string
-  channel: string
-}
-
-interface EntityInfo {
-  title: string
-  dueDate: Date
-}
-
-// ---------------------------------------------------------------------------
-// Lookup task
-// ---------------------------------------------------------------------------
-async function getTaskInfo(entityId: string): Promise<EntityInfo | null> {
-  const { data, error } = await sb
-    .from('ts_tasks')
-    .select('title, type, start_date, next_occurrence_date, status')
-    .eq('id', entityId)
-    .single()
-
-  if (error || !data) return null
-  if (data.status !== 'active') return null
-
-  // Scegli la data di riferimento in base al tipo
-  let dateStr: string | null = null
-  switch (data.type) {
-    case 'single':
-    case 'recurring':
-    case 'simple_recurring':
-    case 'workflow':
-      dateStr = data.next_occurrence_date || data.start_date
-      break
-    default:
-      // free_repeat, multiple: nessuna data fissa — skip
-      return null
-  }
-
-  if (!dateStr) return null
-
-  let dueDate: Date
-  if (dateStr.includes('T')) {
-    // ISO datetime completo
-    dueDate = new Date(dateStr)
-  } else {
-    // YYYY-MM-DD → imposta a DUE_HOUR_UTC
-    const [y, m, d] = dateStr.split('-').map(Number)
-    dueDate = new Date(Date.UTC(y, m - 1, d, DUE_HOUR_UTC, 0, 0))
-  }
-
-  return { title: data.title, dueDate }
-}
-
-// ---------------------------------------------------------------------------
-// Lookup habit
-// ---------------------------------------------------------------------------
-async function getHabitInfo(entityId: string): Promise<EntityInfo | null> {
-  const { data, error } = await sb
-    .from('hb_habits')
-    .select('name')
-    .eq('id', entityId)
-    .single()
-
-  if (error || !data) return null
-
-  // Habit = ricorrenza giornaliera: prossimo trigger = oggi alle DUE_HOUR_UTC
-  const now = new Date()
-  const dueDate = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DUE_HOUR_UTC, 0, 0)
-  )
-  // Se l'ora di oggi è già passata, usa domani
-  if (dueDate <= now) dueDate.setUTCDate(dueDate.getUTCDate() + 1)
-
-  return { title: data.name, dueDate }
+  offset_label:   string
+  channel:        string
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +45,7 @@ Deno.serve(async (_req) => {
   try {
     const { data: rules, error: rulesError } = await sb
       .from('cm_notification_rules')
-      .select('*')
+      .select('id, user_id, app, entity_id, entity_title, due_at, offset_minutes, offset_label, channel')
       .eq('enabled', true)
 
     if (rulesError) throw rulesError
@@ -127,15 +58,8 @@ Deno.serve(async (_req) => {
     let errors   = 0
 
     for (const rule of (rules as Rule[]) ?? []) {
-      // Recupera info entità
-      let info: EntityInfo | null = null
-      if      (rule.app === 'tasks')  info = await getTaskInfo(rule.entity_id)
-      else if (rule.app === 'habits') info = await getHabitInfo(rule.entity_id)
-
-      if (!info) { skipped++; continue }
-
-      // Calcola fire_at
-      const fireAt = new Date(info.dueDate.getTime() - rule.offset_minutes * 60 * 1000)
+      const dueAt  = new Date(rule.due_at)
+      const fireAt = new Date(dueAt.getTime() - rule.offset_minutes * 60 * 1000)
 
       // Salta se già passato o oltre l'orizzonte
       if (fireAt <= now || fireAt > horizon) { skipped++; continue }
@@ -148,7 +72,7 @@ Deno.serve(async (_req) => {
             user_id:   rule.user_id,
             app:       rule.app,
             entity_id: rule.entity_id,
-            title:     `🔔 ${info.title}`,
+            title:     `🔔 ${rule.entity_title}`,
             body:      `Promemoria: ${rule.offset_label} prima`,
             channel:   rule.channel,
             fire_at:   fireAt.toISOString(),
