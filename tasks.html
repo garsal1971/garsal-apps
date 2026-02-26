@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.18</title>
+    <title>Tasks v19.17.19</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -1542,7 +1542,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.18</span>
+                        <span>Tasks v19.17.19</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2067,7 +2067,7 @@
         let reminderPresets = []; // Preset promemoria da DB
 
         async function init() {
-            console.log('🚀 Tasks v19.17.18 - Init function started');
+            console.log('🚀 Tasks v19.17.19 - Init function started');
             
             // Reset sidebar state on desktop
             if (window.innerWidth > 768) {
@@ -2121,6 +2121,82 @@
                 }
             } catch (e) {
                 console.error('loadReminderPresets exception:', e);
+            }
+        }
+
+        // ========================================
+        // NOTIFICATION RULES (cm_notification_rules)
+        // ========================================
+
+        async function syncNotificationRules(taskId, taskType, reminderLabels) {
+            try {
+                const { data: { user } } = await sb.auth.getUser();
+                if (!user) {
+                    console.warn('⚠️ syncNotificationRules: nessun utente autenticato, skip');
+                    return;
+                }
+
+                // Elimina le regole esistenti per questo task
+                await sb.from('cm_notification_rules')
+                    .delete()
+                    .eq('app', 'tasks')
+                    .eq('entity_id', taskId)
+                    .eq('user_id', user.id);
+
+                if (!reminderLabels || reminderLabels.length === 0) {
+                    console.log(`ℹ️ syncNotificationRules: nessun promemoria per task ${taskId}`);
+                    return;
+                }
+
+                // Mappa le label agli offset_minutes tramite reminderPresets
+                const rulesToInsert = reminderLabels
+                    .map(label => {
+                        const preset = reminderPresets.find(p => p.label === label);
+                        if (!preset) return null;
+                        return {
+                            user_id: user.id,
+                            app: 'tasks',
+                            entity_id: taskId,
+                            entity_type: taskType,
+                            offset_minutes: preset.offset_minutes,
+                            offset_label: label,
+                            channel: 'telegram',
+                            enabled: true
+                        };
+                    })
+                    .filter(Boolean);
+
+                if (rulesToInsert.length > 0) {
+                    const { error } = await sb.from('cm_notification_rules').insert(rulesToInsert);
+                    if (error) {
+                        console.error('❌ syncNotificationRules insert error:', error);
+                    } else {
+                        console.log(`✅ syncNotificationRules: ${rulesToInsert.length} regole per task ${taskId}`);
+                    }
+                }
+            } catch (e) {
+                console.error('❌ syncNotificationRules exception:', e);
+            }
+        }
+
+        async function deleteNotificationRules(taskId) {
+            try {
+                const { data: { user } } = await sb.auth.getUser();
+                if (!user) return;
+
+                const { error } = await sb.from('cm_notification_rules')
+                    .delete()
+                    .eq('app', 'tasks')
+                    .eq('entity_id', taskId)
+                    .eq('user_id', user.id);
+
+                if (error) {
+                    console.error('❌ deleteNotificationRules error:', error);
+                } else {
+                    console.log(`🗑️ deleteNotificationRules: regole eliminate per task ${taskId}`);
+                }
+            } catch (e) {
+                console.error('❌ deleteNotificationRules exception:', e);
             }
         }
 
@@ -6020,25 +6096,27 @@
                 if (data) {
                     const index = tasks.findIndex(t => t.id === taskId);
                     if (index !== -1) tasks[index] = data[0];
+                    await syncNotificationRules(taskId, taskType, reminders);
                 }
             } else {
                 // INSERT
                 console.log('🔵 INSERTING task:', taskData);
                 debugLog('🔵 INSERTING task type:', taskData.type);
-                
+
                 const { data, error } = await sb.from('ts_tasks').insert([taskData]).select();
-                
+
                 if (error) {
                     console.error('❌ INSERT ERROR:', error);
                     debugLog('❌ INSERT ERROR: ' + JSON.stringify(error));
                     alert('ERRORE SALVATAGGIO:\n' + JSON.stringify(error, null, 2));
                     return;
                 }
-                
+
                 if (data) {
                     console.log('✅ Task inserted:', data[0]);
                     debugLog('✅ Task inserted successfully');
                     tasks.push(data[0]);
+                    await syncNotificationRules(data[0].id, taskType, reminders);
                 } else {
                     console.warn('⚠️ No data returned from insert');
                     debugLog('⚠️ No data returned from insert');
@@ -6580,10 +6658,11 @@
                 
                 if (task.type === 'single') {
                     debugLog('📅 Type: SINGLE - marking as completed');
-                    await sb.from('ts_tasks').update({ 
+                    await sb.from('ts_tasks').update({
                         status: 'completed',
                         last_completed_date: completedDate
                     }).eq('id', id);
+                    await deleteNotificationRules(id);
                 } else if (task.type === 'simple_recurring') {
                     debugLog('🔁 Type: SIMPLE_RECURRING - calculating next date');
                     // Calcola la prossima occorrenza dalla next_occurrence_date + repeat_after_days
@@ -6697,11 +6776,12 @@
             
             // Task singoli: chiudi il task
             if (task.type === 'single') {
-                await sb.from('ts_tasks').update({ 
+                await sb.from('ts_tasks').update({
                     status: 'completed',
                     last_completed_date: failedDate
                 }).eq('id', id);
-                
+                await deleteNotificationRules(id);
+
                 await loadTasks();
                 
             // Per ricorrenza semplice, sposta alla prossima occorrenza
@@ -6723,10 +6803,11 @@
                 
                 // Se non c'è prossima occorrenza, chiudi il task
                 if (!nextDate) {
-                    await sb.from('ts_tasks').update({ 
+                    await sb.from('ts_tasks').update({
                         next_occurrence_date: null,
                         status: 'completed'
                     }).eq('id', id);
+                    await deleteNotificationRules(id);
                 } else {
                     await sb.from('ts_tasks').update({ 
                         next_occurrence_date: nextDate.toISOString()
@@ -6764,12 +6845,13 @@
                     next_occurrence_date: nextOccurrence,
                     status: nextOccurrence === null ? 'completed' : 'active'
                 }).eq('id', id);
-                
+                if (nextOccurrence === null) await deleteNotificationRules(id);
+
                 await loadTasks();
             }
-            
+
             await loadHistory();
-            
+
             showToast('✗ Task fallito');
             
             // Refresh della vista corrente
@@ -6845,13 +6927,14 @@
                         next_occurrence_date: null,
                         status: 'completed'
                     }).eq('id', id);
-                    
+                    await deleteNotificationRules(id);
+
                     await loadTasks();
                     await loadHistory();
                     renderDashboard();
                     renderCalendar();
                     renderManagement();
-                    
+
                     showToast('✅ Ultima data saltata, task completato');
                     return;
                 }
@@ -6922,7 +7005,8 @@
 
         async function deleteTask(id) {
             if (!confirm('Eliminare questo task?')) return;
-            
+
+            await deleteNotificationRules(id);
             await sb.from('ts_tasks').delete().eq('id', id);
             tasks = tasks.filter(t => t.id !== id);
             renderTasks();
