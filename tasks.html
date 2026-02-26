@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.25</title>
+    <title>Tasks v19.17.26</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.25</span>
+                        <span>Tasks v19.17.26</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2100,6 +2100,7 @@
         let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
         let reminderPresets = []; // Preset promemoria da DB
+        let sbAccessToken = null; // Token Supabase ricevuto via postMessage dal launcher
         let fpStart = null;
         let fpDeadline = null;
         let fpNoteDate = null;
@@ -2127,7 +2128,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.25 - Init function started');
+            console.log('🚀 Tasks v19.17.26 - Init function started');
 
             initDatePickers();
 
@@ -2190,24 +2191,48 @@
         // NOTIFICATION RULES (cm_notification_rules)
         // ========================================
 
+        // Restituisce un client Supabase autenticato con il token ricevuto dal launcher.
+        // Il client globale `sb` usa solo la chiave anonima; per tabelle con RLS su user_id
+        // serve il JWT dell'utente nell'header Authorization.
+        function getAuthSb() {
+            const token = sbAccessToken;
+            if (!token) return null;
+            return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: `Bearer ${token}` } }
+            });
+        }
+
+        // Decodifica il JWT (senza chiamate di rete) e restituisce il payload
+        function decodeJWT(token) {
+            try {
+                return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            } catch(e) { return null; }
+        }
+
         async function syncNotificationRules(taskId, taskType, reminderLabels) {
             try {
-                // getSession() legge da localStorage senza chiamata di rete (più affidabile di getUser())
-                const { data: { session } } = await sb.auth.getSession();
-                const user = session?.user ?? null;
-                if (!user) {
-                    console.warn('⚠️ syncNotificationRules: nessun utente autenticato, skip');
+                const token = sbAccessToken;
+                if (!token) {
+                    console.warn('⚠️ syncNotificationRules: nessun SB_TOKEN, skip');
                     return;
                 }
+                const payload = decodeJWT(token);
+                const userId  = payload?.sub;
+                if (!userId) {
+                    console.warn('⚠️ syncNotificationRules: impossibile decodificare user_id dal JWT');
+                    return;
+                }
+                const authSb = getAuthSb();
 
-                console.log(`🔔 syncNotificationRules — taskId=${taskId} (${typeof taskId}), type=${taskType}, labels=${JSON.stringify(reminderLabels)}, presets=${reminderPresets.length}`);
+                console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, labels=${JSON.stringify(reminderLabels)}, presets=${reminderPresets.length}`);
 
-                // Elimina le regole esistenti per questo task
-                const { error: delErr } = await sb.from('cm_notification_rules')
+                // Elimina le regole esistenti per questo task (usa client autenticato)
+                const { error: delErr } = await authSb.from('cm_notification_rules')
                     .delete()
                     .eq('app', 'tasks')
                     .eq('entity_id', String(taskId))
-                    .eq('user_id', user.id);
+                    .eq('user_id', userId);
                 if (delErr) console.warn('⚠️ syncNotificationRules delete error:', delErr);
 
                 if (!reminderLabels || reminderLabels.length === 0) {
@@ -2222,7 +2247,7 @@
                         const preset = reminderPresets.find(p => p.label === label);
                         if (!preset) { unmatched.push(label); return null; }
                         return {
-                            user_id: user.id,
+                            user_id: userId,
                             app: 'tasks',
                             entity_id: String(taskId),
                             entity_type: taskType,
@@ -2240,12 +2265,13 @@
                 }
 
                 if (rulesToInsert.length > 0) {
-                    const { error } = await sb.from('cm_notification_rules').insert(rulesToInsert);
+                    const { error } = await authSb.from('cm_notification_rules').insert(rulesToInsert);
                     if (error) {
                         console.error('❌ syncNotificationRules insert error:', error);
                         showToast(`❌ Errore salvataggio promemoria: ${error.message || JSON.stringify(error)}`);
                     } else {
                         console.log(`✅ syncNotificationRules: ${rulesToInsert.length} regole per task ${taskId}`);
+                        showToast('🔔 Promemoria salvati');
                     }
                 } else {
                     console.log('ℹ️ syncNotificationRules: rulesToInsert vuoto, nessun insert');
@@ -2258,15 +2284,13 @@
 
         async function deleteNotificationRules(taskId) {
             try {
-                const { data: { session } } = await sb.auth.getSession();
-                const user = session?.user ?? null;
-                if (!user) return;
+                const authSb = getAuthSb();
+                if (!authSb) return; // nessun token, skip silenzioso
 
-                const { error } = await sb.from('cm_notification_rules')
+                const { error } = await authSb.from('cm_notification_rules')
                     .delete()
                     .eq('app', 'tasks')
-                    .eq('entity_id', taskId)
-                    .eq('user_id', user.id);
+                    .eq('entity_id', String(taskId));
 
                 if (error) {
                     console.error('❌ deleteNotificationRules error:', error);
@@ -9468,6 +9492,14 @@ Per attivarle:
             
             return fmtDate(date);
         }
+
+        // Riceve token dal launcher (app-launcher.html) via postMessage
+        window.addEventListener('message', (e) => {
+            if (e.data?.type === 'SB_TOKEN' && e.data.token) {
+                sbAccessToken = e.data.token;
+                console.log('✅ SB_TOKEN ricevuto dal launcher');
+            }
+        });
 
         window.addEventListener('load', init);
     </script>

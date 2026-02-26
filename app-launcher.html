@@ -452,10 +452,14 @@ function makeDraggable(node) {
 function launchApp(app) {
   const win = window.open(app.html_file, '_blank');
 
-  // Passa il token Google all'app figlia via postMessage
+  // Passa i token all'app figlia via postMessage (dopo 1s per attesa caricamento)
   const googleToken = sessionStorage.getItem('google_token');
-  if (googleToken && win) {
-    setTimeout(() => win.postMessage({ type: 'GOOGLE_TOKEN', token: googleToken }, '*'), 1000);
+  const sbToken     = sessionStorage.getItem('sb_token');
+  if (win) {
+    setTimeout(() => {
+      if (googleToken) win.postMessage({ type: 'GOOGLE_TOKEN', token: googleToken }, '*');
+      if (sbToken)     win.postMessage({ type: 'SB_TOKEN',     token: sbToken     }, '*');
+    }, 1000);
   }
 }
 
