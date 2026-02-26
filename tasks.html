@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.20</title>
+    <title>Tasks v19.17.21</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.20</span>
+                        <span>Tasks v19.17.21</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2125,7 +2125,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.20 - Init function started');
+            console.log('🚀 Tasks v19.17.21 - Init function started');
 
             initDatePickers();
 
@@ -6149,11 +6149,19 @@
             if (taskId) {
                 // UPDATE
                 const { data, error } = await sb.from('ts_tasks').update(taskData).eq('id', taskId).select();
-                if (data) {
+                if (error) {
+                    console.error('❌ UPDATE ERROR:', error);
+                    debugLog('❌ UPDATE ERROR: ' + JSON.stringify(error));
+                    alert('ERRORE SALVATAGGIO:\n' + JSON.stringify(error, null, 2));
+                    return;
+                }
+                // Aggiorna cache locale se Supabase restituisce il row (dipende da RLS SELECT)
+                if (data && data[0]) {
                     const index = tasks.findIndex(t => t.id === taskId);
                     if (index !== -1) tasks[index] = data[0];
-                    await syncNotificationRules(taskId, taskType, reminders);
                 }
+                // Sincronizza regole promemoria SEMPRE dopo update riuscito
+                await syncNotificationRules(taskId, taskType, reminders);
             } else {
                 // INSERT
                 console.log('🔵 INSERTING task:', taskData);
