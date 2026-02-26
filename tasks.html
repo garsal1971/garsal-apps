@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.23</title>
+    <title>Tasks v19.17.24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.23</span>
+                        <span>Tasks v19.17.24</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2127,7 +2127,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.23 - Init function started');
+            console.log('🚀 Tasks v19.17.24 - Init function started');
 
             initDatePickers();
 
@@ -2198,12 +2198,15 @@
                     return;
                 }
 
+                console.log(`🔔 syncNotificationRules — taskId=${taskId} (${typeof taskId}), type=${taskType}, labels=${JSON.stringify(reminderLabels)}, presets=${reminderPresets.length}`);
+
                 // Elimina le regole esistenti per questo task
-                await sb.from('cm_notification_rules')
+                const { error: delErr } = await sb.from('cm_notification_rules')
                     .delete()
                     .eq('app', 'tasks')
-                    .eq('entity_id', taskId)
+                    .eq('entity_id', String(taskId))
                     .eq('user_id', user.id);
+                if (delErr) console.warn('⚠️ syncNotificationRules delete error:', delErr);
 
                 if (!reminderLabels || reminderLabels.length === 0) {
                     console.log(`ℹ️ syncNotificationRules: nessun promemoria per task ${taskId}`);
@@ -2211,14 +2214,15 @@
                 }
 
                 // Mappa le label agli offset_minutes tramite reminderPresets
+                const unmatched = [];
                 const rulesToInsert = reminderLabels
                     .map(label => {
                         const preset = reminderPresets.find(p => p.label === label);
-                        if (!preset) return null;
+                        if (!preset) { unmatched.push(label); return null; }
                         return {
                             user_id: user.id,
                             app: 'tasks',
-                            entity_id: taskId,
+                            entity_id: String(taskId),
                             entity_type: taskType,
                             offset_minutes: preset.offset_minutes,
                             offset_label: label,
@@ -2228,16 +2232,25 @@
                     })
                     .filter(Boolean);
 
+                if (unmatched.length > 0) {
+                    console.warn('⚠️ syncNotificationRules: label senza preset corrispondente:', unmatched);
+                    showToast(`⚠️ Promemoria non trovati nei preset: ${unmatched.join(', ')}`);
+                }
+
                 if (rulesToInsert.length > 0) {
                     const { error } = await sb.from('cm_notification_rules').insert(rulesToInsert);
                     if (error) {
                         console.error('❌ syncNotificationRules insert error:', error);
+                        showToast(`❌ Errore salvataggio promemoria: ${error.message || JSON.stringify(error)}`);
                     } else {
                         console.log(`✅ syncNotificationRules: ${rulesToInsert.length} regole per task ${taskId}`);
                     }
+                } else {
+                    console.log('ℹ️ syncNotificationRules: rulesToInsert vuoto, nessun insert');
                 }
             } catch (e) {
                 console.error('❌ syncNotificationRules exception:', e);
+                showToast(`❌ Eccezione promemoria: ${e.message}`);
             }
         }
 
@@ -6186,6 +6199,7 @@
                     if (index !== -1) tasks[index] = data[0];
                 }
                 // Sincronizza regole promemoria SEMPRE dopo update riuscito
+                console.log(`🔵 saveTask UPDATE → reminders al momento del save:`, reminders);
                 await syncNotificationRules(taskId, taskType, reminders);
             } else {
                 // INSERT
@@ -9091,6 +9105,9 @@ Per attivarle:
 
             let html = `
                 <div class="card">
+                    <div style="text-align:center; font-size:1.2rem; font-weight:700; margin-bottom:0.75rem; color:var(--dark);">
+                        ${capitalizedMonth}
+                    </div>
                     <div class="calendar-grid month-view">
                         ${['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map(day => `
                             <div class="calendar-header-cell">${day}</div>
