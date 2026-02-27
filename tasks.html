@@ -8353,12 +8353,19 @@ Per attivarle:
             const container = document.getElementById('remindersContainer');
             if (!container) return;
 
+            const userId = decodeJWT(sbAccessToken)?.sub;
+            if (!userId) {
+                container.innerHTML = '<div class="card" style="color:var(--danger)">❌ Utente non autenticato</div>';
+                return;
+            }
+
             container.innerHTML = '<div style="text-align:center;padding:2rem;opacity:0.6;">⏳ Caricamento...</div>';
 
-            const { data: items, error } = await sb
+            const authSb = getAuthSb();
+            const { data: items, error } = await authSb
                 .from('cm_notification_queue')
                 .select('*')
-                .eq('user_id', currentUser.id)
+                .eq('user_id', userId)
                 .neq('status', 'cancelled')
                 .order('fire_at', { ascending: false })
                 .limit(100);
@@ -8425,11 +8432,13 @@ Per attivarle:
 
         async function closeQueueItem(id) {
             if (!confirm('Annullare questa notifica?')) return;
-            const { error } = await sb
+            const userId = decodeJWT(sbAccessToken)?.sub;
+            const authSb = getAuthSb();
+            const { error } = await authSb
                 .from('cm_notification_queue')
                 .update({ status: 'cancelled' })
                 .eq('id', id)
-                .eq('user_id', currentUser.id);
+                .eq('user_id', userId);
             if (error) { showToast('❌ Errore: ' + error.message); return; }
             showToast('🚫 Notifica annullata');
             loadQueueItems();
@@ -8448,12 +8457,14 @@ Per attivarle:
 
         async function confirmSnooze(minutes) {
             if (!snoozingItemId) return;
+            const userId   = decodeJWT(sbAccessToken)?.sub;
+            const authSb   = getAuthSb();
             const newFireAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-            const { error } = await sb
+            const { error } = await authSb
                 .from('cm_notification_queue')
                 .update({ status: 'pending', send_count: 0, fire_at: newFireAt })
                 .eq('id', snoozingItemId)
-                .eq('user_id', currentUser.id);
+                .eq('user_id', userId);
             closeSnoozeModal();
             if (error) { showToast('❌ Errore: ' + error.message); return; }
             const label = minutes < 60 ? `${minutes} min` : minutes < 1440 ? `${minutes / 60} ore` : '1 giorno';
@@ -8468,11 +8479,13 @@ Per attivarle:
         }
 
         async function loadQueueBadge() {
-            if (!currentUser) return;
-            const { count } = await sb
+            const userId = decodeJWT(sbAccessToken)?.sub;
+            if (!userId) return;
+            const authSb = getAuthSb();
+            const { count } = await authSb
                 .from('cm_notification_queue')
                 .select('id', { count: 'exact', head: true })
-                .eq('user_id', currentUser.id)
+                .eq('user_id', userId)
                 .in('status', ['pending', 'sending']);
             updateRemindersBadge(count ?? 0);
         }
