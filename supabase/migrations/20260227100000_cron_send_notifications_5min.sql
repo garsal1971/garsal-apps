@@ -3,6 +3,14 @@
 -- Migration: 20260227100000_cron_send_notifications_5min
 --
 -- Cambia l'intervallo da ogni minuto (*/1) a ogni 5 minuti
+--
+-- PRE-REQUISITO — eseguire UNA VOLTA nel SQL Editor di Supabase:
+--
+--   ALTER DATABASE postgres
+--       SET "app.supabase_service_role_key" = 'eyJ...service-role-key...';
+--   SELECT pg_reload_conf();
+--
+-- Senza questa impostazione il cron riceve 401 dall'edge function.
 -- ============================================================
 
 SELECT cron.unschedule('send-notifications');
