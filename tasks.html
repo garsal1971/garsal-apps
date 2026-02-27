@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.32</title>
+    <title>Tasks v19.17.31</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -868,24 +868,6 @@
             transform: scale(1.2);
         }
 
-        /* Queue item badge */
-        .queue-status-badge {
-            display: inline-block;
-            padding: 0.1rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 700;
-        }
-
-        .queue-attempt-badge {
-            display: inline-block;
-            background: var(--border);
-            color: var(--muted);
-            padding: 0.1rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-        }
-
         /* Toast Animations */
         @keyframes slideUp {
             from {
@@ -1496,45 +1478,16 @@
             <div id="remindersPage" class="hidden">
                 <!-- Tab Selector -->
                 <div class="card" style="margin-bottom: 1.5rem;">
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <button class="btn btn-primary"   onclick="switchQueueFilter('queue')" id="btnQueueFilter" style="flex: 1; min-width: 0;">⏳ In coda</button>
-                        <button class="btn btn-secondary" onclick="switchQueueFilter('sent')"  id="btnSentFilter"  style="flex: 1; min-width: 0;">✅ Inviati</button>
-                        <button class="btn btn-secondary" onclick="switchQueueFilter('all')"   id="btnAllFilter"   style="flex: 1; min-width: 0;">📋 Tutti</button>
-                        <button class="btn btn-secondary" onclick="loadQueueItems()" title="Ricarica" style="padding: 0.5rem 0.75rem; flex-shrink: 0;">🔄</button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-primary" onclick="switchRemindersView('active')" id="btnActiveRemindersView" style="flex: 1; min-width: 0;">Promemoria Attivi</button>
+                        <button class="btn btn-secondary" onclick="switchRemindersView('upcoming')" id="btnUpcomingRemindersView" style="flex: 1; min-width: 0;">📅 Prossimi</button>
+                        <button class="btn btn-secondary" onclick="switchRemindersView('history')" id="btnHistoryRemindersView" style="flex: 1; min-width: 0;">Storico</button>
                     </div>
                 </div>
-
-                <!-- Queue List -->
+                
+                <!-- Reminders Container -->
                 <div id="remindersContainer">
-                    <div id="queueList"></div>
-                </div>
-            </div>
-
-            <!-- Snooze Modal -->
-            <div id="snoozeModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSnoozeModal()">
-                <div class="modal" style="max-width: 360px;">
-                    <div class="modal-header">
-                        <h3 style="margin: 0;">⏸️ Sospendi notifica</h3>
-                        <button onclick="closeSnoozeModal()" class="modal-close">✕</button>
-                    </div>
-                    <div class="modal-body">
-                        <p style="margin-bottom: 1rem; opacity: 0.8;">Per quanto tempo vuoi sospendere questa notifica?</p>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                            <button class="btn btn-secondary" onclick="confirmSnooze(15)">15 minuti</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(30)">30 minuti</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(60)">1 ora</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(120)">2 ore</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(240)">4 ore</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(1440)">1 giorno</button>
-                        </div>
-                        <div style="margin-top: 1rem;">
-                            <label class="form-label">Altro (minuti)</label>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <input type="number" class="form-input" id="snoozeCustomMinutes" placeholder="es. 90" min="1" max="43200">
-                                <button class="btn btn-primary" onclick="confirmSnoozeCustom()">OK</button>
-                            </div>
-                        </div>
-                    </div>
+                    <div id="remindersPageList"></div>
                 </div>
             </div>
 
@@ -1624,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.32</span>
+                        <span>Tasks v19.17.31</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2175,7 +2128,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.32 - Init function started');
+            console.log('🚀 Tasks v19.17.31 - Init function started');
 
             initDatePickers();
 
@@ -2212,8 +2165,8 @@
             // Carica preset promemoria da DB
             await loadReminderPresets();
 
-            // Aggiorna badge promemoria dalla coda DB
-            loadQueueBadge();
+            // Aggiorna badge promemoria
+            updateRemindersCount();
         }
 
         async function loadReminderPresets() {
@@ -4477,10 +4430,155 @@
         }
 
         // ========================================
-        // CODA NOTIFICHE — renderRemindersPage ora delega a loadQueueItems
+        // PROMEMORIA SCADUTI
         // ========================================
+        
+        function renderRemindersPage() {
+            const now = new Date();
+            const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            
+            console.log('🔔 Rendering reminders from', twentyFourHoursAgo, 'to', now);
+            
+            // Trova tutti i promemoria scaduti nelle ultime 24 ore
+            const expiredReminders = [];
+            
+            tasks.filter(t => t.status === 'active' && t.reminders && t.reminders.length > 0).forEach(task => {
+                // Determina la data target del task
+                let targetDate = null;
+                
+                if (task.type === 'single') {
+                    targetDate = new Date(task.start_date);
+                } else if (task.type === 'recurring' || task.type === 'simple_recurring') {
+                    if (task.next_occurrence_date) {
+                        targetDate = new Date(task.next_occurrence_date);
+                    }
+                } else if (task.type === 'multiple') {
+                    if (task.next_occurrence_date) {
+                        targetDate = new Date(task.next_occurrence_date);
+                    }
+                }
+                
+                if (!targetDate) return;
+                
+                // Controlla ogni promemoria del task
+                task.reminders.forEach(reminder => {
+                    const reminderTime = calculateReminderTime(targetDate, reminder);
+                    if (!reminderTime) return;
 
-        function renderRemindersPage() { loadQueueItems(); }
+                    // Verifica se il promemoria è scaduto nelle ultime 24 ore
+                    if (reminderTime >= twentyFourHoursAgo && reminderTime <= now) {
+                        // Salta i promemoria nascosti manualmente
+                        const dateKey = targetDate.toISOString().split('T')[0];
+                        if (localStorage.getItem(`dismissed_${task.id}_${reminder}_${dateKey}`)) return;
+
+                        expiredReminders.push({
+                            task: task,
+                            reminder: reminder,
+                            reminderTime: reminderTime,
+                            targetDate: targetDate
+                        });
+                    }
+                });
+            });
+            
+            // Ordina per tempo di promemoria (più recente prima)
+            expiredReminders.sort((a, b) => b.reminderTime - a.reminderTime);
+            
+            console.log('🔔 Found', expiredReminders.length, 'expired reminders');
+            
+            // Aggiorna badge nel menu
+            updateRemindersBadge(expiredReminders.length);
+            
+            // Conta quanti task unici
+            const uniqueTasks = [...new Set(expiredReminders.map(r => r.task.id))];
+            
+            // Aggiungi bottone "Cancella Tutti" in alto alla pagina
+            const headerButtonsHtml = expiredReminders.length > 0 ? `
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-bottom: 1rem;">
+                    <button class="btn btn-danger" onclick="clearAllReminders()">🗑️ Cancella Tutti i Promemoria</button>
+                </div>
+            ` : '';
+            
+            // Renderizza lista
+            const html = expiredReminders.map(item => {
+                const cats = categories.filter(c => item.task.categories?.includes(c.id));
+                const timeSince = getTimeSince(item.reminderTime);
+                const timeUntil = getTimeUntil(item.targetDate);
+                
+                // Conta quanti promemoria ha questo task nella lista
+                const taskRemindersCount = expiredReminders.filter(r => r.task.id === item.task.id).length;
+                
+                // Determina se il task è in ritardo
+                const isOverdue = item.targetDate < now;
+                const statusColor = isOverdue ? 'var(--danger)' : 'var(--accent)';
+                const statusIcon = isOverdue ? '⚠️' : '🔔';
+                const statusText = isOverdue ? 'SCADUTO' : 'IN ARRIVO';
+                
+                return `
+                    <div class="card" style="border-left: 4px solid ${statusColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <span style="font-size: 1.5rem;">${statusIcon}</span>
+                                    <h3 style="margin: 0;">${item.task.title}</h3>
+                                    ${taskRemindersCount > 1 ? `<span style="background: var(--warning); color: var(--dark); padding: 0.1rem 0.25rem; border-radius: 0; font-size: 0.75rem; font-weight: 600;">${taskRemindersCount} promemoria</span>` : ''}
+                                </div>
+                                
+                                <div style="margin: 0.5rem 0;">
+                                    <span style="background: ${statusColor}20; color: ${statusColor}; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.85rem; font-weight: 600;">
+                                        ${statusText}
+                                    </span>
+                                </div>
+                                
+                                <p style="opacity: 0.8; margin: 0.5rem 0; font-size: 0.95rem;">
+                                    📋 <strong>Promemoria:</strong> ${item.reminder} prima
+                                </p>
+                                
+                                <p style="opacity: 0.7; font-size: 0.9rem; margin: 0.3rem 0;">
+                                    🕐 Scattato: ${timeSince}
+                                </p>
+                                
+                                <p style="opacity: 0.7; font-size: 0.9rem; margin: 0.3rem 0;">
+                                    📅 Scadenza: ${formatDateTime(item.targetDate)} ${isOverdue ? '(passata)' : `(${timeUntil})`}
+                                </p>
+                                
+                                ${cats.length > 0 ? `
+                                    <div class="category-pills" style="margin-top: 0.5rem;">
+                                        ${cats.map(c => `<span class="category-pill" style="background: ${c.color}20; color: ${c.color}">${c.icon} ${c.name}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <button class="btn btn-primary btn-small" onclick="viewTask('${item.task.id}')">👁️ Vedi</button>
+                                <button class="btn btn-success btn-small" onclick="completeTaskFromReminder('${item.task.id}')">✓ Completa</button>
+                                ${taskRemindersCount > 1 ? `
+                                    <button class="btn btn-warning btn-small" onclick="completeAllRemindersForTask('${item.task.id}')" title="Completa tutti i ${taskRemindersCount} promemoria di questo task">✓✓ Completa Tutti</button>
+                                ` : ''}
+                                <button class="btn btn-secondary btn-small" onclick="dismissReminder('${item.task.id}', '${item.reminder}', '${item.targetDate.toISOString().split('T')[0]}')">✕ Nascondi</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            const listEl = document.getElementById('remindersPageList');
+            if (listEl) {
+                if (html) {
+                    listEl.innerHTML = headerButtonsHtml + html;
+                } else {
+                    listEl.innerHTML = `
+                        <div class="card" style="text-align: center; padding: 1.5rem;">
+                            <h2 style="font-size: 3rem; margin-bottom: 1rem;">✅</h2>
+                            <h3 style="margin-bottom: 1rem;">Nessun promemoria scaduto</h3>
+                            <p style="opacity: 0.7;">
+                                Non ci sono promemoria scaduti nelle ultime 24 ore
+                            </p>
+                        </div>
+                    `;
+                }
+            }
+        }
         
         async function completeTaskFromReminder(taskId) {
             if (!confirm('Completare questo task?')) return;
@@ -4495,20 +4593,20 @@
             await completeTask(taskId);
             
             // Ricarica la pagina promemoria
-            loadQueueItems();
+            renderRemindersPage();
             showToast('✅ Task completato!');
         }
-
+        
         async function completeAllRemindersForTask(taskId) {
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
-
+            
             if (!confirm(`Completare "${task.title}"?\n\nQuesto completerà il task e rimuoverà tutti i suoi promemoria dalla lista.`)) {
                 return;
             }
-
+            
             await completeTask(taskId);
-            loadQueueItems();
+            renderRemindersPage();
             showToast('✅ Task completato! Tutti i promemoria rimossi.');
         }
         
@@ -4530,11 +4628,15 @@
             
             console.log(`🗑️ Removed ${keysToRemove.length} notification flags from localStorage`);
             
-            showToast(`🗑️ ${keysToRemove.length} flag cancellati`);
+            // Ricarica la pagina promemoria
+            renderRemindersPage();
+            
+            showToast(`🗑️ ${keysToRemove.length} promemoria cancellati`);
         }
 
         function dismissReminder(taskId, reminder, dateKey) {
             localStorage.setItem(`dismissed_${taskId}_${reminder}_${dateKey}`, '1');
+            renderRemindersPage();
             showToast('🔕 Promemoria nascosto');
         }
 
@@ -4642,182 +4744,6 @@
             }
         }
         
-        // ========================================
-        // CODA NOTIFICHE (cm_notification_queue)
-        // ========================================
-
-        let currentQueueFilter = 'queue';
-        let snoozingItemId     = null;
-
-        function switchQueueFilter(filter) {
-            currentQueueFilter = filter;
-            document.getElementById('btnQueueFilter').className = filter === 'queue' ? 'btn btn-primary' : 'btn btn-secondary';
-            document.getElementById('btnSentFilter').className  = filter === 'sent'  ? 'btn btn-primary' : 'btn btn-secondary';
-            document.getElementById('btnAllFilter').className   = filter === 'all'   ? 'btn btn-primary' : 'btn btn-secondary';
-            loadQueueItems();
-        }
-
-        async function loadQueueItems() {
-            const container = document.getElementById('queueList');
-            if (!container) return;
-
-            container.innerHTML = '<div style="text-align:center;padding:2rem;opacity:0.6;">⏳ Caricamento...</div>';
-
-            let query = sb
-                .from('cm_notification_queue')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .order('fire_at', { ascending: false })
-                .limit(100);
-
-            if (currentQueueFilter === 'queue') {
-                query = query.in('status', ['pending', 'sending']);
-            } else if (currentQueueFilter === 'sent') {
-                query = query.eq('status', 'sent');
-            } else {
-                // 'all' — tutto tranne cancelled
-                query = query.neq('status', 'cancelled');
-            }
-
-            const { data: items, error } = await query;
-
-            if (error) {
-                container.innerHTML = `<div class="card" style="color:var(--danger)">❌ Errore: ${error.message}</div>`;
-                return;
-            }
-
-            // Aggiorna badge con il conteggio pending+sending
-            const pendingCount = (items ?? []).filter(i => i.status === 'pending' || i.status === 'sending').length;
-            updateRemindersBadge(pendingCount);
-
-            if (!items || items.length === 0) {
-                const emptyMsg = currentQueueFilter === 'queue'
-                    ? 'Nessuna notifica in coda'
-                    : currentQueueFilter === 'sent'
-                        ? 'Nessuna notifica inviata'
-                        : 'Nessuna notifica';
-                container.innerHTML = `
-                    <div class="card" style="text-align:center;padding:2rem;">
-                        <div style="font-size:3rem;margin-bottom:1rem;">🔔</div>
-                        <h3>${emptyMsg}</h3>
-                    </div>`;
-                return;
-            }
-
-            container.innerHTML = items.map(item => renderQueueItem(item)).join('');
-        }
-
-        function renderQueueItem(item) {
-            const statusConfig = {
-                pending:   { color: 'var(--warning)',  icon: '⏳', label: 'In attesa'  },
-                sending:   { color: 'var(--accent)',   icon: '📤', label: 'In invio'   },
-                sent:      { color: 'var(--success)',  icon: '✅', label: 'Inviata'    },
-                failed:    { color: 'var(--danger)',   icon: '❌', label: 'Fallita'    },
-                cancelled: { color: 'var(--muted)',    icon: '🚫', label: 'Annullata'  },
-            };
-            const s = statusConfig[item.status] || { color: 'var(--muted)', icon: '❓', label: item.status };
-
-            const fireAt  = new Date(item.fire_at);
-            const now     = new Date();
-            const isPast  = fireAt < now;
-            const fireStr = fireAt.toLocaleString('it-IT', {
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit'
-            });
-
-            const canAct = item.status === 'pending' || item.status === 'sending';
-
-            return `
-                <div class="card" style="border-left: 4px solid ${s.color}; margin-bottom: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
-                        <div style="flex: 1; min-width: 0;">
-                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
-                                <span>${s.icon}</span>
-                                <strong style="font-size: 1rem;">${item.title}</strong>
-                                <span class="queue-status-badge" style="background:${s.color}20;color:${s.color};">${s.label}</span>
-                                ${item.send_count > 0 ? `<span class="queue-attempt-badge">${item.send_count}/5 tent.</span>` : ''}
-                            </div>
-                            <p style="opacity:0.75;margin:0.3rem 0;font-size:0.9rem;">${item.body}</p>
-                            <p style="opacity:0.6;font-size:0.82rem;margin:0.3rem 0;">
-                                📅 ${isPast ? 'Scattata' : 'Scatta'}: <strong>${fireStr}</strong>
-                                · ${isPast ? getTimeSince(fireAt) + ' fa' : 'tra ' + getTimeUntil(fireAt)}
-                            </p>
-                            <p style="opacity:0.5;font-size:0.78rem;margin:0.2rem 0;">
-                                📱 ${item.channel} · ${item.app}
-                            </p>
-                        </div>
-                        ${canAct ? `
-                        <div style="display:flex;flex-direction:column;gap:0.4rem;flex-shrink:0;">
-                            <button class="btn btn-secondary btn-small" onclick="openSnoozeModal('${item.id}')">⏸️ Sospendi</button>
-                            <button class="btn btn-danger btn-small"    onclick="closeQueueItem('${item.id}')">✕ Chiudi</button>
-                        </div>` : ''}
-                    </div>
-                </div>`;
-        }
-
-        async function closeQueueItem(id) {
-            if (!confirm('Annullare questa notifica?')) return;
-
-            const { error } = await sb
-                .from('cm_notification_queue')
-                .update({ status: 'cancelled' })
-                .eq('id', id)
-                .eq('user_id', currentUser.id);
-
-            if (error) { showToast('❌ Errore: ' + error.message); return; }
-            showToast('🚫 Notifica annullata');
-            loadQueueItems();
-        }
-
-        function openSnoozeModal(id) {
-            snoozingItemId = id;
-            document.getElementById('snoozeCustomMinutes').value = '';
-            document.getElementById('snoozeModal').classList.remove('hidden');
-        }
-
-        function closeSnoozeModal() {
-            snoozingItemId = null;
-            document.getElementById('snoozeModal').classList.add('hidden');
-        }
-
-        async function confirmSnooze(minutes) {
-            if (!snoozingItemId) return;
-            const newFireAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-
-            const { error } = await sb
-                .from('cm_notification_queue')
-                .update({ status: 'pending', send_count: 0, fire_at: newFireAt })
-                .eq('id', snoozingItemId)
-                .eq('user_id', currentUser.id);
-
-            closeSnoozeModal();
-            if (error) { showToast('❌ Errore: ' + error.message); return; }
-
-            const label = minutes < 60
-                ? `${minutes} min`
-                : minutes < 1440
-                    ? `${minutes / 60} ore`
-                    : '1 giorno';
-            showToast(`⏸️ Sospesa per ${label}`);
-            loadQueueItems();
-        }
-
-        async function confirmSnoozeCustom() {
-            const minutes = parseInt(document.getElementById('snoozeCustomMinutes').value);
-            if (!minutes || minutes < 1) { showToast('⚠️ Inserisci un numero valido di minuti'); return; }
-            await confirmSnooze(minutes);
-        }
-
-        async function loadQueueBadge() {
-            if (!currentUser) return;
-            const { count } = await sb
-                .from('cm_notification_queue')
-                .select('id', { count: 'exact', head: true })
-                .eq('user_id', currentUser.id)
-                .in('status', ['pending', 'sending']);
-            updateRemindersBadge(count ?? 0);
-        }
-
         function getTimeSince(date) {
             const now = new Date();
             const diff = now - new Date(date);
@@ -7860,11 +7786,13 @@
             
             console.log('🔔 ===== CHECK REMINDERS END =====');
             
-            // Aggiorna badge / ricarica coda notifiche
+            // Aggiorna badge promemoria (se non siamo nella pagina promemoria)
             if (!document.getElementById('remindersPage').classList.contains('hidden')) {
-                loadQueueItems();
+                // Se siamo nella pagina, ricaricala
+                renderRemindersPage();
             } else {
-                loadQueueBadge();
+                // Altrimenti aggiorna solo il badge
+                updateRemindersCount();
             }
         }
         
@@ -8360,10 +8288,29 @@ Per attivarle:
             renderManagement();
         }
 
-        function switchRemindersView(view) { /* legacy — non più usata */ }
+        function switchRemindersView(view) {
+            currentRemindersView = view;
 
+            // Aggiorna i bottoni
+            document.getElementById('btnActiveRemindersView').className = view === 'active' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('btnUpcomingRemindersView').className = view === 'upcoming' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('btnHistoryRemindersView').className = view === 'history' ? 'btn btn-primary' : 'btn btn-secondary';
+
+            renderRemindersContainer();
+        }
+        
         function renderRemindersContainer() {
-            loadQueueItems();
+            const container = document.getElementById('remindersContainer');
+            if (!container) return;
+
+            if (currentRemindersView === 'active') {
+                container.innerHTML = '<div id="remindersPageList"></div>';
+                renderRemindersPage();
+            } else if (currentRemindersView === 'upcoming') {
+                renderUpcomingReminders();
+            } else if (currentRemindersView === 'history') {
+                renderHistoryPage();
+            }
         }
         
         function renderHistoryPage() {
