@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.35</title>
+    <title>Tasks v19.17.36</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1508,33 +1508,6 @@
                 </div>
             </div>
 
-            <!-- Snooze Modal -->
-            <div id="snoozeModal" class="modal" onclick="if(event.target===this)closeSnoozeModal()">
-                <div class="modal-content" style="max-width: 360px;">
-                    <div class="modal-header">
-                        <h3 class="modal-title">⏸️ Sospendi notifica</h3>
-                        <span class="modal-close" onclick="closeSnoozeModal()">✕</span>
-                    </div>
-                    <div style="padding:1.5rem;">
-                        <p style="margin-bottom: 1rem; opacity: 0.8;">Per quanto tempo vuoi sospendere questa notifica?</p>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                            <button class="btn btn-secondary" onclick="confirmSnooze(15)">15 minuti</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(30)">30 minuti</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(60)">1 ora</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(120)">2 ore</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(240)">4 ore</button>
-                            <button class="btn btn-secondary" onclick="confirmSnooze(1440)">1 giorno</button>
-                        </div>
-                        <div style="margin-top: 1rem;">
-                            <label class="form-label">Altro (minuti)</label>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <input type="number" class="form-input" id="snoozeCustomMinutes" placeholder="es. 90" min="1" max="43200">
-                                <button class="btn btn-primary" onclick="confirmSnoozeCustom()">OK</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <!-- Settings Page -->
             <div id="settingsPage" class="hidden">
@@ -1622,7 +1595,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.35</span>
+                        <span>Tasks v19.17.36</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -1657,6 +1630,34 @@
     
     <!-- Debug Toggle Button (fixed bottom right) -->
     <button id="debugToggle" onclick="toggleDebugConsole()" style="position: fixed; bottom: 20px; right: 20px; z-index: 10001; background: #0f0; color: #000; border: none; padding: 0.25rem; border-radius: 0; width: 50px; height: 50px; font-size: 20px; cursor: pointer; display: none; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">🐛</button>
+
+    <!-- Snooze Modal -->
+    <div id="snoozeModal" class="modal" onclick="if(event.target===this)closeSnoozeModal()">
+        <div class="modal-content" style="max-width: 360px;">
+            <div class="modal-header">
+                <h3 class="modal-title">⏸️ Sospendi notifica</h3>
+                <span class="modal-close" onclick="closeSnoozeModal()">✕</span>
+            </div>
+            <div style="padding:1.5rem;">
+                <p style="margin-bottom: 1rem; opacity: 0.8;">Per quanto tempo vuoi sospendere questa notifica?</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="confirmSnooze(15)">15 minuti</button>
+                    <button class="btn btn-secondary" onclick="confirmSnooze(30)">30 minuti</button>
+                    <button class="btn btn-secondary" onclick="confirmSnooze(60)">1 ora</button>
+                    <button class="btn btn-secondary" onclick="confirmSnooze(120)">2 ore</button>
+                    <button class="btn btn-secondary" onclick="confirmSnooze(240)">4 ore</button>
+                    <button class="btn btn-secondary" onclick="confirmSnooze(1440)">1 giorno</button>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label class="form-label">Altro (minuti)</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="number" class="form-input" id="snoozeCustomMinutes" placeholder="es. 90" min="1" max="43200">
+                        <button class="btn btn-primary" onclick="confirmSnoozeCustom()">OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Task Modal (Create/Edit) -->
     <div id="taskModal" class="modal">
@@ -2173,7 +2174,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.35 - Init function started');
+            console.log('🚀 Tasks v19.17.36 - Init function started');
 
             initDatePickers();
 
