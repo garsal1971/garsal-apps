@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.32</title>
+    <title>Tasks v19.17.33</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1622,7 +1622,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.32</span>
+                        <span>Tasks v19.17.33</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2173,7 +2173,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.32 - Init function started');
+            console.log('🚀 Tasks v19.17.33 - Init function started');
 
             initDatePickers();
 
@@ -8372,7 +8372,6 @@ Per attivarle:
                 .from('cm_notification_queue')
                 .select('*')
                 .eq('user_id', userId)
-                .neq('status', 'cancelled')
                 .order('fire_at', { ascending: false })
                 .limit(100);
 
@@ -8408,10 +8407,11 @@ Per attivarle:
             const fireAt = new Date(item.fire_at);
             const isPast = fireAt < new Date();
             const fireStr = fireAt.toLocaleString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-            const canAct  = item.status === 'pending' || item.status === 'sending';
+            const canAct      = item.status === 'pending' || item.status === 'sending';
+            const isCancelled = item.status === 'cancelled';
 
             return `
-                <div class="card" style="border-left:4px solid ${s.color};margin-bottom:0.75rem;">
+                <div class="card" style="border-left:4px solid ${s.color};margin-bottom:0.75rem;${isCancelled ? 'opacity:0.72;' : ''}">
                     <div style="display:flex;justify-content:space-between;align-items:start;gap:1rem;">
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;flex-wrap:wrap;">
@@ -8432,6 +8432,10 @@ Per attivarle:
                             <button class="btn btn-secondary btn-small" onclick="openSnoozeModal('${item.id}')">⏸️ Sospendi</button>
                             <button class="btn btn-danger btn-small"    onclick="closeQueueItem('${item.id}')">✕ Chiudi</button>
                         </div>` : ''}
+                        ${isCancelled ? `
+                        <div style="flex-shrink:0;">
+                            <button class="btn btn-danger btn-small" onclick="deleteQueueItem('${item.id}')">🗑️ Elimina</button>
+                        </div>` : ''}
                     </div>
                 </div>`;
         }
@@ -8447,6 +8451,21 @@ Per attivarle:
                 .eq('user_id', userId);
             if (error) { showToast('❌ Errore: ' + error.message); return; }
             showToast('🚫 Notifica annullata');
+            loadQueueItems();
+        }
+
+        async function deleteQueueItem(id) {
+            if (!confirm('Eliminare definitivamente questa notifica?')) return;
+            const userId = decodeJWT(sbAccessToken)?.sub;
+            const authSb = getAuthSb();
+            const { error } = await authSb
+                .from('cm_notification_queue')
+                .delete()
+                .eq('id', id)
+                .eq('user_id', userId)
+                .eq('status', 'cancelled');
+            if (error) { showToast('❌ Errore: ' + error.message); return; }
+            showToast('🗑️ Notifica eliminata');
             loadQueueItems();
         }
 
