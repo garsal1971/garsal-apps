@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.36</title>
+    <title>Tasks v19.17.37</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1595,7 +1595,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.36</span>
+                        <span>Tasks v19.17.37</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2174,7 +2174,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.36 - Init function started');
+            console.log('🚀 Tasks v19.17.37 - Init function started');
 
             initDatePickers();
 
@@ -8398,17 +8398,19 @@ Per attivarle:
 
         function renderQueueItem(item) {
             const cfg = {
-                pending:   { color: 'var(--warning)', icon: '⏳', label: 'In attesa' },
-                sending:   { color: 'var(--accent)',  icon: '📤', label: 'In invio'  },
-                sent:      { color: 'var(--success)', icon: '✅', label: 'Inviata'   },
-                failed:    { color: 'var(--danger)',  icon: '❌', label: 'Fallita'   },
-                cancelled: { color: 'var(--muted)',   icon: '🚫', label: 'Annullata' },
+                pending:   { color: 'var(--warning)',   icon: '⏳', label: 'In attesa' },
+                sending:   { color: 'var(--accent)',    icon: '📤', label: 'In invio'  },
+                sent:      { color: 'var(--success)',   icon: '✅', label: 'Inviata'   },
+                failed:    { color: 'var(--danger)',    icon: '❌', label: 'Fallita'   },
+                cancelled: { color: 'var(--muted)',     icon: '🚫', label: 'Annullata' },
+                snoozed:   { color: 'var(--secondary)', icon: '💤', label: 'Sospesa'   },
             };
             const s      = cfg[item.status] || { color: 'var(--muted)', icon: '❓', label: item.status };
             const fireAt = new Date(item.fire_at);
             const isPast = fireAt < new Date();
             const fireStr = fireAt.toLocaleString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-            const canAct      = item.status === 'pending' || item.status === 'sending' || item.status === 'sent';
+            const canSnooze   = item.status === 'pending' || item.status === 'sending' || item.status === 'sent';
+            const canCancel   = canSnooze || item.status === 'snoozed';
             const isCancelled = item.status === 'cancelled';
 
             return `
@@ -8423,15 +8425,15 @@ Per attivarle:
                             </div>
                             <p style="opacity:0.75;margin:0.3rem 0;font-size:0.9rem;">${item.body}</p>
                             <p style="opacity:0.6;font-size:0.82rem;margin:0.3rem 0;">
-                                📅 ${isPast ? 'Scattata' : 'Scatta'}: <strong>${fireStr}</strong>
-                                · ${isPast ? getTimeSince(fireAt) + ' fa' : 'tra ' + getTimeUntil(fireAt)}
+                                📅 ${item.status === 'snoozed' ? 'Si risveglia' : isPast ? 'Scattata' : 'Scatta'}: <strong>${fireStr}</strong>
+                                · ${isPast && item.status !== 'snoozed' ? getTimeSince(fireAt) + ' fa' : 'tra ' + getTimeUntil(fireAt)}
                             </p>
                             <p style="opacity:0.5;font-size:0.78rem;margin:0.2rem 0;">📱 ${item.channel} · ${item.app}</p>
                         </div>
-                        ${canAct ? `
+                        ${canCancel ? `
                         <div style="display:flex;flex-direction:column;gap:0.4rem;flex-shrink:0;">
-                            <button class="btn btn-secondary btn-small" onclick="openSnoozeModal('${item.id}')">⏸️ Sospendi</button>
-                            <button class="btn btn-danger btn-small"    onclick="closeQueueItem('${item.id}')">✕ Chiudi</button>
+                            ${canSnooze ? `<button class="btn btn-secondary btn-small" onclick="openSnoozeModal('${item.id}')">⏸️ Sospendi</button>` : ''}
+                            <button class="btn btn-danger btn-small" onclick="closeQueueItem('${item.id}')">✕ Chiudi</button>
                         </div>` : ''}
                         ${isCancelled ? `
                         <div style="flex-shrink:0;">
@@ -8488,7 +8490,7 @@ Per attivarle:
             const newFireAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
             const { error } = await authSb
                 .from('cm_notification_queue')
-                .update({ status: 'pending', send_count: 0, fire_at: newFireAt })
+                .update({ status: 'snoozed', send_count: 0, fire_at: newFireAt })
                 .eq('id', snoozingItemId)
                 .eq('user_id', userId);
             closeSnoozeModal();
