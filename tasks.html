@@ -2239,13 +2239,19 @@
         // Restituisce un client Supabase autenticato con il token ricevuto dal launcher.
         // Il client globale `sb` usa solo la chiave anonima; per tabelle con RLS su user_id
         // serve il JWT dell'utente nell'header Authorization.
+        let _authSbInstance = null;
+        let _authSbToken    = null;
+
         function getAuthSb() {
             const token = sbAccessToken;
             if (!token) return null;
-            return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            if (_authSbInstance && _authSbToken === token) return _authSbInstance;
+            _authSbToken    = token;
+            _authSbInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
                 auth: { persistSession: false, autoRefreshToken: false },
                 global: { headers: { Authorization: `Bearer ${token}` } }
             });
+            return _authSbInstance;
         }
 
         // Decodifica il JWT (senza chiamate di rete) e restituisce il payload
