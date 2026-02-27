@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.34</title>
+    <title>Tasks v19.17.35</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1509,13 +1509,13 @@
             </div>
 
             <!-- Snooze Modal -->
-            <div id="snoozeModal" class="modal-overlay hidden" onclick="if(event.target===this)closeSnoozeModal()">
-                <div class="modal" style="max-width: 360px;">
+            <div id="snoozeModal" class="modal" onclick="if(event.target===this)closeSnoozeModal()">
+                <div class="modal-content" style="max-width: 360px;">
                     <div class="modal-header">
-                        <h3 style="margin: 0;">⏸️ Sospendi notifica</h3>
-                        <button onclick="closeSnoozeModal()" class="modal-close">✕</button>
+                        <h3 class="modal-title">⏸️ Sospendi notifica</h3>
+                        <span class="modal-close" onclick="closeSnoozeModal()">✕</span>
                     </div>
-                    <div class="modal-body">
+                    <div style="padding:1.5rem;">
                         <p style="margin-bottom: 1rem; opacity: 0.8;">Per quanto tempo vuoi sospendere questa notifica?</p>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
                             <button class="btn btn-secondary" onclick="confirmSnooze(15)">15 minuti</button>
@@ -1622,7 +1622,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.34</span>
+                        <span>Tasks v19.17.35</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2173,7 +2173,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.34 - Init function started');
+            console.log('🚀 Tasks v19.17.35 - Init function started');
 
             initDatePickers();
 
@@ -8472,12 +8472,12 @@ Per attivarle:
         function openSnoozeModal(id) {
             snoozingItemId = id;
             document.getElementById('snoozeCustomMinutes').value = '';
-            document.getElementById('snoozeModal').classList.remove('hidden');
+            document.getElementById('snoozeModal').classList.add('active');
         }
 
         function closeSnoozeModal() {
             snoozingItemId = null;
-            document.getElementById('snoozeModal').classList.add('hidden');
+            document.getElementById('snoozeModal').classList.remove('active');
         }
 
         async function confirmSnooze(minutes) {
