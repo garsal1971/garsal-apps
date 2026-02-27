@@ -1,12 +1,24 @@
 // ============================================================
 // Job 2 — send-notifications
-// Frequenza: ogni minuto (cron: "* * * * *")
+// Frequenza: ogni 5 minuti (cron: "*/5 * * * *")
 //
-// Legge cm_notification_queue (status='pending', fire_at <= now),
-// invia la notifica sul canale configurato, aggiorna lo status,
-// scrive il risultato in cm_notification_log.
+// Logica con contatore (send_count, max 5 tentativi):
 //
-// Max 50 notifiche per run per evitare timeout.
+//   FASE 1 — pending → sending
+//     Legge status='pending' con fire_at <= now.
+//     Imposta status='sending', send_count=1 e invia la notifica.
+//
+//   FASE 2 — sending → sending | sent
+//     Legge status='sending' con send_count < 5.
+//     Incrementa send_count e reinvia.
+//     Se send_count raggiunge 5 → imposta status='sent'.
+//
+//   FASE 3 — digest
+//     Raccoglie gli elementi appena diventati 'sent' in questo run.
+//     Invia UNA sola notifica Telegram per utente con il riepilogo
+//     di tutti quei messaggi. Lo status 'sent' NON viene modificato.
+//
+// Max 50 notifiche per run (25 pending + 25 sending) per evitare timeout.
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -16,6 +28,24 @@ const SERVICE_ROLE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+
+// ---------------------------------------------------------------------------
+// Tipi
+// ---------------------------------------------------------------------------
+interface QueueItem {
+  id:         string
+  rule_id:    string
+  user_id:    string
+  app:        string
+  entity_id:  string
+  title:      string
+  body:       string
+  channel:    string
+  fire_at:    string
+  status:     string
+  send_count: number
+  created_at: string
+}
 
 // ---------------------------------------------------------------------------
 // Telegram
@@ -39,31 +69,64 @@ async function sendTelegram(
 // ---------------------------------------------------------------------------
 Deno.serve(async (_req) => {
   try {
-    // Leggi notifiche da inviare
-    const { data: items, error: queueError } = await sb
+    const now = new Date().toISOString()
+
+    // ── FASE 1: elementi pending ──────────────────────────────────────────
+    const { data: pendingItems, error: pendingError } = await sb
       .from('cm_notification_queue')
       .select('*')
       .eq('status', 'pending')
-      .lte('fire_at', new Date().toISOString())
+      .lte('fire_at', now)
       .order('fire_at', { ascending: true })
-      .limit(50)
+      .limit(25)
 
-    if (queueError) throw queueError
+    if (pendingError) throw pendingError
+
+    // ── FASE 2: elementi sending (da riprovare) ───────────────────────────
+    const { data: sendingItems, error: sendingError } = await sb
+      .from('cm_notification_queue')
+      .select('*')
+      .eq('status', 'sending')
+      .lt('send_count', 5)
+      .order('fire_at', { ascending: true })
+      .limit(25)
+
+    if (sendingError) throw sendingError
+
+    const allItems: QueueItem[] = [
+      ...(pendingItems ?? []),
+      ...(sendingItems ?? []),
+    ]
 
     let sent   = 0
     let failed = 0
 
-    for (const item of items ?? []) {
-      // Impostazioni notifica dell'utente
-      const { data: settings } = await sb
+    // Raccoglie gli item che diventano 'sent' in questo run per il digest
+    const justSentItems: QueueItem[] = []
+
+    // Cache impostazioni utente per evitare query ripetute
+    const settingsCache = new Map<string, { telegram_chat_id: string | null; telegram_enabled: boolean } | null>()
+
+    async function getUserSettings(userId: string) {
+      if (settingsCache.has(userId)) return settingsCache.get(userId)!
+      const { data } = await sb
         .from('cm_user_notification_settings')
         .select('telegram_chat_id, telegram_enabled')
-        .eq('user_id', item.user_id)
+        .eq('user_id', userId)
         .single()
+      settingsCache.set(userId, data ?? null)
+      return data ?? null
+    }
 
-      let status: 'sent' | 'failed' = 'failed'
-      let responseText = ''
-      let errorMsg     = ''
+    // ── Processa ogni item ─────────────────────────────────────────────────
+    for (const item of allItems) {
+      const newCount  = (item.send_count ?? 0) + 1
+      const newStatus = newCount >= 5 ? 'sent' : 'sending'
+
+      const settings    = await getUserSettings(item.user_id)
+      let responseText  = ''
+      let errorMsg      = ''
+      let telegramOk    = false
 
       if (
         item.channel === 'telegram' &&
@@ -72,17 +135,17 @@ Deno.serve(async (_req) => {
       ) {
         const message = `${item.title}\n${item.body}`
         const result  = await sendTelegram(settings.telegram_chat_id, message)
-        status        = result.ok ? 'sent' : 'failed'
+        telegramOk    = result.ok
         responseText  = result.response
         if (!result.ok) errorMsg = `Telegram API error: ${result.response}`
       } else {
         errorMsg = 'Canale non configurato o disabilitato'
       }
 
-      // Aggiorna status nella queue
+      // Aggiorna status e contatore nella queue
       await sb
         .from('cm_notification_queue')
-        .update({ status })
+        .update({ status: newStatus, send_count: newCount })
         .eq('id', item.id)
 
       // Scrivi nel log storico
@@ -93,21 +156,55 @@ Deno.serve(async (_req) => {
         entity_id: item.entity_id,
         title:     item.title,
         channel:   item.channel,
-        fired_at:  new Date().toISOString(),
-        status,
+        fired_at:  now,
+        status:    telegramOk ? 'sent' : 'failed',
         response:  responseText || null,
         error_msg: errorMsg     || null,
       })
 
-      if (status === 'sent') sent++
+      if (telegramOk) sent++
       else failed++
+
+      // Tieni traccia degli item appena promossi a 'sent'
+      if (newStatus === 'sent') {
+        justSentItems.push(item)
+      }
     }
 
-    const total = items?.length ?? 0
-    console.log(`[send-notif] done — total:${total} sent:${sent} failed:${failed}`)
+    // ── FASE 3: digest per gli item appena diventati 'sent' ───────────────
+    // Raggruppa per user_id e invia UN solo messaggio per utente.
+    // Lo status 'sent' non viene modificato.
+    let digestSent = 0
+
+    if (justSentItems.length > 0) {
+      const byUser = new Map<string, QueueItem[]>()
+      for (const item of justSentItems) {
+        const list = byUser.get(item.user_id) ?? []
+        list.push(item)
+        byUser.set(item.user_id, list)
+      }
+
+      for (const [userId, items] of byUser) {
+        const settings = await getUserSettings(userId)
+        if (settings?.telegram_enabled && settings?.telegram_chat_id) {
+          const lines = items.map(i => `• <b>${i.title}</b>\n  ${i.body}`)
+          const digestText =
+            `📋 <b>Riepilogo notifiche (${items.length})</b>\n\n` +
+            lines.join('\n\n')
+          await sendTelegram(settings.telegram_chat_id, digestText)
+          digestSent++
+        }
+      }
+    }
+
+    const total = allItems.length
+    console.log(
+      `[send-notif] done — total:${total} sent:${sent} failed:${failed}` +
+      ` digest-users:${digestSent} digest-items:${justSentItems.length}`
+    )
 
     return new Response(
-      JSON.stringify({ ok: true, total, sent, failed }),
+      JSON.stringify({ ok: true, total, sent, failed, digest_users: digestSent, digest_items: justSentItems.length }),
       { headers: { 'Content-Type': 'application/json' } }
     )
   } catch (err) {
