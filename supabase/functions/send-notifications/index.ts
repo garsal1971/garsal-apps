@@ -4,6 +4,10 @@
 //
 // Logica con contatore (send_count, max 5 tentativi):
 //
+//   FASE 0 — snoozed → pending (wake-up)
+//     Trova elementi status='snoozed' con fire_at <= now.
+//     Li riporta a 'pending' così la Fase 1 li processa nello stesso run.
+//
 //   FASE 1 — pending → sending
 //     Legge status='pending' con fire_at <= now.
 //     Imposta status='sending', send_count=1 e invia la notifica.
@@ -70,6 +74,17 @@ async function sendTelegram(
 Deno.serve(async (_req) => {
   try {
     const now = new Date().toISOString()
+
+    // ── FASE 0: snoozed → pending (wake-up) ──────────────────────────────
+    // Gli item sospesi dall'utente tornano a 'pending' quando fire_at <= now.
+    // La Fase 1 li raccoglierà nello stesso run.
+    const { error: snoozeWakeError } = await sb
+      .from('cm_notification_queue')
+      .update({ status: 'pending' })
+      .eq('status', 'snoozed')
+      .lte('fire_at', now)
+
+    if (snoozeWakeError) throw snoozeWakeError
 
     // ── FASE 1: elementi pending ──────────────────────────────────────────
     const { data: pendingItems, error: pendingError } = await sb
