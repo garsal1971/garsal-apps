@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.30</title>
+    <title>Tasks v19.17.31</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1577,7 +1577,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.30</span>
+                        <span>Tasks v19.17.31</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2100,7 +2100,7 @@
         let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
         let reminderPresets = []; // Preset promemoria da DB
-        let sbAccessToken = null; // Token Supabase ricevuto via postMessage dal launcher
+        let sbAccessToken = sessionStorage.getItem('sb_token') || null; // Token Supabase: da sessionStorage o postMessage
         let fpStart = null;
         let fpDeadline = null;
         let fpNoteDate = null;
@@ -2128,7 +2128,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.30 - Init function started');
+            console.log('🚀 Tasks v19.17.31 - Init function started');
 
             initDatePickers();
 
@@ -9501,6 +9501,7 @@ Per attivarle:
         window.addEventListener('message', (e) => {
             if (e.data?.type === 'SB_TOKEN' && e.data.token) {
                 sbAccessToken = e.data.token;
+                sessionStorage.setItem('sb_token', e.data.token);
                 console.log('✅ SB_TOKEN ricevuto dal launcher');
             }
         });
