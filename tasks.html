@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.37</title>
+    <title>Tasks v19.17.38</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1419,6 +1419,7 @@
                                     <select class="form-select" id="filterStatus" onchange="applyTaskFilters()">
                                         <option value="active">Attivi</option>
                                         <option value="completed">Completati</option>
+                                        <option value="terminato">Terminati</option>
                                         <option value="archived">Archiviati</option>
                                         <option value="">Tutti</option>
                                     </select>
@@ -1595,7 +1596,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.37</span>
+                        <span>Tasks v19.17.38</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2174,7 +2175,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.37 - Init function started');
+            console.log('🚀 Tasks v19.17.38 - Init function started');
 
             initDatePickers();
 
@@ -3952,7 +3953,9 @@
                 
                 // Badge stato
                 let statusBadge = '';
-                if (task.status === 'completed') {
+                if (task.status === 'terminato') {
+                    statusBadge = '<span style="background: #374151; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⛔ Terminato</span>';
+                } else if (task.status === 'completed') {
                     statusBadge = '<span style="background: var(--success); color: var(--dark); padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
                 } else if (task.status === 'archived') {
                     statusBadge = '<span style="background: var(--secondary); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">📦 Archiviato</span>';
@@ -4251,7 +4254,9 @@
                                 }
                                 
                                 let statusBadge = '';
-                                if (task.status === 'completed') {
+                                if (task.status === 'terminato') {
+                                    statusBadge = '<span style="background: #374151; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⛔ Terminato</span>';
+                                } else if (task.status === 'completed') {
                                     statusBadge = '<span style="background: var(--success); color: var(--dark); padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
                                 } else if (task.status === 'archived') {
                                     statusBadge = '<span style="background: var(--secondary); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">📦 Archiviato</span>';
@@ -6843,9 +6848,9 @@
                 const completedDate = task.next_occurrence_date || task.start_date || new Date().toISOString();
                 
                 if (task.type === 'single') {
-                    debugLog('📅 Type: SINGLE - marking as completed');
+                    debugLog('📅 Type: SINGLE - marking as terminato');
                     await sb.from('ts_tasks').update({
-                        status: 'completed',
+                        status: 'terminato',
                         last_completed_date: completedDate
                     }).eq('id', id);
                     await deleteNotificationRules(id);
@@ -6921,9 +6926,9 @@
                     await sb.from('ts_tasks').update({
                         last_completed_date: completedDate,
                         next_occurrence_date: nextOccurrence,
-                        status: nextOccurrence === null ? 'completed' : 'active'
+                        status: nextOccurrence === null ? 'terminato' : 'active'
                     }).eq('id', id);
-                    
+
                     debugLog('✅ Updated multiple task, next: ' + nextOccurrence);
                 } else {
                     // free_repeat
@@ -6963,7 +6968,7 @@
             // Task singoli: chiudi il task
             if (task.type === 'single') {
                 await sb.from('ts_tasks').update({
-                    status: 'completed',
+                    status: 'terminato',
                     last_completed_date: failedDate
                 }).eq('id', id);
                 await deleteNotificationRules(id);
@@ -7029,7 +7034,7 @@
                 
                 await sb.from('ts_tasks').update({
                     next_occurrence_date: nextOccurrence,
-                    status: nextOccurrence === null ? 'completed' : 'active'
+                    status: nextOccurrence === null ? 'terminato' : 'active'
                 }).eq('id', id);
                 if (nextOccurrence === null) await deleteNotificationRules(id);
 
@@ -9362,7 +9367,7 @@ Per attivarle:
                                         ${dayTasks.slice(0, 2).map(task => {
                                             const cat = categories.find(c => task.categories?.includes(c.id));
                                             const bgColor = cat ? cat.color : 'var(--primary)';
-                                            const isCompleted = task.completed_at || task.status === 'completed';
+                                            const isCompleted = task.completed_at || task.status === 'completed' || task.status === 'terminato';
                                             return `
                                                 <div class="calendar-task-item ${isCompleted ? 'completed' : ''}"
                                                      style="background: ${bgColor};"
@@ -9545,7 +9550,7 @@ Per attivarle:
 
             // Separa task attivi e completati
             const activeTasks = dayTasks.filter(t => !t.completed_at && t.status === 'active');
-            const completedTasks = dayTasks.filter(t => t.completed_at || t.status === 'completed');
+            const completedTasks = dayTasks.filter(t => t.completed_at || t.status === 'completed' || t.status === 'terminato');
 
             if (activeTasks.length > 0) {
                 html += '<h4 style="color: var(--primary); margin-bottom: 1rem;">✅ Task Attivi</h4>';
