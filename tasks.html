@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.40</title>
+    <title>Tasks v19.17.41</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1417,9 +1417,8 @@
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label class="form-label">Stato</label>
                                     <select class="form-select" id="filterStatus" onchange="applyTaskFilters()">
-                                        <option value="active">Attivi</option>
-                                        <option value="completed">Completati</option>
-                                        <option value="terminato">Terminati</option>
+                                        <option value="active_group">Attivi</option>
+                                        <option value="terminated">Terminati</option>
                                         <option value="archived">Archiviati</option>
                                         <option value="">Tutti</option>
                                     </select>
@@ -1596,7 +1595,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.40</span>
+                        <span>Tasks v19.17.41</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2175,7 +2174,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.40 - Init function started');
+            console.log('🚀 Tasks v19.17.41 - Init function started');
 
             initDatePickers();
 
@@ -3321,7 +3320,7 @@
             // Filtra task attivi
             debugLog('🔵 STEP 1: Filter active tasks');
             debugLog('  Total tasks: ' + tasks.length);
-            const activeTasks = tasks.filter(t => t.status === 'active');
+            const activeTasks = tasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status));
             debugLog('  Active tasks: ' + activeTasks.length);
             
             // Log dettagli task multipli
@@ -3761,7 +3760,7 @@
                 const categoriesWithCount = categories.map(cat => {
                     const count = tasks.filter(t => 
                         t.categories?.includes(cat.id) && 
-                        t.status === 'active'
+                        ['started', 'completed', 'failed', 'skipped'].includes(t.status)
                     ).length;
                     return { ...cat, taskCount: count };
                 });
@@ -3793,7 +3792,7 @@
         function applyTaskFilters(containerElement = document) {
             const categoryFilter = containerElement.querySelector('#filterCategory')?.value || '';
             const priorityFilter = containerElement.querySelector('#filterPriority')?.value || '';
-            const statusFilter = containerElement.querySelector('#filterStatus')?.value || 'active';
+            const statusFilter = containerElement.querySelector('#filterStatus')?.value || 'active_group';
             const searchFilter = containerElement.querySelector('#filterSearch')?.value.toLowerCase().trim() || '';
             
             // Mostra/nascondi bottone clear
@@ -3805,7 +3804,9 @@
             let filteredTasks = tasks;
             
             // Filtra per stato
-            if (statusFilter) {
+            if (statusFilter === 'active_group') {
+                filteredTasks = filteredTasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status));
+            } else if (statusFilter) {
                 filteredTasks = filteredTasks.filter(t => t.status === statusFilter);
             }
             
@@ -3953,14 +3954,18 @@
                 
                 // Badge stato
                 let statusBadge = '';
-                if (task.status === 'terminato') {
+                if (task.status === 'terminated') {
                     statusBadge = '<span style="background: #374151; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⛔ Terminato</span>';
                 } else if (task.status === 'completed') {
-                    statusBadge = '<span style="background: var(--success); color: var(--dark); padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
+                    statusBadge = '<span style="background: var(--success); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
+                } else if (task.status === 'failed') {
+                    statusBadge = '<span style="background: var(--danger); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✗ Fallito</span>';
+                } else if (task.status === 'skipped') {
+                    statusBadge = '<span style="background: var(--warning); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⏭ Saltato</span>';
                 } else if (task.status === 'archived') {
                     statusBadge = '<span style="background: var(--secondary); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">📦 Archiviato</span>';
                 }
-                
+
                 // Genera HTML per le categorie (stile dashboard)
                 let categoriesHtml = '';
                 if (cats.length > 0) {
@@ -4058,7 +4063,7 @@
                             " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
                                 Vedi
                             </button>
-                            ${task.status === 'active' ? `
+                            ${['started', 'completed', 'failed', 'skipped'].includes(task.status) ? `
                                 <button onclick="editTask('${task.id}')" style="
                                     background: var(--primary);
                                     color: white;
@@ -4254,10 +4259,14 @@
                                 }
                                 
                                 let statusBadge = '';
-                                if (task.status === 'terminato') {
+                                if (task.status === 'terminated') {
                                     statusBadge = '<span style="background: #374151; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⛔ Terminato</span>';
                                 } else if (task.status === 'completed') {
-                                    statusBadge = '<span style="background: var(--success); color: var(--dark); padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
+                                    statusBadge = '<span style="background: var(--success); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
+                                } else if (task.status === 'failed') {
+                                    statusBadge = '<span style="background: var(--danger); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✗ Fallito</span>';
+                                } else if (task.status === 'skipped') {
+                                    statusBadge = '<span style="background: var(--warning); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⏭ Saltato</span>';
                                 } else if (task.status === 'archived') {
                                     statusBadge = '<span style="background: var(--secondary); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">📦 Archiviato</span>';
                                 }
@@ -4292,7 +4301,7 @@
                                         <div style="display: flex; gap: 0.8rem;">
                                             <button onclick="viewTask('${task.id}')" style="background: var(--accent); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; cursor: pointer;">Vedi</button>
                                             <button onclick="editTask('${task.id}')" style="background: var(--primary); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; cursor: pointer;">Modifica</button>
-                                            ${task.status === 'active' ? `<button onclick="archiveTask('${task.id}')" style="background: var(--secondary); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; cursor: pointer;">Archivia</button>` : `<button onclick="reactivateTask('${task.id}')" style="background: var(--warning); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; cursor: pointer;">Riattiva</button>`}
+                                            ${['started', 'completed', 'failed', 'skipped'].includes(task.status) ? `<button onclick="archiveTask('${task.id}')" style="background: var(--secondary); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; cursor: pointer;">Archivia</button>` : `<button onclick="reactivateTask('${task.id}')" style="background: var(--warning); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; cursor: pointer;">Riattiva</button>`}
                                         </div>
                                     </div>
                                 `;
@@ -6122,9 +6131,9 @@
                 failure_points: parseInt(document.getElementById('failurePoints').value),
                 skip_points: parseInt(document.getElementById('skipPoints').value),
                 late_points: parseInt(document.getElementById('latePoints').value) || 0,
-                status: 'active'
+                status: 'started'
             };
-            
+
             if (taskType === 'single') {
                 const deadlineRaw = document.getElementById('taskDeadline').value;
                 taskData.deadline = euToIso(deadlineRaw) || deadlineRaw || null;
@@ -6699,7 +6708,7 @@
             await completeWorkflowStep(taskId, stepId);
             // Riapri popup aggiornato
             const task = tasks.find(t => t.id === taskId);
-            if (task && task.status === 'active') {
+            if (task && ['started', 'completed', 'failed', 'skipped'].includes(task.status)) {
                 renderWorkflowPopup(task);
             } else {
                 closeWorkflowPopup();
@@ -6709,7 +6718,7 @@
         async function wfPopupFailStep(taskId, stepId) {
             await failWorkflowStep(taskId, stepId);
             const task = tasks.find(t => t.id === taskId);
-            if (task && task.status === 'active') {
+            if (task && ['started', 'completed', 'failed', 'skipped'].includes(task.status)) {
                 renderWorkflowPopup(task);
             } else {
                 closeWorkflowPopup();
@@ -6831,9 +6840,9 @@
                 const completedDate = task.next_occurrence_date || task.start_date || new Date().toISOString();
                 
                 if (task.type === 'single') {
-                    debugLog('📅 Type: SINGLE - marking as terminato');
+                    debugLog('📅 Type: SINGLE - marking as terminated');
                     await sb.from('ts_tasks').update({
-                        status: 'terminato',
+                        status: 'terminated',
                         last_completed_date: completedDate
                     }).eq('id', id);
                     await deleteNotificationRules(id);
@@ -6845,11 +6854,12 @@
                     nextDate.setDate(baseDate.getDate() + (task.repeat_after_days || 7));
                     debugLog('🔁 Next date:', nextDate.toISOString());
                     
-                    await sb.from('ts_tasks').update({ 
+                    await sb.from('ts_tasks').update({
+                        status: 'completed',
                         last_completed_date: completedDate,
                         next_occurrence_date: nextDate.toISOString()
                     }).eq('id', id);
-                    
+
                     debugLog('🔁 Updated simple_recurring task');
                 } else if (task.type === 'recurring') {
                     debugLog('♾️ Type: RECURRING - calculating next date');
@@ -6860,11 +6870,12 @@
                     const nextDate = getNextRecurringDate(task, baseDate);
                     debugLog('📅 Calculated nextDate:', nextDate ? nextDate.toISOString() : 'NULL');
                     
-                    await sb.from('ts_tasks').update({ 
+                    await sb.from('ts_tasks').update({
+                        status: nextDate ? 'completed' : 'terminated',
                         last_completed_date: completedDate,
                         next_occurrence_date: nextDate ? nextDate.toISOString() : null
                     }).eq('id', id);
-                    
+
                     debugLog('✅ Updated recurring task');
                 } else if (task.type === 'multiple') {
                     debugLog('📅 Type: MULTIPLE - moving to next date');
@@ -6909,13 +6920,13 @@
                     await sb.from('ts_tasks').update({
                         last_completed_date: completedDate,
                         next_occurrence_date: nextOccurrence,
-                        status: nextOccurrence === null ? 'terminato' : 'active'
+                        status: nextOccurrence === null ? 'terminated' : 'completed'
                     }).eq('id', id);
 
                     debugLog('✅ Updated multiple task, next: ' + nextOccurrence);
                 } else {
                     // free_repeat
-                    await sb.from('ts_tasks').update({ last_completed_date: completedDate }).eq('id', id);
+                    await sb.from('ts_tasks').update({ status: 'completed', last_completed_date: completedDate }).eq('id', id);
                 }
                 
                 await loadTasks();
@@ -6951,7 +6962,7 @@
             // Task singoli: chiudi il task
             if (task.type === 'single') {
                 await sb.from('ts_tasks').update({
-                    status: 'terminato',
+                    status: 'terminated',
                     last_completed_date: failedDate
                 }).eq('id', id);
                 await deleteNotificationRules(id);
@@ -6963,8 +6974,9 @@
                 const baseDate = new Date(task.next_occurrence_date || task.start_date);
                 const nextDate = new Date(baseDate);
                 nextDate.setDate(baseDate.getDate() + (task.repeat_after_days || 7));
-                
-                await sb.from('ts_tasks').update({ 
+
+                await sb.from('ts_tasks').update({
+                    status: 'failed',
                     next_occurrence_date: nextDate.toISOString()
                 }).eq('id', id);
                 
@@ -6978,12 +6990,13 @@
                 // Se non c'è prossima occorrenza, chiudi il task
                 if (!nextDate) {
                     await sb.from('ts_tasks').update({
-                        next_occurrence_date: null,
-                        status: 'completed'
+                        status: 'terminated',
+                        next_occurrence_date: null
                     }).eq('id', id);
                     await deleteNotificationRules(id);
                 } else {
-                    await sb.from('ts_tasks').update({ 
+                    await sb.from('ts_tasks').update({
+                        status: 'failed',
                         next_occurrence_date: nextDate.toISOString()
                     }).eq('id', id);
                 }
@@ -7017,7 +7030,7 @@
                 
                 await sb.from('ts_tasks').update({
                     next_occurrence_date: nextOccurrence,
-                    status: nextOccurrence === null ? 'terminato' : 'active'
+                    status: nextOccurrence === null ? 'terminated' : 'failed'
                 }).eq('id', id);
                 if (nextOccurrence === null) await deleteNotificationRules(id);
 
@@ -7099,7 +7112,7 @@
                     
                     await sb.from('ts_tasks').update({
                         next_occurrence_date: null,
-                        status: 'completed'
+                        status: 'terminated'
                     }).eq('id', id);
                     await deleteNotificationRules(id);
 
@@ -7109,7 +7122,7 @@
                     renderCalendar();
                     renderManagement();
 
-                    showToast('✅ Ultima data saltata, task completato');
+                    showToast('⛔ Ultima data saltata, task terminato');
                     return;
                 }
                 
@@ -7149,19 +7162,22 @@
             // Aggiorna in base al tipo di task
             if (task.type === 'single') {
                 // Per task singoli, aggiorna next_occurrence_date
-                await sb.from('ts_tasks').update({ 
+                await sb.from('ts_tasks').update({
+                    status: 'skipped',
                     next_occurrence_date: newDate.toISOString()
                 }).eq('id', id);
-                
+
             } else if (task.type === 'simple_recurring' || task.type === 'recurring') {
                 // Per ricorrenti, aggiorna next_occurrence_date
-                await sb.from('ts_tasks').update({ 
+                await sb.from('ts_tasks').update({
+                    status: 'skipped',
                     next_occurrence_date: newDate.toISOString()
                 }).eq('id', id);
-                
+
             } else if (task.type === 'multiple') {
                 // Per task multipli, aggiorna solo next_occurrence_date
-                await sb.from('ts_tasks').update({ 
+                await sb.from('ts_tasks').update({
+                    status: 'skipped',
                     next_occurrence_date: newDate.toISOString()
                 }).eq('id', id);
             }
@@ -7192,7 +7208,7 @@
             if (!confirm('Riattivare questo task?')) return;
             
             const { data, error } = await sb.from('ts_tasks')
-                .update({ status: 'active' })
+                .update({ status: 'started' })
                 .eq('id', id)
                 .select();
             
@@ -8216,7 +8232,7 @@ Per attivarle:
             if (!cat) return;
             
             const categoryTasks = tasks.filter(t => 
-                t.categories?.includes(categoryId) && t.status === 'active'
+                t.categories?.includes(categoryId) && ['started', 'completed', 'failed', 'skipped'].includes(t.status)
             );
             
             let html = `
@@ -8295,7 +8311,7 @@ Per attivarle:
             search: '',
             category: '',
             priority: '',
-            status: 'active',
+            status: 'active_group',
             groupBy: 'none',
             groupsExpanded: false,
             vistaPanelOpen: false,
@@ -8641,7 +8657,7 @@ Per attivarle:
                     const categoriesWithCount = categories.map(cat => {
                         const count = tasks.filter(t => 
                             t.categories?.includes(cat.id) && 
-                            t.status === 'active'
+                        ['started', 'completed', 'failed', 'skipped'].includes(t.status)
                         ).length;
                         return { ...cat, taskCount: count };
                     });
@@ -8908,7 +8924,7 @@ Per attivarle:
             const nextNDays = new Date(today);
             nextNDays.setDate(nextNDays.getDate() + upcomingDays);
             
-            const activeTasks = tasks.filter(t => t.status === 'active');
+            const activeTasks = tasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status));
             const freeRepeatTasks = activeTasks.filter(t => t.type === 'free_repeat');
             const scheduledTasks = activeTasks.filter(t => t.type !== 'free_repeat');
             
@@ -9345,7 +9361,7 @@ Per attivarle:
                                         ${dayTasks.slice(0, 2).map(task => {
                                             const cat = categories.find(c => task.categories?.includes(c.id));
                                             const bgColor = cat ? cat.color : 'var(--primary)';
-                                            const isCompleted = task.completed_at || task.status === 'completed' || task.status === 'terminato';
+                                            const isCompleted = task.completed_at || task.status === 'terminated';
                                             return `
                                                 <div class="calendar-task-item ${isCompleted ? 'completed' : ''}"
                                                      style="background: ${bgColor};"
@@ -9373,7 +9389,7 @@ Per attivarle:
             
             // Ottieni tutti i task del giorno
             const dayTasks = tasks.filter(task => {
-                if (task.status !== 'active') return false;
+                if (!['started', 'completed', 'failed', 'skipped'].includes(task.status)) return false;
                 
                 // Per task singoli, usa start_date
                 if (task.type === 'single' && task.start_date) {
@@ -9438,7 +9454,7 @@ Per attivarle:
             
             // Task attivi - controlla start_date, next_occurrence_date, o next_due
             const activeTasks = tasks.filter(task => {
-                if (task.status !== 'active') return false;
+                if (!['started', 'completed', 'failed', 'skipped'].includes(task.status)) return false;
                 
                 // Per task singoli, usa start_date
                 if (task.type === 'single' && task.start_date) {
@@ -9528,7 +9544,7 @@ Per attivarle:
 
             // Separa task attivi e completati
             const activeTasks = dayTasks.filter(t => !t.completed_at && t.status === 'active');
-            const completedTasks = dayTasks.filter(t => t.completed_at || t.status === 'completed' || t.status === 'terminato');
+            const completedTasks = dayTasks.filter(t => t.completed_at || t.status === 'terminated');
 
             if (activeTasks.length > 0) {
                 html += '<h4 style="color: var(--primary); margin-bottom: 1rem;">✅ Task Attivi</h4>';
