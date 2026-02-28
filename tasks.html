@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.41</title>
+    <title>Tasks v19.17.42</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1595,7 +1595,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.41</span>
+                        <span>Tasks v19.17.42</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2174,7 +2174,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.41 - Init function started');
+            console.log('🚀 Tasks v19.17.42 - Init function started');
 
             initDatePickers();
 
@@ -2638,6 +2638,8 @@
             // Crea un nuovo record con punti opposti
             const rollbackRecord = {
                 task_id: originalRecord.task_id,
+                from_status: null,
+                to_status: null,
                 action: 'rollback',
                 points: -originalRecord.points,  // Punti opposti
                 rollback_of: historyId,  // Riferimento al record originale
@@ -2695,6 +2697,15 @@
                     notifications_enabled: 'true'
                 };
             }
+        }
+
+        // Helper: crea un record di history con tutti i campi
+        function historyRecord(taskId, fromStatus, toStatus, action, points) {
+            return { task_id: taskId, from_status: fromStatus, to_status: toStatus, action, points, timestamp: new Date().toISOString() };
+        }
+        // Helper: crea il record di transizione automatica verso 'terminated' (0 punti)
+        function termRecord(taskId, fromStatus) {
+            return historyRecord(taskId, fromStatus, 'terminated', 'terminated', 0);
         }
 
         function updateScore() {
@@ -5156,13 +5167,16 @@
 
         async function archiveTask(id) {
             if (!confirm('Archiviare questo task?')) return;
-            
+
+            const task = tasks.find(t => t.id === id);
             const { data, error } = await sb.from('ts_tasks')
                 .update({ status: 'archived' })
                 .eq('id', id)
                 .select();
-            
+
             if (data) {
+                await sb.from('ts_history').insert([historyRecord(id, task ? task.status : null, 'archived', 'archived', 0)]);
+                await loadHistory();
                 const index = tasks.findIndex(t => t.id === id);
                 if (index !== -1) tasks[index] = data[0];
                 renderTasks();
@@ -6340,6 +6354,8 @@
                 // Salva history per lo step completato
                 await sb.from('ts_history').insert([{
                     task_id: taskId,
+                    from_status: 'active',
+                    to_status: 'completed',
                     action: 'completed',
                     points: wfPoints.step_success,
                     timestamp: now
@@ -6394,14 +6410,8 @@
                 // Salva history per step fallito
                 await sb.from('ts_history').insert([{
                     task_id: taskId,
-                    action: 'failed',
-                    points: wfPoints.step_failure,
-                    timestamp: now
-                }]);
-                
-                // Salva history per step fallito
-                await sb.from('ts_history').insert([{
-                    task_id: taskId,
+                    from_status: 'active',
+                    to_status: 'failed',
                     action: 'failed',
                     points: wfPoints.step_failure,
                     timestamp: now
@@ -6742,11 +6752,13 @@
             
             await sb.from('ts_history').insert([{
                 task_id: taskId,
+                from_status: task.status,
+                to_status: 'completed',
                 action: 'completed',
                 points: wfPts.task_success || 0,
                 timestamp: now
             }]);
-            
+
             const completedDates = steps.filter(s => s.completed_at).map(s => new Date(s.completed_at));
             const maxDate = completedDates.length > 0 ? new Date(Math.max(...completedDates)).toISOString() : now;
             
@@ -6776,6 +6788,8 @@
             
             await sb.from('ts_history').insert([{
                 task_id: taskId,
+                from_status: task.status,
+                to_status: 'failed',
                 action: 'failed',
                 points: wfPts.task_failure || 0,
                 timestamp: now
@@ -6829,22 +6843,19 @@
                     }
                 }
                 
-                await sb.from('ts_history').insert([{
-                    task_id: id,
-                    action: 'completed',
-                    points: completionPoints,
-                    timestamp: new Date().toISOString()
-                }]);
-                
+                const fromStatus = task.status;
+                await sb.from('ts_history').insert([historyRecord(id, fromStatus, 'completed', 'completed', completionPoints)]);
+
                 // Determina la data di completamento (next_occurrence_date o start_date)
                 const completedDate = task.next_occurrence_date || task.start_date || new Date().toISOString();
-                
+
                 if (task.type === 'single') {
                     debugLog('📅 Type: SINGLE - marking as terminated');
                     await sb.from('ts_tasks').update({
                         status: 'terminated',
                         last_completed_date: completedDate
                     }).eq('id', id);
+                    await sb.from('ts_history').insert([termRecord(id, 'completed')]);
                     await deleteNotificationRules(id);
                 } else if (task.type === 'simple_recurring') {
                     debugLog('🔁 Type: SIMPLE_RECURRING - calculating next date');
@@ -6875,6 +6886,7 @@
                         last_completed_date: completedDate,
                         next_occurrence_date: nextDate ? nextDate.toISOString() : null
                     }).eq('id', id);
+                    if (!nextDate) await sb.from('ts_history').insert([termRecord(id, 'completed')]);
 
                     debugLog('✅ Updated recurring task');
                 } else if (task.type === 'multiple') {
@@ -6922,6 +6934,7 @@
                         next_occurrence_date: nextOccurrence,
                         status: nextOccurrence === null ? 'terminated' : 'completed'
                     }).eq('id', id);
+                    if (nextOccurrence === null) await sb.from('ts_history').insert([termRecord(id, 'completed')]);
 
                     debugLog('✅ Updated multiple task, next: ' + nextOccurrence);
                 } else {
@@ -6949,22 +6962,19 @@
             
             const task = tasks.find(t => t.id === id);
             
-            await sb.from('ts_history').insert([{
-                task_id: id,
-                action: 'failed',
-                points: task.failure_points,
-                timestamp: new Date().toISOString()
-            }]);
-            
+            const fromStatusFail = task.status;
+            await sb.from('ts_history').insert([historyRecord(id, fromStatusFail, 'failed', 'failed', task.failure_points)]);
+
             // Determina la data di completamento
             const failedDate = task.next_occurrence_date || task.start_date || new Date().toISOString();
-            
+
             // Task singoli: chiudi il task
             if (task.type === 'single') {
                 await sb.from('ts_tasks').update({
                     status: 'terminated',
                     last_completed_date: failedDate
                 }).eq('id', id);
+                await sb.from('ts_history').insert([termRecord(id, 'failed')]);
                 await deleteNotificationRules(id);
 
                 await loadTasks();
@@ -6993,6 +7003,7 @@
                         status: 'terminated',
                         next_occurrence_date: null
                     }).eq('id', id);
+                    await sb.from('ts_history').insert([termRecord(id, 'failed')]);
                     await deleteNotificationRules(id);
                 } else {
                     await sb.from('ts_tasks').update({
@@ -7000,9 +7011,9 @@
                         next_occurrence_date: nextDate.toISOString()
                     }).eq('id', id);
                 }
-                
+
                 await loadTasks();
-                
+
             // Per task multipli, passa alla prossima data
             } else if (task.type === 'multiple') {
                 // Assicurati che multiple_dates sia un array
@@ -7032,7 +7043,10 @@
                     next_occurrence_date: nextOccurrence,
                     status: nextOccurrence === null ? 'terminated' : 'failed'
                 }).eq('id', id);
-                if (nextOccurrence === null) await deleteNotificationRules(id);
+                if (nextOccurrence === null) {
+                    await sb.from('ts_history').insert([termRecord(id, 'failed')]);
+                    await deleteNotificationRules(id);
+                }
 
                 await loadTasks();
             }
@@ -7103,13 +7117,11 @@
                     skipMessage = 'Task saltato alla prossima data';
                 } else {
                     // Era l'ultima data, chiudi il task
-                    await sb.from('ts_history').insert([{
-                        task_id: id,
-                        action: 'skipped',
-                        points: task.skip_points,
-                        timestamp: new Date().toISOString()
-                    }]);
-                    
+                    await sb.from('ts_history').insert([
+                        historyRecord(id, task.status, 'skipped', 'skipped', task.skip_points),
+                        termRecord(id, 'skipped')
+                    ]);
+
                     await sb.from('ts_tasks').update({
                         next_occurrence_date: null,
                         status: 'terminated'
@@ -7152,12 +7164,7 @@
             }
             
             // Registra skip nella history
-            await sb.from('ts_history').insert([{
-                task_id: id,
-                action: 'skipped',
-                points: task.skip_points,
-                timestamp: new Date().toISOString()
-            }]);
+            await sb.from('ts_history').insert([historyRecord(id, task.status, 'skipped', 'skipped', task.skip_points)]);
             
             // Aggiorna in base al tipo di task
             if (task.type === 'single') {
@@ -7206,13 +7213,16 @@
 
         async function reactivateTask(id) {
             if (!confirm('Riattivare questo task?')) return;
-            
+
+            const task = tasks.find(t => t.id === id);
             const { data, error } = await sb.from('ts_tasks')
                 .update({ status: 'started' })
                 .eq('id', id)
                 .select();
-            
+
             if (data) {
+                await sb.from('ts_history').insert([historyRecord(id, task ? task.status : null, 'started', 'reactivated', 0)]);
+                await loadHistory();
                 const index = tasks.findIndex(t => t.id === id);
                 if (index !== -1) tasks[index] = data[0];
                 renderTasks();
@@ -8578,24 +8588,51 @@ Per attivarle:
                                         actionIcon = '⏭️';
                                         actionText = 'Saltato';
                                         actionColor = 'var(--warning)';
+                                    } else if (h.action === 'terminated') {
+                                        actionIcon = '⛔';
+                                        actionText = 'Terminato';
+                                        actionColor = 'var(--muted)';
+                                    } else if (h.action === 'archived') {
+                                        actionIcon = '📦';
+                                        actionText = 'Archiviato';
+                                        actionColor = 'var(--muted)';
+                                    } else if (h.action === 'reactivated') {
+                                        actionIcon = '🔄';
+                                        actionText = 'Riattivato';
+                                        actionColor = 'var(--accent)';
+                                    } else if (h.action === 'rollback') {
+                                        actionIcon = '↩️';
+                                        actionText = 'Annullato';
+                                        actionColor = 'var(--warning)';
                                     } else {
                                         actionIcon = '📝';
                                         actionText = h.action;
                                         actionColor = 'var(--muted)';
                                     }
-                                    
+
+                                    const transitionBadge = (h.from_status && h.to_status)
+                                        ? `<span style="font-size:0.75em; opacity:0.6; font-family:monospace;">${h.from_status} → ${h.to_status}</span>`
+                                        : '';
+                                    const pointsDisplay = h.points !== 0
+                                        ? `${h.points > 0 ? '+' : ''}${h.points}`
+                                        : '—';
+                                    const pointsColor = h.points > 0 ? 'var(--success)' : h.points < 0 ? 'var(--danger)' : 'var(--muted)';
+
                                     return `
                                         <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; background: var(--input-bg); border-left: 3px solid ${actionColor};">
                                             <span style="font-size: 1.5rem;">${actionIcon}</span>
                                             <div style="flex: 1;">
                                                 <div style="font-weight: 600; margin-bottom: 0.25rem;">${taskTitle}</div>
-                                                <div style="font-size: 0.85rem; opacity: 0.7;">
-                                                    ${actionText} • ${time}
-                                                    ${h.notes ? ` • ${h.notes}` : ''}
+                                                <div style="font-size: 0.85rem; opacity: 0.7; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;">
+                                                    <span>${actionText}</span>
+                                                    <span>•</span>
+                                                    <span>${time}</span>
+                                                    ${transitionBadge ? `<span>•</span>${transitionBadge}` : ''}
+                                                    ${h.notes ? `<span>•</span><span>${h.notes}</span>` : ''}
                                                 </div>
                                             </div>
-                                            <div style="text-align: right; font-weight: 700; color: ${h.points > 0 ? 'var(--success)' : 'var(--danger)'};">
-                                                ${h.points > 0 ? '+' : ''}${h.points}
+                                            <div style="text-align: right; font-weight: 700; color: ${pointsColor};">
+                                                ${pointsDisplay}
                                             </div>
                                         </div>
                                     `;
