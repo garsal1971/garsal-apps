@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.44</title>
+    <title>Tasks v19.17.45</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1589,7 +1589,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.44</span>
+                        <span>Tasks v19.17.45</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2168,7 +2168,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.44 - Init function started');
+            console.log('🚀 Tasks v19.17.45 - Init function started');
 
             initDatePickers();
 
@@ -8597,11 +8597,19 @@ Per attivarle:
                                         : '—';
                                     const pointsColor = h.points > 0 ? 'var(--success)' : h.points < 0 ? 'var(--danger)' : 'var(--muted)';
 
-                                    const canRollback = h.action !== 'rollback' && h.points !== 0;
-                                    const alreadyRolledBack = canRollback && history.some(x => x.rollback_of === h.id);
-                                    const rollbackBtn = !canRollback ? '' : alreadyRolledBack
-                                        ? `<button disabled title="Punteggio già annullato" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;opacity:0.35;cursor:not-allowed;">↩️</button>`
-                                        : `<button onclick="rollbackPoints('${h.id}')" title="Annulla punteggio" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;cursor:pointer;color:var(--muted);" onmouseover="this.style.borderColor='var(--warning)';this.style.color='var(--warning)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↩️</button>`;
+                                    const canRollback  = h.action !== 'rollback' && h.points !== 0;
+                                    const isRollback   = h.action === 'rollback';
+                                    const alreadyCountered = history.some(x => x.rollback_of === h.id);
+                                    let rollbackBtn = '';
+                                    if (canRollback) {
+                                        rollbackBtn = alreadyCountered
+                                            ? `<button disabled title="Punteggio già annullato" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;opacity:0.35;cursor:not-allowed;">↩️</button>`
+                                            : `<button onclick="rollbackPoints('${h.id}')" title="Annulla punteggio" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;cursor:pointer;color:var(--muted);" onmouseover="this.style.borderColor='var(--warning)';this.style.color='var(--warning)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↩️</button>`;
+                                    } else if (isRollback) {
+                                        rollbackBtn = alreadyCountered
+                                            ? `<button disabled title="Rollback già ripristinato" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;opacity:0.35;cursor:not-allowed;">↪️</button>`
+                                            : `<button onclick="rollbackPoints('${h.id}')" title="Ripristina punteggio" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;cursor:pointer;color:var(--muted);" onmouseover="this.style.borderColor='var(--success)';this.style.color='var(--success)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↪️</button>`;
+                                    }
 
                                     return `
                                         <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; background: var(--input-bg); border-left: 3px solid ${actionColor};">
