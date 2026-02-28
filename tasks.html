@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.42</title>
+    <title>Tasks v19.17.43</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1345,7 +1345,8 @@
             <nav class="nav-menu">
                 <div class="nav-item active" onclick="showPage('planner', this)" data-text="Piano">📅</div>
                 <div class="nav-item" onclick="showPage('management', this)" data-text="Gestione">⚙️</div>
-                <div class="nav-item" onclick="showPage('reminders', this)" id="remindersMenuItem" data-text="Promemoria">🔔</div>
+                <div class="nav-item" onclick="showPage('promemoria', this)" id="remindersMenuItem" data-text="Promemoria">🔔</div>
+                <div class="nav-item" onclick="showPage('cronologia', this)" data-text="Cronologia">🕐</div>
                 <div class="nav-item" onclick="showPage('settings', this)" data-text="Impostazioni">🔧</div>
             </nav>
 
@@ -1491,21 +1492,14 @@
                 <div id="managementContainer"></div>
             </div>
 
-            <!-- Reminders Page -->
-            <div id="remindersPage" class="hidden">
-                <!-- Tab Selector -->
-                <div class="card" style="margin-bottom: 1.5rem;">
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <button class="btn btn-primary"   onclick="switchRemindersView('notifiche')" id="btnNotificheView"       style="flex: 1; min-width: 0;">🔔 Notifiche</button>
-                        <button class="btn btn-secondary" onclick="switchRemindersView('history')"   id="btnHistoryRemindersView" style="flex: 1; min-width: 0;">Storico</button>
-                        <button class="btn btn-secondary" onclick="loadQueueItems()" title="Ricarica" style="padding: 0.5rem 0.75rem; flex-shrink: 0;">🔄</button>
-                    </div>
-                </div>
+            <!-- Promemoria Page -->
+            <div id="promemoriaPage" class="hidden">
+                <div id="promemoriaContainer"></div>
+            </div>
 
-                <!-- Container -->
-                <div id="remindersContainer">
-                    <div id="remindersPageList"></div>
-                </div>
+            <!-- Cronologia Page -->
+            <div id="cronologiaPage" class="hidden">
+                <div id="cronologiaContainer"></div>
             </div>
 
 
@@ -1595,7 +1589,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.42</span>
+                        <span>Tasks v19.17.43</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2174,7 +2168,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.42 - Init function started');
+            console.log('🚀 Tasks v19.17.43 - Init function started');
 
             initDatePickers();
 
@@ -2941,7 +2935,8 @@
             if (page === 'categories') renderCategories();
             if (page === 'notes') renderNotes();
             if (page === 'management') renderManagement();
-            if (page === 'reminders') renderRemindersContainer();
+            if (page === 'promemoria') loadQueueItems();
+            if (page === 'cronologia') renderHistoryPage();
             if (page === 'settings') renderSettings();
         }
 
@@ -7853,7 +7848,7 @@
             console.log('🔔 ===== CHECK REMINDERS END =====');
             
             // Aggiorna badge / ricarica coda se siamo nella pagina
-            if (!document.getElementById('remindersPage').classList.contains('hidden') && currentRemindersView === 'notifiche') {
+            if (!document.getElementById('promemoriaPage').classList.contains('hidden')) {
                 loadQueueItems();
             } else {
                 loadQueueBadge();
@@ -8327,7 +8322,6 @@ Per attivarle:
             vistaPanelOpen: false,
             searchPanelOpen: false
         };
-        let currentRemindersView = 'notifiche';
         let snoozingItemId = null;
         let currentPlannerDate = new Date();
 
@@ -8353,25 +8347,10 @@ Per attivarle:
             renderManagement();
         }
 
-        function switchRemindersView(view) {
-            currentRemindersView = view;
-            document.getElementById('btnNotificheView').className       = view === 'notifiche' ? 'btn btn-primary' : 'btn btn-secondary';
-            document.getElementById('btnHistoryRemindersView').className = view === 'history'   ? 'btn btn-primary' : 'btn btn-secondary';
-            renderRemindersContainer();
-        }
-
-        function renderRemindersContainer() {
-            if (currentRemindersView === 'notifiche') {
-                loadQueueItems();
-            } else if (currentRemindersView === 'history') {
-                renderHistoryPage();
-            }
-        }
-
         // ── Queue functions ──────────────────────────────────────────────────
 
         async function loadQueueItems() {
-            const container = document.getElementById('remindersContainer');
+            const container = document.getElementById('promemoriaContainer');
             if (!container) return;
 
             const userId = decodeJWT(sbAccessToken)?.sub;
@@ -8528,7 +8507,7 @@ Per attivarle:
         }
         
         function renderHistoryPage() {
-            const container = document.getElementById('remindersContainer');
+            const container = document.getElementById('cronologiaContainer');
             if (!container) return;
             
             // Ordina history per timestamp (più recente prima)
