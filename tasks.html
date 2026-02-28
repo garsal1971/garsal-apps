@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.45</title>
+    <title>Tasks v19.17.46</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1589,7 +1589,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.45</span>
+                        <span>Tasks v19.17.46</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2168,7 +2168,7 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.45 - Init function started');
+            console.log('🚀 Tasks v19.17.46 - Init function started');
 
             initDatePickers();
 
@@ -2657,6 +2657,18 @@
                 renderHistoryPage();
                 showToast('↩️ Punteggio annullato!');
             }
+        }
+
+        async function deleteRollback(rollbackId) {
+            if (!confirm('Eliminare questo rollback? Il punteggio originale verrà ripristinato.')) return;
+            const { error } = await sb.from('ts_history').delete().eq('id', rollbackId);
+            if (error) {
+                alert('Errore: ' + error.message);
+                return;
+            }
+            await loadHistory();
+            renderHistoryPage();
+            showToast('↪️ Rollback eliminato!');
         }
 
         async function loadSettings() {
@@ -8607,8 +8619,8 @@ Per attivarle:
                                             : `<button onclick="rollbackPoints('${h.id}')" title="Annulla punteggio" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;cursor:pointer;color:var(--muted);" onmouseover="this.style.borderColor='var(--warning)';this.style.color='var(--warning)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↩️</button>`;
                                     } else if (isRollback) {
                                         rollbackBtn = alreadyCountered
-                                            ? `<button disabled title="Rollback già ripristinato" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;opacity:0.35;cursor:not-allowed;">↪️</button>`
-                                            : `<button onclick="rollbackPoints('${h.id}')" title="Ripristina punteggio" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;cursor:pointer;color:var(--muted);" onmouseover="this.style.borderColor='var(--success)';this.style.color='var(--success)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↪️</button>`;
+                                            ? `<button disabled title="Rollback già eliminato" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;opacity:0.35;cursor:not-allowed;">↪️</button>`
+                                            : `<button onclick="deleteRollback('${h.id}')" title="Elimina rollback e ripristina punteggio" style="background:none;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;cursor:pointer;color:var(--muted);" onmouseover="this.style.borderColor='var(--success)';this.style.color='var(--success)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↪️</button>`;
                                     }
 
                                     return `
