@@ -26,6 +26,12 @@ const WEBHOOK_SECRET      = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') ?? ''
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Bot-Api-Secret-Token',
+}
+
 // ---------------------------------------------------------------------------
 // Helpers Telegram API
 // ---------------------------------------------------------------------------
@@ -75,6 +81,11 @@ function formatDateTime(date: Date): string {
 // Handler principale
 // ---------------------------------------------------------------------------
 Deno.serve(async (req) => {
+  // ── Preflight CORS (per debug da browser) ────────────────────────────────
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS })
+  }
+
   // ── Sicurezza: verifica il secret token inviato da Telegram ──────────────
   if (WEBHOOK_SECRET) {
     const incomingSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token') ?? ''
@@ -96,11 +107,17 @@ Deno.serve(async (req) => {
     return new Response('Bad Request', { status: 400 })
   }
 
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    })
+
   // ── Gestisci solo callback_query ─────────────────────────────────────────
   const cq = update.callback_query as Record<string, unknown> | undefined
   if (!cq) {
     // Telegram potrebbe inviare altri tipi di update (messaggi, ecc.) — ignorali
-    return new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } })
+    return json({ ok: true })
   }
 
   const callbackQueryId = cq.id as string
@@ -114,9 +131,7 @@ Deno.serve(async (req) => {
 
   if (!callbackData || !chatId || !messageId) {
     await answerCallbackQuery(callbackQueryId, '❌ Dati non validi')
-    return new Response(JSON.stringify({ ok: false, error: 'missing fields' }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return json({ ok: false, error: 'missing fields' })
   }
 
   // ── Parsing del callback_data ─────────────────────────────────────────────
@@ -130,9 +145,7 @@ Deno.serve(async (req) => {
 
     if (isNaN(minutes) || minutes <= 0) {
       await answerCallbackQuery(callbackQueryId, '❌ Durata sospensione non valida')
-      return new Response(JSON.stringify({ ok: false, error: 'invalid minutes' }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return json({ ok: false, error: 'invalid minutes' })
     }
 
     const newFireAt = new Date(Date.now() + minutes * 60 * 1000)
@@ -145,9 +158,7 @@ Deno.serve(async (req) => {
     if (error) {
       console.error('[telegram-webhook] errore snooze:', error)
       await answerCallbackQuery(callbackQueryId, '❌ Errore durante la sospensione')
-      return new Response(JSON.stringify({ ok: false, error: String(error) }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return json({ ok: false, error: String(error) })
     }
 
     // Etichetta leggibile per la durata
@@ -171,9 +182,7 @@ Deno.serve(async (req) => {
     if (error) {
       console.error('[telegram-webhook] errore cancel:', error)
       await answerCallbackQuery(callbackQueryId, '❌ Errore durante l\'annullamento')
-      return new Response(JSON.stringify({ ok: false, error: String(error) }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return json({ ok: false, error: String(error) })
     }
 
     const newText = `${originalText ?? ''}\n\n❌ <i>Promemoria annullato</i>`
@@ -185,7 +194,5 @@ Deno.serve(async (req) => {
     await answerCallbackQuery(callbackQueryId, '❓ Azione non riconosciuta')
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return json({ ok: true })
 })
