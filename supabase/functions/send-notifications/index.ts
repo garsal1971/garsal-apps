@@ -56,16 +56,51 @@ interface QueueItem {
 // ---------------------------------------------------------------------------
 async function sendTelegram(
   chatId: string,
-  text: string
-): Promise<{ ok: boolean; response: string }> {
+  text: string,
+  replyMarkup?: object
+): Promise<{ ok: boolean; response: string; message_id?: number }> {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`
-  const res = await fetch(url, {
-    method: 'POST',
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+  }
+  if (replyMarkup) {
+    payload.reply_markup = replyMarkup
+  }
+  const res  = await fetch(url, {
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    body:    JSON.stringify(payload),
   })
-  const body = await res.text()
-  return { ok: res.ok, response: body }
+  const bodyText = await res.text()
+  let message_id: number | undefined
+  try {
+    const parsed = JSON.parse(bodyText)
+    message_id = parsed?.result?.message_id
+  } catch {
+    // ignore parse error
+  }
+  return { ok: res.ok, response: bodyText, message_id }
+}
+
+// Costruisce la inline keyboard con le opzioni snooze + annulla
+function buildInlineKeyboard(itemId: string): object {
+  return {
+    inline_keyboard: [
+      [
+        { text: '⏸ 30min',  callback_data: `snooze:30:${itemId}`   },
+        { text: '⏸ 1h',     callback_data: `snooze:60:${itemId}`   },
+      ],
+      [
+        { text: '⏸ 3h',     callback_data: `snooze:180:${itemId}`  },
+        { text: '⏸ Domani', callback_data: `snooze:1440:${itemId}` },
+      ],
+      [
+        { text: '❌ Annulla promemoria', callback_data: `cancel:${itemId}` },
+      ],
+    ],
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -148,10 +183,11 @@ Deno.serve(async (_req) => {
         settings?.telegram_enabled &&
         settings?.telegram_chat_id
       ) {
-        const message = `${item.title}\n${item.body}`
-        const result  = await sendTelegram(settings.telegram_chat_id, message)
-        telegramOk    = result.ok
-        responseText  = result.response
+        const message      = `${item.title}\n${item.body}`
+        const replyMarkup  = buildInlineKeyboard(item.id)
+        const result       = await sendTelegram(settings.telegram_chat_id, message, replyMarkup)
+        telegramOk         = result.ok
+        responseText       = result.response
         if (!result.ok) errorMsg = `Telegram API error: ${result.response}`
       } else {
         errorMsg = 'Canale non configurato o disabilitato'
@@ -188,6 +224,7 @@ Deno.serve(async (_req) => {
 
     // ── FASE 3: digest per gli item appena diventati 'sent' ───────────────
     // Raggruppa per user_id e invia UN solo messaggio per utente.
+    // Il digest NON include bottoni inline (aggruppa più item).
     // Lo status 'sent' non viene modificato.
     let digestSent = 0
 
