@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere</title>
+<title>AppSphere v1.1.0</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -91,6 +91,40 @@
   }
   .tip-name { font-weight: 600; margin-bottom: 2px; }
   .tip-meta { color: #aaa; font-size: 11px; font-family: 'DM Mono', monospace; }
+
+  /* ── SCORE PANEL ── */
+  #score-panel {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: #EE334E;
+    border: 4px solid #111;
+    border-radius: 10px;
+    padding: 10px 20px 12px;
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 110px;
+    pointer-events: none;
+  }
+  #score-panel.visible { display: flex; }
+  .sp-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .sp-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 30px;
+    font-weight: 400;
+    color: #fff;
+    line-height: 1;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
 
   @keyframes popIn {
     from { opacity:0; transform:translate(-50%,-50%) scale(0.2); }
@@ -207,11 +241,48 @@
 </div>
 
 <div id="field"></div>
+
+<!-- SCORE PANEL -->
+<div id="score-panel">
+  <div class="sp-label">Totale</div>
+  <div class="sp-value" id="sp-value">—</div>
+</div>
+
 <script>
 const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
+
+const APP_VERSION = 'v1.1.0';
+const BUILD_TIME  = '2026-03-01T00:00:00Z';
+console.log('%c AppSphere ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+function getScorePanelRect() {
+  const el = document.getElementById('score-panel');
+  if (!el || !el.classList.contains('visible')) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+
+function pushFromPanel(cx, cy, r, panel) {
+  if (!panel) return { x: cx, y: cy };
+  const closestX = clamp(cx, panel.x, panel.x + panel.w);
+  const closestY = clamp(cy, panel.y, panel.y + panel.h);
+  const dx = cx - closestX;
+  const dy = cy - closestY;
+  const dist = Math.hypot(dx, dy) || 0.001;
+  const minDist = r + GAP;
+  if (dist < minDist) {
+    const scale = (minDist - dist) / dist;
+    return { x: cx + dx * scale, y: cy + dy * scale };
+  }
+  return { x: cx, y: cy };
+}
 
 let nodes = []; // { el, x, y, r, app }
 let W, H;
@@ -227,27 +298,43 @@ function sizeOf(score) {
 function initialPlace(r, existingNodes) {
   const cx = W / 2;
   const cy = H / 2;
+  const panel = getScorePanelRect();
+
+  function overlapsPanelAt(x, y) {
+    if (!panel) return false;
+    const closestX = clamp(x, panel.x, panel.x + panel.w);
+    const closestY = clamp(y, panel.y, panel.y + panel.h);
+    return Math.hypot(x - closestX, y - closestY) < r + GAP;
+  }
+
   // Start tight at center, expand spread until a non-overlapping spot is found
   for (let attempt = 0; attempt < 200; attempt++) {
     const spread = r + attempt * (r * 0.5);
     for (let i = 0; i < 30; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist  = Math.random() * spread;
-      const x = Math.min(W - r - PAD, Math.max(r + PAD, cx + Math.cos(angle) * dist));
-      const y = Math.min(H - r - PAD, Math.max(r + PAD, cy + Math.sin(angle) * dist));
-      const ok = existingNodes.every(n => Math.hypot(x - n.x, y - n.y) >= r + n.r + GAP);
-      if (ok) return { x, y };
+      const x = clamp(cx + Math.cos(angle) * dist, r + PAD, W - r - PAD);
+      const y = clamp(cy + Math.sin(angle) * dist, r + PAD, H - r - PAD);
+      const okCircles = existingNodes.every(n => Math.hypot(x - n.x, y - n.y) >= r + n.r + GAP);
+      if (okCircles && !overlapsPanelAt(x, y)) return { x, y };
     }
   }
   return { x: cx, y: cy };
 }
 
 // ── COLLISION RESOLUTION ──
-// Iteratively push circles apart. draggedId is the one being moved (pinned).
+// Phase 1: push non-dragged circles away (dragged pinned).
+// Phase 2: back-pressure — if dragged still overlaps anything (circles backed
+//          against a wall), push the dragged circle back to eliminate all overlap.
 function resolveCollisions(draggedId) {
-  const ITERS = 40;
-  for (let iter = 0; iter < ITERS; iter++) {
+  const MAIN_ITERS = 80;
+  const BACK_ITERS = 30;
+  const panel = getScorePanelRect();
+
+  // ── Phase 1 ──
+  for (let iter = 0; iter < MAIN_ITERS; iter++) {
     let moved = false;
+
     for (let a = 0; a < nodes.length; a++) {
       for (let b = a + 1; b < nodes.length; b++) {
         const na = nodes[a];
@@ -259,32 +346,63 @@ function resolveCollisions(draggedId) {
         if (dist >= minDist) continue;
 
         moved = true;
-        const overlap = minDist - dist;
-        const nx = dx / dist;
-        const ny = dy / dist;
+        const push = (minDist - dist) / dist;
 
-        // dragged circle is pinned — push the other fully
         if (na.id === draggedId) {
-          nb.x += nx * overlap;
-          nb.y += ny * overlap;
+          nb.x += dx * push;
+          nb.y += dy * push;
         } else if (nb.id === draggedId) {
-          na.x -= nx * overlap;
-          na.y -= ny * overlap;
+          na.x -= dx * push;
+          na.y -= dy * push;
         } else {
-          // both free — split equally
-          na.x -= nx * overlap * 0.5;
-          na.y -= ny * overlap * 0.5;
-          nb.x += nx * overlap * 0.5;
-          nb.y += ny * overlap * 0.5;
+          na.x -= dx * push * 0.5;
+          na.y -= dy * push * 0.5;
+          nb.x += dx * push * 0.5;
+          nb.y += dy * push * 0.5;
         }
       }
     }
-    // clamp all to viewport
+
+    // Clamp non-dragged to viewport and push away from score panel
     nodes.forEach(n => {
       if (n.id === draggedId) return;
-      n.x = Math.min(W - n.r - PAD, Math.max(n.r + PAD, n.x));
-      n.y = Math.min(H - n.r - PAD, Math.max(n.r + PAD, n.y));
+      const p = pushFromPanel(n.x, n.y, n.r, panel);
+      if (p.x !== n.x || p.y !== n.y) moved = true;
+      n.x = clamp(p.x, n.r + PAD, W - n.r - PAD);
+      n.y = clamp(p.y, n.r + PAD, H - n.r - PAD);
     });
+
+    if (!moved) break;
+  }
+
+  // ── Phase 2: back-pressure ──
+  // If dragged circle still overlaps something (e.g. others are against the wall),
+  // push the dragged circle back until there is no overlap.
+  const dn = nodes.find(n => n.id === draggedId);
+  if (!dn) return;
+
+  for (let iter = 0; iter < BACK_ITERS; iter++) {
+    let moved = false;
+
+    for (const n of nodes) {
+      if (n.id === draggedId) continue;
+      const minDist = dn.r + n.r + GAP;
+      const dx = n.x - dn.x;
+      const dy = n.y - dn.y;
+      const dist = Math.hypot(dx, dy) || 0.01;
+      if (dist < minDist) {
+        moved = true;
+        const push = (minDist - dist) / dist;
+        dn.x -= dx * push;
+        dn.y -= dy * push;
+      }
+    }
+
+    // Keep dragged away from score panel and viewport edges
+    const p = pushFromPanel(dn.x, dn.y, dn.r, panel);
+    dn.x = clamp(p.x, dn.r + PAD, W - dn.r - PAD);
+    dn.y = clamp(p.y, dn.r + PAD, H - dn.r - PAD);
+
     if (!moved) break;
   }
 }
@@ -382,6 +500,11 @@ function render(apps) {
     makeDraggable(node);
     field.appendChild(wrap);
   });
+
+  // Update total score in the panel
+  const total = CURRENT_APPS.reduce((s, a) => s + a.score, 0);
+  const spv = document.getElementById('sp-value');
+  if (spv) spv.textContent = total.toLocaleString('it-IT');
 }
 
 // ── DRAG ──
@@ -492,6 +615,8 @@ async function logout() {
   }
   sessionStorage.removeItem('sb_token');
   document.getElementById('user-bar').classList.remove('visible');
+  document.getElementById('score-panel').classList.remove('visible');
+  document.getElementById('sp-value').textContent = '—';
   document.getElementById('login-screen').classList.remove('hidden');
 }
 
@@ -521,6 +646,7 @@ function showApp(user) {
   const name = user?.user_metadata?.full_name || user?.email || 'Utente';
   document.getElementById('user-name').textContent = name.split(' ')[0];
   document.getElementById('user-bar').classList.add('visible');
+  document.getElementById('score-panel').classList.add('visible');
   const ls = document.getElementById('login-screen');
   ls.classList.add('hidden');
   setTimeout(() => {
