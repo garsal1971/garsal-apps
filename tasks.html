@@ -2069,6 +2069,13 @@
     </div>
 
     <script>
+        const APP_VERSION = 'v19.17.48';
+        const BUILD_TIME  = '2026-03-01T12:00:00Z';
+
+        console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+            'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
+            'background:#222;color:#aaa;padding:2px 8px;border-radius:0 3px 3px 0');
+
         console.log('Script started');
         console.log('window.supabase:', window.supabase);
         
@@ -2168,7 +2175,21 @@
         }
 
         async function init() {
-            console.log('🚀 Tasks v19.17.48 - Init function started');
+            console.log('🚀 Tasks ' + APP_VERSION + ' - Init function started');
+
+            // Banner versione nel debug console in-app
+            setTimeout(() => {
+                const debugLogDiv = document.getElementById('debugLog');
+                const debugToggle = document.getElementById('debugToggle');
+                if (debugLogDiv) {
+                    if (debugToggle) debugToggle.style.display = 'block';
+                    debugLogDiv.innerHTML =
+                        `<div style="margin:0 0 0.4rem;padding:0.3rem 0.6rem;background:#1a0010;border-left:4px solid #FF3366;color:#FF3366;font-weight:bold;letter-spacing:.04em;">` +
+                        `● Tasks ${APP_VERSION} ` +
+                        `<span style="color:#666;font-weight:normal;font-size:.85em;">build: ${BUILD_TIME}</span>` +
+                        `</div>` + debugLogDiv.innerHTML;
+                }
+            }, 50);
 
             initDatePickers();
 
@@ -2323,10 +2344,30 @@
                 } else {
                     console.log(`✅ syncNotificationRules: task ${taskId} → preset IDs ${JSON.stringify(presetIds)}`);
                     showToast('🔔 Promemoria salvati');
+                    triggerFillQueue(); // aggiorna la coda notifiche immediatamente
                 }
             } catch (e) {
                 console.error('❌ syncNotificationRules exception:', e);
                 showToast(`❌ Eccezione promemoria: ${e.message}`);
+            }
+        }
+
+        async function triggerFillQueue() {
+            try {
+                const token = sbAccessToken;
+                if (!token) return;
+                const resp = await fetch(`${SUPABASE_URL}/functions/v1/fill-notification-queue`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!resp.ok) {
+                    console.warn('⚠️ triggerFillQueue: risposta non ok', resp.status);
+                    return;
+                }
+                const data = await resp.json();
+                console.log('✅ triggerFillQueue:', data);
+            } catch (e) {
+                console.warn('⚠️ triggerFillQueue eccezione:', e.message);
             }
         }
 
