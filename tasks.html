@@ -2069,8 +2069,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.17.49';
-        const BUILD_TIME  = '2026-03-01T14:00:00Z';
+        const APP_VERSION = 'v19.17.50';
+        const BUILD_TIME  = '2026-03-01T15:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2279,18 +2279,40 @@
 
         async function syncNotificationRules(taskId, taskType, reminderLabels, dueDate, entityTitle) {
             try {
+                // Fallback: se sbAccessToken non è disponibile, lo legge dalla sessione Supabase
+                // (il client sb salva la sessione in localStorage — condivisa tra le tab della stessa origin)
+                if (!sbAccessToken) {
+                    try {
+                        const { data: { session } } = await sb.auth.getSession();
+                        if (session?.access_token) {
+                            sbAccessToken = session.access_token;
+                            sessionStorage.setItem('sb_token', sbAccessToken);
+                            console.log('✅ syncNotificationRules: token recuperato da sb.auth.getSession()');
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ syncNotificationRules: getSession fallback fallito:', e.message);
+                    }
+                }
+
                 const token = sbAccessToken;
                 if (!token) {
                     console.warn('⚠️ syncNotificationRules: nessun SB_TOKEN, skip');
+                    showToast('⚠️ Sessione non disponibile: promemoria non salvato');
                     return;
                 }
                 const payload = decodeJWT(token);
                 const userId  = payload?.sub;
                 if (!userId) {
                     console.warn('⚠️ syncNotificationRules: impossibile decodificare user_id dal JWT');
+                    showToast('⚠️ Impossibile identificare utente: promemoria non salvato');
                     return;
                 }
                 const authSb = getAuthSb();
+                if (!authSb) {
+                    console.warn('⚠️ syncNotificationRules: authSb non disponibile');
+                    showToast('⚠️ Client non disponibile: promemoria non salvato');
+                    return;
+                }
 
                 console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, labels=${JSON.stringify(reminderLabels)}`);
 
@@ -2322,30 +2344,59 @@
                     showToast(`⚠️ Promemoria non trovati nei preset: ${unmatched.join(', ')}`);
                 }
 
-                // UPSERT: un solo record per task con l'array JSONB degli int_id selezionati
-                // conflict target: (user_id, app, entity_id) → richiede UNIQUE CONSTRAINT sul DB
+                // Se nessun preset_id valido trovato → tratta come nessun promemoria
+                if (presetIds.length === 0) {
+                    console.warn('⚠️ syncNotificationRules: nessun preset_id valido, elimino eventuale regola esistente');
+                    const { error: delErr2 } = await authSb.from('cm_notification_rules')
+                        .delete()
+                        .eq('app', 'tasks')
+                        .eq('entity_id', String(taskId))
+                        .eq('user_id', userId);
+                    if (delErr2) console.warn('⚠️ syncNotificationRules delete (no presetIds) error:', delErr2);
+                    triggerFillQueue();
+                    return;
+                }
+
+                // SELECT + INSERT/UPDATE: più affidabile di upsert con onConflict
+                // (non richiede UNIQUE CONSTRAINT se non già presente sul DB)
+                const { data: existing } = await authSb
+                    .from('cm_notification_rules')
+                    .select('id')
+                    .eq('user_id', userId)
+                    .eq('app', 'tasks')
+                    .eq('entity_id', String(taskId))
+                    .maybeSingle();
+
                 const rule = {
                     user_id:          userId,
                     app:              'tasks',
                     entity_id:        String(taskId),
                     entity_type:      taskType,
                     entity_title:     entityTitle || null,
-                    reminder_presets: { reminders: presetIds, due_at: dueDate || null },   // JSONB: {"reminders": [1, 3, 5], "due_at": "2026-02-26T10:00:00"}
+                    reminder_presets: { reminders: presetIds, due_at: dueDate || null },
                     channel:          'telegram',
                     enabled:          true
                 };
 
-                const { error } = await authSb
-                    .from('cm_notification_rules')
-                    .upsert(rule, { onConflict: 'user_id,app,entity_id' });
+                let error;
+                if (existing?.id) {
+                    ({ error } = await authSb
+                        .from('cm_notification_rules')
+                        .update(rule)
+                        .eq('id', existing.id));
+                } else {
+                    ({ error } = await authSb
+                        .from('cm_notification_rules')
+                        .insert(rule));
+                }
 
                 if (error) {
-                    console.error('❌ syncNotificationRules upsert error:', error);
+                    console.error('❌ syncNotificationRules save error:', error);
                     showToast(`❌ Errore salvataggio promemoria: ${error.message || JSON.stringify(error)}`);
                 } else {
                     console.log(`✅ syncNotificationRules: task ${taskId} → preset IDs ${JSON.stringify(presetIds)}`);
                     showToast('🔔 Promemoria salvati');
-                    triggerFillQueue(); // aggiorna la coda notifiche immediatamente
+                    triggerFillQueue();
                 }
             } catch (e) {
                 console.error('❌ syncNotificationRules exception:', e);
