@@ -2184,6 +2184,20 @@
         async function init() {
             console.log('🚀 Tasks ' + APP_VERSION + ' - Init function started');
 
+            // Banner versione nel debug console in-app
+            setTimeout(() => {
+                const debugLogDiv = document.getElementById('debugLog');
+                const debugToggle = document.getElementById('debugToggle');
+                if (debugLogDiv) {
+                    if (debugToggle) debugToggle.style.display = 'block';
+                    debugLogDiv.innerHTML =
+                        `<div style="margin:0 0 0.4rem;padding:0.3rem 0.6rem;background:#1a0010;border-left:4px solid #FF3366;color:#FF3366;font-weight:bold;letter-spacing:.04em;">` +
+                        `● Tasks ${APP_VERSION} ` +
+                        `<span style="color:#666;font-weight:normal;font-size:.85em;">build: ${BUILD_TIME}</span>` +
+                        `</div>` + debugLogDiv.innerHTML;
+                }
+            }, 50);
+
             initDatePickers();
 
             // Reset sidebar state on desktop
