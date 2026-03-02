@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.1.4</title>
+<title>AppSphere v1.1.5</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -255,7 +255,7 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.1.4';
+const APP_VERSION = 'v1.1.5';
 const BUILD_TIME  = '2026-03-01T00:00:00Z';
 console.log('%c AppSphere ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
@@ -276,13 +276,28 @@ function pushFromPanel(cx, cy, r, panel) {
   const closestY = clamp(cy, panel.y, panel.y + panel.h);
   const dx = cx - closestX;
   const dy = cy - closestY;
-  const dist = Math.hypot(dx, dy) || 0.001;
+  const dist = Math.hypot(dx, dy);
   const minDist = r + GAP;
-  if (dist < minDist) {
+  if (dist >= minDist) return { x: cx, y: cy };
+
+  if (dist > 0.001) {
+    // Normal case: push the center away from the nearest panel boundary.
     const scale = (minDist - dist) / dist;
     return { x: cx + dx * scale, y: cy + dy * scale };
   }
-  return { x: cx, y: cy };
+
+  // Edge case: center is inside (or exactly on) the panel rectangle.
+  // dx = dy = 0, so direction is undefined — escape on the axis with the
+  // least penetration depth so the movement is minimal.
+  const dL = cx - panel.x;
+  const dR = (panel.x + panel.w) - cx;
+  const dT = cy - panel.y;
+  const dB = (panel.y + panel.h) - cy;
+  const m  = Math.min(dL, dR, dT, dB);
+  if (m === dL) return { x: panel.x           - r - GAP, y: cy };
+  if (m === dR) return { x: panel.x + panel.w + r + GAP, y: cy };
+  if (m === dT) return { x: cx, y: panel.y           - r - GAP };
+                return { x: cx, y: panel.y + panel.h + r + GAP };
 }
 
 let nodes = []; // { el, x, y, r, app }
@@ -375,12 +390,13 @@ function resolveCollisions(draggedId) {
         }
       }
 
-      // Viewport + panel constraints for every non-D circle
+      // Viewport clamp first, then panel (panel has final authority).
       nodes.forEach(n => {
         if (n.id === draggedId) return;
+        n.x = clamp(n.x, n.r + PAD, W - n.r - PAD);
+        n.y = clamp(n.y, n.r + PAD, H - n.r - PAD);
         const p = pushFromPanel(n.x, n.y, n.r, panel);
-        n.x = clamp(p.x, n.r + PAD, W - n.r - PAD);
-        n.y = clamp(p.y, n.r + PAD, H - n.r - PAD);
+        n.x = p.x; n.y = p.y;
       });
 
       // Convergence: compare against snapshot (catches push↔constraint oscillation)
@@ -410,9 +426,10 @@ function resolveCollisions(draggedId) {
     const prevX = dn.x, prevY = dn.y;
     dn.x += pushDx;
     dn.y += pushDy;
+    dn.x = clamp(dn.x, dn.r + PAD, W - dn.r - PAD);
+    dn.y = clamp(dn.y, dn.r + PAD, H - dn.r - PAD);
     const p = pushFromPanel(dn.x, dn.y, dn.r, panel);
-    dn.x = clamp(p.x, dn.r + PAD, W - dn.r - PAD);
-    dn.y = clamp(p.y, dn.r + PAD, H - dn.r - PAD);
+    dn.x = p.x; dn.y = p.y;
     if (Math.abs(dn.x - prevX) + Math.abs(dn.y - prevY) < 0.01) break;
   }
 }
@@ -438,9 +455,10 @@ function settlePositions() {
       }
     }
     nodes.forEach(n => {
+      n.x = clamp(n.x, n.r + PAD, W - n.r - PAD);
+      n.y = clamp(n.y, n.r + PAD, H - n.r - PAD);
       const p = pushFromPanel(n.x, n.y, n.r, panel);
-      n.x = clamp(p.x, n.r + PAD, W - n.r - PAD);
-      n.y = clamp(p.y, n.r + PAD, H - n.r - PAD);
+      n.x = p.x; n.y = p.y;
     });
     let netMove = 0;
     nodes.forEach((n, i) => netMove += Math.abs(n.x - snap[i][0]) + Math.abs(n.y - snap[i][1]));
@@ -595,9 +613,11 @@ function makeDraggable(node) {
     }
     if (!moved) return;
 
-    // Update dragged node position (clamped)
-    node.x = Math.min(W - node.r - PAD, Math.max(node.r + PAD, origX + dx));
-    node.y = Math.min(H - node.r - PAD, Math.max(node.r + PAD, origY + dy));
+    // Update dragged node position: viewport clamp, then panel exclusion.
+    node.x = clamp(origX + dx, node.r + PAD, W - node.r - PAD);
+    node.y = clamp(origY + dy, node.r + PAD, H - node.r - PAD);
+    const pp = pushFromPanel(node.x, node.y, node.r, getScorePanelRect());
+    node.x = pp.x; node.y = pp.y;
 
     // Resolve collisions keeping this node pinned
     resolveCollisions(node.id);
