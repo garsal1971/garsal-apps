@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Events Log v2.0</title>
+    <title>Events Log v2.1.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -20,6 +20,11 @@
             --border: #E5E7EB;
             --card-bg: #FFFFFF;
             --input-bg: #F9FAFB;
+            /* Badge size scales */
+            --badge-smart-name: 0.78rem;
+            --badge-smart-pts: 0.80rem;
+            --badge-dash-val: 1.6rem;
+            --badge-dash-lbl: 0.70rem;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -277,8 +282,8 @@
         .event-btn:active { transform: translateY(-1px); }
 
         .event-btn .ev-icon { font-size: 2rem; line-height: 1; }
-        .event-btn .ev-name { font-size: 0.78rem; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2; }
-        .event-btn .ev-pts { font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700; }
+        .event-btn .ev-name { font-size: var(--badge-smart-name); font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2; }
+        .event-btn .ev-pts { font-family: 'Space Mono', monospace; font-size: var(--badge-smart-pts); font-weight: 700; }
         .event-btn .ev-divider { width: 60%; height: 1px; background: currentColor; opacity: 0.15; }
         .event-btn .ev-total { font-family: 'Space Mono', monospace; font-size: 0.95rem; font-weight: 700; }
         .event-btn .ev-total-label { font-size: 0.62rem; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.3px; margin-top: -0.15rem; }
@@ -300,12 +305,12 @@
 
         .stat-val {
             font-family: 'Space Mono', monospace;
-            font-size: 1.6rem;
+            font-size: var(--badge-dash-val);
             font-weight: 700;
             line-height: 1;
         }
 
-        .stat-lbl { font-size: 0.7rem; text-transform: uppercase; opacity: 0.6; margin-top: 0.3rem; letter-spacing: 0.5px; }
+        .stat-lbl { font-size: var(--badge-dash-lbl); text-transform: uppercase; opacity: 0.6; margin-top: 0.3rem; letter-spacing: 0.5px; }
 
         /* ===== LOG LIST ===== */
         .log-entry {
@@ -608,6 +613,7 @@
             <div class="nav-item" onclick="showPage('historyPage', this)" data-text="Storico">📋</div>
             <div class="nav-item" onclick="showPage('mgmtPage', this)" data-text="Gestione">⚙️</div>
             <div class="nav-item" onclick="showPage('statsPage', this)" data-text="Statistiche">📊</div>
+            <div class="nav-item" onclick="showPage('settingsPage', this)" data-text="Impostazioni">🔧</div>
         </nav>
 
         <div class="score-widget">
@@ -688,6 +694,58 @@
                     <div class="empty-icon">🗂️</div>
                     <p>Nessun gruppo configurato.</p>
                     <button class="btn btn-accent" onclick="openGroupModal()">+ Crea il primo gruppo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== SETTINGS PAGE ====== -->
+        <div class="page" id="settingsPage">
+
+            <div class="card" style="margin-bottom:1rem;">
+                <h3 style="margin-bottom:1.5rem;">📏 Dimensione Badge</h3>
+
+                <div class="form-group">
+                    <label class="form-label">Vista Smart (Log Rapido)</label>
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <span style="font-size:0.8rem; color:#999;">A</span>
+                        <input type="range" id="settingBadgeSmart" min="60" max="130" step="5" value="100"
+                               style="flex:1; height:6px; -webkit-appearance:auto; appearance:auto; accent-color:var(--primary);"
+                               oninput="document.getElementById('badgeSmartLabel').textContent = this.value + '%';">
+                        <span style="font-size:1.2rem; color:#999;">A</span>
+                        <span id="badgeSmartLabel" style="font-weight:700; min-width:3.5rem; text-align:center; background:var(--primary); color:white; padding:0.2rem 0.5rem; border-radius:4px; font-size:0.9rem;">100%</span>
+                    </div>
+                    <small style="opacity:0.7; display:block; margin-top:0.5rem;">
+                        Testo dei pulsanti nella pagina Log Rapido — nome evento e punti (60%–130%)
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vista Dashboard (Statistiche)</label>
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <span style="font-size:0.8rem; color:#999;">A</span>
+                        <input type="range" id="settingBadgeDash" min="60" max="130" step="5" value="100"
+                               style="flex:1; height:6px; -webkit-appearance:auto; appearance:auto; accent-color:var(--primary);"
+                               oninput="document.getElementById('badgeDashLabel').textContent = this.value + '%';">
+                        <span style="font-size:1.2rem; color:#999;">A</span>
+                        <span id="badgeDashLabel" style="font-weight:700; min-width:3.5rem; text-align:center; background:var(--primary); color:white; padding:0.2rem 0.5rem; border-radius:4px; font-size:0.9rem;">100%</span>
+                    </div>
+                    <small style="opacity:0.7; display:block; margin-top:0.5rem;">
+                        Valori e label nelle strisce statistiche (Log Rapido, Statistiche) (60%–130%)
+                    </small>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveSettings()">💾 Salva Impostazioni</button>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom:1rem;">Informazioni Sistema</h3>
+                <div style="display:flex; justify-content:space-between; padding:0.4rem 0; border-bottom:1px solid var(--border);">
+                    <span style="color:var(--muted); font-size:0.9rem;">Versione</span>
+                    <span style="font-weight:700;" id="infoVersion"></span>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:0.4rem 0;">
+                    <span style="color:var(--muted); font-size:0.9rem;">Database</span>
+                    <span style="font-weight:700;">Supabase PostgreSQL</span>
                 </div>
             </div>
         </div>
@@ -875,6 +933,15 @@
 
 <script>
     // ==========================================
+    // VERSION
+    // ==========================================
+    var APP_VERSION = 'v2.1.0';
+    var BUILD_TIME  = '2026-03-03T00:00:00Z';
+    console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+        'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+    // ==========================================
     // SUPABASE
     // ==========================================
     const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
@@ -903,10 +970,11 @@ function showPage(pageId, navEl) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     if (navEl) navEl.classList.add('active');
 
-    if (pageId === 'logPage')     { renderLogPage(); }
-    if (pageId === 'historyPage') { renderHistory(); }
-    if (pageId === 'mgmtPage')    { renderMgmt(); }
-    if (pageId === 'statsPage')   { renderStats(); }
+    if (pageId === 'logPage')      { renderLogPage(); }
+    if (pageId === 'historyPage')  { renderHistory(); }
+    if (pageId === 'mgmtPage')     { renderMgmt(); }
+    if (pageId === 'statsPage')    { renderStats(); }
+    if (pageId === 'settingsPage') { renderSettingsPage(); }
 }
 
 // ==========================================
@@ -1817,9 +1885,55 @@ function setLoading(on) {
 }
 
 // ==========================================
+// SETTINGS
+// ==========================================
+const EL_SETTINGS_KEY = 'el_badge_settings';
+
+function loadSettings() {
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(EL_SETTINGS_KEY) || '{}'); } catch(e) {}
+    const smartScale = parseInt(s.badge_smart_scale || '100');
+    const dashScale  = parseInt(s.badge_dash_scale  || '100');
+    applyBadgeScales(smartScale, dashScale);
+}
+
+function applyBadgeScales(smartScale, dashScale) {
+    const root = document.documentElement;
+    root.style.setProperty('--badge-smart-name', (0.78 * smartScale / 100).toFixed(3) + 'rem');
+    root.style.setProperty('--badge-smart-pts',  (0.80 * smartScale / 100).toFixed(3) + 'rem');
+    root.style.setProperty('--badge-dash-val',   (1.60 * dashScale  / 100).toFixed(3) + 'rem');
+    root.style.setProperty('--badge-dash-lbl',   (0.70 * dashScale  / 100).toFixed(3) + 'rem');
+}
+
+function renderSettingsPage() {
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(EL_SETTINGS_KEY) || '{}'); } catch(e) {}
+    const smartScale = parseInt(s.badge_smart_scale || '100');
+    const dashScale  = parseInt(s.badge_dash_scale  || '100');
+
+    document.getElementById('settingBadgeSmart').value = smartScale;
+    document.getElementById('badgeSmartLabel').textContent = smartScale + '%';
+    document.getElementById('settingBadgeDash').value = dashScale;
+    document.getElementById('badgeDashLabel').textContent = dashScale + '%';
+    document.getElementById('infoVersion').textContent = APP_VERSION;
+}
+
+function saveSettings() {
+    const smartScale = parseInt(document.getElementById('settingBadgeSmart').value);
+    const dashScale  = parseInt(document.getElementById('settingBadgeDash').value);
+    localStorage.setItem(EL_SETTINGS_KEY, JSON.stringify({
+        badge_smart_scale: smartScale,
+        badge_dash_scale:  dashScale
+    }));
+    applyBadgeScales(smartScale, dashScale);
+    showToast('✅ Impostazioni salvate');
+}
+
+// ==========================================
 // INIT
 // ==========================================
 window.addEventListener('load', async () => {
+    loadSettings();
     showToast('⏳ Caricamento dati...');
     await loadGroups();
     await loadEvents();
