@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.3.2</title>
+    <title>Weight Quest v3.3.3</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -751,8 +751,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.3.2';
-        var BUILD_TIME  = '2026-03-03T11:00:00Z';
+        var APP_VERSION = 'v3.3.3';
+        var BUILD_TIME  = '2026-03-03T12:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3704,8 +3704,11 @@
         // STATISTICHE
         // ============================================================
 
-        // Individua periodi di dieta: calo >= 5 kg in <= 120 giorni
-        // Algoritmo: peak-to-valley sulla media mobile a 7 giorni
+        // Individua periodi di dieta: calo >= 5 kg dal picco al vero minimo locale
+        // (minimo prima della ripresa stabile del peso).
+        // Algoritmo: peak-to-valley sulla media mobile a 7 giorni;
+        // la fine del periodo è il minimo reale prima che il peso risalga
+        // di almeno REBOUND_KG per almeno REBOUND_PTS punti consecutivi.
         function detectDietPeriods(data) {
             if (!data || data.length < 10) return [];
 
@@ -3729,9 +3732,10 @@
                 return { date: days[i].date, w: sum / cnt };
             });
 
-            var MAX_DAYS = 120; // finestra massima (giorni)
-            var MIN_DROP = 5.0; // calo minimo (kg)
-            var periods  = [];
+            var MIN_DROP    = 5.0;  // calo minimo (kg) per qualificare come dieta
+            var REBOUND_KG  = 1.0;  // risalita minima oltre il minimo per considerare ripresa
+            var REBOUND_PTS = 7;    // punti consecutivi sopra soglia per confermare la ripresa
+            var periods     = [];
 
             for (var i = 0; i < smoothed.length; i++) {
                 // Picco locale: massimo nella finestra di ±7 punti
@@ -3741,17 +3745,30 @@
                 }
                 if (!isPeak) continue;
 
-                // Cerca il minimo nei prossimi MAX_DAYS giorni
-                var peakDate = new Date(smoothed[i].date);
-                var bestDrop = 0, bestJ = -1;
+                // Scansiona in avanti per trovare il VERO minimo locale,
+                // cioè il punto più basso prima che il peso risalga in modo stabile.
+                var minW = smoothed[i].w;
+                var minJ = i;
+                var risingCnt = 0;
+
                 for (var j = i + 1; j < smoothed.length; j++) {
-                    var daysDiff = (new Date(smoothed[j].date) - peakDate) / 86400000;
-                    if (daysDiff > MAX_DAYS) break;
-                    var drop = smoothed[i].w - smoothed[j].w;
-                    if (drop > bestDrop) { bestDrop = drop; bestJ = j; }
+                    if (smoothed[j].w <= minW) {
+                        // Nuovo minimo — aggiorna e azzera il contatore ripresa
+                        minW = smoothed[j].w;
+                        minJ = j;
+                        risingCnt = 0;
+                    } else if (smoothed[j].w > minW + REBOUND_KG) {
+                        // Peso sopra la soglia di ripresa
+                        risingCnt++;
+                        if (risingCnt >= REBOUND_PTS) break; // ripresa confermata
+                    } else {
+                        // Oscillazione minore: non conta come ripresa
+                        risingCnt = 0;
+                    }
                 }
 
-                if (bestDrop < MIN_DROP || bestJ < 0) continue;
+                var drop = smoothed[i].w - smoothed[minJ].w;
+                if (drop < MIN_DROP || minJ === i) continue;
 
                 // Evita duplicati ravvicinati (< 30 giorni di distanza dal picco)
                 var tooClose = periods.some(function(p) {
@@ -3759,13 +3776,13 @@
                 });
                 if (tooClose) continue;
 
-                var durDays = Math.round((new Date(days[bestJ].date) - new Date(days[i].date)) / 86400000);
+                var durDays = Math.round((new Date(days[minJ].date) - new Date(days[i].date)) / 86400000);
                 periods.push({
                     startDate:   days[i].date,
-                    endDate:     days[bestJ].date,
+                    endDate:     days[minJ].date,
                     startWeight: Math.round(smoothed[i].w * 10) / 10,
-                    endWeight:   Math.round(smoothed[bestJ].w * 10) / 10,
-                    drop:        Math.round(bestDrop * 10) / 10,
+                    endWeight:   Math.round(smoothed[minJ].w * 10) / 10,
+                    drop:        Math.round(drop * 10) / 10,
                     days:        durDays
                 });
             }
@@ -3878,7 +3895,7 @@
 
             // Periodi di dieta
             html += '<div class="card">';
-            html += '<h3>🏃 Periodi di Dieta <small style="font-size:13px;font-weight:normal;color:#888">(calo ≥ 5 kg in ≤ 120 giorni)</small></h3>';
+            html += '<h3>🏃 Periodi di Dieta <small style="font-size:13px;font-weight:normal;color:#888">(calo ≥ 5 kg dal picco al minimo reale)</small></h3>';
             if (periods.length === 0) {
                 html += '<p style="color:#888;font-size:14px">Nessun periodo con calo ≥ 5 kg rilevato.</p>';
             } else {
