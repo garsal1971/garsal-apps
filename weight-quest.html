@@ -596,6 +596,16 @@
             <div id="tabellaPage" class="page">
                 <div class="card">
                     <h3>📊 Storico Pesate</h3>
+                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+                        <input type="text" id="tableSearchDate" placeholder="Cerca data (es. 2025-03)"
+                               style="flex:1; min-width:140px; padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:14px;"
+                               oninput="tableSearch()">
+                        <select id="tableRowsPerPage" onchange="tableChangeRows()" style="padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+                            <option value="20">20 righe</option>
+                            <option value="50">50 righe</option>
+                            <option value="100">100 righe</option>
+                        </select>
+                    </div>
                     <div style="overflow-x: auto;">
                         <table>
                             <thead>
@@ -610,6 +620,11 @@
                             </thead>
                             <tbody id="weightTableBody"></tbody>
                         </table>
+                    </div>
+                    <div id="tablePagination" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; flex-wrap:wrap;">
+                        <button id="tablePrevBtn" onclick="tableGoPage(tablePage-1)" style="padding:7px 14px; border:1px solid #ddd; border-radius:6px; background:white; cursor:pointer; font-size:14px;">◀</button>
+                        <span id="tablePageInfo" style="font-size:14px; color:#555;"></span>
+                        <button id="tableNextBtn" onclick="tableGoPage(tablePage+1)" style="padding:7px 14px; border:1px solid #ddd; border-radius:6px; background:white; cursor:pointer; font-size:14px;">▶</button>
                     </div>
                 </div>
             </div>
@@ -3069,10 +3084,17 @@
             }(0));
         }
 
-        function updateWeightTable(data) {
-            var tbody = document.getElementById('weightTableBody');
-            tbody.innerHTML = '';
+        // --- STATO PAGINAZIONE TABELLA ---
+        var tablePage         = 1;
+        var tableRowsPerPage  = 20;
+        var tableAllDays      = [];   // tutte le date ordinate desc (reali + interpolate)
+        var tableDayGroups    = {};
+        var tableInterpDays   = {};
+        var tableCumulMap     = {};
+        var tableDailyScoreMap= {};
+        var tableObj          = null;
 
+        function updateWeightTable(data) {
             var obj          = userData.currentObjective || null;
             var startDateStr = obj ? obj.start_date : null;
             var endDateStr   = obj ? obj.end_date   : null;
@@ -3109,22 +3131,12 @@
 
             var allDays = Object.keys(dayGroups).concat(Object.keys(interpolatedDays));
 
-            if (allDays.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="padding: 20px; text-align: center; color: #999;">Nessun dato disponibile</td></tr>';
-                return;
-            }
-
-            // Ordina per data decrescente (per display)
-            var sortedDays = allDays.sort(function(a, b) { return b.localeCompare(a); });
-
             // Costruisce mappa data→punteggio cumulativo in ordine cronologico
-            // (pesate reali + giorni interpolati, entrambi contribuiscono al punteggio)
             var cumulativeMap = {};
             var dailyScoreMap = {};
             var cumulative = 0;
 
             if (obj) {
-                // Unisce giorni reali e interpolati, ordina cronologicamente
                 var allDaysAsc = Object.keys(dayGroups)
                     .concat(Object.keys(interpolatedDays))
                     .filter(function(d) { return d >= startDateStr && d <= endDateStr; })
@@ -3164,10 +3176,72 @@
                 });
             }
 
-            // Render righe in ordine decrescente
-            sortedDays.forEach(function(date) {
-                var isInterpolated = !!interpolatedDays[date];
-                var dayData  = isInterpolated ? null : dayGroups[date];
+            // Salva stato globale per paginazione
+            tableDayGroups     = dayGroups;
+            tableInterpDays    = interpolatedDays;
+            tableCumulMap      = cumulativeMap;
+            tableDailyScoreMap = dailyScoreMap;
+            tableObj           = obj;
+            tableAllDays       = allDays.sort(function(a, b) { return b.localeCompare(a); });
+
+            tablePage = 1;
+            tableRenderPage();
+        }
+
+        function tableSearch() {
+            tablePage = 1;
+            tableRenderPage();
+        }
+
+        function tableChangeRows() {
+            tableRowsPerPage = parseInt(document.getElementById('tableRowsPerPage').value, 10);
+            tablePage = 1;
+            tableRenderPage();
+        }
+
+        function tableGoPage(n) {
+            var filtered = tableFilteredDays();
+            var total = Math.ceil(filtered.length / tableRowsPerPage) || 1;
+            tablePage = Math.max(1, Math.min(n, total));
+            tableRenderPage();
+        }
+
+        function tableFilteredDays() {
+            var q = (document.getElementById('tableSearchDate') ? document.getElementById('tableSearchDate').value : '').trim().toLowerCase();
+            if (!q) return tableAllDays;
+            return tableAllDays.filter(function(d) { return d.toLowerCase().indexOf(q) !== -1; });
+        }
+
+        function tableRenderPage() {
+            var tbody = document.getElementById('weightTableBody');
+            tbody.innerHTML = '';
+
+            var filtered = tableFilteredDays();
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="padding: 20px; text-align: center; color: #999;">Nessun dato disponibile</td></tr>';
+                document.getElementById('tablePageInfo').textContent = '';
+                document.getElementById('tablePrevBtn').disabled = true;
+                document.getElementById('tableNextBtn').disabled = true;
+                return;
+            }
+
+            var totalPages = Math.ceil(filtered.length / tableRowsPerPage);
+            if (tablePage > totalPages) tablePage = totalPages;
+
+            var start    = (tablePage - 1) * tableRowsPerPage;
+            var end      = Math.min(start + tableRowsPerPage, filtered.length);
+            var pageDays = filtered.slice(start, end);
+
+            var obj          = tableObj;
+            var startDateStr = obj ? obj.start_date : null;
+            var endDateStr   = obj ? obj.end_date   : null;
+
+            var fragment = document.createDocumentFragment();
+
+            pageDays.forEach(function(date) {
+                var isInterpolated = !!tableInterpDays[date];
+                var dayData  = isInterpolated ? null : tableDayGroups[date];
 
                 var minEntry = dayData ? dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; }) : null;
                 var maxEntry = dayData ? dayData.reduce(function(a, b) { return a.weight > b.weight ? a : b; }) : null;
@@ -3180,17 +3254,15 @@
                     ? (minEntry.target_weight || getInterpolatedTarget(date))
                     : getInterpolatedTarget(date);
 
-                // Per i giorni senza pesate: peso stimato dall'andamento della serie reale
                 var interpWeight = isInterpolated
-                    ? getInterpolatedWeightFromSeries(date, dayGroups)
+                    ? getInterpolatedWeightFromSeries(date, tableDayGroups)
                     : null;
 
                 var inRange   = obj && (date >= startDateStr && date <= endDateStr);
                 var isLastDay = obj && (date === endDateStr);
 
-                // Punteggio giornaliero (pesate reali e giorni interpolati)
-                var dailyScore = (inRange && dailyScoreMap[date] !== undefined)
-                    ? dailyScoreMap[date]
+                var dailyScore = (inRange && tableDailyScoreMap[date] !== undefined)
+                    ? tableDailyScoreMap[date]
                     : null;
 
                 var tr = document.createElement('tr');
@@ -3198,7 +3270,6 @@
                 tr.style.borderBottom = '1px solid #eee';
 
                 if (isInterpolated) {
-                    // Riga senza pesata reale: sfondo leggermente diverso, corsivo
                     tr.style.background = '#f9f9f9';
                     tr.style.fontStyle = 'italic';
                     tr.style.opacity = '0.7';
@@ -3206,12 +3277,11 @@
                     tr.style.opacity = '0.4';
                 }
 
-                // -- DATA --
+                // DATA
                 var tdDate = document.createElement('td');
                 tdDate.style.padding = '10px';
                 tdDate.style.fontWeight = 'bold';
 
-                // Precalcola tipo pesata
                 var hasSync = false, hasManual = false, manualEntry = null;
                 if (!isInterpolated) {
                     hasSync     = dayData.some(function(e) { return e.time !== 'Manuale'; });
@@ -3219,7 +3289,6 @@
                     manualEntry = hasManual ? dayData.find(function(e) { return e.time === 'Manuale'; }) : null;
                 }
 
-                // -- ICONA TIPO (prima della data, sempre visibile) --
                 var iconInline = document.createElement('span');
                 if (isInterpolated) {
                     var badge = document.createElement('span');
@@ -3241,11 +3310,8 @@
                     iconInline.appendChild(manBadge);
                 }
                 tdDate.appendChild(iconInline);
-
-                // -- TESTO DATA --
                 tdDate.appendChild(document.createTextNode(date));
 
-                // -- BOTTONI AZIONE (dopo la data, solo desktop) --
                 var btnInline = document.createElement('span');
                 btnInline.className = 'row-detail-inline';
                 if (isInterpolated) {
@@ -3278,7 +3344,6 @@
                 }
                 tdDate.appendChild(btnInline);
 
-                // -- CLICK SU RIGA → popup mobile --
                 tr.addEventListener('click', (function(rowInfo) {
                     return function() {
                         if (window.innerWidth <= 768) showWeightRowDetail(rowInfo);
@@ -3296,12 +3361,12 @@
                     maxTime: maxTime,
                     interpWeight: interpWeight,
                     dailyScore: dailyScore,
-                    cumulativeScore: cumulativeMap[date]
+                    cumulativeScore: tableCumulMap[date]
                 }));
 
                 tr.appendChild(tdDate);
 
-                // -- TARGET --
+                // TARGET
                 var tdTarget = document.createElement('td');
                 tdTarget.style.padding = '10px';
                 tdTarget.style.textAlign = 'center';
@@ -3310,14 +3375,13 @@
                 tdTarget.textContent = target ? target.toFixed(1) + ' kg' : '--';
                 tr.appendChild(tdTarget);
 
-                // -- PESO MIN --
+                // PESO MIN
                 var tdMin = document.createElement('td');
                 tdMin.style.padding = '10px';
                 tdMin.style.textAlign = 'center';
                 tdMin.style.fontWeight = 'bold';
                 tdMin.style.fontSize = '1.1em';
                 if (isInterpolated) {
-                    // Peso stimato dall'andamento della serie (non dal target milestone)
                     tdMin.textContent = interpWeight !== null ? interpWeight.toFixed(1) + ' kg' : '—';
                     tdMin.style.color = '#aaa';
                     tdMin.style.fontStyle = 'italic';
@@ -3327,14 +3391,13 @@
                 }
                 tr.appendChild(tdMin);
 
-                // -- PESO MAX --
+                // PESO MAX
                 var tdMax = document.createElement('td');
                 tdMax.style.padding = '10px';
                 tdMax.style.textAlign = 'center';
                 tdMax.style.fontWeight = 'bold';
                 tdMax.style.fontSize = '1.1em';
                 if (isInterpolated) {
-                    // Peso stimato dall'andamento della serie (non dal target milestone)
                     tdMax.textContent = interpWeight !== null ? interpWeight.toFixed(1) + ' kg' : '—';
                     tdMax.style.color = '#aaa';
                     tdMax.style.fontStyle = 'italic';
@@ -3344,7 +3407,7 @@
                 }
                 tr.appendChild(tdMax);
 
-                // -- PUNTI GIORNALIERI --
+                // PUNTI
                 var tdScore = document.createElement('td');
                 tdScore.style.padding = '10px';
                 tdScore.style.textAlign = 'center';
@@ -3362,14 +3425,14 @@
                 }
                 tr.appendChild(tdScore);
 
-                // -- PUNTEGGIO CUMULATIVO --
+                // CUMULATIVO
                 var tdCumulative = document.createElement('td');
                 tdCumulative.style.padding = '10px';
                 tdCumulative.style.textAlign = 'center';
                 tdCumulative.style.fontWeight = 'bold';
                 tdCumulative.style.fontSize = '1.1em';
-                if (cumulativeMap[date] !== undefined) {
-                    var cum = cumulativeMap[date];
+                if (tableCumulMap[date] !== undefined) {
+                    var cum = tableCumulMap[date];
                     tdCumulative.textContent = (cum > 0 ? '+' : '') + cum;
                     tdCumulative.style.color = cum >= 0 ? '#00B894' : '#E74C3C';
                 } else {
@@ -3378,8 +3441,16 @@
                 }
                 tr.appendChild(tdCumulative);
 
-                tbody.appendChild(tr);
+                fragment.appendChild(tr);
             });
+
+            tbody.appendChild(fragment);
+
+            // Aggiorna controlli paginazione
+            var info = 'Pagina ' + tablePage + ' / ' + totalPages + '  (' + filtered.length + ' giorni)';
+            document.getElementById('tablePageInfo').textContent = info;
+            document.getElementById('tablePrevBtn').disabled = (tablePage <= 1);
+            document.getElementById('tableNextBtn').disabled = (tablePage >= totalPages);
         }
 
         var initialChartWidth = null; // Salva larghezza iniziale
