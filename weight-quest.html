@@ -738,14 +738,13 @@
                 };
             }
 
-            _query(table, columns, orderCol, orderOpts, limit) {
+            _query(table, columns, orderCol, orderOpts, limit, offset) {
                 var url = this.url + '/rest/v1/' + table + '?select=' + (columns || '*');
                 if (orderCol) {
                     url += '&order=' + orderCol + '.' + (orderOpts && orderOpts.ascending ? 'asc' : 'desc');
                 }
-                if (limit) {
-                    url += '&limit=' + limit;
-                }
+                if (limit)  url += '&limit='  + limit;
+                if (offset) url += '&offset=' + offset;
 
                 return fetch(url, {
                     method: 'GET',
@@ -825,6 +824,29 @@
         var userData = { targetWeight: null, score: 0, weights: [], milestones: [] };
         var isLoadingData = false; // Flag per evitare caricamenti simultanei
         var tempMilestones = []; // Milestone temporanee prima del salvataggio
+
+        // Recupera TUTTI i record da ps_weight_tracking con paginazione automatica
+        // (Supabase PostgREST ha un limite di 1000 record per request)
+        function fetchAllWeights(orderCol, ascending) {
+            var PAGE = 1000;
+            var allRows = [];
+            function fetchPage(offset) {
+                return supabase._query(
+                    'ps_weight_tracking', '*',
+                    orderCol || 'date', { ascending: !!ascending },
+                    PAGE, offset
+                ).then(function(res) {
+                    if (res.error) return Promise.reject(res.error);
+                    var rows = res.data || [];
+                    allRows = allRows.concat(rows);
+                    if (rows.length === PAGE) {
+                        return fetchPage(offset + PAGE); // c'è ancora un'altra pagina
+                    }
+                    return { data: allRows, error: null };
+                });
+            }
+            return fetchPage(0);
+        }
 
         // LOG FUNCTION
         function log(msg) {
@@ -1994,12 +2016,8 @@
             
             isLoadingData = true;
             log('Caricamento dati da Supabase...');
-            
-            supabase
-                .from('ps_weight_tracking')
-                .select('*')
-                .order('date', { ascending: false })
-                .limit(100)
+
+            fetchAllWeights('date', false)
                 .then(function(response) {
                     if (response.error) {
                         log('ERROR: ' + response.error.message);
@@ -2041,11 +2059,7 @@
             log('Aggiornamento target_weight per nuovo obiettivo...');
             
             // Prima rileggi tutti i record esistenti per aggiornarli
-            supabase
-                .from('ps_weight_tracking')
-                .select('*')
-                .order('date', { ascending: false })
-                .limit(100)
+            fetchAllWeights('date', false)
                 .then(function(response) {
                     if (response.error) {
                         log('ERROR reload select: ' + response.error.message);
@@ -2093,11 +2107,7 @@
                     }
                     
                     // Ora ricarica i dati aggiornati
-                    return supabase
-                        .from('ps_weight_tracking')
-                        .select('*')
-                        .order('date', { ascending: false })
-                        .limit(100);
+                    return fetchAllWeights('date', false);
                 })
                 .then(function(response) {
                     if (response.error) {
