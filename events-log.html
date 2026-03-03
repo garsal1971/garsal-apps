@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Events Log v2.1.4</title>
+    <title>Events Log v2.1.5</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -23,8 +23,6 @@
             /* Badge size scales */
             --badge-smart-name: 0.82rem;
             --badge-smart-pts: 0.68rem;
-            --badge-dash-val: 1.6rem;
-            --badge-dash-lbl: 0.70rem;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -305,12 +303,12 @@
 
         .stat-val {
             font-family: 'Space Mono', monospace;
-            font-size: var(--badge-dash-val);
+            font-size: 1.6rem;
             font-weight: 700;
             line-height: 1;
         }
 
-        .stat-lbl { font-size: var(--badge-dash-lbl); text-transform: uppercase; opacity: 0.6; margin-top: 0.3rem; letter-spacing: 0.5px; }
+        .stat-lbl { font-size: 0.70rem; text-transform: uppercase; opacity: 0.6; margin-top: 0.3rem; letter-spacing: 0.5px; }
 
         /* ===== LOG LIST ===== */
         .log-entry {
@@ -719,22 +717,7 @@
                     </small>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Vista Dashboard (Statistiche)</label>
-                    <div style="display:flex; align-items:center; gap:0.75rem;">
-                        <span style="font-size:0.8rem; color:#999;">A</span>
-                        <input type="range" id="settingBadgeDash" min="60" max="250" step="5" value="100"
-                               style="flex:1; height:6px; -webkit-appearance:auto; appearance:auto; accent-color:var(--primary);"
-                               oninput="document.getElementById('badgeDashLabel').textContent = this.value + '%';">
-                        <span style="font-size:1.2rem; color:#999;">A</span>
-                        <span id="badgeDashLabel" style="font-weight:700; min-width:3.5rem; text-align:center; background:var(--primary); color:white; padding:0.2rem 0.5rem; border-radius:4px; font-size:0.9rem;">100%</span>
-                    </div>
-                    <small style="opacity:0.7; display:block; margin-top:0.5rem;">
-                        Valori e label nelle strisce statistiche (Log Rapido, Statistiche) (60%–250%)
-                    </small>
-                </div>
-
-                <button class="btn btn-primary" onclick="saveSettings()">💾 Salva Impostazioni</button>
+<button class="btn btn-primary" onclick="saveSettings()">💾 Salva Impostazioni</button>
             </div>
 
             <div class="card">
@@ -935,7 +918,7 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v2.1.4';
+    var APP_VERSION = 'v2.1.5';
     var BUILD_TIME  = '2026-03-03T11:30:00Z';
     console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
@@ -1891,41 +1874,31 @@ function loadSettings() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(EL_SETTINGS_KEY) || '{}'); } catch(e) {}
     const smartScale = parseInt(s.badge_smart_scale || '100');
-    const dashScale  = parseInt(s.badge_dash_scale  || '100');
-    applyBadgeScales(smartScale, dashScale);
+    applyBadgeScales(smartScale);
 }
 
-function applyBadgeScales(smartScale, dashScale) {
+function applyBadgeScales(smartScale) {
     const root = document.documentElement;
     // il nome cresce al ritmo pieno; il punteggio cresce a metà ritmo
     const ptsScale = 1 + (smartScale - 100) / 200;
     root.style.setProperty('--badge-smart-name', (0.82 * smartScale / 100).toFixed(3) + 'rem');
     root.style.setProperty('--badge-smart-pts',  (0.68 * ptsScale).toFixed(3) + 'rem');
-    root.style.setProperty('--badge-dash-val',   (1.60 * dashScale  / 100).toFixed(3) + 'rem');
-    root.style.setProperty('--badge-dash-lbl',   (0.70 * dashScale  / 100).toFixed(3) + 'rem');
 }
 
 function renderSettingsPage() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(EL_SETTINGS_KEY) || '{}'); } catch(e) {}
     const smartScale = parseInt(s.badge_smart_scale || '100');
-    const dashScale  = parseInt(s.badge_dash_scale  || '100');
 
     document.getElementById('settingBadgeSmart').value = smartScale;
     document.getElementById('badgeSmartLabel').textContent = smartScale + '%';
-    document.getElementById('settingBadgeDash').value = dashScale;
-    document.getElementById('badgeDashLabel').textContent = dashScale + '%';
     document.getElementById('infoVersion').textContent = APP_VERSION;
 }
 
 function saveSettings() {
     const smartScale = parseInt(document.getElementById('settingBadgeSmart').value);
-    const dashScale  = parseInt(document.getElementById('settingBadgeDash').value);
-    localStorage.setItem(EL_SETTINGS_KEY, JSON.stringify({
-        badge_smart_scale: smartScale,
-        badge_dash_scale:  dashScale
-    }));
-    applyBadgeScales(smartScale, dashScale);
+    localStorage.setItem(EL_SETTINGS_KEY, JSON.stringify({ badge_smart_scale: smartScale }));
+    applyBadgeScales(smartScale);
     showToast('✅ Impostazioni salvate');
 }
 
