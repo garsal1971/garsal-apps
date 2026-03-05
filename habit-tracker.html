@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker</title>
+    <title>Habit Stack Tracker v9.1.0</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1020,6 +1020,15 @@
     </style>
 </head>
 <body>
+
+    <!-- AUTH OVERLAY — mostrato se app aperta senza token -->
+    <div id="authOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,15,30,0.97); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:1.5rem; font-family:inherit;">
+        <div style="font-size:3.5rem;">🔐</div>
+        <h2 style="color:#fff; margin:0; font-size:1.4rem; font-weight:700;">Accesso richiesto</h2>
+        <p style="color:#aaa; margin:0; text-align:center; max-width:320px; line-height:1.6;">Apri <strong style="color:#FF3366;">Habit Stack Tracker</strong> da AppSphere per accedere con il tuo account Google.</p>
+        <a href="app-launcher.html" style="margin-top:0.5rem; padding:0.8rem 2rem; background:#FF3366; color:#fff; border-radius:10px; text-decoration:none; font-weight:700; font-size:0.95rem;">Vai ad AppSphere</a>
+    </div>
+
     <!-- Menu Toggle (Mobile) -->
     <!-- Top Navigation Bar (Mobile Only) -->
     <nav class="bottom-nav">
@@ -1487,14 +1496,36 @@
     </div>
 
     <script>
-        // Supabase Configuration
-        // VERSION 2.0 - Fixed supabase client reference
-        const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+        // ==========================================
+        // VERSION
+        // ==========================================
+        const APP_VERSION = 'v9.1.0';
+        const BUILD_TIME  = '2026-03-05T12:00:00Z';
+        console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+            'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+            'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+        // ==========================================
+        // SUPABASE — client inizializzato dopo auth
+        // ==========================================
+        const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
-        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
-        console.log('🔥 Habit Tracker v9.0.1');
-        console.log('📡 Client object:', supabaseClient);
+
+        let supabaseClient = null; // inizializzato in initWithToken()
+        let sbAccessToken  = null;
+
+        function initWithToken(token) {
+            if (supabaseClient) return; // già inizializzato
+            sbAccessToken  = token;
+            sessionStorage.setItem('sb_token', token);
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + token } }
+            });
+            console.log('✅ Supabase autenticato con token Google (Habit Stack ' + APP_VERSION + ')');
+            document.getElementById('authOverlay').style.display = 'none';
+            init();
+        }
 
         // Global State
         let habits = [];
@@ -4881,8 +4912,26 @@
             container.innerHTML = html;
         }
 
-        // Initialize app when page loads
-        window.addEventListener('load', init);
+        // ==========================================
+        // AUTH — token da launcher via postMessage o sessionStorage
+        // ==========================================
+        window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'SB_TOKEN' && e.data.token) {
+                console.log('✅ SB_TOKEN ricevuto dal launcher (Habit Stack)');
+                initWithToken(e.data.token);
+            }
+        });
+
+        window.addEventListener('load', () => {
+            const stored = sessionStorage.getItem('sb_token');
+            if (stored) {
+                initWithToken(stored);
+            } else {
+                // Mostra overlay di blocco e attende postMessage dal launcher
+                document.getElementById('authOverlay').style.display = 'flex';
+                console.warn('⚠️ Nessun SB_TOKEN — attendo dal launcher (AppSphere)');
+            }
+        });
     </script>
 </body>
 </html>

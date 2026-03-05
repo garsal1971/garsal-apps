@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.52</title>
+    <title>Tasks v19.18.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1331,6 +1331,15 @@
 </style>
 </head>
 <body>
+
+    <!-- AUTH OVERLAY — mostrato se app aperta senza token -->
+    <div id="authOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,15,30,0.97); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:1.5rem; font-family:inherit;">
+        <div style="font-size:3.5rem;">🔐</div>
+        <h2 style="color:#fff; margin:0; font-size:1.4rem; font-weight:700;">Accesso richiesto</h2>
+        <p style="color:#aaa; margin:0; text-align:center; max-width:320px; line-height:1.6;">Apri <strong style="color:#FF3366;">Tasks</strong> da AppSphere per accedere con il tuo account Google.</p>
+        <a href="app-launcher.html" style="margin-top:0.5rem; padding:0.8rem 2rem; background:#FF3366; color:#fff; border-radius:10px; text-decoration:none; font-weight:700; font-size:0.95rem;">Vai ad AppSphere</a>
+    </div>
+
     <div class="app-container">
         <!-- Mobile Menu Toggle -->
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
@@ -2070,8 +2079,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.17.52';
-        const BUILD_TIME  = '2026-03-05T15:00:00Z';
+        const APP_VERSION = 'v19.18.0';
+        const BUILD_TIME  = '2026-03-05T12:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2134,9 +2143,23 @@
             alert('ERRORE: Supabase non è caricato! Verifica la connessione internet.');
             console.error('Supabase library not loaded!');
         }
-        
-        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('Supabase client created:', sb);
+
+        // sb inizializzato dopo ricezione token (in initWithToken)
+        let sb            = null;
+        let sbAccessToken = sessionStorage.getItem('sb_token') || null;
+
+        function initWithToken(token) {
+            if (sb) return; // già inizializzato
+            sbAccessToken = token;
+            sessionStorage.setItem('sb_token', token);
+            sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + token } }
+            });
+            console.log('✅ Supabase autenticato con token Google (Tasks ' + APP_VERSION + ')');
+            document.getElementById('authOverlay').style.display = 'none';
+            init();
+        }
 
         let categories = [];
         let tasks = [];
@@ -2148,7 +2171,6 @@
         let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
         let reminderPresets = []; // Preset promemoria da DB
-        let sbAccessToken = sessionStorage.getItem('sb_token') || null; // Token Supabase: da sessionStorage o postMessage
         let fpStart = null;
         let fpDeadline = null;
         let fpNoteDate = null;
@@ -2253,22 +2275,10 @@
         // NOTIFICATION RULES (cm_notification_rules)
         // ========================================
 
-        // Restituisce un client Supabase autenticato con il token ricevuto dal launcher.
-        // Il client globale `sb` usa solo la chiave anonima; per tabelle con RLS su user_id
-        // serve il JWT dell'utente nell'header Authorization.
-        let _authSbInstance = null;
-        let _authSbToken    = null;
-
+        // Restituisce il client Supabase autenticato (sb è già creato con Bearer token).
+        // Mantenuto per compatibilità con le chiamate esistenti.
         function getAuthSb() {
-            const token = sbAccessToken;
-            if (!token) return null;
-            if (_authSbInstance && _authSbToken === token) return _authSbInstance;
-            _authSbToken    = token;
-            _authSbInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-                auth: { persistSession: false, autoRefreshToken: false },
-                global: { headers: { Authorization: `Bearer ${token}` } }
-            });
-            return _authSbInstance;
+            return sb || null;
         }
 
         // Decodifica il JWT (senza chiamate di rete) e restituisce il payload
@@ -2280,21 +2290,6 @@
 
         async function syncNotificationRules(taskId, taskType, reminderLabels, dueDate, entityTitle) {
             try {
-                // Fallback: se sbAccessToken non è disponibile, lo legge dalla sessione Supabase
-                // (il client sb salva la sessione in localStorage — condivisa tra le tab della stessa origin)
-                if (!sbAccessToken) {
-                    try {
-                        const { data: { session } } = await sb.auth.getSession();
-                        if (session?.access_token) {
-                            sbAccessToken = session.access_token;
-                            sessionStorage.setItem('sb_token', sbAccessToken);
-                            console.log('✅ syncNotificationRules: token recuperato da sb.auth.getSession()');
-                        }
-                    } catch (e) {
-                        console.warn('⚠️ syncNotificationRules: getSession fallback fallito:', e.message);
-                    }
-                }
-
                 const token = sbAccessToken;
                 if (!token) {
                     console.warn('⚠️ syncNotificationRules: nessun SB_TOKEN, skip');
@@ -9841,14 +9836,22 @@ Per attivarle:
 
         // Riceve token dal launcher (app-launcher.html) via postMessage
         window.addEventListener('message', (e) => {
-            if (e.data?.type === 'SB_TOKEN' && e.data.token) {
-                sbAccessToken = e.data.token;
-                sessionStorage.setItem('sb_token', e.data.token);
-                console.log('✅ SB_TOKEN ricevuto dal launcher');
+            if (e.data && e.data.type === 'SB_TOKEN' && e.data.token) {
+                console.log('✅ SB_TOKEN ricevuto dal launcher (Tasks)');
+                initWithToken(e.data.token);
             }
         });
 
-        window.addEventListener('load', init);
+        window.addEventListener('load', () => {
+            const stored = sessionStorage.getItem('sb_token');
+            if (stored) {
+                initWithToken(stored);
+            } else {
+                // Mostra overlay di blocco e attende postMessage dal launcher
+                document.getElementById('authOverlay').style.display = 'flex';
+                console.warn('⚠️ Nessun SB_TOKEN — attendo dal launcher (AppSphere)');
+            }
+        });
     </script>
 </body>
 </html>
