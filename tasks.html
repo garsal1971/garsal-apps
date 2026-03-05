@@ -2069,8 +2069,23 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.17.51';
-        const BUILD_TIME  = '2026-03-05T11:30:00Z';
+        // ── Google Calendar OAuth popup callback (deve girare subito) ──────────
+        (function() {
+            const hash = window.location.hash.slice(1);
+            if (!hash || !window.opener) return;
+            const params = {};
+            hash.split('&').forEach(kv => {
+                const [k, v] = kv.split('=');
+                params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+            });
+            if (params.access_token) {
+                window.opener.postMessage({ type: 'GCAL_TOKEN', token: params.access_token }, '*');
+                window.close();
+            }
+        })();
+
+        const APP_VERSION = 'v19.17.52';
+        const BUILD_TIME  = '2026-03-05T12:30:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -9014,6 +9029,22 @@ Per attivarle:
                 console.error('Errore Google Calendar:', e);
                 return [];
             }
+        }
+
+        function authorizeGoogleCalendar() {
+            const redirect = window.location.origin + window.location.pathname;
+            const url = 'https://accounts.google.com/o/oauth2/v2/auth?'
+                + 'client_id=792683148606-9msthde03l2con90vt5la2u2d2srt89s.apps.googleusercontent.com'
+                + '&redirect_uri=' + encodeURIComponent(redirect)
+                + '&response_type=token'
+                + '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/calendar.readonly');
+            const popup = window.open(url, 'gcal_auth', 'width=500,height=600,left=200,top=100');
+            if (!popup) alert('Popup bloccato dal browser. Consenti i popup per questo sito.');
+        }
+
+        function updateGcalBanner() {
+            const banner = document.getElementById('gcalAuthBanner');
+            if (banner) banner.style.display = googleToken ? 'none' : 'flex';
         }
 
         function gcalEventsForDate(date) {
