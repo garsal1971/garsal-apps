@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.17.48</title>
+    <title>Tasks v19.17.51</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1589,7 +1589,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.48</span>
+                        <span>Tasks v19.17.51</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2069,8 +2069,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.17.50';
-        const BUILD_TIME  = '2026-03-01T15:00:00Z';
+        const APP_VERSION = 'v19.17.51';
+        const BUILD_TIME  = '2026-03-05T11:30:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -8429,6 +8429,8 @@ Per attivarle:
         };
         let snoozingItemId = null;
         let currentPlannerDate = new Date();
+        let gcalEvents = [];
+        let googleToken = localStorage.getItem('google_token') || null;
 
         function switchPlannerView(view) {
             currentPlannerView = view;
@@ -8989,7 +8991,64 @@ Per attivarle:
         }
         */
 
-        function renderCalendar() {
+        // ── Google Calendar helpers ──────────────────────────────────────────
+
+        async function fetchGcalEvents(timeMin, timeMax) {
+            if (!googleToken) return [];
+            try {
+                const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events`
+                    + `?timeMin=${encodeURIComponent(timeMin)}`
+                    + `&timeMax=${encodeURIComponent(timeMax)}`
+                    + `&singleEvents=true&orderBy=startTime&maxResults=200`;
+                const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + googleToken } });
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        googleToken = null;
+                        localStorage.removeItem('google_token');
+                        console.warn('⚠️ Google token scaduto');
+                    }
+                    return [];
+                }
+                return (await res.json()).items || [];
+            } catch (e) {
+                console.error('Errore Google Calendar:', e);
+                return [];
+            }
+        }
+
+        function gcalEventsForDate(date) {
+            const dateStr = date.toISOString().split('T')[0];
+            return gcalEvents.filter(ev => {
+                const s = (ev.start?.dateTime || ev.start?.date || '').split('T')[0];
+                return s === dateStr;
+            });
+        }
+
+        function gcalEventsForTimeSlot(date, startHour, endHour) {
+            const dateStr = date.toISOString().split('T')[0];
+            return gcalEvents.filter(ev => {
+                if (!ev.start?.dateTime) return false;
+                const d = new Date(ev.start.dateTime);
+                if (d.toISOString().split('T')[0] !== dateStr) return false;
+                const h = d.getHours();
+                return h >= startHour && h < endHour;
+            });
+        }
+
+        function gcalEventChip(ev, compact = false) {
+            const title = ev.summary || '(senza titolo)';
+            const dt    = ev.start?.dateTime ? new Date(ev.start.dateTime) : null;
+            const time  = dt ? dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : 'tutto il giorno';
+            if (compact) {
+                return `<div style="background:#1a73e8;color:#fff;padding:0.2rem 0.45rem;border-radius:4px;font-size:0.68rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;" title="${title}">📅 ${title}</div>`;
+            }
+            return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.75rem;background:#e8f0fe;border-left:3px solid #1a73e8;border-radius:6px;">
+                <span style="font-size:0.75rem;color:#1a73e8;font-weight:700;flex-shrink:0;">${time}</span>
+                <span style="font-size:0.85rem;font-weight:600;color:#1a1a1a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📅 ${title}</span>
+            </div>`;
+        }
+
+        async function renderCalendar() {
             console.log('Rendering calendar - View:', currentPlannerView);
             console.log('Current date:', currentPlannerDate);
             console.log('Available tasks:', tasks.length);
@@ -9002,8 +9061,29 @@ Per attivarle:
             // Aggiorna display periodo corrente
             updatePeriodDisplay();
             
+            // Fetch Google Calendar events per il periodo corrente
+            if (googleToken) {
+                let timeMin, timeMax;
+                if (currentPlannerView === 'week') {
+                    const s = getStartOfWeek(currentPlannerDate);
+                    const e = new Date(s); e.setDate(e.getDate() + 6); e.setHours(23, 59, 59, 999);
+                    timeMin = s.toISOString(); timeMax = e.toISOString();
+                } else if (currentPlannerView === 'month') {
+                    const y = currentPlannerDate.getFullYear(), m = currentPlannerDate.getMonth();
+                    timeMin = new Date(y, m, 1).toISOString();
+                    timeMax = new Date(y, m + 1, 0, 23, 59, 59).toISOString();
+                } else {
+                    const t = new Date(); t.setHours(0, 0, 0, 0);
+                    const e = new Date(t); e.setDate(e.getDate() + parseInt(settings['dashboard_upcoming_days'] || '10') + 1);
+                    timeMin = t.toISOString(); timeMax = e.toISOString();
+                }
+                gcalEvents = await fetchGcalEvents(timeMin, timeMax);
+            } else {
+                gcalEvents = [];
+            }
+
             if (currentPlannerView === 'dashboard') {
-                renderDashboard(); // Ora usa la funzione unificata
+                renderDashboard();
             } else if (currentPlannerView === 'week') {
                 renderWeekView();
             } else {
@@ -9358,8 +9438,35 @@ Per attivarle:
                 html += `</div>`;
             }
             
+            // ── Google Calendar events ──
+            if (gcalEvents.length > 0) {
+                const todayStr = new Date().toISOString().split('T')[0];
+                html += `<div class="card dash-section dash-section--full" style="border-left:4px solid #1a73e8;margin-bottom:1.5rem;">
+                    <h2 class="dash-section-title" style="color:#1a73e8;font-size:1.1rem;font-weight:900;margin-bottom:0.75rem;">📅 GOOGLE CALENDAR (${gcalEvents.length})</h2>
+                    <div style="display:flex;flex-direction:column;gap:0.4rem;">
+                        ${gcalEvents.map(ev => {
+                            const evDate = (ev.start?.dateTime || ev.start?.date || '').split('T')[0];
+                            const dt = ev.start?.dateTime ? new Date(ev.start.dateTime) : null;
+                            const dayLabel = dt
+                                ? dt.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+                                : evDate === todayStr ? 'oggi' : evDate;
+                            const timeLabel = dt
+                                ? dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                                : 'tutto il giorno';
+                            const title = ev.summary || '(senza titolo)';
+                            const isToday = evDate === todayStr;
+                            return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.45rem 0.75rem;background:${isToday ? '#e8f0fe' : '#f8f9ff'};border-radius:6px;border-left:3px solid #1a73e8;">
+                                <span style="font-size:0.72rem;color:#5f6368;font-weight:600;flex-shrink:0;min-width:70px;">${dayLabel}</span>
+                                <span style="font-size:0.72rem;color:#1a73e8;font-weight:700;flex-shrink:0;min-width:42px;">${timeLabel}</span>
+                                <span style="font-size:0.85rem;font-weight:600;color:#1a1a1a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }
+
             html += `</div>`; // chiude dash-sections-grid
-            
+
             container.innerHTML = html;
         }
 
@@ -9404,21 +9511,25 @@ Per attivarle:
                 `;
                 
                 timeSlots.forEach(slot => {
-                    const dayTasks = getTasksForTimeSlot(day, slot.start, slot.end);
-                    
+                    const dayTasks  = getTasksForTimeSlot(day, slot.start, slot.end);
+                    const dayGcal   = gcalEventsForTimeSlot(day, slot.start, slot.end);
+                    const hasItems  = dayTasks.length > 0 || dayGcal.length > 0;
+
                     html += `
                         <div style="border-bottom: 1px solid var(--border); padding: 0.5rem; height: ${slot.height}; overflow-y: auto; cursor: pointer; position: relative;"
                              onclick="showDayTasks('${day.toISOString()}')">
                             <!-- Label fascia oraria -->
                             <div style="font-size: 0.7rem; font-weight: 600; opacity: 0.6; margin-bottom: 0.25rem;">${slot.label}</div>
-                            
+
                             <!-- Task della fascia -->
                             <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                                ${dayTasks.length > 0 ? dayTasks.map(task => {
+                                ${dayTasks.map(task => {
                                     const cat = categories.find(c => task.categories?.includes(c.id));
                                     const bgColor = cat ? cat.color : 'var(--primary)';
                                     return `<div style="background: ${bgColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600;" title="${task.title}">${task.title}</div>`;
-                                }).join('') : '<div style="opacity: 0.2; font-size: 0.7rem; text-align: center; font-style: italic;">Nessun task</div>'}
+                                }).join('')}
+                                ${dayGcal.map(ev => gcalEventChip(ev, true)).join('')}
+                                ${!hasItems ? '<div style="opacity: 0.2; font-size: 0.7rem; text-align: center; font-style: italic;">Nessun task</div>' : ''}
                             </div>
                         </div>
                     `;
@@ -9486,9 +9597,11 @@ Per attivarle:
                         
                         ${weeks.map(week => week.map(day => {
                             const dayTasks = getTasksForDate(day);
+                            const dayGcal  = gcalEventsForDate(day);
                             const isCurrentMonth = day.getMonth() === month;
                             const isCurrentDay = isToday(day);
-                            
+                            const totalExtra = (dayTasks.length > 2 ? dayTasks.length - 2 : 0) + Math.max(0, dayGcal.length - 1);
+
                             return `
                                 <div class="calendar-day-cell ${isCurrentDay ? 'today' : ''} ${!isCurrentMonth ? 'other-month' : ''}"
                                      onclick="handleCalendarCellClick('${day.toISOString()}', event)">
@@ -9506,9 +9619,8 @@ Per attivarle:
                                                 </div>
                                             `;
                                         }).join('')}
-                                        ${dayTasks.length > 2 ? `
-                                            <span class="calendar-task-count">+${dayTasks.length - 2} altri</span>
-                                        ` : ''}
+                                        ${dayGcal.slice(0, 1).map(ev => gcalEventChip(ev, true)).join('')}
+                                        ${totalExtra > 0 ? `<span class="calendar-task-count">+${totalExtra} altri</span>` : ''}
                                     </div>
                                 </div>
                             `;
@@ -9843,6 +9955,11 @@ Per attivarle:
                 sbAccessToken = e.data.token;
                 sessionStorage.setItem('sb_token', e.data.token);
                 console.log('✅ SB_TOKEN ricevuto dal launcher');
+            }
+            if (e.data?.type === 'GOOGLE_TOKEN' && e.data.token) {
+                googleToken = e.data.token;
+                localStorage.setItem('google_token', e.data.token);
+                console.log('✅ GOOGLE_TOKEN ricevuto dal launcher');
             }
         });
 
