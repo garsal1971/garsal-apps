@@ -160,7 +160,7 @@
 
   <header>
     <h1>⚙ Comandi Manuali — garsal-apps</h1>
-    <p>// aggiornato da Claude · ultima modifica: 2026-03-05T10:30:00Z</p>
+    <p>// aggiornato da Claude · ultima modifica: 2026-03-05T12:00:00Z</p>
   </header>
 
   <!-- ═══════════════════════════════════════════════════
@@ -248,6 +248,49 @@ from cm_rewards
 order by created_at;</pre>
     </div>
     <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TASK 3 — PENDING
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-3">
+    <div class="task-header">
+      <div class="task-num">#003</div>
+      <div class="task-info">
+        <div class="task-title">Abilita Google Calendar API su Google Cloud Console</div>
+        <div class="task-desc">
+          Il scope <code>calendar.readonly</code> è già aggiunto al login OAuth (v1.4.3), ma Google richiede
+          che la Calendar API sia esplicitamente abilitata nel progetto Cloud e che il scope sia approvato
+          nell'OAuth Consent Screen. Senza questo, il token dà 401 anche se il scope è richiesto.<br><br>
+          <strong>Poi: esci da AppSphere e rientra</strong> — il vecchio token non ha il Calendar scope,
+          occorre un nuovo login per ottenerlo.
+        </div>
+        <div class="task-meta">
+          <span class="task-status">⏳ da fare</span>
+          <span class="task-tag">Google Cloud Console</span>
+          <span class="task-tag">OAuth</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-3">
+      <button class="copy-btn" onclick="copyCode('cb-3', this)">Copia URL</button>
+      <pre>Passaggi da fare su Google Cloud Console:
+
+1. Vai su: https://console.cloud.google.com/apis/library
+   → cerca "Google Calendar API" → clicca → ABILITA
+
+2. Vai su: https://console.cloud.google.com/apis/credentials/consent
+   → Scopes → "Add or remove scopes"
+   → aggiungi: https://www.googleapis.com/auth/calendar.readonly
+   → Salva
+
+3. Se l'app è in modalità "Testing", aggiungi il tuo account Google
+   come utente di test (se non già presente)
+
+4. Torna su AppSphere → clicca "Esci" → rifai il login con Google
+   → ora il token avrà il Calendar scope</pre>
+    </div>
+    <div class="platform-note">📍 Dove: console.cloud.google.com → stesso progetto usato per Google Fit</div>
   </div>
 
   <!-- Aggiungi nuovi task sopra questo commento -->
