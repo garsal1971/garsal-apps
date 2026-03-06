@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.13</title>
+    <title>Weight Quest v3.5.14</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -983,7 +983,7 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.13';
+        var APP_VERSION = 'v3.5.14';
         var BUILD_TIME  = '2026-03-06T23:50:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
@@ -1876,11 +1876,17 @@
                 info.textContent = '📍 ' + m.date + ' → ' + m.weight + ' kg';
                 info.style.fontWeight = 'bold';
                 
+                var isClosed = userData.currentObjective &&
+                    (userData.currentObjective.status === 'success' || userData.currentObjective.status === 'failed');
+
                 var btnRemove = document.createElement('button');
                 btnRemove.textContent = '🗑️';
                 btnRemove.style.padding = '5px 10px';
                 btnRemove.style.fontSize = '14px';
-                btnRemove.style.background = '#E74C3C';
+                btnRemove.style.background = isClosed ? '#aaa' : '#E74C3C';
+                btnRemove.style.opacity = isClosed ? '0.5' : '1';
+                btnRemove.style.cursor = isClosed ? 'not-allowed' : 'pointer';
+                btnRemove.disabled = !!isClosed;
                 btnRemove.onclick = function() {
                     tempMilestones.splice(index, 1);
                     updateMilestoneList();
@@ -2106,29 +2112,32 @@
 
         function updateUILockState(status) {
             var isClosed = (status === 'success' || status === 'failed');
-            
+
             // Disabilita campi di input
             document.getElementById('objectiveName').disabled = isClosed;
             document.getElementById('objectiveDailyBonus').disabled = isClosed;
             document.getElementById('objectiveDailyMalus').disabled = isClosed;
             document.getElementById('objectiveFinalBonus').disabled = isClosed;
             document.getElementById('objectiveFinalMalus').disabled = isClosed;
-            
+            document.getElementById('objectiveMilestonePts').disabled = isClosed;
+            document.getElementById('newMilestoneDate').disabled = isClosed;
+            document.getElementById('newMilestoneWeight').disabled = isClosed;
+
             // Disabilita bottoni di modifica
             document.getElementById('btnAddMilestone').disabled = isClosed;
             document.getElementById('btnSaveObjective').disabled = isClosed;
             document.getElementById('btnCloseSuccess').disabled = isClosed;
             document.getElementById('btnCloseFailed').disabled = isClosed;
-            
+
             // Cambia stile visivo
             var opacity = isClosed ? '0.5' : '1';
             var cursor = isClosed ? 'not-allowed' : 'pointer';
-            
+
             document.getElementById('btnAddMilestone').style.opacity = opacity;
             document.getElementById('btnSaveObjective').style.opacity = opacity;
             document.getElementById('btnCloseSuccess').style.opacity = opacity;
             document.getElementById('btnCloseFailed').style.opacity = opacity;
-            
+
             document.getElementById('btnAddMilestone').style.cursor = cursor;
             document.getElementById('btnSaveObjective').style.cursor = cursor;
             document.getElementById('btnCloseSuccess').style.cursor = cursor;
