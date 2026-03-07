@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.15</title>
+    <title>Weight Quest v3.5.16</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1004,8 +1004,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.15';
-        var BUILD_TIME  = '2026-03-06T23:50:00Z';
+        var APP_VERSION = 'v3.5.16';
+        var BUILD_TIME  = '2026-03-07T17:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2023,12 +2023,12 @@
         var allObjectives = []; // Cache di tutti gli obiettivi
 
         function loadAllObjectives() {
-            if (!googleToken) return Promise.reject('no token');
+            if (!sbToken) return Promise.reject('no token');
 
             log('Caricamento tutti gli obiettivi...');
 
             return fetch(supabase.url + '/rest/v1/ps_objectives?order=created_at.desc', {
-                headers: { 'apikey': supabase.key, 'Authorization': 'Bearer ' + supabase.key }
+                headers: supabase.headers
             })
             .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function(data) {
@@ -2069,6 +2069,7 @@
                 loadObjectiveById(allObjectives[0].id);
             } else {
                 loadNewObjectiveForm();
+                loadData(); // Nessun obiettivo: carica comunque i dati peso
             }
         }
 
@@ -2657,7 +2658,8 @@
 
         function reloadWeightData() {
             if (!userData.currentObjective || !userData.milestones || userData.milestones.length < 2) {
-                log('Nessun obiettivo valido per ricaricare i dati');
+                log('Nessun obiettivo valido per ricaricare i dati — carico comunque');
+                loadData();
                 return;
             }
             
@@ -2698,12 +2700,7 @@
 
                     return fetch(url, {
                         method: 'POST',
-                        headers: {
-                            'apikey': supabase.key,
-                            'Authorization': 'Bearer ' + supabase.key,
-                            'Content-Type': 'application/json',
-                            'Prefer': 'resolution=merge-duplicates,return=minimal'
-                        },
+                        headers: Object.assign({}, supabase.headers, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
                         body: JSON.stringify(updates)
                     });
                 })
