@@ -1535,8 +1535,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.2.0';
-        const BUILD_TIME  = '2026-03-07T19:00:00Z';
+        const APP_VERSION = 'v9.2.1';
+        const BUILD_TIME  = '2026-03-07T19:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1785,36 +1785,20 @@
             }
         }
 
-        async function loadUserPoints() {
-            try {
-                const { data, error } = await supabaseClient
-                    .from('hb_user_points')
-                    .select('*')
-                    .limit(1)
-                    .single();
-                
-                if (error && error.code !== 'PGRST116') { // PGRST116 = no rows
-                    console.error('❌ Errore caricamento punti:', error);
-                    return;
-                }
-                
-                if (!data) {
-                    // Crea record se non esiste
-                    const { data: newData } = await supabaseClient
-                        .from('hb_user_points')
-                        .insert([{ total_points: 0 }])
-                        .select()
-                        .single();
-                    
-                    document.getElementById('totalScore').textContent = '0';
-                } else {
-                    document.getElementById('totalScore').textContent = data.total_points || 0;
-                }
-            } catch (error) {
-                console.error('❌ Errore caricamento punti:', error);
-                // Non mostrare errore all'utente, usa 0 di default
-                document.getElementById('totalScore').textContent = '0';
+        function recalculateTotalScore() {
+            let total = 0;
+            for (const habit of habits) {
+                const reward = habit.points_reward || 0;
+                const penalty = habit.points_penalty || 0;
+                const completed = completions.filter(c => c.habit_id === habit.id && c.status === 'completed').length;
+                const failed = completions.filter(c => c.habit_id === habit.id && c.status === 'failed').length;
+                total += completed * reward - failed * penalty;
             }
+            document.getElementById('totalScore').textContent = Math.max(0, total);
+        }
+
+        async function loadUserPoints() {
+            recalculateTotalScore();
         }
 
         async function loadCompletions() {
@@ -2369,9 +2353,9 @@
                     }]);
                 
                 // Aggiorna sidebar
-                document.getElementById('totalScore').textContent = newTotal;
+                recalculateTotalScore();
             }
-            
+
             // Reset stack per ricominciare
             await supabaseClient
                 .from('hb_habits')
@@ -3344,7 +3328,8 @@
             // Ricarica habits aggiornati
             await loadHabits();
             await loadCompletions();
-            
+            recalculateTotalScore();
+
             console.log('✅ Controllo giorni mancati completato');
         }
 
@@ -3564,10 +3549,10 @@
                             reason: 'stack_failed'
                         }]);
                     
-                    console.log(`💰 Punteggio aggiornato: ${newTotal}`);
-                    
+                    console.log(`💰 Punteggio aggiornato`);
+
                     // Aggiorna sidebar
-                    document.getElementById('totalScore').textContent = newTotal;
+                    recalculateTotalScore();
                 }
                 
                 // STEP 2: Cancella TUTTI i completions del vecchio stack
@@ -3614,6 +3599,7 @@
                 await loadHabits();
                 await loadArchivedStacks();
                 await loadCompletions(); // IMPORTANTE: ricarica completions aggiornati
+                recalculateTotalScore();
                 renderDashboard();
                 renderHabits();
                 
@@ -5186,7 +5172,8 @@
                             await loadCategories();
                             await loadHabits();
                             await loadCompletions();
-                            
+                            recalculateTotalScore();
+
                             renderDashboard();
                             showToast('Dati importati con successo!');
                         }
