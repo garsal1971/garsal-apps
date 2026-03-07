@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.1.2</title>
+    <title>Habit Stack Tracker v9.1.3</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1241,13 +1241,19 @@
                     <label class="form-label">⏰ Orario promemoria</label>
                     <input type="time" class="form-input" id="habitReminderTime">
                     <small style="opacity:0.7;font-size:0.85rem;display:block;margin-top:0.3rem;">
-                        Riceverai una notifica a quest'ora se l'abitudine non è ancora completata
+                        Orario di riferimento per i promemoria anticipati
                     </small>
                 </div>
                 <div class="form-group" id="dailyMultipleReminderNote" style="display: none;">
-                    <p style="opacity:0.7;font-size:0.9rem;background:var(--input-bg);padding:0.75rem;border-radius:8px;border:1px solid var(--border);margin:0;">
-                        ℹ️ I promemoria verranno inviati automaticamente agli orari configurati per questa abitudine
-                    </p>
+                    <small style="opacity:0.7;font-size:0.85rem;">
+                        ℹ️ I promemoria si applicano agli orari configurati per questa abitudine
+                    </small>
+                </div>
+                <div class="form-group" id="reminderPresetsGroup">
+                    <label class="form-label" style="font-weight:700;text-transform:uppercase;font-size:0.82rem;letter-spacing:0.05em;">Promemoria</label>
+                    <div id="addHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
+                        <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Data Inizio Stack</label>
@@ -1350,13 +1356,19 @@
                     <label class="form-label">⏰ Orario promemoria</label>
                     <input type="time" class="form-input" id="editHabitReminderTime">
                     <small style="opacity:0.7;font-size:0.85rem;display:block;margin-top:0.3rem;">
-                        Riceverai una notifica a quest'ora se l'abitudine non è ancora completata
+                        Orario di riferimento per i promemoria anticipati
                     </small>
                 </div>
                 <div class="form-group" id="editDailyMultipleReminderNote" style="display: none;">
-                    <p style="opacity:0.7;font-size:0.9rem;background:var(--input-bg);padding:0.75rem;border-radius:8px;border:1px solid var(--border);margin:0;">
-                        ℹ️ I promemoria verranno inviati automaticamente agli orari configurati per questa abitudine
-                    </p>
+                    <small style="opacity:0.7;font-size:0.85rem;">
+                        ℹ️ I promemoria si applicano agli orari configurati per questa abitudine
+                    </small>
+                </div>
+                <div class="form-group" id="editReminderPresetsGroup">
+                    <label class="form-label" style="font-weight:700;text-transform:uppercase;font-size:0.82rem;letter-spacing:0.05em;">Promemoria</label>
+                    <div id="editHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
+                        <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -1523,8 +1535,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.1.2';
-        const BUILD_TIME  = '2026-03-07T12:00:00Z';
+        const APP_VERSION = 'v9.1.3';
+        const BUILD_TIME  = '2026-03-07T14:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1559,7 +1571,10 @@
         let settings = {
             notificationsEnabled: false
         };
-        let habitNotificationRules = {}; // { habitId: { time?, use_habit_times? } }
+        let habitNotificationRules = {}; // { habitId: { reminders:[], time?, use_habit_times? } }
+        let habitReminderPresets   = []; // preset da cm_reminder_presets
+        let addHabitReminderIds    = []; // int_id selezionati nel modal Add
+        let editHabitReminderIds   = []; // int_id selezionati nel modal Edit
         let debugLogs = [];
         let debugEnabled = false;
         let dailyTimes = []; // Array per orari multipli giornalieri
@@ -1709,6 +1724,7 @@
             await loadCompletions();
             await loadArchivedStacks();
             await loadUserPoints(); // Carica punteggio totale
+            await loadHabitReminderPresets();    // Carica preset anticipi da cm_reminder_presets
             await loadHabitNotificationRules(); // Carica regole promemoria per abitudine
             loadSettings();
             await renderDashboard(); // Ora è async!
@@ -1896,7 +1912,7 @@
 
                 // Salva regola promemoria
                 const reminderTime = document.getElementById('habitReminderTime').value;
-                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name);
+                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds);
 
                 closeModal('addHabitModal');
                 showToast('Abitudine creata con successo! 🎉');
@@ -4286,9 +4302,11 @@
             // Mostra/nascondi sezioni
             handleEditFrequencyChange();
 
-            // Carica orario promemoria
+            // Carica orario promemoria e chip selezionati
             const existingRule = habitNotificationRules[habit.id];
             document.getElementById('editHabitReminderTime').value = existingRule?.time || '';
+            editHabitReminderIds = existingRule?.reminders ? [...existingRule.reminders] : [];
+            renderHabitReminderChips('editHabitReminderChips', editHabitReminderIds, 'toggleEditHabitChip');
 
             // Aggiorna select categorie
             updateEditCategorySelect();
@@ -4410,7 +4428,7 @@
 
                 // Aggiorna regola promemoria
                 const editReminderTime = document.getElementById('editHabitReminderTime').value;
-                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name);
+                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds);
 
                 closeModal('editHabitModal');
                 showToast('Abitudine aggiornata! 🎉');
@@ -4431,6 +4449,9 @@
             document.getElementById('habitReminderTime').value = '';
             document.getElementById('reminderTimeGroup').style.display = 'block';
             document.getElementById('dailyMultipleReminderNote').style.display = 'none';
+            // Reset e render chip
+            addHabitReminderIds = [];
+            renderHabitReminderChips('addHabitReminderChips', addHabitReminderIds, 'toggleAddHabitChip');
             document.getElementById('addHabitModal').classList.add('active');
         }
 
@@ -4800,6 +4821,57 @@
             }
         }
 
+        async function loadHabitReminderPresets() {
+            if (!supabaseClient) return;
+            try {
+                const { data, error } = await supabaseClient
+                    .from('cm_reminder_presets')
+                    .select('int_id, label, offset_minutes, sort_order')
+                    .eq('active', true)
+                    .order('sort_order', { ascending: true });
+                if (!error && data) {
+                    habitReminderPresets = data;
+                    console.log('🔔 Preset promemoria caricati:', habitReminderPresets.length);
+                }
+            } catch (e) { console.warn('⚠️ loadHabitReminderPresets:', e.message); }
+        }
+
+        function renderHabitReminderChips(containerId, selectedIds, toggleFn) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            if (habitReminderPresets.length === 0) {
+                container.innerHTML = '<span style="opacity:0.5;font-size:0.85rem;align-self:center;">Nessun preset disponibile</span>';
+                return;
+            }
+            container.innerHTML = habitReminderPresets.map(p => {
+                const selected = selectedIds.includes(p.int_id);
+                return `<div onclick="${toggleFn}(${p.int_id})" style="
+                    display:inline-flex;align-items:center;gap:0.3rem;
+                    padding:0.25rem 0.7rem;border-radius:20px;cursor:pointer;
+                    font-size:0.85rem;transition:all 0.15s;user-select:none;
+                    ${selected
+                        ? 'background:var(--accent,#2563EB);color:#fff;border:1px solid var(--accent,#2563EB);'
+                        : 'background:#fff;color:#333;border:1px solid #ddd;'}
+                " onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
+                    ${p.label}${selected ? ' <span style="font-size:0.9rem;">✕</span>' : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function toggleAddHabitChip(intId) {
+            const idx = addHabitReminderIds.indexOf(intId);
+            if (idx > -1) addHabitReminderIds.splice(idx, 1);
+            else addHabitReminderIds.push(intId);
+            renderHabitReminderChips('addHabitReminderChips', addHabitReminderIds, 'toggleAddHabitChip');
+        }
+
+        function toggleEditHabitChip(intId) {
+            const idx = editHabitReminderIds.indexOf(intId);
+            if (idx > -1) editHabitReminderIds.splice(idx, 1);
+            else editHabitReminderIds.push(intId);
+            renderHabitReminderChips('editHabitReminderChips', editHabitReminderIds, 'toggleEditHabitChip');
+        }
+
         async function loadHabitNotificationRules() {
             if (!supabaseClient) return;
             try {
@@ -4817,13 +4889,14 @@
             }
         }
 
-        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName) {
+        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds) {
             if (!supabaseClient || !sbAccessToken) return;
             const payload = decodeJWT(sbAccessToken);
             const userId = payload?.sub;
             if (!userId) { console.warn('⚠️ syncHabitNotificationRule: userId non trovato'); return; }
 
-            const hasReminder = (frequency === 'daily_multiple') || !!reminderTime;
+            const ids = reminderIds || [];
+            const hasReminder = (frequency === 'daily_multiple') || !!reminderTime || ids.length > 0;
             if (!hasReminder) {
                 await supabaseClient.from('cm_notification_rules')
                     .delete()
@@ -4835,9 +4908,11 @@
                 return;
             }
 
-            const reminderPresets = frequency === 'daily_multiple'
-                ? { use_habit_times: true }
-                : { time: reminderTime };
+            const reminderPresetsJson = {
+                reminders: ids,
+                use_habit_times: frequency === 'daily_multiple',
+                time: frequency !== 'daily_multiple' ? (reminderTime || null) : null
+            };
 
             const { data: existing } = await supabaseClient
                 .from('cm_notification_rules')
@@ -4853,7 +4928,7 @@
                 entity_id: habitId,
                 entity_type: frequency,
                 entity_title: habitName,
-                reminder_presets: reminderPresets,
+                reminder_presets: reminderPresetsJson,
                 channel: 'telegram',
                 enabled: true
             };
@@ -4869,8 +4944,8 @@
                 console.error('❌ syncHabitNotificationRule:', error);
                 showToast('Errore salvataggio promemoria: ' + (error.message || ''));
             } else {
-                habitNotificationRules[habitId] = reminderPresets;
-                console.log('✅ syncHabitNotificationRule:', habitId, reminderPresets);
+                habitNotificationRules[habitId] = reminderPresetsJson;
+                console.log('✅ syncHabitNotificationRule:', habitId, reminderPresetsJson);
                 triggerFillQueue();
             }
         }
@@ -4912,44 +4987,52 @@
                 const rule = habitNotificationRules[habit.id];
                 if (!rule) return;
 
+                const presetIds = rule.reminders || [];
+                if (presetIds.length === 0) return;
+
+                // Determina gli orari base
+                let baseTimes = [];
                 if (habit.frequency === 'daily_multiple' && rule.use_habit_times) {
-                    (habit.daily_times || []).forEach(timeStr => {
-                        const [h, m] = timeStr.split(':').map(Number);
-                        const slotTime = new Date(now); slotTime.setHours(h, m, 0, 0);
-                        const diff = now - slotTime;
+                    baseTimes = habit.daily_times || [];
+                } else if (rule.time) {
+                    if (habit.frequency === 'weekly' && !(habit.weekdays || []).includes(now.getDay())) return;
+                    baseTimes = [rule.time];
+                }
+                if (baseTimes.length === 0) return;
+
+                baseTimes.forEach(baseTime => {
+                    const [bh, bm] = baseTime.split(':').map(Number);
+                    const baseDate = new Date(now); baseDate.setHours(bh, bm, 0, 0);
+
+                    presetIds.forEach(presetId => {
+                        const preset = habitReminderPresets.find(p => p.int_id === presetId);
+                        if (!preset) return;
+
+                        const fireTime = new Date(baseDate.getTime() - preset.offset_minutes * 60000);
+                        const diff = now - fireTime;
                         if (diff < 0 || diff > 120000) return;
-                        const flagKey = `habit_notified_${habit.id}_${timeStr}_${todayStr}`;
+
+                        const flagKey = `habit_notified_${habit.id}_${baseTime}_${presetId}_${todayStr}`;
                         if (localStorage.getItem(flagKey)) return;
-                        const done = completions.some(c =>
-                            c.habit_id === habit.id && c.completed_at.startsWith(`${todayStr}T${timeStr}`));
+
+                        let done;
+                        if (habit.frequency === 'daily_multiple') {
+                            done = completions.some(c =>
+                                c.habit_id === habit.id && c.completed_at.startsWith(`${todayStr}T${baseTime}`));
+                        } else {
+                            done = completions.some(c =>
+                                c.habit_id === habit.id && c.completed_at.startsWith(todayStr));
+                        }
                         if (!done) {
-                            new Notification(`⏰ ${habit.name}`, {
-                                body: `Sessione delle ${timeStr} da completare! 💪`,
-                                icon: '🔥'
-                            });
+                            const isMultiple = habit.frequency === 'daily_multiple';
+                            const msg = preset.offset_minutes === 0
+                                ? `È ora di: ${habit.name}${isMultiple ? ' (' + baseTime + ')' : ''}`
+                                : `${preset.label} — ${habit.name}${isMultiple ? ' (' + baseTime + ')' : ''}`;
+                            new Notification(`⏰ ${habit.name}`, { body: msg, icon: '🔥' });
                             localStorage.setItem(flagKey, 'true');
                         }
                     });
-                } else if (rule.time) {
-                    if (habit.frequency === 'weekly') {
-                        if (!(habit.weekdays || []).includes(now.getDay())) return;
-                    }
-                    const [h, m] = rule.time.split(':').map(Number);
-                    const scheduled = new Date(now); scheduled.setHours(h, m, 0, 0);
-                    const diff = now - scheduled;
-                    if (diff < 0 || diff > 120000) return;
-                    const flagKey = `habit_notified_${habit.id}_${todayStr}`;
-                    if (localStorage.getItem(flagKey)) return;
-                    const done = completions.some(c =>
-                        c.habit_id === habit.id && c.completed_at.startsWith(todayStr));
-                    if (!done) {
-                        new Notification(`⏰ ${habit.name}`, {
-                            body: `Ricordati di completare: ${habit.name} 💪`,
-                            icon: '🔥'
-                        });
-                        localStorage.setItem(flagKey, 'true');
-                    }
-                }
+                });
             });
         }
 
