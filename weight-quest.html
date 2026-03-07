@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.16</title>
+    <title>Weight Quest v3.5.17</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1004,8 +1004,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.16';
-        var BUILD_TIME  = '2026-03-07T17:30:00Z';
+        var APP_VERSION = 'v3.5.17';
+        var BUILD_TIME  = '2026-03-07T18:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1402,12 +1402,7 @@
                 var url = supabase.url + '/rest/v1/ps_weight_tracking?on_conflict=timestamp';
                 var response = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        'apikey': supabase.key,
-                        'Authorization': 'Bearer ' + supabase.key,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'resolution=merge-duplicates,return=minimal'
-                    },
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
                     body: JSON.stringify([record])
                 });
                 if (!response.ok) {
@@ -1432,11 +1427,7 @@
                 var url = supabase.url + '/rest/v1/ps_weight_tracking?timestamp=eq.' + timestamp;
                 var response = await fetch(url, {
                     method: 'DELETE',
-                    headers: {
-                        'apikey': supabase.key,
-                        'Authorization': 'Bearer ' + supabase.key,
-                        'Prefer': 'return=minimal'
-                    }
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' })
                 });
                 if (!response.ok) {
                     var text = await response.text();
@@ -2521,12 +2512,7 @@
 
             // Inserisci usando singole chiamate HTTP dirette
             var url = supabase.url + '/rest/v1/ps_weight_tracking';
-            var headers = {
-                'apikey': supabase.key,
-                'Authorization': 'Bearer ' + supabase.key,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal,resolution=merge-duplicates'
-            };
+            var headers = Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
 
             // Prepara tutti i record
             var records = uniqueWeights.map(function(entry) {
@@ -2550,11 +2536,7 @@
                 log('Sync: rimozione pesata manuale per ' + w.date + ' (ts=' + w.timestamp + ')');
                 return fetch(supabase.url + '/rest/v1/ps_weight_tracking?timestamp=eq.' + w.timestamp, {
                     method: 'DELETE',
-                    headers: {
-                        'apikey': supabase.key,
-                        'Authorization': 'Bearer ' + supabase.key,
-                        'Prefer': 'return=minimal'
-                    }
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' })
                 });
             });
 
