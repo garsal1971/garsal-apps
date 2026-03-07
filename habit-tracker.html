@@ -1535,8 +1535,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.1.8';
-        const BUILD_TIME  = '2026-03-07T18:00:00Z';
+        const APP_VERSION = 'v9.1.9';
+        const BUILD_TIME  = '2026-03-07T18:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5016,6 +5016,14 @@
         async function deleteHabitNotificationRule(habitId) {
             if (!supabaseClient) return;
             try {
+                // Cancella le notifiche pending/snoozed prima di eliminare la regola
+                await supabaseClient
+                    .from('cm_notification_queue')
+                    .update({ status: 'cancelled' })
+                    .eq('app', 'habits')
+                    .eq('entity_id', String(habitId))
+                    .in('status', ['pending', 'snoozed']);
+
                 await supabaseClient.from('cm_notification_rules')
                     .delete()
                     .eq('app', 'habits')
