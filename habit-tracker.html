@@ -1108,7 +1108,7 @@
                     </select>
                     <select class="form-input" style="width: auto;" onchange="filterHabits()" id="filterStatus">
                         <option value="active">Attive</option>
-                        <option value="paused">Interrotti</option>
+                        <option value="stopped">Interrotti</option>
                         <option value="all">Tutte</option>
                     </select>
                 </div>
@@ -1556,8 +1556,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.6';
-        const BUILD_TIME  = '2026-03-08T17:30:00Z';
+        const APP_VERSION = 'v9.3.7';
+        const BUILD_TIME  = '2026-03-08T18:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1644,7 +1644,7 @@
             const stats = {
                 'Abitudini': habits.length,
                 'Attive': habits.filter(h => h.status === 'active').length,
-                'Interrotti': habits.filter(h => h.status === 'paused').length,
+                'Interrotti': habits.filter(h => h.status === 'stopped').length,
                 'Categorie': categories.length,
                 'Completamenti': completions.length,
                 'Oggi': completions.filter(c => c.completed_at.startsWith(new Date().toISOString().split('T')[0])).length,
@@ -1737,10 +1737,25 @@
         }
 
         // Initialize App
+        async function migratePausedToStopped() {
+            // Migrazione una-tantum: aggiorna record con status='paused' a 'stopped'
+            try {
+                const { error } = await supabaseClient
+                    .from('hb_habits')
+                    .update({ status: 'stopped' })
+                    .eq('status', 'paused');
+                if (error) console.warn('⚠️ Migrazione paused→stopped:', error.message);
+                else console.log('✅ Migrazione paused→stopped completata');
+            } catch (e) {
+                console.warn('⚠️ Migrazione paused→stopped fallita:', e.message);
+            }
+        }
+
         async function init() {
             console.log('🚀 Inizializzazione app...');
             console.log('📡 Supabase URL:', SUPABASE_URL);
 
+            await migratePausedToStopped();
             await loadCategories();
             await loadHabits();
             await loadCompletions();
@@ -1765,7 +1780,7 @@
                 const { data, error } = await supabaseClient
                     .from('hb_habits')
                     .select('*')
-                    .in('status', ['active', 'paused'])
+                    .in('status', ['active', 'stopped'])
                     .order('created_at', { ascending: false });
                 
                 if (error) throw error;
@@ -4954,7 +4969,7 @@
             if (!confirm('Vuoi interrompere questa abitudine? Non verrà eliminata e il punteggio non cambierà.')) return;
 
             try {
-                const { error } = await supabaseClient.from('hb_habits').update({ status: 'paused' }).eq('id', habitId);
+                const { error } = await supabaseClient.from('hb_habits').update({ status: 'stopped' }).eq('id', habitId);
                 if (error) throw error;
 
                 habits = habits.filter(h => h.id !== habitId);
@@ -5620,8 +5635,8 @@
         function renderArchive() {
             const container = document.getElementById('archivedStacksList');
 
-            const statusLabel = { completed: '✅ Completata', failed: '💀 Fallita', paused: '⏸ In Pausa' };
-            const statusBg    = { completed: '#e8f5e9', failed: '#ffebee', paused: '#fff8e1' };
+            const statusLabel = { completed: '✅ Completata', failed: '💀 Fallita', stopped: '⏹ Interrotta' };
+            const statusBg    = { completed: '#e8f5e9', failed: '#ffebee', stopped: '#fff8e1' };
 
             const inactiveHtml = inactiveHabits.length === 0
                 ? '<p style="opacity: 0.7; text-align: center; padding: 1rem;">Nessuna abitudine non attiva.</p>'
