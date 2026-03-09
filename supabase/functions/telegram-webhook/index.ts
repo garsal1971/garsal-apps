@@ -311,6 +311,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Per gli habit, calcola streak e assegna punti se lo stack è completato
+    if (cu.app === 'habits') {
+      const habitInsertOp = cu.operations.find(o => o.op === 'insert' && o.table === 'hb_completions')
+      const habitId = habitInsertOp?.fields?.habit_id as string | undefined
+      if (habitId) {
+        const { data: rpcResult, error: rpcErr } = await sb.rpc('habit_post_completion', {
+          p_habit_id:   habitId,
+          p_local_date: localDateStr,
+        })
+        if (rpcErr) {
+          console.error('[telegram-webhook] errore habit_post_completion:', rpcErr)
+        } else {
+          console.log('[telegram-webhook] habit_post_completion:', JSON.stringify(rpcResult))
+        }
+      }
+    }
+
     // Cancella le entry pending/sending dello stesso slot (rule_id + slot_time + giorno UTC)
     // Evita di cancellare altri slot dello stesso habit (es. 08:00 vs 22:00)
     const fireDay    = (queueRow.fire_at as string).slice(0, 10) // YYYY-MM-DD
