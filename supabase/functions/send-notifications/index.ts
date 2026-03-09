@@ -56,17 +56,6 @@ interface QueueItem {
 // ---------------------------------------------------------------------------
 // Telegram
 // ---------------------------------------------------------------------------
-
-// Elimina un messaggio Telegram precedente (usato prima di rinviare la stessa entry)
-async function deleteTelegramMessage(chatId: string, messageId: number): Promise<void> {
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`
-  await fetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ chat_id: chatId, message_id: messageId }),
-  })
-}
-
 async function sendTelegram(
   chatId: string,
   text: string,
@@ -197,11 +186,6 @@ Deno.serve(async (_req) => {
         settings?.telegram_enabled &&
         settings?.telegram_chat_id
       ) {
-        // Se è un reinvio (sending → sending/sent), elimina il vecchio messaggio prima di inviarne uno nuovo.
-        // Evita l'accumulo di messaggi duplicati in chat per la stessa entry.
-        if (item.status === 'sending' && item.telegram_message_id) {
-          await deleteTelegramMessage(settings.telegram_chat_id, item.telegram_message_id)
-        }
         const message      = `${item.title}\n${item.body}`
         const hasComplete  = !!(item.metadata?.completion_update)
         const replyMarkup  = buildInlineKeyboard(item.id, hasComplete)
@@ -214,9 +198,19 @@ Deno.serve(async (_req) => {
         errorMsg = 'Canale non configurato o disabilitato'
       }
 
-      // Aggiorna status, contatore e (se disponibile) il message_id Telegram nella queue
+      // Aggiorna status, contatore e (se disponibile) il message_id Telegram nella queue.
+      // Accumula tutti gli ID inviati in metadata.telegram_message_ids per poterli
+      // cancellare tutti al click su Fatto (anche quelli di reinvii precedenti).
       const updatePayload: Record<string, unknown> = { status: newStatus, send_count: newCount }
-      if (telegramMsgId) updatePayload.telegram_message_id = telegramMsgId
+      if (telegramMsgId) {
+        updatePayload.telegram_message_id = telegramMsgId
+        const existingMeta = (item.metadata ?? {}) as Record<string, unknown>
+        const existingIds  = (existingMeta.telegram_message_ids ?? []) as number[]
+        updatePayload.metadata = {
+          ...existingMeta,
+          telegram_message_ids: [...existingIds, telegramMsgId],
+        }
+      }
       await sb
         .from('cm_notification_queue')
         .update(updatePayload)
