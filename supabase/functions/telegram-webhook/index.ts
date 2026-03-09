@@ -220,12 +220,17 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: 'no completion_update in metadata' })
     }
 
+    // Leggi slot_time dal metadata (orario reale del habit, es. "08:00")
+    const metadata  = queueRow.metadata as Record<string, unknown> | null
+    const slotTime  = metadata?.slot_time as string | undefined
+
     // Risolvi i template variables
     // {{fire_date_local}}: data locale (Europe/Rome) del fire_at
-    // {{slot_time}}: HH:MM dal fire_at locale
+    // {{slot_time}}: orario del slot habit (da metadata) — fallback a fire_at locale
     const fireAt       = new Date(queueRow.fire_at as string)
     const localDateStr = fireAt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' }) // YYYY-MM-DD
-    const localTimeStr = fireAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }) // HH:MM
+    const localTimeStr = slotTime
+      ?? fireAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
 
     function resolveTemplates(val: unknown): unknown {
       if (typeof val !== 'string') return val
@@ -250,16 +255,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Cancella tutte le entry pending/sending dello stesso habit per lo stesso giorno UTC
-    // (un habit può avere più reminder, es. [6h, 5h, 1h] = 3 entry per slot)
-    const fireDay = (queueRow.fire_at as string).slice(0, 10) // YYYY-MM-DD
-    await sb
+    // Cancella le entry pending/sending dello stesso slot (rule_id + slot_time + giorno UTC)
+    // Evita di cancellare altri slot dello stesso habit (es. 08:00 vs 22:00)
+    const fireDay    = (queueRow.fire_at as string).slice(0, 10) // YYYY-MM-DD
+    const cancelBase = sb
       .from('cm_notification_queue')
       .update({ status: 'cancelled' })
       .eq('rule_id', queueRow.rule_id as string)
       .in('status', ['pending', 'sending'])
       .gte('fire_at', `${fireDay}T00:00:00.000Z`)
       .lte('fire_at', `${fireDay}T23:59:59.999Z`)
+
+    await (slotTime
+      ? cancelBase.filter('metadata->>slot_time', 'eq', slotTime)
+      : cancelBase)
 
     const nowStr = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
     const newText = `${originalText ?? ''}\n\n✅ <i>Completato alle ${nowStr}</i>`
