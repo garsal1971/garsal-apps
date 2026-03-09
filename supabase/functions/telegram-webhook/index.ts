@@ -328,10 +328,20 @@ Deno.serve(async (req) => {
 
     await answerCallbackQuery(callbackQueryId, '✅ Completato!')
 
-    // Elimina i messaggi sibling + cancella dalla coda,
-    // poi edita il messaggio cliccato con il testo di completamento (rimuove i bottoni)
+    // 1. Elimina i messaggi sibling (altre entry con stesso rule_id)
     await deleteSiblingMessages(queueRow.rule_id as string, queueId, chatId)
     await cancelSiblingItems(queueRow.rule_id as string, queueId)
+
+    // 2. Elimina i messaggi di reinvio precedenti della stessa entry
+    //    (accumulati in metadata.telegram_message_ids da send-notifications)
+    const allMsgIds = (queueRow.metadata as Record<string, unknown> | null)?.telegram_message_ids as number[] ?? []
+    for (const oldMsgId of allMsgIds) {
+      if (oldMsgId !== messageId) {
+        await deleteMessage(chatId, oldMsgId)
+      }
+    }
+
+    // 3. Edita il messaggio cliccato con il testo di completamento (rimuove i bottoni)
     const completedAt   = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
     const completedText = `${originalText ?? ''}\n✅ Completato alle ${completedAt}`
     await editMessageText(chatId, messageId, completedText)
