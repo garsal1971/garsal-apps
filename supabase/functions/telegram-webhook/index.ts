@@ -55,6 +55,20 @@ async function deleteMessage(chatId: number, messageId: number): Promise<void> {
   })
 }
 
+async function editMessageText(chatId: number, messageId: number, text: string): Promise<void> {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`
+  await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      chat_id:      chatId,
+      message_id:   messageId,
+      text,
+      reply_markup: { inline_keyboard: [] },
+    }),
+  })
+}
+
 // Elimina i messaggi Telegram di tutti gli item sibling (stesso rule_id)
 async function deleteSiblingMessages(ruleId: string, excludeQueueId: string, chatId: number): Promise<void> {
   const { data } = await sb
@@ -314,10 +328,13 @@ Deno.serve(async (req) => {
 
     await answerCallbackQuery(callbackQueryId, '✅ Completato!')
 
-    // Elimina i messaggi sibling + cancella dalla coda, poi elimina il messaggio cliccato
+    // Elimina i messaggi sibling + cancella dalla coda,
+    // poi edita il messaggio cliccato con il testo di completamento (rimuove i bottoni)
     await deleteSiblingMessages(queueRow.rule_id as string, queueId, chatId)
     await cancelSiblingItems(queueRow.rule_id as string, queueId)
-    await deleteMessage(chatId, messageId)
+    const completedAt   = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
+    const completedText = `${originalText ?? ''}\n✅ Completato alle ${completedAt}`
+    await editMessageText(chatId, messageId, completedText)
 
   } else {
     console.warn('[telegram-webhook] callback_data non riconosciuto:', callbackData)
