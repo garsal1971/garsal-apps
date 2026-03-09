@@ -49,6 +49,7 @@ interface QueueItem {
   status:     string
   send_count: number
   created_at: string
+  metadata?:  { completion_update?: Record<string, unknown> } | null
 }
 
 // ---------------------------------------------------------------------------
@@ -85,22 +86,22 @@ async function sendTelegram(
 }
 
 // Costruisce la inline keyboard con le opzioni snooze + annulla
-function buildInlineKeyboard(itemId: string): object {
-  return {
-    inline_keyboard: [
-      [
-        { text: '⏸ 30min',  callback_data: `snooze:30:${itemId}`   },
-        { text: '⏸ 1h',     callback_data: `snooze:60:${itemId}`   },
-      ],
-      [
-        { text: '⏸ 3h',     callback_data: `snooze:180:${itemId}`  },
-        { text: '⏸ Domani', callback_data: `snooze:1440:${itemId}` },
-      ],
-      [
-        { text: '❌ Annulla promemoria', callback_data: `cancel:${itemId}` },
-      ],
-    ],
+// Se completeButton è true aggiunge il pulsante "✅ Fatto" come prima riga
+function buildInlineKeyboard(itemId: string, completeButton = false): object {
+  const rows: object[][] = []
+  if (completeButton) {
+    rows.push([{ text: '✅ Fatto', callback_data: `complete:${itemId}` }])
   }
+  rows.push([
+    { text: '⏸ 30min',  callback_data: `snooze:30:${itemId}`   },
+    { text: '⏸ 1h',     callback_data: `snooze:60:${itemId}`   },
+  ])
+  rows.push([
+    { text: '⏸ 3h',     callback_data: `snooze:180:${itemId}`  },
+    { text: '⏸ Domani', callback_data: `snooze:1440:${itemId}` },
+  ])
+  rows.push([{ text: '❌ Annulla promemoria', callback_data: `cancel:${itemId}` }])
+  return { inline_keyboard: rows }
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +185,8 @@ Deno.serve(async (_req) => {
         settings?.telegram_chat_id
       ) {
         const message      = `${item.title}\n${item.body}`
-        const replyMarkup  = buildInlineKeyboard(item.id)
+        const hasComplete  = !!(item.metadata?.completion_update)
+        const replyMarkup  = buildInlineKeyboard(item.id, hasComplete)
         const result       = await sendTelegram(settings.telegram_chat_id, message, replyMarkup)
         telegramOk         = result.ok
         responseText       = result.response
