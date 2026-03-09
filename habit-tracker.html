@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.14</title>
+    <title>Habit Stack Tracker v9.3.15</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1288,6 +1288,13 @@
                         <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
                     </div>
                 </div>
+                <div class="form-group" id="addCompleteButtonGroup" style="display:none;">
+                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
+                        <input type="checkbox" id="addHabitCompleteButton" onchange="addHabitCompleteButton=this.checked">
+                        <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
+                    </label>
+                    <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
+                </div>
                 <div class="form-group">
                     <label class="form-label">Data Inizio Stack</label>
                     <input type="date" class="form-input" id="habitStartDate" value="">
@@ -1402,6 +1409,13 @@
                     <div id="editHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
                         <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
                     </div>
+                </div>
+                <div class="form-group" id="editCompleteButtonGroup" style="display:none;">
+                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
+                        <input type="checkbox" id="editHabitCompleteButton" onchange="editHabitCompleteButton=this.checked">
+                        <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
+                    </label>
+                    <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
                 </div>
 
                 <div class="form-group">
@@ -1589,8 +1603,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.14';
-        const BUILD_TIME  = '2026-03-08T21:45:00Z';
+        const APP_VERSION = 'v9.3.15';
+        const BUILD_TIME  = '2026-03-09T00:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1630,6 +1644,8 @@
         let habitReminderPresets   = []; // preset da cm_reminder_presets
         let addHabitReminderIds    = []; // int_id selezionati nel modal Add
         let editHabitReminderIds   = []; // int_id selezionati nel modal Edit
+        let addHabitCompleteButton = false; // flag pulsante Fatto Telegram (modal Add)
+        let editHabitCompleteButton = false; // flag pulsante Fatto Telegram (modal Edit)
         let debugLogs = [];
         let debugEnabled = false;
         let dailyTimes = []; // Array per orari multipli giornalieri
@@ -1990,7 +2006,7 @@
 
                 // Salva regola promemoria
                 const reminderTime = document.getElementById('habitReminderTime').value;
-                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds, weekdays, startedAt, goal);
+                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds, weekdays, startedAt, goal, addHabitCompleteButton);
 
                 closeModal('addHabitModal');
                 showToast('Abitudine creata con successo! 🎉');
@@ -4752,6 +4768,12 @@
             document.getElementById('editHabitReminderTime').value = existingRule?.time || '';
             editHabitReminderIds = existingRule?.reminders ? [...existingRule.reminders] : [];
             renderHabitReminderChips('editHabitReminderChips', editHabitReminderIds, 'toggleEditHabitChip');
+            // Ripristina flag pulsante completamento Telegram
+            editHabitCompleteButton = existingRule?.telegram_complete_button || false;
+            const editGrp = document.getElementById('editCompleteButtonGroup');
+            if (editGrp) editGrp.style.display = editHabitReminderIds.length > 0 ? '' : 'none';
+            const editCb = document.getElementById('editHabitCompleteButton');
+            if (editCb) editCb.checked = editHabitCompleteButton;
 
             // Aggiorna select categorie
             updateEditCategorySelect();
@@ -4873,7 +4895,7 @@
 
                 // Aggiorna regola promemoria
                 const editReminderTime = document.getElementById('editHabitReminderTime').value;
-                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds, weekdays, startedAt, goal);
+                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds, weekdays, startedAt, goal, editHabitCompleteButton);
 
                 closeModal('editHabitModal');
                 showToast('Abitudine aggiornata! 🎉');
@@ -5361,6 +5383,13 @@
             if (idx > -1) addHabitReminderIds.splice(idx, 1);
             else addHabitReminderIds.push(intId);
             renderHabitReminderChips('addHabitReminderChips', addHabitReminderIds, 'toggleAddHabitChip');
+            const grp = document.getElementById('addCompleteButtonGroup');
+            if (grp) grp.style.display = addHabitReminderIds.length > 0 ? '' : 'none';
+            if (addHabitReminderIds.length === 0) {
+                addHabitCompleteButton = false;
+                const cb = document.getElementById('addHabitCompleteButton');
+                if (cb) cb.checked = false;
+            }
         }
 
         function toggleEditHabitChip(intId) {
@@ -5368,6 +5397,13 @@
             if (idx > -1) editHabitReminderIds.splice(idx, 1);
             else editHabitReminderIds.push(intId);
             renderHabitReminderChips('editHabitReminderChips', editHabitReminderIds, 'toggleEditHabitChip');
+            const grp = document.getElementById('editCompleteButtonGroup');
+            if (grp) grp.style.display = editHabitReminderIds.length > 0 ? '' : 'none';
+            if (editHabitReminderIds.length === 0) {
+                editHabitCompleteButton = false;
+                const cb = document.getElementById('editHabitCompleteButton');
+                if (cb) cb.checked = false;
+            }
         }
 
         async function loadHabitNotificationRules() {
@@ -5387,7 +5423,7 @@
             }
         }
 
-        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds, weekdays, startedAt, goal) {
+        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds, weekdays, startedAt, goal, completeButton) {
             if (!supabaseClient || !sbAccessToken) return;
             const payload = decodeJWT(sbAccessToken);
             const userId = payload?.sub;
@@ -5414,25 +5450,43 @@
                 endDate = d.toISOString().split('T')[0];
             }
 
+            // Blocco aggiuntivo per pulsante Fatto Telegram
+            const completeButtonExtra = completeButton ? {
+                telegram_complete_button: true,
+                completion_update: {
+                    app: 'habits',
+                    table: 'hb_completions',
+                    op: 'insert',
+                    fields: {
+                        habit_id: habitId,
+                        completed_at: '{{fire_date_local}}T{{slot_time}}:00',
+                        status: 'completed'
+                    }
+                }
+            } : {};
+
             let reminderPresetsJson;
             if (frequency === 'daily_multiple') {
                 reminderPresetsJson = {
                     reminders: ids,
                     times: dailyTimesArr,
-                    'from-to': [startedAt || null, endDate]
+                    'from-to': [startedAt || null, endDate],
+                    ...completeButtonExtra
                 };
             } else if (frequency === 'weekly') {
                 reminderPresetsJson = {
                     reminders: ids,
                     days: weekdays || [],
                     times: reminderTime ? [reminderTime] : [],
-                    'from-to': [startedAt || null, endDate]
+                    'from-to': [startedAt || null, endDate],
+                    ...completeButtonExtra
                 };
             } else {
                 reminderPresetsJson = {
                     reminders: ids,
                     times: reminderTime ? [reminderTime] : [],
-                    'from-to': [startedAt || null, endDate]
+                    'from-to': [startedAt || null, endDate],
+                    ...completeButtonExtra
                 };
             }
 

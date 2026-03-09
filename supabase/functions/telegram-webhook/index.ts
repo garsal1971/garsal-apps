@@ -7,6 +7,7 @@
 // Azioni supportate (callback_data):
 //   snooze:<minutes>:<queue_id>  — sospende il promemoria per N minuti
 //   cancel:<queue_id>            — annulla definitivamente il promemoria
+//   complete:<queue_id>          — segna l'abitudine come completata
 //
 // Flusso:
 //   1. Verifica header di sicurezza X-Telegram-Bot-Api-Secret-Token
@@ -135,7 +136,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Parsing del callback_data ─────────────────────────────────────────────
-  // Formati: "snooze:<minutes>:<uuid>" | "cancel:<uuid>"
+  // Formati: "snooze:<minutes>:<uuid>" | "cancel:<uuid>" | "complete:<uuid>"
   const parts = callbackData.split(':')
   const action = parts[0]
 
@@ -187,6 +188,68 @@ Deno.serve(async (req) => {
 
     const newText = `${originalText ?? ''}\n\n❌ <i>Promemoria annullato</i>`
     await answerCallbackQuery(callbackQueryId, '❌ Promemoria annullato')
+    await editMessageText(chatId, messageId, newText)
+
+  } else if (action === 'complete' && parts.length === 2) {
+    const queueId = parts[1]
+
+    // Leggi la queue entry per ottenere metadata.completion_update
+    const { data: queueRow, error: fetchErr } = await sb
+      .from('cm_notification_queue')
+      .select('metadata, entity_id, fire_at')
+      .eq('id', queueId)
+      .maybeSingle()
+
+    if (fetchErr || !queueRow) {
+      console.error('[telegram-webhook] errore lettura queue:', fetchErr)
+      await answerCallbackQuery(callbackQueryId, '❌ Errore: promemoria non trovato')
+      return json({ ok: false, error: 'queue row not found' })
+    }
+
+    const cu = (queueRow.metadata as Record<string, unknown> | null)?.completion_update as {
+      table: string; fields: Record<string, unknown>
+    } | undefined
+
+    if (!cu?.table || !cu?.fields) {
+      await answerCallbackQuery(callbackQueryId, '❌ Dati completamento non disponibili')
+      return json({ ok: false, error: 'no completion_update in metadata' })
+    }
+
+    // Risolvi i template variables in fields
+    // {{fire_date_local}}: data locale (Europe/Rome) del fire_at
+    // {{slot_time}}: HH:MM estratto da completed_at template o fire_at
+    const fireAt  = new Date(queueRow.fire_at as string)
+    const localDateStr = fireAt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' }) // YYYY-MM-DD
+    const localTimeStr = fireAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }) // HH:MM
+
+    const resolvedFields: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(cu.fields)) {
+      if (typeof v === 'string') {
+        resolvedFields[k] = v
+          .replace('{{fire_date_local}}', localDateStr)
+          .replace('{{slot_time}}', localTimeStr)
+      } else {
+        resolvedFields[k] = v
+      }
+    }
+
+    // Inserisci il record di completamento
+    const { error: insertErr } = await sb.from(cu.table).insert(resolvedFields)
+    if (insertErr) {
+      console.error('[telegram-webhook] errore insert completamento:', insertErr)
+      await answerCallbackQuery(callbackQueryId, '❌ Errore durante il completamento')
+      return json({ ok: false, error: String(insertErr) })
+    }
+
+    // Annulla le notifiche pending della stessa queue entry
+    await sb
+      .from('cm_notification_queue')
+      .update({ status: 'cancelled' })
+      .eq('id', queueId)
+
+    const nowStr = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
+    const newText = `${originalText ?? ''}\n\n✅ <i>Completato alle ${nowStr}</i>`
+    await answerCallbackQuery(callbackQueryId, '✅ Completato!')
     await editMessageText(chatId, messageId, newText)
 
   } else {

@@ -45,6 +45,13 @@ interface HabitReminderPresets {
   times:     string[]           // ["HH:MM", ...]
   'from-to': [string, string | null]  // [started_at, end_date | null]
   days?:     number[]           // [0-6] solo per weekly (0=domenica)
+  telegram_complete_button?: boolean
+  completion_update?: {
+    app:    string
+    table:  string
+    op:     string
+    fields: Record<string, unknown>
+  }
 }
 
 type ReminderPresetsJson = TaskReminderPresets | HabitReminderPresets
@@ -158,25 +165,37 @@ Deno.serve(async (_req) => {
       // 4. Upsert le nuove entry
       const title = rule.entity_title ? `🔔 ${rule.entity_title}` : `🔔 Promemoria`
 
+      // Prepara metadata con completion_update se presente nella rule
+      let queueMetadata: Record<string, unknown> | null = null
+      if (isHabit) {
+        const hrp = rp as HabitReminderPresets
+        if (hrp.telegram_complete_button && hrp.completion_update) {
+          queueMetadata = { completion_update: hrp.completion_update }
+        }
+      }
+
       for (const entry of entries) {
         const body = isHabit
           ? buildHabitBody(entry, rule.entity_title)
           : buildTaskBody(entry, (rp as TaskReminderPresets).due_at)
 
+        const queueEntry: Record<string, unknown> = {
+          rule_id:   rule.id,
+          user_id:   rule.user_id,
+          app:       rule.app,
+          entity_id: rule.entity_id,
+          title,
+          body,
+          channel:   rule.channel,
+          fire_at:   entry.fire_at,
+          status:    'pending',
+        }
+        if (queueMetadata) queueEntry.metadata = queueMetadata
+
         const { error: upsertError } = await sb
           .from('cm_notification_queue')
           .upsert(
-            {
-              rule_id:   rule.id,
-              user_id:   rule.user_id,
-              app:       rule.app,
-              entity_id: rule.entity_id,
-              title,
-              body,
-              channel:   rule.channel,
-              fire_at:   entry.fire_at,
-              status:    'pending',
-            },
+            queueEntry,
             { onConflict: 'rule_id,fire_at', ignoreDuplicates: true }
           )
 
