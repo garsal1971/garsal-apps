@@ -66,5 +66,10 @@ jobs:
         run: |
           for FN in $(git diff HEAD~1 HEAD --name-only | grep '^supabase/functions/' | awk -F/ '{print $3}' | sort -u); do
             echo "▶ Deploy edge function: $FN"
-            supabase functions deploy "$FN" --project-ref jajlmmdsjlvzgcxiiypk
+            EXTRA=""
+            if grep -q "verify_jwt = false" "supabase/functions/$FN/config.toml" 2>/dev/null; then
+              EXTRA="--no-verify-jwt"
+              echo "   ↳ verify_jwt=false → aggiunto --no-verify-jwt"
+            fi
+            supabase functions deploy "$FN" --project-ref jajlmmdsjlvzgcxiiypk $EXTRA
           done
