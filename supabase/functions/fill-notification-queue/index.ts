@@ -51,6 +51,10 @@ interface HabitReminderPresets {
     table:  string
     op:     string
     fields: Record<string, unknown>
+    rule_update?: {
+      append_to: string
+      value:     string
+    }
   }
 }
 
