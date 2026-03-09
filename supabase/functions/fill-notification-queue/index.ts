@@ -169,19 +169,22 @@ Deno.serve(async (_req) => {
       // 4. Upsert le nuove entry
       const title = rule.entity_title ? `🔔 ${rule.entity_title}` : `🔔 Promemoria`
 
-      // Prepara metadata con completion_update se presente nella rule
-      let queueMetadata: Record<string, unknown> | null = null
-      if (isHabit) {
-        const hrp = rp as HabitReminderPresets
-        if (hrp.telegram_complete_button && hrp.completion_update) {
-          queueMetadata = { completion_update: hrp.completion_update }
-        }
-      }
-
       for (const entry of entries) {
         const body = isHabit
           ? buildHabitBody(entry, rule.entity_title)
           : buildTaskBody(entry, (rp as TaskReminderPresets).due_at)
+
+        // Metadata per-entry: include slot_time per filtrare la cancellazione per slot
+        let entryMetadata: Record<string, unknown> | null = null
+        if (isHabit) {
+          const hrp = rp as HabitReminderPresets
+          if (hrp.telegram_complete_button && hrp.completion_update) {
+            entryMetadata = {
+              completion_update: hrp.completion_update,
+              slot_time: entry.time,   // es. "08:00" — orario del slot habit
+            }
+          }
+        }
 
         const queueEntry: Record<string, unknown> = {
           rule_id:   rule.id,
@@ -194,7 +197,7 @@ Deno.serve(async (_req) => {
           fire_at:   entry.fire_at,
           status:    'pending',
         }
-        if (queueMetadata) queueEntry.metadata = queueMetadata
+        if (entryMetadata) queueEntry.metadata = entryMetadata
 
         const { error: upsertError } = await sb
           .from('cm_notification_queue')
