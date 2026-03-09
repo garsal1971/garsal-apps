@@ -1,5 +1,6 @@
 // ============================================================
 // telegram-webhook — gestisce i callback_query dai bottoni inline
+// verify_jwt = false (vedi config.toml) — Telegram non invia JWT
 //
 // Telegram invia un POST a questo endpoint ogni volta che l'utente
 // clicca un bottone inline su un messaggio del bot.
