@@ -160,7 +160,7 @@
 
   <header>
     <h1>⚙ Comandi Manuali — garsal-apps</h1>
-    <p>// aggiornato da Claude · ultima modifica: 2026-03-10T21:45:00Z</p>
+    <p>// aggiornato da Claude · ultima modifica: 2026-03-10T22:00:00Z</p>
   </header>
 
   <!-- ═══════════════════════════════════════════════════
@@ -431,8 +431,14 @@ try (CallableStatement cs = conn.prepareCall(sql)) {
     </div>
     <div class="code-block" id="cb-4a">
       <button class="copy-btn" onclick="copyCode('cb-4a', this)">Copia</button>
-      <pre>-- 1) Chi sono? (utente connesso)
-SELECT CURRENT USER, CURRENT SCHEMA FROM SYSIBM.SYSDUMMY1;
+      <pre>-- 1a) Chi sono? — sintassi VALUES (DB2 z/OS nativa)
+VALUES (USER);
+
+-- 1b) Alternativa se VALUES non gira nel tool
+SELECT USER FROM SYSIBM.SYSDUMMY1;
+
+-- 1c) Utente + schema corrente
+SELECT USER, CURRENT SCHEMA FROM SYSIBM.SYSDUMMY1;
 
 -- 2) Ho EXECUTE su DB2C.KCBPANAG?
 SELECT GRANTOR, GRANTEE, EXECUTEAUTH
