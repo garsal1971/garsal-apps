@@ -215,9 +215,6 @@ BEGIN
            last_completed_date  = v_completed_date
      WHERE id = p_task_id;
 
-    INSERT INTO ts_history (task_id, from_status, to_status, action, points, timestamp)
-    VALUES (p_task_id, 'completed', 'terminated', 'terminated', 0, now());
-
     -- Elimina la regola di notifica (task singolo terminato)
     DELETE FROM cm_notification_rules
      WHERE entity_id = p_task_id::text
@@ -251,11 +248,6 @@ BEGIN
            next_occurrence_date = v_next_ts
      WHERE id = p_task_id;
 
-    IF v_next_date IS NULL THEN
-      INSERT INTO ts_history (task_id, from_status, to_status, action, points, timestamp)
-      VALUES (p_task_id, 'completed', 'terminated', 'terminated', 0, now());
-    END IF;
-
   -- -------------------------------------------------------
   ELSIF v_task.type = 'multiple' THEN
     DECLARE
@@ -288,10 +280,6 @@ BEGIN
              next_occurrence_date = v_next_str::timestamptz
        WHERE id = p_task_id;
 
-      IF v_next_str IS NULL THEN
-        INSERT INTO ts_history (task_id, from_status, to_status, action, points, timestamp)
-        VALUES (p_task_id, 'completed', 'terminated', 'terminated', 0, now());
-      END IF;
     END;
 
   -- -------------------------------------------------------
