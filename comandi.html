@@ -160,7 +160,7 @@
 
   <header>
     <h1>⚙ Comandi Manuali — garsal-apps</h1>
-    <p>// aggiornato da Claude · ultima modifica: 2026-03-10T21:00:00Z</p>
+    <p>// aggiornato da Claude · ultima modifica: 2026-03-10T21:30:00Z</p>
   </header>
 
   <!-- ═══════════════════════════════════════════════════
@@ -235,6 +235,177 @@ WHERE  SCHEMA = 'DB2C'              -- &lt;-- sostituire con lo schema trovato i
 ORDER  BY ORDINAL</pre>
     </div>
     <div class="platform-note">📍 Dove: DBeaver → apri Script → incolla → esegui (F5) · Eseguire dopo #000 · Sostituire DB2C con lo schema reale</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TASK 2 — CALL COMPLETA KCBPANAG
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-2">
+    <div class="task-header">
+      <div class="task-num">#002</div>
+      <div class="task-info">
+        <div class="task-title">CALL completa di <code>KCBPANAG</code> — 4 IN + 25 OUT</div>
+        <div class="task-desc">
+          Firma verificata da SYSPARMS (29 parametri, tutti CHAR).
+          Sostituire i valori di <code>CD_INTERNO</code>, <code>NDG</code>, <code>LINGUA</code>, <code>COUNTRY</code>
+          con i dati reali. Le variabili OUT vengono popolate dalla proc.
+          Se in Java/JDBC usare <code>registerOutParameter</code> per i parametri 5–29.
+        </div>
+        <div class="task-meta">
+          <span class="task-status" style="background:#1E40AF22;color:#93C5FD;border-color:#1E40AF44;">▶ da eseguire</span>
+          <span class="task-tag sql">SQL</span>
+          <span class="task-tag db2">DB2 z/OS</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-2">
+      <button class="copy-btn" onclick="copyCode('cb-2', this)">Copia</button>
+      <pre>-- Firma KCBPANAG — schema DB2C — 29 parametri (4 IN, 25 OUT)
+-- Tutti CHAR; lunghezze da SYSPARMS
+--
+-- #  NOME               DIR  LEN
+-- 1  CD_INTERNO          IN    5
+-- 2  NDG                 IN   16
+-- 3  LINGUA              IN    2
+-- 4  COUNTRY             IN    2
+-- 5  COMPANY_NAME        OUT 100
+-- 6  REG_ADDRESS         OUT 100
+-- 7  TOWN                OUT 100
+-- 8  POSTAL_CODE         OUT   5
+-- 9  COUNTRY_HO          OUT   3
+-- 10 COUNTRY_BRANCH      OUT   3
+-- 11 CUSTOMER_COUNT_1    OUT 100
+-- 12 ROLE_1              OUT 100
+-- 13 E_MAIL_1            OUT 100
+-- 14 FAX_NUMB_1          OUT  20
+-- 15 CUSTOMER_COUNT_2    OUT 100
+-- 16 ROLE_2              OUT 100
+-- 17 E_MAIL_2            OUT 100
+-- 18 FAX_NUMB_2          OUT  20
+-- 19 SWIFT_BIC           OUT  11
+-- 20 UIC                 OUT   9
+-- 21 TYPE_HBS            OUT 100
+-- 22 PURPOSE_BUSN        OUT 100
+-- 23 EB_VOLUME_MONTH     OUT 100
+-- 24 EB_REVENUES_YEAR    OUT 100
+-- 25 ADDITIONAL_INFO     OUT 100
+-- 26 TP_REL              OUT   5
+-- 27 FLAG_NDG_POTENZ     OUT   1
+-- 28 RET_CODE            OUT   2
+-- 29 MSG                 OUT 200
+
+CALL DB2C.KCBPANAG(
+  'CDINP',          -- 1  CD_INTERNO       CHAR(5)   IN
+  '1234567890123456',-- 2  NDG              CHAR(16)  IN
+  'IT',             -- 3  LINGUA           CHAR(2)   IN
+  'IT',             -- 4  COUNTRY          CHAR(2)   IN
+  ?,                -- 5  COMPANY_NAME     CHAR(100) OUT
+  ?,                -- 6  REG_ADDRESS      CHAR(100) OUT
+  ?,                -- 7  TOWN             CHAR(100) OUT
+  ?,                -- 8  POSTAL_CODE      CHAR(5)   OUT
+  ?,                -- 9  COUNTRY_HO       CHAR(3)   OUT
+  ?,                -- 10 COUNTRY_BRANCH   CHAR(3)   OUT
+  ?,                -- 11 CUSTOMER_COUNT_1 CHAR(100) OUT
+  ?,                -- 12 ROLE_1           CHAR(100) OUT
+  ?,                -- 13 E_MAIL_1         CHAR(100) OUT
+  ?,                -- 14 FAX_NUMB_1       CHAR(20)  OUT
+  ?,                -- 15 CUSTOMER_COUNT_2 CHAR(100) OUT
+  ?,                -- 16 ROLE_2           CHAR(100) OUT
+  ?,                -- 17 E_MAIL_2         CHAR(100) OUT
+  ?,                -- 18 FAX_NUMB_2       CHAR(20)  OUT
+  ?,                -- 19 SWIFT_BIC        CHAR(11)  OUT
+  ?,                -- 20 UIC              CHAR(9)   OUT
+  ?,                -- 21 TYPE_HBS         CHAR(100) OUT
+  ?,                -- 22 PURPOSE_BUSN     CHAR(100) OUT
+  ?,                -- 23 EB_VOLUME_MONTH  CHAR(100) OUT
+  ?,                -- 24 EB_REVENUES_YEAR CHAR(100) OUT
+  ?,                -- 25 ADDITIONAL_INFO  CHAR(100) OUT
+  ?,                -- 26 TP_REL           CHAR(5)   OUT
+  ?,                -- 27 FLAG_NDG_POTENZ  CHAR(1)   OUT
+  ?,                -- 28 RET_CODE         CHAR(2)   OUT
+  ?                 -- 29 MSG              CHAR(200) OUT
+)</pre>
+    </div>
+    <div class="platform-note">📍 DBeaver: Script → esegui · Java/JDBC: CallableStatement con registerOutParameter(5..29, Types.CHAR) · Controllare RET_CODE (param 28) e MSG (param 29) per esito</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TASK 3 — SNIPPET JAVA/JDBC
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-3">
+    <div class="task-header">
+      <div class="task-num">#003</div>
+      <div class="task-info">
+        <div class="task-title">Snippet Java/JDBC per chiamare <code>KCBPANAG</code></div>
+        <div class="task-desc">
+          Codice Java pronto all'uso con <code>CallableStatement</code>.
+          Imposta i 4 parametri IN, registra i 25 OUT, esegue la CALL e legge i risultati.
+          Adattare i valori di input e il <code>DataSource</code> al proprio contesto.
+        </div>
+        <div class="task-meta">
+          <span class="task-status" style="background:#1E40AF22;color:#93C5FD;border-color:#1E40AF44;">▶ snippet</span>
+          <span class="task-tag">Java</span>
+          <span class="task-tag db2">JDBC</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-3">
+      <button class="copy-btn" onclick="copyCode('cb-3', this)">Copia</button>
+      <pre>String sql = "{CALL DB2C.KCBPANAG(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)}";
+
+try (CallableStatement cs = conn.prepareCall(sql)) {
+
+    // --- parametri IN (1-4) ---
+    cs.setString(1, cdInterno);   // CD_INTERNO  CHAR(5)
+    cs.setString(2, ndg);         // NDG         CHAR(16)
+    cs.setString(3, lingua);      // LINGUA      CHAR(2)
+    cs.setString(4, country);     // COUNTRY     CHAR(2)
+
+    // --- parametri OUT (5-29) ---
+    cs.registerOutParameter( 5, Types.CHAR);  // COMPANY_NAME
+    cs.registerOutParameter( 6, Types.CHAR);  // REG_ADDRESS
+    cs.registerOutParameter( 7, Types.CHAR);  // TOWN
+    cs.registerOutParameter( 8, Types.CHAR);  // POSTAL_CODE
+    cs.registerOutParameter( 9, Types.CHAR);  // COUNTRY_HO
+    cs.registerOutParameter(10, Types.CHAR);  // COUNTRY_BRANCH
+    cs.registerOutParameter(11, Types.CHAR);  // CUSTOMER_COUNT_1
+    cs.registerOutParameter(12, Types.CHAR);  // ROLE_1
+    cs.registerOutParameter(13, Types.CHAR);  // E_MAIL_1
+    cs.registerOutParameter(14, Types.CHAR);  // FAX_NUMB_1
+    cs.registerOutParameter(15, Types.CHAR);  // CUSTOMER_COUNT_2
+    cs.registerOutParameter(16, Types.CHAR);  // ROLE_2
+    cs.registerOutParameter(17, Types.CHAR);  // E_MAIL_2
+    cs.registerOutParameter(18, Types.CHAR);  // FAX_NUMB_2
+    cs.registerOutParameter(19, Types.CHAR);  // SWIFT_BIC
+    cs.registerOutParameter(20, Types.CHAR);  // UIC
+    cs.registerOutParameter(21, Types.CHAR);  // TYPE_HBS
+    cs.registerOutParameter(22, Types.CHAR);  // PURPOSE_BUSN
+    cs.registerOutParameter(23, Types.CHAR);  // EB_VOLUME_MONTH
+    cs.registerOutParameter(24, Types.CHAR);  // EB_REVENUES_YEAR
+    cs.registerOutParameter(25, Types.CHAR);  // ADDITIONAL_INFO
+    cs.registerOutParameter(26, Types.CHAR);  // TP_REL
+    cs.registerOutParameter(27, Types.CHAR);  // FLAG_NDG_POTENZ
+    cs.registerOutParameter(28, Types.CHAR);  // RET_CODE
+    cs.registerOutParameter(29, Types.CHAR);  // MSG
+
+    cs.execute();
+
+    // --- leggi esito ---
+    String retCode = cs.getString(28); // es. "00" = OK
+    String msg     = cs.getString(29);
+
+    if (!"00".equals(retCode != null ? retCode.trim() : "")) {
+        throw new RuntimeException("KCBPANAG errore: " + retCode + " — " + msg);
+    }
+
+    // --- leggi dati output ---
+    String companyName = cs.getString(5);
+    String address     = cs.getString(6);
+    String town        = cs.getString(7);
+    // ... ecc.
+}</pre>
+    </div>
+    <div class="platform-note">📍 Nota: verificare il codice di successo reale in RET_CODE (potrebbe essere "00", " ", o altro) — leggere prima senza il controllo per vedere cosa ritorna la proc</div>
   </div>
 
   <!-- Aggiungi nuovi task sopra questo commento -->
