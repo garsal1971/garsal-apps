@@ -41,7 +41,7 @@
     overflow: hidden;
   }
   .task.done { opacity: 0.45; }
-  .task.done .task-status { background: #064E3B; color: #34D399; }
+  .task.done .task-status { background: #064E3B; color: #34D399; border-color: #065F46; }
 
   .task-header {
     display: flex;
@@ -100,6 +100,15 @@
   }
   .task-tag.sql  { background: #78350F22; color: #FCD34D; border-color: #78350F44; }
   .task-tag.bash { background: #064E3B22; color: #6EE7B7; border-color: #064E3B44; }
+  .task-tag.order {
+    background: #1E293B;
+    color: #F97316;
+    border: 1px solid #F9731644;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
 
   .code-block {
     position: relative;
@@ -144,8 +153,6 @@
     font-family: monospace;
   }
 
-  .empty { text-align: center; padding: 60px 20px; color: #475569; font-size: 14px; }
-
   footer {
     margin-top: 40px;
     text-align: center;
@@ -160,93 +167,98 @@
 
   <header>
     <h1>⚙ Comandi Manuali — garsal-apps</h1>
-    <p>// aggiornato da Claude · ultima modifica: 2026-03-10T15:00:00Z</p>
+    <p>// aggiornato da Claude · 2026-03-11T00:00:00Z</p>
   </header>
 
   <!-- ═══════════════════════════════════════════════════
-       TASK 0 — DIAGNOSTICA
-       ══════════════════════════════════════════════════ -->
-  <div class="task" id="task-0">
-    <div class="task-header">
-      <div class="task-num">#000</div>
-      <div class="task-info">
-        <div class="task-title">Diagnostica — leggi definizione constraint <code>history_action_check</code></div>
-        <div class="task-desc">
-          Esegui questa query per vedere esattamente quali valori accetta il constraint su <code>ts_history</code>.
-          Copia il risultato e comunicalo: serve per capire quali valori sono vietati.
-        </div>
-        <div class="task-meta">
-          <span class="task-status" style="background:#0F766E22;color:#2DD4BF;border-color:#0F766E44;">🔍 diagnostica</span>
-          <span class="task-tag sql">SQL</span>
-          <span class="task-tag">Supabase</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-0">
-      <button class="copy-btn" onclick="copyCode('cb-0', this)">Copia</button>
-      <pre>SELECT pg_get_constraintdef(oid) AS definizione_constraint
-FROM   pg_constraint
-WHERE  conname = 'history_action_check';</pre>
-    </div>
-    <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run · Comunica il risultato</div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════
-       TASK 1 — PENDING
+       TASK 1 — occurrence_id migration
        ══════════════════════════════════════════════════ -->
   <div class="task" id="task-1">
     <div class="task-header">
       <div class="task-num">#001</div>
       <div class="task-info">
-        <div class="task-title">Crea funzione <code>task_next_recurring_date()</code></div>
+        <div class="task-title">Migration — aggiunge <code>occurrence_id</code> a <code>cm_notification_queue</code></div>
         <div class="task-desc">
-          Funzione helper che calcola la prossima occorrenza di un task <em>recurring</em> dopo una data base.
-          Supporta frequenza <strong>daily, weekly, monthly, yearly</strong> con intervalli e giorni multipli.
-          Equivalente SQL di <code>getNextRecurringDate()</code> in tasks.html.
-          Esegui nell'SQL Editor di Supabase → <strong>dashboard.supabase.com</strong> → progetto garsal-apps → SQL Editor.
+          Nuova colonna che identifica la specifica occorrenza di una notifica:<br>
+          • habit → <code>{rule_id}:{YYYY-MM-DD}:{slot_time}</code> (es. <code>abc:2026-03-11:08:00</code>)<br>
+          • task → <code>{rule_id}</code><br>
+          Usata dal webhook Telegram per cancellare solo le notifiche del singolo slot completato,
+          senza toccare i promemoria di altri slot orari o dei giorni futuri.
         </div>
         <div class="task-meta">
           <span class="task-status">⏳ da fare</span>
           <span class="task-tag sql">SQL</span>
           <span class="task-tag">Supabase</span>
+          <span class="task-tag order">1° — eseguire per primo</span>
         </div>
       </div>
     </div>
     <div class="code-block" id="cb-1">
       <button class="copy-btn" onclick="copyCode('cb-1', this)">Copia</button>
+      <pre>ALTER TABLE cm_notification_queue
+  ADD COLUMN IF NOT EXISTS occurrence_id text;
+
+CREATE INDEX IF NOT EXISTS idx_queue_occurrence_id
+  ON cm_notification_queue (occurrence_id)
+  WHERE status IN ('pending', 'snoozed', 'sending');</pre>
+    </div>
+    <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TASK 2 — task_next_recurring_date
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-2">
+    <div class="task-header">
+      <div class="task-num">#002</div>
+      <div class="task-info">
+        <div class="task-title">Crea funzione helper <code>task_next_recurring_date()</code></div>
+        <div class="task-desc">
+          Calcola la prossima occorrenza di un task <em>recurring</em> dopo una data base.
+          Supporta frequenza <strong>daily, weekly, monthly, yearly</strong> con intervalli e giorni multipli.
+          Equivalente SQL di <code>getNextRecurringDate()</code> in tasks.html.
+          Richiesta da <code>task_complete_via_telegram</code> (#003).
+        </div>
+        <div class="task-meta">
+          <span class="task-status">⏳ da fare</span>
+          <span class="task-tag sql">SQL</span>
+          <span class="task-tag">Supabase</span>
+          <span class="task-tag order">2°</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-2">
+      <button class="copy-btn" onclick="copyCode('cb-2', this)">Copia</button>
       <pre>CREATE OR REPLACE FUNCTION task_next_recurring_date(
   p_task    ts_tasks,
-  p_base    date        -- data corrente (next_occurrence_date o start_date)
+  p_base    date
 )
 RETURNS date LANGUAGE plpgsql AS $$
 DECLARE
   v_interval  integer := COALESCE(p_task.recurring_interval, 1);
   v_freq      text    := p_task.recurring_frequency;
 
-  -- weekly
-  v_dow_arr   integer[];
-  v_start_dow integer;
-  v_cur_dow   integer;
-  v_test_date date;
-  i           integer;
+  v_dow_arr     integer[];
+  v_start_dow   integer;
+  v_cur_dow     integer;
+  v_test_date   date;
+  i             integer;
   v_days_to_sun integer;
   v_target_sun  date;
 
-  -- monthly
-  v_day_arr   integer[];
-  v_start_day integer;
-  v_cur_day   integer;
-  v_cur_month integer;
-  v_cur_year  integer;
+  v_day_arr    integer[];
+  v_start_day  integer;
+  v_cur_day    integer;
+  v_cur_month  integer;
+  v_cur_year   integer;
   v_next_month date;
 
-  -- yearly
-  v_dates_arr   text[];
-  v_date_str    text;
-  v_parts       text[];
-  v_d           integer;
-  v_m           integer;
-  v_next_year   integer;
+  v_dates_arr text[];
+  v_date_str  text;
+  v_parts     text[];
+  v_d         integer;
+  v_m         integer;
+  v_next_year integer;
 BEGIN
 
   IF v_freq = 'daily' THEN
@@ -273,8 +285,7 @@ BEGIN
       END IF;
     END LOOP;
 
-    v_days_to_sun := CASE WHEN v_cur_dow = 0 THEN 7
-                          ELSE (7 - v_cur_dow) END;
+    v_days_to_sun := CASE WHEN v_cur_dow = 0 THEN 7 ELSE (7 - v_cur_dow) END;
     v_target_sun  := p_base + v_days_to_sun + ((v_interval - 1) * 7);
 
     FOR i IN 0..6 LOOP
@@ -298,7 +309,7 @@ BEGIN
       v_day_arr   := ARRAY[v_start_day];
     END IF;
 
-    v_cur_day   := EXTRACT(DAY  FROM p_base)::integer;
+    v_cur_day   := EXTRACT(DAY   FROM p_base)::integer;
     v_cur_month := EXTRACT(MONTH FROM p_base)::integer;
     v_cur_year  := EXTRACT(YEAR  FROM p_base)::integer;
 
@@ -309,7 +320,7 @@ BEGIN
     END LOOP;
 
     v_next_month := (make_date(v_cur_year, v_cur_month, 1) + (v_interval || ' months')::interval)::date;
-    RETURN make_date(EXTRACT(YEAR FROM v_next_month)::integer,
+    RETURN make_date(EXTRACT(YEAR  FROM v_next_month)::integer,
                      EXTRACT(MONTH FROM v_next_month)::integer,
                      v_day_arr[1]);
   END IF;
@@ -353,36 +364,32 @@ $$;</pre>
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       TASK 2 — PENDING
+       TASK 3 — task_complete_via_telegram
        ══════════════════════════════════════════════════ -->
-  <div class="task" id="task-2">
+  <div class="task" id="task-3">
     <div class="task-header">
-      <div class="task-num">#002</div>
+      <div class="task-num">#003</div>
       <div class="task-info">
-        <div class="task-title">Crea funzione <code>task_complete_via_telegram()</code></div>
+        <div class="task-title">Crea funzione RPC <code>task_complete_via_telegram()</code></div>
         <div class="task-desc">
-          Funzione RPC chiamata dal webhook Telegram quando l'utente clicca <strong>✅ Fatto</strong>
-          su una notifica task. Gestisce tutti i tipi:
-          <strong>single</strong> (→ terminated, elimina regola notifica),
-          <strong>simple_recurring</strong> (→ next = current + repeat_after_days),
-          <strong>recurring</strong> (→ calcola next via <code>task_next_recurring_date</code>),
-          <strong>multiple</strong> (→ avanza alla data successiva),
-          <strong>free_repeat</strong> (→ completed).
-          Inserisce sempre un record in <code>ts_history</code>.
-          Eseguire <strong>dopo</strong> il task #001.
+          Funzione chiamata dal webhook Telegram quando l'utente clicca <strong>✅ Fatto</strong> su una notifica task.
+          Gestisce tutti i tipi: <strong>single</strong> (→ terminated, elimina regola notifica),
+          <strong>simple_recurring</strong>, <strong>recurring</strong>, <strong>multiple</strong>, <strong>free_repeat</strong>.
+          Inserisce un record in <code>ts_history</code> con <code>action='completed'</code>
+          (rispetta il constraint <code>history_action_check</code>).
+          Eseguire <strong>dopo</strong> il task #002.
         </div>
         <div class="task-meta">
           <span class="task-status">⏳ da fare</span>
           <span class="task-tag sql">SQL</span>
           <span class="task-tag">Supabase</span>
+          <span class="task-tag order">3° — dopo #002</span>
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-2">
-      <button class="copy-btn" onclick="copyCode('cb-2', this)">Copia</button>
-      <pre>-- Eseguire DOPO il task #001 (task_next_recurring_date)
--- v2: variabili timestamptz per compatibilità con colonne ts_tasks
-CREATE OR REPLACE FUNCTION task_complete_via_telegram(
+    <div class="code-block" id="cb-3">
+      <button class="copy-btn" onclick="copyCode('cb-3', this)">Copia</button>
+      <pre>CREATE OR REPLACE FUNCTION task_complete_via_telegram(
   p_task_id  uuid,
   p_today    date
 )
@@ -414,7 +421,6 @@ BEGIN
     now()
   );
 
-  -- Per task singoli con deadline: controlla se in ritardo
   IF v_task.type = 'single' AND v_task.deadline IS NOT NULL THEN
     IF p_today > v_task.deadline::date THEN
       v_points := COALESCE(v_task.late_points, 0);
@@ -422,14 +428,13 @@ BEGIN
     END IF;
   END IF;
 
-  -- Inserisci il record history principale (action sempre 'completed', come nel JS)
   INSERT INTO ts_history (task_id, from_status, to_status, action, points, timestamp)
   VALUES (p_task_id, v_from_status, 'completed', 'completed', v_points, now());
 
   IF v_task.type = 'single' THEN
     UPDATE ts_tasks
-       SET status               = 'terminated',
-           last_completed_date  = v_completed_date
+       SET status              = 'terminated',
+           last_completed_date = v_completed_date
      WHERE id = p_task_id;
 
     DELETE FROM cm_notification_rules
@@ -492,7 +497,6 @@ BEGIN
              last_completed_date  = v_completed_date,
              next_occurrence_date = v_next_str::timestamptz
        WHERE id = p_task_id;
-
     END;
 
   ELSE -- free_repeat
@@ -511,10 +515,40 @@ BEGIN
 END;
 $$;
 
--- Permetti agli utenti autenticati di chiamare la funzione
 GRANT EXECUTE ON FUNCTION task_complete_via_telegram(uuid, date) TO authenticated;</pre>
     </div>
-    <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run · Eseguire dopo #001</div>
+    <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run · Eseguire dopo #002</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TASK 4 — Deploy Edge Functions
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-4">
+    <div class="task-header">
+      <div class="task-num">#004</div>
+      <div class="task-info">
+        <div class="task-title">Deploy Edge Functions — <code>fill-notification-queue</code> &amp; <code>telegram-webhook</code></div>
+        <div class="task-desc">
+          Aggiorna le due Edge Function su Supabase dopo le modifiche a <code>occurrence_id</code>:<br>
+          • <strong>fill-notification-queue</strong> — ora popola <code>occurrence_id</code> per ogni entry della coda<br>
+          • <strong>telegram-webhook</strong> — usa <code>occurrence_id</code> per cancellare solo le notifiche dello stesso slot<br>
+          Eseguire dalla radice del repo con Supabase CLI (link progetto: <code>jajlmmdsjlvzgcxiiypk</code>).
+          Dopo il deploy, invocare manualmente <code>fill-notification-queue</code> per rigenerare le entry con <code>occurrence_id</code>.
+        </div>
+        <div class="task-meta">
+          <span class="task-status">⏳ da fare</span>
+          <span class="task-tag bash">Bash</span>
+          <span class="task-tag">Supabase CLI</span>
+          <span class="task-tag order">4° — dopo #001</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-4">
+      <button class="copy-btn" onclick="copyCode('cb-4', this)">Copia</button>
+      <pre>supabase functions deploy fill-notification-queue --project-ref jajlmmdsjlvzgcxiiypk
+supabase functions deploy telegram-webhook --project-ref jajlmmdsjlvzgcxiiypk</pre>
+    </div>
+    <div class="platform-note">📍 Dove: terminale locale, dalla radice di garsal-apps · Supabase CLI già configurato</div>
   </div>
 
   <!-- Aggiungi nuovi task sopra questo commento -->
@@ -526,7 +560,6 @@ GRANT EXECUTE ON FUNCTION task_complete_via_telegram(uuid, date) TO authenticate
 <script>
 function copyCode(blockId, btn) {
   const pre = document.getElementById(blockId).querySelector('pre');
-  // Per il copia, ripristina < al posto di &lt;
   const text = pre.innerHTML
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
