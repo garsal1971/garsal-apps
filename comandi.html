@@ -297,6 +297,99 @@ WHERE status IN ('sending', 'snoozed');</pre>
     <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run</div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════
+       TASK 4 — migration: aggiungi stato 'completed' al CHECK constraint
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-4">
+    <div class="task-header">
+      <div class="task-num">#004</div>
+      <div class="task-info">
+        <div class="task-title">SQL — aggiungi <code>'completed'</code> al CHECK constraint di <code>status</code></div>
+        <div class="task-desc">
+          La colonna <code>status</code> ha un CHECK constraint che ammette solo <code>pending | sent | failed | cancelled</code>.<br>
+          Il webhook Telegram imposta <code>status = 'completed'</code> quando l'utente clicca "✅ Fatto".<br>
+          Senza questa migration, l'UPDATE fallisce silenziosamente (constraint violation) e lo status rimane <code>sent</code>.<br>
+          File: <code>supabase/migrations/20260313160000_notification_queue_completed_status.sql</code>
+        </div>
+        <div class="task-meta">
+          <span class="task-status">⏳ da fare</span>
+          <span class="task-tag sql">SQL</span>
+          <span class="task-tag">Supabase</span>
+          <span class="task-tag order">1° — eseguire prima di testare "Fatto"</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-4">
+      <button class="copy-btn" onclick="copyCode('cb-4', this)">Copia</button>
+      <pre>ALTER TABLE cm_notification_queue
+  DROP CONSTRAINT IF EXISTS cm_notification_queue_status_check;
+
+ALTER TABLE cm_notification_queue
+  ADD CONSTRAINT cm_notification_queue_status_check
+    CHECK (status IN ('pending', 'sent', 'failed', 'cancelled', 'completed'));
+
+-- Verifica: il constraint deve includere 'completed'
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'cm_notification_queue'::regclass
+  AND conname = 'cm_notification_queue_status_check';</pre>
+    </div>
+    <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       TASK 5 — verifica comportamento "Fatto" e "Annulla"
+       ══════════════════════════════════════════════════ -->
+  <div class="task" id="task-5">
+    <div class="task-header">
+      <div class="task-num">#005</div>
+      <div class="task-info">
+        <div class="task-title">SQL — verifica dopo aver cliccato "✅ Fatto" o "❌ Annulla" su Telegram</div>
+        <div class="task-desc">
+          Dopo aver cliccato un bottone su Telegram, verifica che:<br>
+          • "✅ Fatto" → row cliccato ha <code>status = 'completed'</code>, tutti i sibling hanno <code>status = 'cancelled'</code><br>
+          • "❌ Annulla" → row cliccato + tutti i sibling hanno <code>status = 'cancelled'</code> (qualsiasi stato precedente)<br>
+          • I messaggi Telegram corrispondenti siano stati eliminati dalla chat<br>
+          • Nessun sibling rimanga con <code>status = 'sent'</code> dopo l'azione
+        </div>
+        <div class="task-meta">
+          <span class="task-status">⏳ da fare</span>
+          <span class="task-tag sql">SQL</span>
+          <span class="task-tag">Supabase</span>
+          <span class="task-tag order">2° — dopo il click su Telegram</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-5">
+      <button class="copy-btn" onclick="copyCode('cb-5', this)">Copia</button>
+      <pre>-- Ultime 10 occorrenze con i loro sibling — controlla status e telegram_message_id
+SELECT
+  occurrence_id,
+  id,
+  fire_at AT TIME ZONE 'Europe/Rome' AS fire_at_rome,
+  status,
+  telegram_message_id,
+  title
+FROM cm_notification_queue
+WHERE occurrence_id IN (
+  -- prende le ultime 5 occurrence_id distinte toccate
+  SELECT DISTINCT occurrence_id
+  FROM cm_notification_queue
+  WHERE status IN ('completed', 'cancelled')
+    AND created_at >= now() - interval '30 minutes'
+  LIMIT 5
+)
+ORDER BY occurrence_id, fire_at;
+
+-- Distribuzione stati aggiornata
+SELECT status, COUNT(*) AS n
+FROM cm_notification_queue
+GROUP BY status
+ORDER BY n DESC;</pre>
+    </div>
+    <div class="platform-note">📍 Dove: Supabase Dashboard → SQL Editor → New Query → incolla → Run</div>
+  </div>
+
   <!-- Aggiungi nuovi task sopra questo commento -->
 
   <footer>garsal-apps · comandi.html · aggiornato automaticamente da Claude</footer>
