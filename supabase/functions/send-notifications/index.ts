@@ -164,20 +164,6 @@ Deno.serve(async (_req) => {
         .update(updatePayload)
         .eq('id', item.id)
 
-      // Scrivi nel log storico
-      await sb.from('cm_notification_log').insert({
-        queue_id:  item.id,
-        user_id:   item.user_id,
-        app:       item.app,
-        entity_id: item.entity_id,
-        title:     item.title,
-        channel:   item.channel,
-        fired_at:  now,
-        status:    telegramOk ? 'sent' : 'failed',
-        response:  responseText || null,
-        error_msg: errorMsg     || null,
-      })
-
       if (telegramOk) sent++
       else failed++
     }
