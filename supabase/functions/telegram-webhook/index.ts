@@ -53,22 +53,28 @@ async function answerCallbackQuery(callbackQueryId: string, text: string): Promi
 
 async function deleteMessage(chatId: number, messageId: number): Promise<void> {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`
-  await fetch(url, {
+  const res = await fetch(url, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ chat_id: chatId, message_id: messageId }),
   })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.warn(`[telegram-webhook] deleteMessage failed msg=${messageId}:`, body)
+  }
 }
 
 // Elimina i messaggi Telegram degli item con lo stesso occurrence_id
 async function deleteSiblingsByOccurrence(occId: string, excludeQueueId: string, chatId: number): Promise<void> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from('cm_notification_queue')
-    .select('telegram_message_id')
+    .select('id, telegram_message_id')
     .eq('occurrence_id', occId)
     .neq('id', excludeQueueId)
     .not('telegram_message_id', 'is', null)
-  if (!data) return
+  if (error) { console.error('[telegram-webhook] deleteSiblings query error:', error); return }
+  if (!data || data.length === 0) { console.log(`[telegram-webhook] deleteSiblings: nessun sibling per occId=${occId}`); return }
+  console.log(`[telegram-webhook] deleteSiblings: ${data.length} sibling(s) per occId=${occId}`)
   for (const row of data) {
     if (row.telegram_message_id) {
       await deleteMessage(chatId, row.telegram_message_id as number)
@@ -365,11 +371,12 @@ Deno.serve(async (req) => {
         .eq('occurrence_id', occId)
         .neq('id', queueId)
     }
-    // Segna il row cliccato come cancelled
-    await sb
+    // Segna il row cliccato come completed
+    const { error: completeErr } = await sb
       .from('cm_notification_queue')
-      .update({ status: 'cancelled' })
+      .update({ status: 'completed' })
       .eq('id', queueId)
+    if (completeErr) console.error('[telegram-webhook] errore set completed:', completeErr)
 
     await answerCallbackQuery(callbackQueryId, '✅ Completato!')
     await deleteMessage(chatId, messageId)
