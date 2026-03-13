@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Events Log v2.2.3</title>
+    <title>Events Log v2.2.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -947,8 +947,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v2.2.3';
-    var BUILD_TIME  = '2026-03-13T23:00:00Z';
+    var APP_VERSION = 'v2.2.4';
+    var BUILD_TIME  = '2026-03-13T23:30:00Z';
     console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2106,12 +2106,24 @@ window.addEventListener('message', (e) => {
 // Logout broadcast da AppSphere: invalida sessione e mostra overlay
 const _authChannel = new BroadcastChannel('appsphere_auth');
 _authChannel.onmessage = (e) => {
-    if (e.data && e.data.type === 'LOGOUT') {
+    if (!e.data) return;
+    if (e.data.type === 'LOGOUT') {
         sb = null;
         sbAccessToken = null;
         sessionStorage.removeItem('sb_token');
         document.getElementById('authOverlay').style.display = 'flex';
         console.log('🔒 Sessione invalidata da AppSphere (logout)');
+    } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+        const newToken = e.data.sbToken;
+        sessionStorage.setItem('sb_token', newToken);
+        sbAccessToken = newToken;
+        if (sb) {
+            sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + newToken } }
+            });
+        }
+        console.log('🔄 Token rinnovato silenziosamente (AppSphere)');
     }
 };
 
