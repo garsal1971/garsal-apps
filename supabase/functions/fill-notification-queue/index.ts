@@ -1,21 +1,34 @@
 // ============================================================
 // Job 1 — fill-notification-queue
 // Frequenza: ogni 6 ore (cron: "0 */6 * * *")
-// Aggiornato: 2026-03-11 — aggiunto occurrence_id per cancellazione mirata
+// Aggiornato: 2026-03-11 — refactoring occorrenze e body unificato
 //
-// Gestisce due tipi di struttura in reminder_presets:
+// Concetti chiave:
+//   REGOLA  = 1 row in cm_notification_rules (configurazione persistente)
+//   OCCORRENZA = entity + data specifica + ora specifica
+//             → da una regola habit si generano N occorrenze (una per giorno × slot)
+//             → da una regola task si genera 1 occorrenza (la data di scadenza)
+//   NOTIFICA = 1 row in cm_notification_queue
+//             → per ogni occorrenza si generano K notifiche (una per preset reminder)
+//             → tutte le notifiche della stessa occorrenza condividono occurrence_id
+//             → si distinguono solo per fire_at (= ora occorrenza − offset preset)
 //
-// TASKS (struttura legacy):
+// Formato occurrence_id (uniforme per task e habit):
+//   "{rule_id}:{YYYY-MM-DD}:{HH:MM}"
+//
+// Formato body (uniforme per task e habit):
+//   "{entity_title} — {preset_label} prima — DD/MM/YYYY[ ore HH:MM]"
+//   (l'ora è omessa se è 00:00, ossia task senza orario specifico)
+//
+// Strutture reminder_presets:
+//
+// TASKS:
 //   { "reminders": [1, 3], "due_at": "2026-03-10T10:00:00Z" }
-//   → un fire_at per preset = due_at − offset_minutes
 //
-// HABITS (nuova struttura):
-//   daily / daily_multiple:
-//     { "reminders": [1, 3], "times": ["08:00","22:00"], "from-to": ["2026-03-01","2026-05-30"] }
-//   weekly:
-//     { "reminders": [1, 3], "days": [1,3,5], "times": ["08:00"], "from-to": ["2026-03-01","2026-05-30"] }
-//   → fire_at per ogni giorno nel range × ogni orario × ogni preset
-//      (per weekly: solo i giorni della settimana in `days`)
+// HABITS (daily / daily_multiple):
+//   { "reminders": [1, 3], "times": ["08:00","22:00"], "from-to": ["2026-03-01","2026-05-30"] }
+// HABITS (weekly):
+//   { "reminders": [1, 3], "days": [1,3,5], "times": ["08:00"], "from-to": ["2026-03-01","2026-05-30"] }
 //
 // Idempotente: UPSERT su conflict (rule_id, fire_at)
 // ============================================================
@@ -79,10 +92,11 @@ interface Preset {
 }
 
 interface QueueEntry {
-  fire_at:       string
-  label:         string
-  time:          string   // HH:MM usato come riferimento (per task = ora di due_at)
-  occurrence_id: string   // identifica la specifica occorrenza (habit: ruleId:YYYY-MM-DD:HH:MM, task: ruleId)
+  fire_at:         string
+  label:           string
+  time:            string   // HH:MM — ora dell'occorrenza (slot habit o ora di due_at per task)
+  occurrence_id:   string   // ruleId:YYYY-MM-DD:HH:MM (stesso formato per task e habit)
+  occurrence_date: string   // YYYY-MM-DD — data dell'occorrenza (per buildBody)
 }
 
 // ---------------------------------------------------------------------------
@@ -172,9 +186,7 @@ Deno.serve(async (_req) => {
       const title = rule.entity_title ? `🔔 ${rule.entity_title}` : `🔔 Promemoria`
 
       for (const entry of entries) {
-        const body = isHabit
-          ? buildHabitBody(entry, rule.entity_title)
-          : buildTaskBody(entry, (rp as TaskReminderPresets).due_at)
+        const body = buildBody(entry, rule.entity_title)
 
         // Metadata per-entry: include slot_time per filtrare la cancellazione per slot
         let entryMetadata: Record<string, unknown> | null = null
@@ -243,7 +255,9 @@ Deno.serve(async (_req) => {
 })
 
 // ---------------------------------------------------------------------------
-// Genera entry per un task (struttura legacy: due_at singolo)
+// Genera entry per un task (struttura: due_at singolo)
+// Una regola task → una occorrenza (la data di scadenza) → K notifiche (una per preset)
+// Tutte le notifiche della stessa occorrenza condividono occurrence_id, differiscono per fire_at
 // ---------------------------------------------------------------------------
 function generateTaskEntries(
   rp:         TaskReminderPresets,
@@ -252,8 +266,11 @@ function generateTaskEntries(
   horizon:    Date,
   ruleId:     string,
 ): QueueEntry[] {
-  const dueAt  = new Date(rp.due_at)
+  const dueAt   = new Date(rp.due_at)
+  const dateStr = dueAt.toISOString().slice(0, 10)  // YYYY-MM-DD
   const timeStr = `${String(dueAt.getUTCHours()).padStart(2,'0')}:${String(dueAt.getUTCMinutes()).padStart(2,'0')}`
+  // occurrence_id uniforme con habit: ruleId:YYYY-MM-DD:HH:MM
+  const occurrenceId = `${ruleId}:${dateStr}:${timeStr}`
   const results: QueueEntry[] = []
 
   for (const pid of rp.reminders) {
@@ -261,7 +278,13 @@ function generateTaskEntries(
     if (!preset) { console.warn(`[fill-queue] preset int_id=${pid} non trovato`); continue }
     const fireAt = new Date(dueAt.getTime() - preset.offset_minutes * 60 * 1000)
     if (fireAt > now && fireAt <= horizon) {
-      results.push({ fire_at: fireAt.toISOString(), label: preset.label, time: timeStr, occurrence_id: ruleId })
+      results.push({
+        fire_at:         fireAt.toISOString(),
+        label:           preset.label,
+        time:            timeStr,
+        occurrence_id:   occurrenceId,
+        occurrence_date: dateStr,
+      })
     }
   }
 
@@ -269,7 +292,9 @@ function generateTaskEntries(
 }
 
 // ---------------------------------------------------------------------------
-// Genera entry per un habit (nuova struttura: times[] + from-to + days?)
+// Genera entry per un habit (struttura: times[] + from-to + days?)
+// Una regola habit → N occorrenze (una per giorno × slot) → K notifiche per occorrenza
+// Tutte le notifiche dello stesso slot condividono occurrence_id, differiscono per fire_at
 // ---------------------------------------------------------------------------
 function generateHabitEntries(
   rp:         HabitReminderPresets,
@@ -322,7 +347,13 @@ function generateHabitEntries(
 
         const fireAt = new Date(baseDate.getTime() - preset.offset_minutes * 60 * 1000)
         if (fireAt > now && fireAt <= horizon) {
-          results.push({ fire_at: fireAt.toISOString(), label: preset.label, time: timeStr, occurrence_id: occurrenceId })
+          results.push({
+            fire_at:         fireAt.toISOString(),
+            label:           preset.label,
+            time:            timeStr,
+            occurrence_id:   occurrenceId,
+            occurrence_date: cursorDateStr,
+          })
         }
       }
     }
@@ -334,25 +365,23 @@ function generateHabitEntries(
 }
 
 // ---------------------------------------------------------------------------
-// Body messages
+// Body unificato — stesso formato per task e habit
+//   "{entity_title} — {preset_label} prima — DD/MM/YYYY[ ore HH:MM]"
+//   L'ora è omessa se è 00:00 (task con solo data, nessun orario specifico)
 // ---------------------------------------------------------------------------
-function buildTaskBody(entry: QueueEntry, dueAt: string): string {
-  return `${entry.label} prima — scad. ${formatDate(new Date(dueAt))}`
-}
-
-function buildHabitBody(entry: QueueEntry, entityTitle: string | null): string {
-  const name = entityTitle ?? 'Abitudine'
-  return `${entry.label} prima — ${name} ore ${entry.time}`
+function buildBody(entry: QueueEntry, entityTitle: string | null): string {
+  const name     = entityTitle ?? 'Promemoria'
+  const datePart = formatDateStr(entry.occurrence_date)
+  const timePart = entry.time !== '00:00' ? ` ore ${entry.time}` : ''
+  return `${name} — ${entry.label} prima — ${datePart}${timePart}`
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function formatDate(d: Date): string {
-  const dd   = String(d.getUTCDate()).padStart(2, '0')
-  const mm   = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const yyyy = d.getUTCFullYear()
-  const hh   = String(d.getUTCHours()).padStart(2, '0')
-  const min  = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`
+
+// Converte YYYY-MM-DD → DD/MM/YYYY
+function formatDateStr(d: string): string {
+  const [y, m, day] = d.split('-')
+  return `${day}/${m}/${y}`
 }
