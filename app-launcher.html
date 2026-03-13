@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.4.6</title>
+<title>AppSphere v1.4.7</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -847,8 +847,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.4.6';
-const BUILD_TIME  = '2026-03-07T10:00:00Z';
+const APP_VERSION = 'v1.4.7';
+const BUILD_TIME  = '2026-03-13T23:00:00Z';
 console.log('%c AppSphere ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1265,6 +1265,40 @@ function loginWithGoogle() {
 }
 
 const _authChannel = new BroadcastChannel('appsphere_auth');
+let _refreshInterval = null;
+
+// Rinnova il JWT tramite refresh_token senza richiedere un nuovo login.
+// In caso di errore fa logout forzato. Distribuisce il nuovo token a tutte le app figlie.
+async function refreshSession() {
+  const refreshToken = sessionStorage.getItem('refresh_token');
+  if (!refreshToken) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    if (!res.ok) {
+      console.warn('🔒 Refresh token non valido — logout forzato');
+      logout();
+      return;
+    }
+    const data = await res.json();
+    sessionStorage.setItem('sb_token', data.access_token);
+    if (data.refresh_token) sessionStorage.setItem('refresh_token', data.refresh_token);
+    // Notifica tutte le app figlie: aggiornare il token senza ricaricare la pagina
+    _authChannel.postMessage({ type: 'TOKEN_REFRESH', sbToken: data.access_token });
+    console.log('🔄 Token rinnovato silenziosamente (' + APP_VERSION + ')');
+  } catch (e) {
+    console.warn('Errore refresh token:', e);
+  }
+}
+
+// Avvia il rinnovo automatico ogni 50 minuti (JWT Supabase scade dopo 60 min di default)
+function startTokenRefresh() {
+  if (_refreshInterval) clearInterval(_refreshInterval);
+  _refreshInterval = setInterval(refreshSession, 50 * 60 * 1000);
+}
 
 async function logout() {
   const token = sessionStorage.getItem('sb_token');
@@ -1275,7 +1309,9 @@ async function logout() {
     }).catch(() => {});
   }
   sessionStorage.removeItem('sb_token');
+  sessionStorage.removeItem('refresh_token');
   sessionStorage.removeItem('google_token');
+  if (_refreshInterval) { clearInterval(_refreshInterval); _refreshInterval = null; }
 
   // Notifica tutte le app figlie aperte: devono invalidare il token
   _authChannel.postMessage({ type: 'LOGOUT' });
@@ -1293,6 +1329,8 @@ function parseHash() {
     sessionStorage.setItem('sb_token', p.access_token);
     // provider_token = token Google reale, usabile con Google Fit API
     if (p.provider_token) sessionStorage.setItem('google_token', p.provider_token);
+    // refresh_token = usato per rinnovare il JWT senza re-login
+    if (p.refresh_token) sessionStorage.setItem('refresh_token', p.refresh_token);
     history.replaceState(null, '', window.location.pathname);
     return p.access_token;
   }
@@ -1724,7 +1762,7 @@ async function init() {
   const token = parseHash() || sessionStorage.getItem('sb_token');
   if (token) {
     const user = await getUserInfo(token);
-    if (user) { showApp(user); return; }
+    if (user) { showApp(user); startTokenRefresh(); return; }
     sessionStorage.removeItem('sb_token');
   }
   // show login

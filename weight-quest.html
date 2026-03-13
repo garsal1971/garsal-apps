@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.29</title>
+    <title>Weight Quest v3.5.30</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -999,8 +999,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.29';
-        var BUILD_TIME  = '2026-03-13T23:00:00Z';
+        var APP_VERSION = 'v3.5.30';
+        var BUILD_TIME  = '2026-03-13T23:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1782,7 +1782,8 @@
         // anche quando l'app è già autenticata
         var _authChannel = new BroadcastChannel('appsphere_auth');
         _authChannel.onmessage = function(e) {
-            if (e.data && e.data.type === 'LOGOUT') {
+            if (!e.data) return;
+            if (e.data.type === 'LOGOUT') {
                 sbToken     = null;
                 googleToken = null;
                 sessionStorage.removeItem('sb_token');
@@ -1791,6 +1792,12 @@
                 document.getElementById('mainSection').classList.add('hidden');
                 document.getElementById('authSection').classList.remove('hidden');
                 log('🔒 Sessione invalidata da AppSphere (logout)');
+            } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+                var newToken = e.data.sbToken;
+                sessionStorage.setItem('sb_token', newToken);
+                sbToken = newToken;
+                supabase.setAuthToken(newToken);
+                log('🔄 Token rinnovato silenziosamente (AppSphere)');
             }
         };
 
