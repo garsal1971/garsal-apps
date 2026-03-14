@@ -1603,8 +1603,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.21';
-        const BUILD_TIME  = '2026-03-14T01:00:00Z';
+        const APP_VERSION = 'v9.3.22';
+        const BUILD_TIME  = '2026-03-14T02:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2086,7 +2086,10 @@
             const timeStr = time + ':00';
             const key = buildPeriodKey('daily_multiple', targetDate, time);
 
-            const existing = completions.find(c => c.habit_id === habitId && c.period_key === key);
+            const existing = completions.find(c =>
+                c.habit_id === habitId &&
+                (c.period_key === key ||
+                 (c.period_key == null && c.completed_at.startsWith(`${targetDate}T${time}`))));
 
             console.log(`🎯 setTimeState: habit=${habitId}, time=${time}, date=${targetDate}, newState=${newState}`);
             console.log(`📦 existing:`, existing);
@@ -2235,7 +2238,10 @@
             const timeStr = time + ':00';
             const key = buildPeriodKey('daily_multiple', targetDate, time);
 
-            const existing = completions.find(c => c.habit_id === habitId && c.period_key === key);
+            const existing = completions.find(c =>
+                c.habit_id === habitId &&
+                (c.period_key === key ||
+                 (c.period_key == null && c.completed_at.startsWith(`${targetDate}T${time}`))));
 
             console.log(`🔄 Toggle 3-state orario ${time} del ${targetDate}`);
 
@@ -2300,7 +2306,9 @@
         async function toggleHabitCompletion(habitId) {
             const today = localDateStr();
             const key = buildPeriodKey('daily', today);
-            const existing = completions.find(c => c.habit_id === habitId && c.period_key === key);
+            const existing = completions.find(c =>
+                c.habit_id === habitId &&
+                (c.period_key === key || (c.period_key == null && c.completed_at.startsWith(today))));
 
             console.log('🔄 Toggle completamento per habit:', habitId);
 
@@ -3275,7 +3283,9 @@
 
         async function setWeekDayState(habitId, dateStr, newState) {
             const key = buildPeriodKey('weekly', dateStr);
-            const existing = completions.find(c => c.habit_id === habitId && c.period_key === key);
+            const existing = completions.find(c =>
+                c.habit_id === habitId &&
+                (c.period_key === key || (c.period_key == null && c.completed_at.startsWith(dateStr))));
 
             console.log(`🎯 Imposta stato WEEK-DAY ${newState} per ${dateStr} - habit ${habitId}`);
             console.log(`📦 Existing prima:`, existing);
@@ -3370,7 +3380,9 @@
         async function setDayState(habitId, dateStr, newState) {
             const habit = habits.find(h => h.id === habitId);
             const key = buildPeriodKey(habit?.frequency || 'daily', dateStr);
-            const existing = completions.find(c => c.habit_id === habitId && c.period_key === key);
+            const existing = completions.find(c =>
+                c.habit_id === habitId &&
+                (c.period_key === key || (c.period_key == null && c.completed_at.startsWith(dateStr))));
 
             console.log(`🎯 [DAILY] setDayState: habit=${habitId}, date=${dateStr}, newState=${newState}`);
             console.log(`📦 [DAILY] existing:`, existing);
@@ -3528,7 +3540,9 @@
                                 for (const timeSlot of habit.daily_times) {
                                     const slotKey = buildPeriodKey('daily_multiple', dateStr, timeSlot);
                                     const alreadyExists = completions.some(c =>
-                                        c.habit_id === habit.id && c.period_key === slotKey
+                                        c.habit_id === habit.id &&
+                                        (c.period_key === slotKey ||
+                                         (c.period_key == null && c.completed_at.startsWith(`${dateStr}T${timeSlot}`)))
                                     );
                                     if (!alreadyExists) {
                                         missedCount++;
@@ -3541,7 +3555,9 @@
                                     ? buildPeriodKey('weekly', dateStr)
                                     : buildPeriodKey('daily', dateStr);
                                 const hasCompletion = completions.some(c =>
-                                    c.habit_id === habit.id && c.period_key === periodKey
+                                    c.habit_id === habit.id &&
+                                    (c.period_key === periodKey ||
+                                     (c.period_key == null && c.completed_at.startsWith(dateStr)))
                                 );
                                 if (!hasCompletion) {
                                     missedCount++;
@@ -4182,7 +4198,9 @@
         async function toggleDayCompletion(habitId, dateStr) {
             const habit = habits.find(h => h.id === habitId);
             const key = buildPeriodKey(habit?.frequency || 'daily', dateStr);
-            const existing = completions.find(c => c.habit_id === habitId && c.period_key === key);
+            const existing = completions.find(c =>
+                c.habit_id === habitId &&
+                (c.period_key === key || (c.period_key == null && c.completed_at.startsWith(dateStr))));
 
             console.log(`🔄 Toggle 3-state per ${dateStr} - habit ${habitId}`);
 
