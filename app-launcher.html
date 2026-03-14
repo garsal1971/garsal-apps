@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.2</title>
+<title>AppSphere v1.5.4</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -879,8 +879,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.3';
-const BUILD_TIME  = '2026-03-14T10:00:00Z';
+const APP_VERSION = 'v1.5.4';
+const BUILD_TIME  = '2026-03-14T12:00:00Z';
 console.log('%c AppSphere ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1894,16 +1894,33 @@ init();
 
 window.addEventListener('resize', () => { if (CURRENT_APPS.length) render(); });
 
-// Doppio click sullo sfondo bianco → avvia cattura sequenza nascosta
-document.getElementById('field').addEventListener('dblclick', (e) => {
-  if (e.target.closest('.cw')) return; // ignora doppio click su cerchio
-  if (!hiddenSequence.length) return;  // sequenza non ancora caricata
+// ── DOUBLE-TAP / DOUBLE-CLICK helper ─────────────────────────────────────────
+// Funziona su desktop (dblclick) e su mobile (touch double-tap entro 350ms)
+function addDoubleTapListener(el, handler) {
+  // Desktop
+  el.addEventListener('dblclick', handler);
+  // Mobile — rileva due tocchi rapidi sullo stesso elemento
+  let lastTap = 0;
+  el.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTap < 350) {
+      e.preventDefault(); // evita zoom su iOS/Android
+      handler(e);
+    }
+    lastTap = now;
+  }, { passive: false });
+}
+
+// Doppio click/tap sullo sfondo bianco → avvia cattura sequenza nascosta
+addDoubleTapListener(document.getElementById('field'), (e) => {
+  if (e.target && e.target.closest && e.target.closest('.cw')) return;
+  if (!hiddenSequence.length) return;
   enterCaptureMode();
 });
 
-// Click sull'indicatore 👁 → mostra messaggio (la disattivazione richiede la sequenza)
-document.getElementById('hidden-indicator').addEventListener('dblclick', (e) => {
-  e.stopPropagation();
+// Doppio click/tap sull'indicatore 👁 → avvia cattura sequenza
+addDoubleTapListener(document.getElementById('hidden-indicator'), (e) => {
+  if (e.stopPropagation) e.stopPropagation();
   if (!hiddenSequence.length) return;
   enterCaptureMode();
 });
