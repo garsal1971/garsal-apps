@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Events Log v2.2.12</title>
+    <title>Events Log v2.2.13</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -990,8 +990,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v2.2.12';
-    var BUILD_TIME  = '2026-03-15T16:00:00Z';
+    var APP_VERSION = 'v2.2.13';
+    var BUILD_TIME  = '2026-03-15T16:15:00Z';
     console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1026,7 +1026,7 @@
         riservatoFilter = !riservatoFilter;
         sessionStorage.setItem('riservato_filter', riservatoFilter ? '1' : '0');
         updateHiddenModeFab();
-        if (sb) loadEvents().then(() => renderLogPage());
+        if (sb) Promise.all([loadGroups(), loadEvents()]).then(() => renderLogPage());
     }
 
     function initWithToken(token) {
@@ -2205,7 +2205,7 @@ window.addEventListener('message', (e) => {
         riservatoFilter = false; sessionStorage.setItem('riservato_filter', '0');
         console.log('👁 Modalità nascosta:', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
         updateHiddenModeFab();
-        if (sb) loadEvents().then(() => renderLogPage());
+        if (sb) Promise.all([loadGroups(), loadEvents()]).then(() => renderLogPage());
     }
 });
 
@@ -2235,7 +2235,7 @@ _authChannel.onmessage = (e) => {
         riservatoFilter = false;
         console.log('👁 Modalità nascosta (broadcast):', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
         updateHiddenModeFab();
-        if (sb) loadEvents().then(() => renderLogPage());
+        if (sb) Promise.all([loadGroups(), loadEvents()]).then(() => renderLogPage());
     }
 };
 
