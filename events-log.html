@@ -947,8 +947,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v2.2.5';
-    var BUILD_TIME  = '2026-03-13T23:30:00Z';
+    var APP_VERSION = 'v2.2.6';
+    var BUILD_TIME  = '2026-03-15T11:30:00Z';
     console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2156,6 +2156,12 @@ _authChannel.onmessage = (e) => {
 };
 
 window.addEventListener('load', () => {
+    // Legge hidden_mode impostato dal launcher (navigazione stessa pagina)
+    const storedHidden = sessionStorage.getItem('hidden_mode');
+    if (storedHidden !== null) {
+        hiddenMode = storedHidden === '1';
+    }
+
     const stored = sessionStorage.getItem('sb_token');
     if (stored) {
         initWithToken(stored);
