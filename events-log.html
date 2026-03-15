@@ -1034,7 +1034,7 @@
     // VERSION
     // ==========================================
     var APP_VERSION = 'v2.2.22';
-    var BUILD_TIME  = '2026-03-15T18:45:00Z';
+    var BUILD_TIME  = '2026-03-15T19:00:00Z';
     console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1075,7 +1075,7 @@
     function initWithToken(token) {
         if (sb) return; // già inizializzato
         sbAccessToken = token;
-        sessionStorage.setItem('sb_token', token);
+        localStorage.setItem('sb_token', token);
         sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth:   { persistSession: false, autoRefreshToken: false },
             global: { headers: { Authorization: 'Bearer ' + token } }
@@ -1099,7 +1099,7 @@
         console.warn('🔒 Token scaduto — sessione invalidata');
         sb = null;
         sbAccessToken = null;
-        sessionStorage.removeItem('sb_token');
+        localStorage.removeItem('sb_token');
         document.getElementById('authOverlay').style.display = 'flex';
         return true;
     }
@@ -2289,12 +2289,12 @@ _authChannel.onmessage = (e) => {
     if (e.data.type === 'LOGOUT') {
         sb = null;
         sbAccessToken = null;
-        sessionStorage.removeItem('sb_token');
+        localStorage.removeItem('sb_token');
         document.getElementById('authOverlay').style.display = 'flex';
         console.log('🔒 Sessione invalidata da AppSphere (logout)');
     } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
         const newToken = e.data.sbToken;
-        sessionStorage.setItem('sb_token', newToken);
+        localStorage.setItem('sb_token', newToken);
         sbAccessToken = newToken;
         if (sb) {
             sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -2321,7 +2321,7 @@ window.addEventListener('load', () => {
         updateHiddenModeFab();
     }
 
-    const stored = sessionStorage.getItem('sb_token');
+    const stored = localStorage.getItem('sb_token');
     if (stored) {
         initWithToken(stored);
     } else {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.25</title>
+<title>AppSphere v1.5.31</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1020,8 +1020,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.30';
-const BUILD_TIME  = '2026-03-15T18:30:00Z';
+const APP_VERSION = 'v1.5.31';
+const BUILD_TIME  = '2026-03-15T19:00:00Z';
 console.log('%c AppSphere ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1463,7 +1463,7 @@ let _refreshInterval = null;
 // Rinnova il JWT tramite refresh_token senza richiedere un nuovo login.
 // In caso di errore fa logout forzato. Distribuisce il nuovo token a tutte le app figlie.
 async function refreshSession() {
-  const refreshToken = sessionStorage.getItem('refresh_token');
+  const refreshToken = localStorage.getItem('refresh_token');
   if (!refreshToken) return;
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
@@ -1477,8 +1477,8 @@ async function refreshSession() {
       return;
     }
     const data = await res.json();
-    sessionStorage.setItem('sb_token', data.access_token);
-    if (data.refresh_token) sessionStorage.setItem('refresh_token', data.refresh_token);
+    localStorage.setItem('sb_token', data.access_token);
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
     // Notifica tutte le app figlie: aggiornare il token senza ricaricare la pagina
     _authChannel.postMessage({ type: 'TOKEN_REFRESH', sbToken: data.access_token });
     console.log('🔄 Token rinnovato silenziosamente (' + APP_VERSION + ')');
@@ -1494,16 +1494,16 @@ function startTokenRefresh() {
 }
 
 async function logout() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   if (token) {
     await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
       method: 'POST',
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
     }).catch(() => {});
   }
-  sessionStorage.removeItem('sb_token');
-  sessionStorage.removeItem('refresh_token');
-  sessionStorage.removeItem('google_token');
+  localStorage.removeItem('sb_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('google_token');
   if (_refreshInterval) { clearInterval(_refreshInterval); _refreshInterval = null; }
 
   // Notifica tutte le app figlie aperte: devono invalidare il token
@@ -1519,11 +1519,11 @@ function parseHash() {
   const p = {};
   hash.split('&').forEach(kv => { const [k,v] = kv.split('='); p[decodeURIComponent(k)] = decodeURIComponent(v||''); });
   if (p.access_token) {
-    sessionStorage.setItem('sb_token', p.access_token);
+    localStorage.setItem('sb_token', p.access_token);
     // provider_token = token Google reale, usabile con Google Fit API
-    if (p.provider_token) sessionStorage.setItem('google_token', p.provider_token);
+    if (p.provider_token) localStorage.setItem('google_token', p.provider_token);
     // refresh_token = usato per rinnovare il JWT senza re-login
-    if (p.refresh_token) sessionStorage.setItem('refresh_token', p.refresh_token);
+    if (p.refresh_token) localStorage.setItem('refresh_token', p.refresh_token);
     history.replaceState(null, '', window.location.pathname);
     return p.access_token;
   }
@@ -1560,7 +1560,7 @@ function showApp(user) {
 
 // ── HIDDEN MODE: carica sequenza dal DB ──
 async function loadHiddenSequence() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   if (!token) return;
   try {
     const res = await fetch(
@@ -1646,7 +1646,7 @@ function updateHiddenIndicator() {
 
 // ── CARICA APP DA SUPABASE ──
 async function loadApps() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
 
   // Carica anche la sequenza nascosta se non ancora disponibile
   if (!hiddenSeqLength) await loadHiddenSequence();
@@ -1723,7 +1723,7 @@ async function loadApps() {
 let _badgeRows = []; // cache delle righe cm_apps
 
 async function openBadgeSettings() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   const overlay = document.getElementById('badge-modal-overlay');
   const body    = document.getElementById('badge-modal-body');
   body.innerHTML = '<div style="padding:20px;color:#aaa;font-family:DM Mono,monospace;font-size:12px;">Caricamento…</div>';
@@ -1767,7 +1767,7 @@ function closeBadgeSettings() {
 }
 
 async function saveBadgeQuery(id) {
-  const token    = sessionStorage.getItem('sb_token');
+  const token    = localStorage.getItem('sb_token');
   const textarea = document.getElementById('bq-query-' + id);
   const statusEl = document.getElementById('bq-status-' + id);
   const colorEl  = document.getElementById('bq-colorpicker-' + id);
@@ -1819,7 +1819,7 @@ let _rewardsList = [];
 let _ptsAvailable = 0;
 
 async function fetchPtsSpent() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   if (!token) return 0;
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/cm_rewards_log?select=points_spent`,
@@ -1860,7 +1860,7 @@ function closeRewards() {
 }
 
 async function loadRewards() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   document.getElementById('rw-prize-scroll').innerHTML =
     '<div style="padding:30px;text-align:center;color:#aaa;font-family:DM Mono,monospace;font-size:12px;">Caricamento…</div>';
 
@@ -1913,7 +1913,7 @@ async function redeemReward(id) {
   if (!reward) return;
   if (!confirm(`Riscattare "${reward.name}" per ${reward.points_cost} punti?`)) return;
 
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   const hdr = {
     'apikey': SUPABASE_KEY,
     'Authorization': 'Bearer ' + token,
@@ -1942,7 +1942,7 @@ async function redeemReward(id) {
 }
 
 async function loadCronologia() {
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   const el = document.getElementById('rw-cron-list');
   el.innerHTML = '<div style="padding:30px;text-align:center;color:#aaa;font-family:DM Mono,monospace;font-size:12px;">Caricamento…</div>';
   const res = await fetch(
@@ -2031,7 +2031,7 @@ function rwTypeChange() {
 }
 
 async function saveReward() {
-  const token      = sessionStorage.getItem('sb_token');
+  const token      = localStorage.getItem('sb_token');
   const name       = document.getElementById('rw-name').value.trim();
   const type       = document.getElementById('rw-type').value;
   const pointsCost = parseInt(document.getElementById('rw-points').value);
@@ -2065,7 +2065,7 @@ async function saveReward() {
 
 async function deleteReward(id) {
   if (!confirm('Eliminare questo premio?')) return;
-  const token = sessionStorage.getItem('sb_token');
+  const token = localStorage.getItem('sb_token');
   const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_rewards?id=eq.${id}`, {
     method: 'DELETE',
     headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token },
@@ -2083,11 +2083,11 @@ document.getElementById('rw-form-overlay').addEventListener('click', function(e)
 });
 
 async function init() {
-  const token = parseHash() || sessionStorage.getItem('sb_token');
+  const token = parseHash() || localStorage.getItem('sb_token');
   if (token) {
     const user = await getUserInfo(token);
     if (user) { showApp(user); startTokenRefresh(); return; }
-    sessionStorage.removeItem('sb_token');
+    localStorage.removeItem('sb_token');
   }
   // show login
 }
