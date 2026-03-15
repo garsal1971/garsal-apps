@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.32</title>
+    <title>Weight Quest v3.5.34</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1049,7 +1049,7 @@
 
     <script>
         var APP_VERSION = 'v3.5.34';
-        var BUILD_TIME  = '2026-03-15T18:45:00Z';
+        var BUILD_TIME  = '2026-03-15T19:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1850,7 +1850,7 @@
             if (e.data.type === 'LOGOUT') {
                 sbToken     = null;
                 googleToken = null;
-                sessionStorage.removeItem('sb_token');
+                localStorage.removeItem('sb_token');
                 localStorage.removeItem('googleToken');
                 supabase.setAuthToken(CONFIG.supabaseKey); // ripristina anon key
                 document.getElementById('mainSection').classList.add('hidden');
@@ -1858,7 +1858,7 @@
                 log('🔒 Sessione invalidata da AppSphere (logout)');
             } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
                 var newToken = e.data.sbToken;
-                sessionStorage.setItem('sb_token', newToken);
+                localStorage.setItem('sb_token', newToken);
                 sbToken = newToken;
                 supabase.setAuthToken(newToken);
                 log('🔄 Token rinnovato silenziosamente (AppSphere)');
@@ -1878,7 +1878,7 @@
             if (!isAuthError) return false;
             log('🔒 Token scaduto — sessione invalidata');
             sbToken = null;
-            sessionStorage.removeItem('sb_token');
+            localStorage.removeItem('sb_token');
             supabase.setAuthToken(CONFIG.supabaseKey);
             document.getElementById('mainSection').classList.add('hidden');
             document.getElementById('authSection').classList.remove('hidden');
@@ -1903,7 +1903,7 @@
                 if (event.data.type === 'SB_TOKEN' && event.data.token && !sbToken) {
                     log('SB_TOKEN ricevuto da AppSphere');
                     sbToken = event.data.token;
-                    sessionStorage.setItem('sb_token', sbToken);
+                    localStorage.setItem('sb_token', sbToken);
                     supabase.setAuthToken(sbToken);
                     if (document.getElementById('authSection') && !document.getElementById('authSection').classList.contains('hidden')) {
                         showMain();
@@ -1912,7 +1912,7 @@
             });
 
             // Fallback: sessione attiva in sessionStorage (stessa tab non ricaricata)
-            var savedSb = sessionStorage.getItem('sb_token');
+            var savedSb = localStorage.getItem('sb_token');
             if (savedSb) {
                 sbToken = savedSb;
                 supabase.setAuthToken(sbToken);
