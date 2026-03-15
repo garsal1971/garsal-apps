@@ -2132,8 +2132,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.10';
-        const BUILD_TIME  = '2026-03-15T10:30:00Z';
+        const APP_VERSION = 'v19.18.11';
+        const BUILD_TIME  = '2026-03-15T11:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2192,25 +2192,31 @@
         // sb inizializzato dopo ricezione token (in initWithToken)
         let sb            = null;
         let sbAccessToken = sessionStorage.getItem('sb_token') || null;
-        let hiddenMode    = false; // modalità nascosta: mostra solo task riservati
+        let hiddenMode      = false; // modalità nascosta: attivata dal launcher
+        let riservatoFilter = false; // filtro FAB: mostra solo task riservati
 
         function updateHiddenModeFab() {
             const fab = document.getElementById('hiddenModeFab');
             if (!fab) return;
-            if (hiddenMode) {
+            if (riservatoFilter) {
                 fab.classList.add('active');
-                fab.title = 'Modalità Nascosta ATTIVA — clicca per disattivare';
+                fab.title = 'Solo riservati — clicca per mostrare tutti';
                 fab.textContent = '👁';
             } else {
                 fab.classList.remove('active');
-                fab.title = 'Modalità Nascosta — clicca per attivare';
+                fab.title = hiddenMode ? 'Mostra solo riservati' : 'Modalità nascosta non attiva';
                 fab.textContent = '🙈';
             }
+            // FAB visibile solo in modalità nascosta
+            fab.style.opacity = hiddenMode ? '1' : '0.35';
+            fab.style.pointerEvents = hiddenMode ? 'auto' : 'none';
         }
 
         function toggleHiddenMode() {
-            hiddenMode = !hiddenMode;
-            console.log('👁 Modalità nascosta:', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
+            // Toggling del filtro riservati (FAB): funziona solo se hiddenMode è attivo
+            if (!hiddenMode) return;
+            riservatoFilter = !riservatoFilter;
+            console.log('👁 Filtro riservati:', riservatoFilter ? 'SOLO RISERVATI' : 'TUTTI');
             updateHiddenModeFab();
             if (sb) loadTasks().then(() => {
                 const activeDiv = document.querySelector('.main-content > div:not(.hidden)');
@@ -2758,11 +2764,14 @@
             debugLog('Loading tasks...');
             try {
                 let taskQuery = sb.from('ts_tasks').select('*');
-                if (hiddenMode) {
+                if (riservatoFilter) {
+                    // FAB attivo: mostra solo riservati
                     taskQuery = taskQuery.eq('riservato', true);
-                } else {
+                } else if (!hiddenMode) {
+                    // Modalità normale: escludi riservati
                     taskQuery = taskQuery.or('riservato.eq.false,riservato.is.null');
                 }
+                // hiddenMode=true + riservatoFilter=false: nessun filtro → tutti i task
                 const { data, error } = await taskQuery;
                 if (error) {
                     console.error('Error loading tasks:', error);
@@ -9878,6 +9887,7 @@ Per attivarle:
                 initWithToken(e.data.token);
             } else if (e.data.type === 'HIDDEN_MODE') {
                 hiddenMode = !!e.data.active;
+                riservatoFilter = false; // reset filtro al cambio di modalità
                 console.log('👁 Modalità nascosta:', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
                 updateHiddenModeFab();
                 if (sb) loadTasks().then(() => {
@@ -9910,6 +9920,7 @@ Per attivarle:
                 console.log('🔄 Token rinnovato silenziosamente (AppSphere)');
             } else if (e.data.type === 'HIDDEN_MODE') {
                 hiddenMode = !!e.data.active;
+                riservatoFilter = false; // reset filtro al cambio di modalità
                 console.log('👁 Modalità nascosta (broadcast):', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
                 updateHiddenModeFab();
                 if (sb) loadTasks().then(() => {
