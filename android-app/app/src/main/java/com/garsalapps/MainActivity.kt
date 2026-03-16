@@ -1,8 +1,11 @@
 package com.garsalapps
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -12,6 +15,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -26,6 +30,10 @@ class MainActivity : AppCompatActivity() {
 
     // ⬇️ Cambia qui con la tua URL Netlify
     private val APP_URL = "https://garsal.netlify.app/"
+
+    // Custom scheme usato come redirect_to dopo Google OAuth
+    private val OAUTH_CALLBACK_SCHEME = "garsalapps"
+    private val OAUTH_CALLBACK_HOST   = "oauth"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +52,21 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    /**
+     * Gestisce il ritorno del deep link OAuth (garsalapps://oauth#access_token=...)
+     * Lanciato da Android quando Chrome Custom Tabs completa il login Google.
+     */
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        val data = intent?.data ?: return
+        if (data.scheme == OAUTH_CALLBACK_SCHEME && data.host == OAUTH_CALLBACK_HOST) {
+            // Ricostruisce l'URL completo per far parsare il token al JS di Supabase
+            val fragment = data.toString().substringAfter('#', "")
+            val callbackUrl = if (fragment.isNotEmpty()) "${APP_URL}#$fragment" else APP_URL
+            webView.loadUrl(callbackUrl)
+        }
+    }
+
     private fun setupWebView() {
         webView.visibility = View.GONE
         webView.apply {
@@ -57,8 +80,52 @@ class MainActivity : AppCompatActivity() {
                 loadWithOverviewMode = true
             }
             webViewClient = object : WebViewClient() {
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
+                }
+
+                /**
+                 * Intercetta la navigazione verso l'endpoint OAuth di Supabase
+                 * e la apre in Chrome Custom Tabs, sostituendo il redirect_to
+                 * con il custom scheme dell'app (garsalapps://oauth).
+                 *
+                 * Questo evita l'errore "Accesso bloccato" di Google che blocca
+                 * i flussi OAuth all'interno di WebView.
+                 */
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url?.toString() ?: return false
+
+                    if (url.contains("supabase.co/auth/v1/authorize") &&
+                        url.contains("provider=google")
+                    ) {
+                        val original = request.url
+                        // Sostituisce redirect_to con il custom scheme
+                        val modified = original.buildUpon()
+                            .clearQuery()
+                            .apply {
+                                original.queryParameterNames.forEach { param ->
+                                    val value = if (param == "redirect_to") {
+                                        "$OAUTH_CALLBACK_SCHEME://$OAUTH_CALLBACK_HOST"
+                                    } else {
+                                        original.getQueryParameter(param)
+                                    }
+                                    appendQueryParameter(param, value)
+                                }
+                            }
+                            .build()
+
+                        CustomTabsIntent.Builder()
+                            .setShowTitle(true)
+                            .build()
+                            .launchUrl(this@MainActivity, modified)
+                        return true
+                    }
+
+                    return false
                 }
             }
         }
