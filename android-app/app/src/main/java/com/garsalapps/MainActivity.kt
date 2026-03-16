@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
 
     // ⬇️ Cambia qui con la tua URL Netlify
-    private val APP_URL = "https://garsal-apps.netlify.app"
+    private val APP_URL = "https://garsal.netlify.app/"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
