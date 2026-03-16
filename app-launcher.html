@@ -1020,8 +1020,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.37';
-const BUILD_TIME  = '2026-03-16T21:30:00Z';
+const APP_VERSION = 'v1.5.38';
+const BUILD_TIME  = '2026-03-16T22:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1490,8 +1490,12 @@ async function refreshSession() {
       body: JSON.stringify({ refresh_token: refreshToken })
     });
     if (!res.ok) {
-      console.warn('🔒 Refresh token non valido — logout forzato');
-      logout();
+      // Token non valido: pulisce i token scaduti ma NON chiama logout()
+      // (logout cancellerebbe was_authenticated e impedirebbe l'auto-login)
+      console.warn('🔒 Refresh token non valido — pulizia silenziosa');
+      localStorage.removeItem('sb_token');
+      localStorage.removeItem('refresh_token');
+      deleteCookie('sb_refresh_token');
       return;
     }
     const data = await res.json();
@@ -1557,10 +1561,15 @@ function parseHash() {
 }
 
 async function getUserInfo(token) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
-  });
-  return res.ok ? res.json() : null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+    });
+    return res.ok ? res.json() : null;
+  } catch(e) {
+    console.warn('getUserInfo network error:', e);
+    return null; // rete non ancora pronta all'avvio
+  }
 }
 
 function showApp(user) {
