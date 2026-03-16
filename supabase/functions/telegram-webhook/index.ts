@@ -287,16 +287,30 @@ Deno.serve(async (req) => {
     // Risolvi i template variables
     // {{fire_date_local}}: data locale (Europe/Rome) del fire_at
     // {{slot_time}}: orario del slot habit (da metadata) — fallback a fire_at locale
+    // {{monday_of_week}}: lunedì della settimana del fire_date_local (per habit weekly)
+    // {{day_of_week_n}}: numero del giorno 1=Lun…7=Dom (per habit weekly)
     const fireAt       = new Date(queueRow.fire_at as string)
     const localDateStr = fireAt.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' }) // YYYY-MM-DD
     const localTimeStr = slotTime
       ?? fireAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
 
+    // Calcola lunedì della settimana e numero giorno (1=Lun…7=Dom) per habit weekly
+    const [_y, _m, _d] = localDateStr.split('-').map(Number)
+    const localDateMid  = new Date(Date.UTC(_y, _m - 1, _d, 12, 0, 0))
+    const utcDay        = localDateMid.getUTCDay()          // 0=Dom,1=Lun,…,6=Sab
+    const dayOfWeekN    = utcDay === 0 ? 7 : utcDay         // 1=Lun…7=Dom
+    const mondayOffset  = utcDay === 0 ? -6 : 1 - utcDay
+    const mondayDate    = new Date(localDateMid)
+    mondayDate.setUTCDate(mondayDate.getUTCDate() + mondayOffset)
+    const mondayStr     = mondayDate.toISOString().slice(0, 10) // YYYY-MM-DD
+
     function resolveTemplates(val: unknown): unknown {
       if (typeof val !== 'string') return val
       return val
         .replace('{{fire_date_local}}', localDateStr)
-        .replace('{{slot_time}}', localTimeStr)
+        .replace('{{slot_time}}',       localTimeStr)
+        .replace('{{monday_of_week}}',  mondayStr)
+        .replace('{{day_of_week_n}}',   String(dayOfWeekN))
     }
 
     // Esegui ogni operazione nell'array (può essere vuoto per i task)

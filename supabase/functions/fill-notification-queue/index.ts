@@ -108,8 +108,11 @@ Deno.serve(async (_req) => {
     const horizon    = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000)
     const safeDelete = new Date(now.getTime() + SAFE_WINDOW_MS)
 
-    // 0. Pulizia: elimina tutte le notifiche in stato terminale
-    const TERMINAL_STATUSES = ['sent', 'failed', 'cancelled', 'completed']
+    // 0. Pulizia: elimina notifiche in stato terminale
+    // NOTA: 'sent' NON è incluso qui perché i messaggi Telegram con bottone "Fatto"
+    // devono rimanere accessibili finché l'utente non clicca il bottone.
+    // I 'sent' vengono puliti separatamente con un cutoff di 7 giorni.
+    const TERMINAL_STATUSES = ['failed', 'cancelled', 'completed']
     const { error: cleanErr, count: cleanCount } = await sb
       .from('cm_notification_queue')
       .delete({ count: 'exact' })
@@ -119,6 +122,20 @@ Deno.serve(async (_req) => {
       console.error('[fill-queue] pulizia stati terminali error:', cleanErr)
     } else {
       console.log(`[fill-queue] pulizia stati terminali: ${cleanCount ?? 0} righe eliminate`)
+    }
+
+    // Pulizia separata per 'sent' più vecchi di 7 giorni (evita crescita tabella)
+    const sentCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { error: sentCleanErr, count: sentCleanCount } = await sb
+      .from('cm_notification_queue')
+      .delete({ count: 'exact' })
+      .eq('status', 'sent')
+      .lt('fire_at', sentCutoff)
+
+    if (sentCleanErr) {
+      console.error('[fill-queue] pulizia sent vecchi error:', sentCleanErr)
+    } else {
+      console.log(`[fill-queue] pulizia sent >7gg: ${sentCleanCount ?? 0} righe eliminate`)
     }
 
     // 1. Carica tutti i preset → mappa int_id → {label, offset_minutes}
