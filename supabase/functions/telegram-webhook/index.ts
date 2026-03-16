@@ -395,6 +395,11 @@ Deno.serve(async (req) => {
     await answerCallbackQuery(callbackQueryId, '✅ Completato!')
     await deleteMessage(chatId, messageId)
 
+  } else if (action === 'dismiss' && parts.length === 2) {
+    // Chiudi senza operazioni DB — elimina solo il messaggio Telegram
+    await answerCallbackQuery(callbackQueryId, '🗑 Messaggio rimosso')
+    await deleteMessage(chatId, messageId)
+
   } else {
     console.warn('[telegram-webhook] callback_data non riconosciuto:', callbackData)
     await answerCallbackQuery(callbackQueryId, '❓ Azione non riconosciuta')
