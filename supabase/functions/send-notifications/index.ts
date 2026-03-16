@@ -88,7 +88,10 @@ function buildInlineKeyboard(itemId: string, completeButton = false): object {
     { text: '⏸ 3h',     callback_data: `snooze:180:${itemId}`  },
     { text: '⏸ Domani', callback_data: `snooze:1440:${itemId}` },
   ])
-  rows.push([{ text: '❌ Annulla promemoria', callback_data: `cancel:${itemId}` }])
+  rows.push([
+    { text: '❌ Annulla promemoria', callback_data: `cancel:${itemId}`  },
+    { text: '🗑 Chiudi',            callback_data: `dismiss:${itemId}` },
+  ])
   return { inline_keyboard: rows }
 }
 
