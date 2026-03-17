@@ -1660,8 +1660,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.37';
-        const BUILD_TIME  = '2026-03-15T19:00:00Z';
+        const APP_VERSION = 'v9.3.38';
+        const BUILD_TIME  = '2026-03-17T10:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -4868,7 +4868,7 @@
 
             // Carica orario promemoria e chip selezionati
             const existingRule = habitNotificationRules[habit.id];
-            document.getElementById('editHabitReminderTime').value = existingRule?.time || '';
+            document.getElementById('editHabitReminderTime').value = existingRule?.times?.[0] || existingRule?.time || '';
             editHabitReminderIds = existingRule?.reminders ? [...existingRule.reminders] : [];
             renderHabitReminderChips('editHabitReminderChips', editHabitReminderIds, 'toggleEditHabitChip');
             // Ripristina flag pulsante completamento Telegram
