@@ -1664,8 +1664,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.56';
-        const BUILD_TIME  = '2026-03-18T17:00:00Z';
+        const APP_VERSION = 'v9.3.57';
+        const BUILD_TIME  = '2026-03-18T17:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3811,9 +3811,23 @@
 
                     const maxFailures = habit.max_failures || 3;
 
-                    // Se già al limite (es. modal ignorato in sessione precedente) → chiudi automaticamente
-                    if ((habit.current_failures || 0) >= maxFailures) {
-                        console.log(`💀 Stack già a limite jolly (auto-chiusura): ${habit.name}`);
+                    // Conta le fallite/mancate REALI dai completions (fonte di verità)
+                    const actualFailures = completions.filter(c =>
+                        c.habit_id === habit.id &&
+                        (c.status === 'failed' || c.status === 'missed') &&
+                        new Date(c.completed_at) >= startDate
+                    ).length;
+
+                    // Sincronizza current_failures se discrepante
+                    if (actualFailures !== (habit.current_failures || 0)) {
+                        console.log(`🔧 Sincronizzazione current_failures per "${habit.name}": DB=${habit.current_failures} → reale=${actualFailures}`);
+                        await supabaseClient.from('hb_habits').update({ current_failures: actualFailures }).eq('id', habit.id);
+                        habit.current_failures = actualFailures;
+                    }
+
+                    // Se già al limite jolly (basato su conteggio reale) → chiudi automaticamente
+                    if (actualFailures >= maxFailures) {
+                        console.log(`💀 Stack già a limite jolly (${actualFailures}/${maxFailures}): ${habit.name}`);
                         await autoCloseFailedStack(habit.id);
                         anyAutoClosed = true;
                         continue;
@@ -3859,7 +3873,7 @@
                                 const hasCompletion = completions.some(c =>
                                     c.habit_id === habit.id &&
                                     (c.period_key === periodKey ||
-                                     (c.period_key == null && c.completed_at.startsWith(dateStr)))
+                                     c.completed_at.startsWith(dateStr))
                                 );
                                 if (!hasCompletion) {
                                     missedCount++;
@@ -3873,11 +3887,12 @@
                     }
 
                     if (missedCount > 0) {
-                        const newFailures = (habit.current_failures || 0) + missedCount;
+                        // newFailures basato su fallimenti REALI, non su current_failures
+                        const newFailures = actualFailures + missedCount;
 
-                        console.log(`⚠️ ${habit.name}: ${missedCount} giorni mancati, totale: ${newFailures}/${maxFailures}`);
+                        console.log(`⚠️ ${habit.name}: ${missedCount} nuovi mancati, totale: ${newFailures}/${maxFailures}`);
 
-                        // Registra i periodi mancati come failed
+                        // Registra i periodi mancati come missed
                         for (const slot of autoFailedSlots) {
                             await supabaseClient
                                 .from('hb_completions')
@@ -3890,12 +3905,12 @@
                         }
 
                         if (newFailures >= maxFailures) {
-                            // Jolly esauriti → chiudi automaticamente e riapri
+                            // Jolly esauriti → chiudi automaticamente
                             console.log(`💀 Jolly esauriti per ${habit.name} → auto-chiusura`);
                             await autoCloseFailedStack(habit.id);
                             anyAutoClosed = true;
                         } else {
-                            // Aggiorna failures in DB
+                            // Aggiorna current_failures in DB
                             await supabaseClient
                                 .from('hb_habits')
                                 .update({ current_failures: newFailures })
