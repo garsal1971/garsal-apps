@@ -1648,8 +1648,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.52';
-        const BUILD_TIME  = '2026-03-18T14:00:00Z';
+        const APP_VERSION = 'v9.3.53';
+        const BUILD_TIME  = '2026-03-18T15:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2772,12 +2772,53 @@
             document.getElementById('stackSuccessModal').classList.remove('active');
         }
 
+        // Conta i giorni (o settimane) completati al 100% nel periodo started_at→limitDate
+        function countCompletedDaysInPeriod(habit, limitDate) {
+            const startDate = parseDateLocal(habit.started_at);
+            if (!startDate) return 0;
+            startDate.setHours(0, 0, 0, 0);
+            const end = new Date(limitDate);
+            end.setHours(0, 0, 0, 0);
+
+            const habitCompletions = completions.filter(c => c.habit_id === habit.id);
+            let count = 0;
+            const cur = new Date(startDate);
+
+            if (habit.frequency === 'daily_multiple' && habit.daily_times && habit.daily_times.length > 0) {
+                const required = habit.daily_times.length;
+                while (cur <= end) {
+                    const dateStr = localDateStr(cur);
+                    const done = habitCompletions.filter(c => c.completed_at.startsWith(dateStr) && c.status === 'completed').length;
+                    if (done >= required) count++;
+                    cur.setDate(cur.getDate() + 1);
+                }
+            } else if (habit.frequency === 'weekly' && habit.weekdays && habit.weekdays.length > 0) {
+                while (cur <= end) {
+                    const dateStr = localDateStr(cur);
+                    const done = habitCompletions.some(c => c.completed_at.startsWith(dateStr) && c.status === 'completed');
+                    if (done) count++;
+                    cur.setDate(cur.getDate() + 1);
+                }
+            } else {
+                while (cur <= end) {
+                    const dateStr = localDateStr(cur);
+                    const done = habitCompletions.some(c => c.completed_at.startsWith(dateStr) && c.status === 'completed');
+                    if (done) count++;
+                    cur.setDate(cur.getDate() + 1);
+                }
+            }
+            return count;
+        }
+
         async function checkCompletedStacks() {
             const toComplete = [];
             for (const habit of habits.filter(h => h.status === 'active')) {
+                if (habit.goal <= 0) continue;
                 const streak = computeHabitStreak(habit);
-                if (habit.goal > 0 && streak >= habit.goal) {
-                    toComplete.push({ habit, streak });
+                const today = new Date(); today.setHours(0,0,0,0);
+                const completedDays = countCompletedDaysInPeriod(habit, today);
+                if (streak >= habit.goal || completedDays >= habit.goal) {
+                    toComplete.push({ habit, streak: Math.max(streak, completedDays) });
                 }
             }
             if (toComplete.length === 0) return;
@@ -2863,20 +2904,21 @@
                 endDate.setHours(0, 0, 0, 0);
 
                 if (today > endDate) {
-                    const streak = computeHabitStreak(habit);
-                    // streak >= goal viene già gestito da checkCompletedStacks
-                    if (streak < habit.goal) {
-                        expired.push({ habit, streak });
+                    // Usa conteggio giorni completati nel periodo (non lo streak che parte da oggi)
+                    const completedDays = countCompletedDaysInPeriod(habit, endDate);
+                    // completedDays >= goal viene già gestito da checkCompletedStacks
+                    if (completedDays < habit.goal) {
+                        expired.push({ habit, completedDays });
                     }
                 }
             }
 
             if (expired.length === 0) return;
 
-            for (const { habit, streak } of expired) {
+            for (const { habit, completedDays } of expired) {
                 try {
                     const startDate = new Date(habit.started_at);
-                    const totalDays = Math.floor((new Date() - startDate) / (1000 * 60 * 60 * 24));
+                    const totalDays = Number(habit.goal); // giorni del ciclo, non giorni trascorsi
 
                     const stackCompletions = completions.filter(c =>
                         c.habit_id === habit.id && c.status === 'completed' && new Date(c.completed_at) >= startDate
@@ -2885,7 +2927,7 @@
                         c.habit_id === habit.id && (c.status === 'failed' || c.status === 'missed') && new Date(c.completed_at) >= startDate
                     );
 
-                    console.log(`⏰ Stack scaduto per calendario: ${habit.name} (streak: ${streak}/${habit.goal})`);
+                    console.log(`⏰ Stack scaduto per calendario: ${habit.name} (giorni completati: ${completedDays}/${habit.goal})`);
 
                     // Deduplicazione: se già archiviato con questo started_at, salta
                     const { data: existing } = await supabaseClient
@@ -2896,12 +2938,11 @@
                         .limit(1);
                     if (existing && existing.length > 0) {
                         console.log(`⚠️ Stack "${habit.name}" già archiviato — salto duplicato`);
-                        // Il vecchio record in hb_habits potrebbe ancora esserci — eliminalo
                         await supabaseClient.from('hb_habits').delete().eq('id', habit.id);
                         continue;
                     }
 
-                    // Archivia stack scaduto
+                    // Archivia stack scaduto come fallito
                     const { data: archivedData } = await supabaseClient
                         .from('hb_archived_stacks')
                         .insert([{
@@ -2910,7 +2951,7 @@
                             category_id: habit.category_id,
                             started_at: habit.started_at,
                             ended_at: todayStr,
-                            final_streak: streak,
+                            final_streak: completedDays,
                             total_days: totalDays,
                             total_completions: stackCompletions.length,
                             total_failures: stackFailures.length,
