@@ -1664,8 +1664,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.58';
-        const BUILD_TIME  = '2026-03-18T18:00:00Z';
+        const APP_VERSION = 'v9.3.59';
+        const BUILD_TIME  = '2026-03-18T18:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2256,15 +2256,44 @@
                     }
 
                     // Gestione jolly
+                    // Per daily_multiple: 1 jolly per GIORNO, non per sessione
                     console.log(`🃏 Controllo jolly: existing=${!!existing}, existing.status=${existing?.status}, newState=${newState}`);
-                    
+                    const _habitForJolly = habits.find(h => h.id === habitId);
+                    const _isMultiple = _habitForJolly?.frequency === 'daily_multiple' && _habitForJolly?.daily_times?.length > 0;
+
                     if (existing && (existing.status === 'failed' || existing.status === 'missed') && newState === 'completed') {
                         console.log('✅ Condizione RESTORE soddisfatta!');
-                        await restoreJolly(habitId);
+                        if (_isMultiple) {
+                            // Restituisci jolly solo se NON ci sono altri slot falliti nello stesso giorno
+                            const otherDayFailures = completions.some(c =>
+                                c.habit_id === habitId &&
+                                (c.status === 'failed' || c.status === 'missed') &&
+                                c.completed_at.startsWith(targetDate) &&
+                                c.id !== existing.id
+                            );
+                            if (!otherDayFailures) await restoreJolly(habitId);
+                            else console.log('⚪ Altri slot falliti nello stesso giorno — jolly non restituito');
+                        } else {
+                            await restoreJolly(habitId);
+                        }
                     }
                     else if (newState === 'failed') {
                         console.log('❌ Condizione CONSUME soddisfatta!');
-                        await handleFailure(habitId);
+                        if (_isMultiple) {
+                            // Consuma jolly solo se NON ci sono già altri slot falliti nello stesso giorno
+                            // (il nuovo record è già in completions, escludo l'id corrente se presente)
+                            const otherSlotFailed = completions.some(c =>
+                                c.habit_id === habitId &&
+                                (c.status === 'failed' || c.status === 'missed') &&
+                                c.completed_at.startsWith(targetDate) &&
+                                c.id !== existing?.id &&
+                                c.period_key !== key
+                            );
+                            if (!otherSlotFailed) await handleFailure(habitId);
+                            else console.log('⚪ Giorno già contato come fallito — jolly non consumato');
+                        } else {
+                            await handleFailure(habitId);
+                        }
                     }
                     else {
                         console.log('⚪ Nessuna gestione jolly necessaria');
