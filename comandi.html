@@ -156,6 +156,42 @@
     <div class="platform-note">📍 Nessuna azione richiesta su Supabase — lo schema esistente è sufficiente</div>
   </div>
 
+  <!-- CHECK constraint fix -->
+  <div class="item sql has-code" id="item-check-constraint">
+    <div class="item-header">
+      <div class="check sql-c">!</div>
+      <div class="item-body">
+        <div class="item-title">ALTER TABLE — allarga CHECK constraint per <code>app='quick'</code></div>
+        <div class="item-desc">
+          La tabella ha un CHECK che ammette solo <code>tasks / habits / events / weight</code>.
+          Esegui questo SQL per aggiungere <code>quick</code> ad entrambi i constraint.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">cm_notification_rules</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-check-constraint">
+      <button class="copy-btn" onclick="copyCode('cb-check-constraint', this)">Copia</button>
+      <pre>-- 1. Allarga il CHECK su app
+ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS cm_notification_rules_app_check;
+ALTER TABLE cm_notification_rules
+    ADD CONSTRAINT cm_notification_rules_app_check
+        CHECK (app IN ('tasks', 'habits', 'events', 'weight', 'quick'));
+
+-- 2. Allarga il CHECK su entity_type
+ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS chk_entity_type;
+ALTER TABLE cm_notification_rules
+    ADD CONSTRAINT chk_entity_type
+        CHECK (entity_type IN ('task', 'habit', 'event', 'objective', 'quick'));</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
   <!-- RLS check -->
   <div class="item sql has-code" id="item-rls">
     <div class="item-header">
