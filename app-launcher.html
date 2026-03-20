@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.65</title>
+<title>AppSphere v1.5.66</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1421,8 +1421,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.65';
-const BUILD_TIME  = '2026-03-20T16:00:00Z';
+const APP_VERSION = 'v1.5.66';
+const BUILD_TIME  = '2026-03-20T13:30:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2498,7 +2498,9 @@ async function saveNqv() {
   if (!data)   { alert('Inserisci la data.'); return; }
   if (!orario) { alert("Inserisci l'orario."); return; }
 
-  const fireAt   = `${data}T${orario}:00`;
+  // Converte ora locale in UTC ISO prima di salvare su DB (timestamptz tratta stringhe senza
+  // offset come UTC → senza conversione la notifica scatta con lo shift del fuso orario).
+  const fireAt   = new Date(`${data}T${orario}:00`).toISOString();
   const token    = sessionStorage.getItem('sb_token') || localStorage.getItem('sb_token');
   const entityId = crypto.randomUUID
     ? crypto.randomUUID()
