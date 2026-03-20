@@ -1421,8 +1421,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.62';
-const BUILD_TIME  = '2026-03-20T14:00:00Z';
+const APP_VERSION = 'v1.5.63';
+const BUILD_TIME  = '2026-03-20T14:30:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2504,6 +2504,9 @@ async function saveNqv() {
     ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
 
+  const currentUser = await getUserInfo(token);
+  const userId = currentUser?.id || null;
+
   const rulePayload = {
     app:          'quick',
     entity_id:    entityId,
@@ -2511,6 +2514,7 @@ async function saveNqv() {
     entity_type:  'once',
     channel:      'telegram',
     enabled:      true,
+    user_id:      userId,
     reminder_presets: {
       fire_at:                fireAt,
       telegram_snooze_button: true,
