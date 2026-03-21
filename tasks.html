@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.32</title>
+    <title>Tasks v19.18.33</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2177,8 +2177,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.32';
-        const BUILD_TIME  = '2026-03-21T15:00:00Z';
+        const APP_VERSION = 'v19.18.33';
+        const BUILD_TIME  = '2026-03-21T16:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -6633,30 +6633,20 @@
             try {
                 const task = tasks.find(t => t.id === taskId);
                 if (!task || !task.workflow_steps) return;
-                
+
                 const steps = JSON.parse(JSON.stringify(task.workflow_steps));
                 const step = steps.find(s => s.id === stepId);
                 if (!step || step.status !== 'active') return;
-                
+
                 const now = localDateTimeStr();
                 const wfPoints = task.workflow_points || { step_success: 5, step_failure: -3, task_success: 20, task_failure: -10 };
 
-                // Segna come completato
+                // Segna come completato e sblocca step dipendenti
                 step.status = 'completed';
                 step.completed_at = now;
-                
-                // Sblocca step dipendenti (completed O failed contano come "fatto")
                 wfUnlockSuccessors(steps, now);
 
-                // Controlla se workflow finito (nessuno step locked o active)
-                const allDone = steps.every(s => s.status === 'completed' || s.status === 'failed');
-                // Auto-completa solo se TUTTI gli step sono completati (nessuno fallito)
-                const allCompleted = steps.every(s => s.status === 'completed');
-
-                // Calcola next_occurrence_date = min(start_date) degli step active
-                const nextOccurrence = wfCalcNextOccurrence(steps, allDone);
-
-                // Salva history per lo step completato
+                // Salva history per lo step
                 await sb.from('ts_history').insert([{
                     task_id: taskId,
                     from_status: 'active',
@@ -6665,31 +6655,21 @@
                     points: wfPoints.step_success,
                     timestamp: now
                 }]);
-                
-                if (allCompleted) {
-                    // Tutti gli step completati: auto-completa il workflow → terminato
-                    await sb.from('ts_history').insert([{
-                        task_id: taskId,
-                        from_status: task.status,
-                        to_status: 'terminated',
-                        action: 'completed',
-                        points: wfPoints.task_success || 0,
-                        timestamp: now
-                    }]);
-                    await sb.from('ts_tasks').update({
-                        workflow_steps: steps,
-                        status: 'terminated',
-                        last_completed_date: now,
-                        next_occurrence_date: nextOccurrence
-                    }).eq('id', taskId);
-                } else {
-                    // Step con fallimenti o workflow ancora in corso
-                    await sb.from('ts_tasks').update({
-                        workflow_steps: steps,
-                        last_completed_date: now,
-                        next_occurrence_date: nextOccurrence
-                    }).eq('id', taskId);
-                }
+
+                // Aggiorna workflow_steps nel DB (il completamento del task è delegato a task_complete)
+                const allDone = steps.every(s => s.status === 'completed' || s.status === 'failed');
+                await sb.from('ts_tasks').update({
+                    workflow_steps: steps,
+                    last_completed_date: now,
+                    next_occurrence_date: wfCalcNextOccurrence(steps, allDone)
+                }).eq('id', taskId);
+
+                // Delega il completamento del task all'RPC (logica unica)
+                const today = localDateStr();
+                const { data: rpcResult } = await sb.rpc('task_complete', {
+                    p_task_id: taskId,
+                    p_today:   today
+                });
 
                 await loadTasks();
                 await loadHistory();
@@ -6697,8 +6677,9 @@
                 renderCalendar();
                 renderManagement();
 
-                if (allCompleted) {
-                    showToast(`🎉 Workflow completato! +${wfPoints.task_success || 0} pt`);
+                const action = rpcResult?.action;
+                if (action === 'completed') {
+                    showToast(`🎉 Workflow completato! +${rpcResult?.points ?? 0} pt`);
                 } else {
                     showToast(`✅ Step "${step.title}" completato! +${wfPoints.step_success} pt`);
                 }
@@ -6712,27 +6693,20 @@
             try {
                 const task = tasks.find(t => t.id === taskId);
                 if (!task || !task.workflow_steps) return;
-                
+
                 const steps = JSON.parse(JSON.stringify(task.workflow_steps));
                 const step = steps.find(s => s.id === stepId);
                 if (!step || step.status !== 'active') return;
-                
+
                 const now = localDateTimeStr();
                 const wfPoints = task.workflow_points || { step_success: 5, step_failure: -3, task_success: 20, task_failure: -10 };
 
-                // Segna come fallito (il workflow prosegue)
+                // Segna come fallito e sblocca successori (failed conta come "fatto")
                 step.status = 'failed';
                 step.completed_at = now;
-                
-                // Sblocca successori (failed conta come "fatto")
                 wfUnlockSuccessors(steps, now);
-                
-                // Controlla se workflow finito
-                const allDone = steps.every(s => s.status === 'completed' || s.status === 'failed');
-                
-                const nextOccurrence = wfCalcNextOccurrence(steps, allDone);
-                
-                // Salva history per step fallito
+
+                // Salva history per lo step fallito
                 await sb.from('ts_history').insert([{
                     task_id: taskId,
                     from_status: 'active',
@@ -6741,22 +6715,27 @@
                     points: wfPoints.step_failure,
                     timestamp: now
                 }]);
-                
-                // Aggiorna task (NON auto-completa, l'utente decide dal popup)
-                const updateData = {
+
+                // Aggiorna workflow_steps nel DB
+                const allDone = steps.every(s => s.status === 'completed' || s.status === 'failed');
+                await sb.from('ts_tasks').update({
                     workflow_steps: steps,
                     last_completed_date: now,
-                    next_occurrence_date: nextOccurrence
-                };
-                
-                await sb.from('ts_tasks').update(updateData).eq('id', taskId);
-                
+                    next_occurrence_date: wfCalcNextOccurrence(steps, allDone)
+                }).eq('id', taskId);
+
+                // Delega il completamento del task all'RPC (logica unica)
+                await sb.rpc('task_complete', {
+                    p_task_id: taskId,
+                    p_today:   localDateStr()
+                });
+
                 await loadTasks();
                 await loadHistory();
                 renderDashboard();
                 renderCalendar();
                 renderManagement();
-                
+
                 showToast(`❌ Step "${step.title}" fallito (${wfPoints.step_failure} pt)`);
             } catch (error) {
                 console.error('Error failing workflow step:', error);
@@ -7053,10 +7032,10 @@
         async function wfPopupFailStep(taskId, stepId) {
             await failWorkflowStep(taskId, stepId);
             const task = tasks.find(t => t.id === taskId);
-            if (task && ['started', 'completed', 'failed', 'skipped'].includes(task.status)) {
-                renderWorkflowPopup(task);
-            } else {
+            if (!task || task.status === 'terminated') {
                 closeWorkflowPopup();
+            } else {
+                renderWorkflowPopup(task);
             }
         }
         
