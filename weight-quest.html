@@ -1121,8 +1121,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.62';
-        var BUILD_TIME  = '2026-03-28T12:00:00Z';
+        var APP_VERSION = 'v3.5.63';
+        var BUILD_TIME  = '2026-03-28T15:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5439,7 +5439,7 @@
         }
 
         // ── Mock mode: imposta true per sviluppare senza chiamare l'API ──────
-        var CLAUDE_MOCK = true; // sviluppo: disattiva per usare Claude reale
+        var CLAUDE_MOCK = false; // false = chiama Claude reale
 
         var CLAUDE_MOCK_RESPONSE = [
             '## Analisi del metabolismo\n\n',
@@ -5547,11 +5547,11 @@
 
             // ── Mock mode ────────────────────────────────────────────────────
             if (CLAUDE_MOCK) {
+                log('[CLAUDE] MOCK MODE attivo — nessuna chiamata reale');
                 boxEl.style.display = 'block';
                 preEl.textContent = CLAUDE_MOCK_RESPONSE;
                 statusEl.style.display = 'none';
                 saveDietConsultation(prompt, CLAUDE_MOCK_RESPONSE);
-                log('Claude MOCK: risposta fake restituita');
                 return;
             }
             // ────────────────────────────────────────────────────────────────
@@ -5559,20 +5559,34 @@
             btn.disabled = true;
             btn.textContent = '⏳ Invio in corso…';
             statusEl.style.display = 'block';
-            statusEl.textContent = '⏳ Elaborazione con Claude (può richiedere 30-60 secondi)…';
+            statusEl.style.color = '';
+            statusEl.textContent = '⏳ Connessione…';
             boxEl.style.display = 'none';
             preEl.textContent = '';
 
-            // Animazione punti durante l'attesa
-            var dots = 0;
+            var t0 = Date.now();
+            var claudeEndpoint = CONFIG.supabaseUrl + '/functions/v1/claude-diet';
+
+            log('[CLAUDE] ===== INIZIO CHIAMATA =====');
+            log('[CLAUDE] endpoint: ' + claudeEndpoint);
+            log('[CLAUDE] sbToken presente: ' + (!!sbToken));
+            log('[CLAUDE] prompt: ' + prompt.length + ' caratteri');
+            log('[CLAUDE] timestamp: ' + new Date().toISOString());
+            console.log('%c[CLAUDE] INIZIO', 'color:#6C5CE7;font-weight:bold');
+            console.log('[CLAUDE] endpoint:', claudeEndpoint);
+            console.log('[CLAUDE] prompt (prime 300 chars):', prompt.substring(0, 300));
+
             var dotsTimer = setInterval(function() {
-                dots = (dots + 1) % 4;
-                statusEl.textContent = '⏳ Elaborazione con Claude' + '.'.repeat(dots + 1) + ' (può richiedere 30-60 secondi)';
-            }, 600);
+                var s = ((Date.now() - t0) / 1000).toFixed(0);
+                statusEl.textContent = '⏳ Elaborazione Claude… ' + s + 's';
+            }, 500);
 
             try {
-                // Chiama la Supabase Edge Function (timeout 150s, nessun blocco firewall)
-                var claudeEndpoint = CONFIG.supabaseUrl + '/functions/v1/claude-diet';
+                // ── [1] fetch ────────────────────────────────────────────────
+                statusEl.textContent = '[1/4] ⏳ Invio richiesta all\'edge function…';
+                log('[CLAUDE 1] fetch POST → ' + claudeEndpoint);
+                console.log('[CLAUDE 1] fetch start...');
+
                 var response = await fetch(claudeEndpoint, {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
@@ -5580,50 +5594,127 @@
                 });
 
                 clearInterval(dotsTimer);
+                var elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
-                var data = await response.json().catch(function() { return null; });
-                if (!response.ok || !data) {
-                    var errMsg = (data && data.error && data.error.message) ? data.error.message : ('HTTP ' + response.status);
-                    throw new Error(errMsg);
+                log('[CLAUDE 2] risposta ricevuta in ' + elapsed + 's');
+                log('[CLAUDE 2] HTTP status: ' + response.status + ' ' + response.statusText);
+                log('[CLAUDE 2] content-type: ' + (response.headers.get('content-type') || '(vuoto)'));
+                console.log('[CLAUDE 2] response.ok:', response.ok);
+                console.log('[CLAUDE 2] status:', response.status, response.statusText);
+                console.log('[CLAUDE 2] content-type:', response.headers.get('content-type'));
+
+                statusEl.textContent = '[2/4] ⏳ Lettura body (HTTP ' + response.status + ')…';
+
+                // ── [2] leggi raw text (così il log mostra sempre il body) ──
+                var rawText = await response.text();
+                log('[CLAUDE 3] raw body: ' + rawText.length + ' caratteri');
+                console.log('[CLAUDE 3] raw body (prime 600 chars):', rawText.substring(0, 600));
+                if (rawText.length > 600) {
+                    console.log('[CLAUDE 3] raw body (ultime 300 chars):', rawText.slice(-300));
                 }
 
+                // ── [3] parse JSON ───────────────────────────────────────────
+                var data = null;
+                try {
+                    data = JSON.parse(rawText);
+                    log('[CLAUDE 4] JSON parse OK — chiavi: ' + Object.keys(data).join(', '));
+                    console.log('[CLAUDE 4] data top-level:', {
+                        id: data.id,
+                        type: data.type,
+                        model: data.model,
+                        stop_reason: data.stop_reason,
+                        content_len: Array.isArray(data.content) ? data.content.length : typeof data.content,
+                        usage: data.usage,
+                        error: data.error
+                    });
+                } catch(parseErr) {
+                    log('[CLAUDE 4] ERRORE JSON parse: ' + parseErr.message);
+                    log('[CLAUDE 4] raw (prime 400): ' + rawText.substring(0, 400));
+                    console.error('[CLAUDE 4] JSON parse error:', parseErr);
+                    throw new Error('Risposta non JSON (HTTP ' + response.status + '): ' + rawText.substring(0, 200));
+                }
+
+                // ── [4] controlla errori HTTP ────────────────────────────────
+                if (!response.ok) {
+                    var errMsg = (data && data.error && data.error.message) ? data.error.message
+                               : (data && data.error ? JSON.stringify(data.error)
+                               : 'HTTP ' + response.status);
+                    log('[CLAUDE 4] ERRORE HTTP ' + response.status + ': ' + errMsg);
+                    console.error('[CLAUDE 4] HTTP error:', response.status, data);
+                    throw new Error('HTTP ' + response.status + ' — ' + errMsg);
+                }
+
+                statusEl.textContent = '[3/4] ⏳ Estrazione testo…';
+
+                // ── [5] estrai testo dai content blocks ─────────────────────
                 var fullText = '';
                 if (data.content && Array.isArray(data.content)) {
-                    data.content.forEach(function(block) {
+                    log('[CLAUDE 5] content blocks: ' + data.content.length);
+                    data.content.forEach(function(block, i) {
+                        var blockLen = block.text ? block.text.length : 0;
+                        log('[CLAUDE 5] block[' + i + '] type=' + block.type + ' len=' + blockLen);
+                        console.log('[CLAUDE 5] block[' + i + ']:', block.type, blockLen + ' chars');
                         if (block.type === 'text') fullText += block.text;
                     });
+                } else {
+                    log('[CLAUDE 5] WARN: content non è array → ' + JSON.stringify(data.content));
+                    console.warn('[CLAUDE 5] content anomalo:', data.content);
                 }
 
-                if (fullText) {
-                    boxEl.style.display = 'block';
-                    preEl.textContent = fullText;
-                    // Avvisa se la risposta è stata troncata per limite token
-                    var truncWarning = document.getElementById('claudeTruncWarning');
-                    if (data.stop_reason === 'max_tokens') {
-                        if (!truncWarning) {
-                            truncWarning = document.createElement('div');
-                            truncWarning.id = 'claudeTruncWarning';
-                            truncWarning.style.cssText = 'background:#FEF3C7; border:1px solid #F59E0B; color:#92400E; padding:8px 12px; font-size:0.82rem; margin-top:8px;';
-                            boxEl.appendChild(truncWarning);
-                        }
-                        truncWarning.textContent = '⚠️ Risposta troncata: limite token raggiunto. Il JSON potrebbe essere incompleto.';
-                        truncWarning.style.display = 'block';
-                    } else if (truncWarning) {
-                        truncWarning.style.display = 'none';
-                    }
-                    saveDietConsultation(prompt, fullText);
-                } else {
-                    throw new Error('Risposta vuota dall\'API (content: ' + JSON.stringify(data.content) + ')');
+                log('[CLAUDE 6] fullText totale: ' + fullText.length + ' caratteri');
+                log('[CLAUDE 6] stop_reason: ' + data.stop_reason);
+                log('[CLAUDE 6] model: ' + (data.model || 'n/a'));
+                if (data.usage) {
+                    log('[CLAUDE 6] usage — input: ' + data.usage.input_tokens + ' tok, output: ' + data.usage.output_tokens + ' tok');
+                    console.log('[CLAUDE 6] usage:', data.usage);
                 }
+                var hasJson = fullText.indexOf('piano_omad_settimanale') !== -1;
+                log('[CLAUDE 6] contiene "piano_omad_settimanale": ' + hasJson);
+                if (data.stop_reason === 'max_tokens') {
+                    log('[CLAUDE 6] ⚠️ ATTENZIONE: stop_reason=max_tokens → risposta TRONCATA');
+                    console.warn('[CLAUDE 6] Risposta troncata per max_tokens!');
+                }
+                console.log('[CLAUDE 6] fullText (ultime 400 chars):', fullText.slice(-400));
+
+                if (!fullText) {
+                    log('[CLAUDE] ERRORE: fullText vuoto');
+                    console.error('[CLAUDE] fullText vuoto, data:', JSON.stringify(data).substring(0, 500));
+                    throw new Error('Risposta vuota. stop_reason=' + data.stop_reason + ' content=' + JSON.stringify(data.content));
+                }
+
+                statusEl.textContent = '[4/4] ⏳ Salvataggio consulenza…';
+                boxEl.style.display = 'block';
+                preEl.textContent = fullText;
+
+                var truncWarning = document.getElementById('claudeTruncWarning');
+                if (data.stop_reason === 'max_tokens') {
+                    if (!truncWarning) {
+                        truncWarning = document.createElement('div');
+                        truncWarning.id = 'claudeTruncWarning';
+                        truncWarning.style.cssText = 'background:#FEF3C7;border:1px solid #F59E0B;color:#92400E;padding:8px 12px;font-size:0.82rem;margin-top:8px;';
+                        boxEl.appendChild(truncWarning);
+                    }
+                    truncWarning.textContent = '⚠️ Risposta troncata: limite token raggiunto. Il JSON potrebbe essere incompleto.';
+                    truncWarning.style.display = 'block';
+                } else if (truncWarning) {
+                    truncWarning.style.display = 'none';
+                }
+
+                saveDietConsultation(prompt, fullText);
 
                 statusEl.style.display = 'none';
                 btn.textContent = '✅ Completato — invia di nuovo';
-                log('Claude API: risposta ricevuta (' + fullText.length + ' caratteri) stop_reason=' + data.stop_reason);
+                var total = ((Date.now() - t0) / 1000).toFixed(1);
+                log('[CLAUDE] ===== COMPLETATO in ' + total + 's — ' + fullText.length + ' chars — stop=' + data.stop_reason + ' =====');
+                console.log('%c[CLAUDE] COMPLETATO ✓', 'color:#00B894;font-weight:bold', total + 's', fullText.length + ' chars');
+
             } catch(e) {
                 clearInterval(dotsTimer);
                 statusEl.textContent = '❌ Errore: ' + e.message;
+                statusEl.style.color = '#dc2626';
                 btn.textContent = '🤖 Riprova';
-                log('Claude API errore: ' + e.message);
+                log('[CLAUDE] ===== ERRORE: ' + e.message + ' =====');
+                console.error('[CLAUDE] Errore:', e);
             } finally {
                 btn.disabled = false;
             }
@@ -5632,39 +5723,88 @@
         // ── Storico consulenze AI ───────────────────────────────────────
 
         function extractPlanJson(text) {
+            log('[JSON] extractPlanJson: testo ' + text.length + ' chars');
             // Cerca blocco ```json ... ``` o ``` ... ```
             var match = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
             if (match) {
-                try { return JSON.parse(match[1]); } catch(e) {}
+                log('[JSON] trovato blocco ```json``` (' + match[1].length + ' chars)');
+                try {
+                    var p1 = JSON.parse(match[1]);
+                    log('[JSON] parse OK — chiavi: ' + Object.keys(p1).join(', '));
+                    return p1;
+                } catch(e) {
+                    log('[JSON] parse blocco markdown FALLITO: ' + e.message);
+                    console.warn('[JSON] parse blocco fallito:', e.message, '— primi 200 chars:', match[1].substring(0, 200));
+                }
+            } else {
+                log('[JSON] nessun blocco ```json``` trovato');
             }
             // Fallback: trova { "piano_omad_settimanale": ... } nel testo libero
             var idx = text.indexOf('"piano_omad_settimanale"');
             if (idx !== -1) {
+                log('[JSON] "piano_omad_settimanale" trovato a posizione ' + idx + ', tentativo estrazione...');
                 var start = text.lastIndexOf('{', idx);
+                log('[JSON] { trovato a posizione ' + start);
                 if (start !== -1) {
-                    try { return JSON.parse(text.slice(start)); } catch(e) {}
+                    try {
+                        var p2 = JSON.parse(text.slice(start));
+                        log('[JSON] fallback parse OK — chiavi: ' + Object.keys(p2).join(', '));
+                        return p2;
+                    } catch(e) {
+                        log('[JSON] fallback parse FALLITO: ' + e.message);
+                        console.warn('[JSON] fallback parse fallito:', e.message);
+                    }
                 }
+            } else {
+                log('[JSON] "piano_omad_settimanale" NON trovato nel testo');
             }
+            log('[JSON] nessun JSON estratto → null');
             return null;
         }
 
         function saveDietConsultation(prompt, response) {
-            if (!sbToken) return;
+            log('[SAVE] ===== INIZIO salvataggio =====');
+            if (!sbToken) {
+                log('[SAVE] SKIP — sbToken mancante');
+                console.warn('[SAVE] sbToken mancante, salvataggio saltato');
+                return;
+            }
+            log('[SAVE] sbToken OK (len=' + sbToken.length + ')');
+
             var plan = extractPlanJson(response);
+            log('[SAVE] plan_json: ' + (plan ? 'trovato, chiavi=' + Object.keys(plan).join(',') : 'null'));
+            console.log('[SAVE] plan_json:', plan ? Object.keys(plan) : 'non trovato');
+
             var payload = { prompt: prompt, response: response };
             if (plan) payload.plan_json = plan;
-            fetch(supabase.url + '/rest/v1/ps_diet_consultations', {
+            log('[SAVE] payload: prompt=' + prompt.length + 'c, response=' + response.length + 'c, plan_json=' + !!plan);
+
+            var url = supabase.url + '/rest/v1/ps_diet_consultations';
+            log('[SAVE] POST → ' + url);
+            console.log('[SAVE] url:', url);
+            console.log('[SAVE] headers:', JSON.stringify(supabase.headers));
+
+            fetch(url, {
                 method: 'POST',
                 headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' }),
                 body: JSON.stringify(payload)
             }).then(function(r) {
+                log('[SAVE] HTTP response: ' + r.status + ' ' + r.statusText);
+                console.log('[SAVE] response status:', r.status, r.statusText);
                 if (r.ok) {
-                    log('Consulenza AI salvata in ps_diet_consultations');
+                    log('[SAVE] OK — consulenza salvata');
+                    console.log('%c[SAVE] Salvato ✓', 'color:#00B894;font-weight:bold');
                     loadDietHistory();
                 } else {
-                    r.text().then(function(t) { log('WARN saveDietConsultation: ' + r.status + ' ' + t); });
+                    r.text().then(function(t) {
+                        log('[SAVE] ERRORE ' + r.status + ': ' + t);
+                        console.error('[SAVE] ERRORE HTTP ' + r.status + ':', t);
+                    });
                 }
-            }).catch(function(e) { log('WARN saveDietConsultation: ' + e.message); });
+            }).catch(function(e) {
+                log('[SAVE] ERRORE fetch: ' + e.message);
+                console.error('[SAVE] fetch error:', e);
+            });
         }
 
         function loadDietHistory() {
