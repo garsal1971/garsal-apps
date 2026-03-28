@@ -41,7 +41,6 @@
   .tag.sql-t  { background: #78350F44; color: #FCD34D; border: 1px solid #78350F44; }
   .tag.warn   { background: #78350F66; color: #FDE68A;  border: 1px solid #B45309; }
   .tag.db     { background: #064E3B44; color: #34D399;  border: 1px solid #065F4644; }
-  .tag.secret { background: #1E3A5F44; color: #7DD3FC;  border: 1px solid #1E3A5F; }
 
   .code-block { position: relative; padding: 14px 16px; background: #0B1423; }
   .code-block pre {
@@ -70,154 +69,18 @@
 
   <header>
     <h1>Comandi — garsal-apps</h1>
-    <p>// aggiornato 2026-03-27</p>
+    <p>// aggiornato 2026-03-28</p>
   </header>
 
-  <!-- 1. cm_profile -->
-  <div class="item" id="item-cm-profile">
+  <!-- 1. FIX ps_objectives + ps_weight_tracking -->
+  <div class="item" id="item-ps-fix">
     <div class="item-header">
       <div class="check">!</div>
       <div class="item-body">
-        <div class="item-title">CREATE TABLE cm_profile — profilo personale utente</div>
+        <div class="item-title">FIX — RLS ps_objectives + ps_weight_tracking</div>
         <div class="item-desc">
-          Crea la tabella <code>cm_profile</code> con dati anagrafici e clinici (patologie, farmaci).
-          Un solo record per utente (UNIQUE su user_id). Include RLS e trigger <code>updated_at</code>.
-        </div>
-        <div class="tags">
-          <span class="tag sql-t">SQL</span>
-          <span class="tag warn">PROD</span>
-          <span class="tag db">cm_profile</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-cm-profile">
-      <button class="copy-btn" onclick="copyCode('cb-cm-profile', this)">Copia</button>
-      <pre>CREATE TABLE IF NOT EXISTS cm_profile (
-  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id       uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-
-  -- Anagrafica
-  nome          text,
-  cognome       text,
-  email         text,
-  avatar_url    text,
-  data_nascita  date,
-  sesso         text        CHECK (sesso IN ('M', 'F', 'Altro')),
-  altezza_cm    smallint    CHECK (altezza_cm > 50 AND altezza_cm < 300),
-
-  -- Clinica
-  patologie     text,       -- testo libero, una patologia per riga
-  farmaci       text,       -- testo libero, un farmaco per riga
-  note_mediche  text,
-
-  -- Meta
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now(),
-
-  UNIQUE (user_id)
-);
-
--- Trigger updated_at
-CREATE OR REPLACE FUNCTION cm_profile_set_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER cm_profile_updated_at
-  BEFORE UPDATE ON cm_profile
-  FOR EACH ROW EXECUTE FUNCTION cm_profile_set_updated_at();
-
--- RLS
-ALTER TABLE cm_profile ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "profilo: lettura proprio record"
-  ON cm_profile FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "profilo: inserimento proprio record"
-  ON cm_profile FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "profilo: aggiornamento proprio record"
-  ON cm_profile FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "profilo: eliminazione proprio record"
-  ON cm_profile FOR DELETE
-  USING (auth.uid() = user_id);
-
--- GRANT (obbligatorio: senza questi l'RLS blocca tutto)
-GRANT ALL ON TABLE cm_profile TO authenticated;
-GRANT ALL ON TABLE cm_profile TO service_role;</pre>
-    </div>
-    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
-  </div>
-
-  <!-- 1b. Fix completo RLS cm_profile -->
-  <div class="item" id="item-cm-profile-grant">
-    <div class="item-header">
-      <div class="check">!</div>
-      <div class="item-body">
-        <div class="item-title">FIX — RLS cm_profile (esegui questo se hai già la tabella)</div>
-        <div class="item-desc">
-          Risolve <em>"new row violates row-level security policy"</em>.<br>
-          Aggiunge GRANT, imposta <code>DEFAULT auth.uid()</code> su user_id
-          e ricrea le policy RLS in modo sicuro.
-        </div>
-        <div class="tags">
-          <span class="tag sql-t">SQL</span>
-          <span class="tag warn">FIX</span>
-          <span class="tag db">cm_profile</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-cm-profile-grant">
-      <button class="copy-btn" onclick="copyCode('cb-cm-profile-grant', this)">Copia</button>
-      <pre>-- 1. GRANT ruolo authenticated
-GRANT ALL ON TABLE cm_profile TO authenticated;
-GRANT ALL ON TABLE cm_profile TO service_role;
-
--- 2. user_id si imposta automaticamente dal JWT (non serve mandarlo dal frontend)
-ALTER TABLE cm_profile ALTER COLUMN user_id SET DEFAULT auth.uid();
-
--- 3. Ricrea policy RLS (DROP + CREATE per sicurezza)
-DROP POLICY IF EXISTS "profilo: lettura proprio record"    ON cm_profile;
-DROP POLICY IF EXISTS "profilo: inserimento proprio record" ON cm_profile;
-DROP POLICY IF EXISTS "profilo: aggiornamento proprio record" ON cm_profile;
-DROP POLICY IF EXISTS "profilo: eliminazione proprio record" ON cm_profile;
-
-CREATE POLICY "profilo: lettura proprio record"
-  ON cm_profile FOR SELECT TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "profilo: inserimento proprio record"
-  ON cm_profile FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "profilo: aggiornamento proprio record"
-  ON cm_profile FOR UPDATE TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "profilo: eliminazione proprio record"
-  ON cm_profile FOR DELETE TO authenticated
-  USING (auth.uid() = user_id);</pre>
-    </div>
-    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
-  </div>
-
-  <!-- 2. Fix RLS ps_objectives + ps_weight_tracking -->
-  <div class="item" id="item-ps-objectives-fix">
-    <div class="item-header">
-      <div class="check">!</div>
-      <div class="item-body">
-        <div class="item-title">FIX — RLS ps_objectives + ps_weight_tracking (pagina obiettivi vuota)</div>
-        <div class="item-desc">
-          Se la pagina Obiettivi è vuota nonostante ci siano record in DB, mancano GRANT e/o policy RLS.<br>
-          Questo script aggiunge <code>user_id DEFAULT auth.uid()</code>, GRANT e policy RLS per entrambe le tabelle.
-          Esegui poi il secondo blocco per aggiornare i record esistenti con <code>user_id = null</code>.
+          Aggiunge <code>user_id DEFAULT auth.uid()</code>, GRANT e policy RLS.<br>
+          Necessario per far funzionare la pagina Obiettivi e il salvataggio pesate.
         </div>
         <div class="tags">
           <span class="tag sql-t">SQL</span>
@@ -226,31 +89,27 @@ CREATE POLICY "profilo: eliminazione proprio record"
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-ps-objectives-fix">
-      <button class="copy-btn" onclick="copyCode('cb-ps-objectives-fix', this)">Copia</button>
+    <div class="code-block" id="cb-ps-fix">
+      <button class="copy-btn" onclick="copyCode('cb-ps-fix', this)">Copia</button>
       <pre>-- ══════════════════════════════════════════
 -- FIX ps_objectives
 -- ══════════════════════════════════════════
 
--- 1. Aggiungi user_id se non esiste, con DEFAULT auth.uid()
 ALTER TABLE ps_objectives
   ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ps_objectives
   ALTER COLUMN user_id SET DEFAULT auth.uid();
 
--- 2. GRANT
 GRANT ALL ON TABLE ps_objectives TO authenticated;
 GRANT ALL ON TABLE ps_objectives TO service_role;
 
--- 3. Abilita RLS
 ALTER TABLE ps_objectives ENABLE ROW LEVEL SECURITY;
 
--- 4. Policy RLS
-DROP POLICY IF EXISTS "obiettivi: select"  ON ps_objectives;
-DROP POLICY IF EXISTS "obiettivi: insert"  ON ps_objectives;
-DROP POLICY IF EXISTS "obiettivi: update"  ON ps_objectives;
-DROP POLICY IF EXISTS "obiettivi: delete"  ON ps_objectives;
+DROP POLICY IF EXISTS "obiettivi: select" ON ps_objectives;
+DROP POLICY IF EXISTS "obiettivi: insert" ON ps_objectives;
+DROP POLICY IF EXISTS "obiettivi: update" ON ps_objectives;
+DROP POLICY IF EXISTS "obiettivi: delete" ON ps_objectives;
 
 CREATE POLICY "obiettivi: select" ON ps_objectives FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
@@ -276,10 +135,10 @@ GRANT ALL ON TABLE ps_weight_tracking TO service_role;
 
 ALTER TABLE ps_weight_tracking ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "peso: select"  ON ps_weight_tracking;
-DROP POLICY IF EXISTS "peso: insert"  ON ps_weight_tracking;
-DROP POLICY IF EXISTS "peso: update"  ON ps_weight_tracking;
-DROP POLICY IF EXISTS "peso: delete"  ON ps_weight_tracking;
+DROP POLICY IF EXISTS "peso: select" ON ps_weight_tracking;
+DROP POLICY IF EXISTS "peso: insert" ON ps_weight_tracking;
+DROP POLICY IF EXISTS "peso: update" ON ps_weight_tracking;
+DROP POLICY IF EXISTS "peso: delete" ON ps_weight_tracking;
 
 CREATE POLICY "peso: select" ON ps_weight_tracking FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
@@ -293,16 +152,15 @@ CREATE POLICY "peso: delete" ON ps_weight_tracking FOR DELETE TO authenticated
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
-  <!-- 2b. Aggiorna record esistenti con user_id null -->
-  <div class="item" id="item-ps-fix-userid">
+  <!-- 2. Aggiorna user_id record esistenti -->
+  <div class="item" id="item-ps-userid">
     <div class="item-header">
       <div class="check">!</div>
       <div class="item-body">
-        <div class="item-title">FIX — Aggiorna user_id nei record esistenti (dopo aver eseguito il blocco sopra)</div>
+        <div class="item-title">FIX — Assegna user_id ai record esistenti (dopo il blocco sopra)</div>
         <div class="item-desc">
           I record inseriti prima del fix hanno <code>user_id = null</code> e non sono visibili dall'app.<br>
-          Questo script assegna il tuo <code>user_id</code> a tutti i record orfani.<br>
-          <strong>Sostituisci</strong> <code>TUO-USER-UUID</code> con il tuo UUID da
+          Sostituisci <code>TUO-USER-UUID</code> con il tuo UUID da
           <em>Authentication → Users → copia UUID</em>.
         </div>
         <div class="tags">
@@ -312,12 +170,9 @@ CREATE POLICY "peso: delete" ON ps_weight_tracking FOR DELETE TO authenticated
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-ps-fix-userid">
-      <button class="copy-btn" onclick="copyCode('cb-ps-fix-userid', this)">Copia</button>
-      <pre>-- Sostituisci TUO-USER-UUID con il tuo UUID reale
--- (Authentication → Users → clic sull'utente → copia UUID)
-
-UPDATE ps_objectives
+    <div class="code-block" id="cb-ps-userid">
+      <button class="copy-btn" onclick="copyCode('cb-ps-userid', this)">Copia</button>
+      <pre>UPDATE ps_objectives
   SET user_id = 'TUO-USER-UUID'
   WHERE user_id IS NULL;
 
@@ -325,17 +180,17 @@ UPDATE ps_weight_tracking
   SET user_id = 'TUO-USER-UUID'
   WHERE user_id IS NULL;</pre>
     </div>
-    <div class="platform-note">📍 supabase.com → progetto PROD → SQL Editor → Run  (dopo aver sostituito TUO-USER-UUID)</div>
+    <div class="platform-note">📍 Sostituisci TUO-USER-UUID → Authentication → Users → copia UUID</div>
   </div>
 
   <!-- 3. ps_diet_consultations -->
-  <div class="item" id="item-ps-diet-consultations">
+  <div class="item" id="item-ps-diet">
     <div class="item-header">
       <div class="check">!</div>
       <div class="item-body">
         <div class="item-title">CREATE TABLE ps_diet_consultations — storico consulenze AI</div>
         <div class="item-desc">
-          Salva prompt inviati a Claude e relative risposte ricevute da Weight Quest.<br>
+          Salva prompt e risposte di Claude ricevute da Weight Quest.<br>
           Un record per ogni chiamata andata a buon fine.
         </div>
         <div class="tags">
@@ -345,8 +200,8 @@ UPDATE ps_weight_tracking
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-ps-diet-consultations">
-      <button class="copy-btn" onclick="copyCode('cb-ps-diet-consultations', this)">Copia</button>
+    <div class="code-block" id="cb-ps-diet">
+      <button class="copy-btn" onclick="copyCode('cb-ps-diet', this)">Copia</button>
       <pre>CREATE TABLE IF NOT EXISTS ps_diet_consultations (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
@@ -356,15 +211,12 @@ UPDATE ps_weight_tracking
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Indice per ordinamento cronologico
-CREATE INDEX IF NOT EXISTS ps_diet_consultations_created_at_idx
+CREATE INDEX IF NOT EXISTS ps_diet_consultations_user_date_idx
   ON ps_diet_consultations (user_id, created_at DESC);
 
--- GRANT
 GRANT ALL ON TABLE ps_diet_consultations TO authenticated;
 GRANT ALL ON TABLE ps_diet_consultations TO service_role;
 
--- RLS
 ALTER TABLE ps_diet_consultations ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "dieta: select" ON ps_diet_consultations FOR SELECT TO authenticated
@@ -377,40 +229,72 @@ CREATE POLICY "dieta: delete" ON ps_diet_consultations FOR DELETE TO authenticat
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
-  <!-- 5. Supabase secret ANTHROPIC_API_KEY -->
-  <div class="item" id="item-anthropic-secret">
+  <!-- 4. cm_profile -->
+  <div class="item" id="item-cm-profile">
     <div class="item-header">
       <div class="check">!</div>
       <div class="item-body">
-        <div class="item-title">Supabase Secret — ANTHROPIC_API_KEY per Edge Function claude-diet</div>
+        <div class="item-title">CREATE TABLE cm_profile — profilo personale utente</div>
         <div class="item-desc">
-          La Edge Function <code>claude-diet</code> legge la API key Anthropic dalla variabile d'ambiente.
-          Aggiungila nei Supabase Secrets oppure via CLI (sostituisci <code>sk-ant-...</code> con la tua chiave reale).
+          Dati anagrafici e clinici (altezza, patologie, farmaci). Un record per utente.
         </div>
         <div class="tags">
-          <span class="tag secret">SECRET</span>
+          <span class="tag sql-t">SQL</span>
           <span class="tag warn">PROD</span>
-          <span class="tag db">claude-diet</span>
+          <span class="tag db">cm_profile</span>
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-anthropic-secret">
-      <button class="copy-btn" onclick="copyCode('cb-anthropic-secret', this)">Copia</button>
-      <pre>-- Opzione A: via Supabase Dashboard
--- Project Settings → Edge Functions → Secrets → Add new secret
--- Nome:  ANTHROPIC_API_KEY
--- Valore: sk-ant-...
+    <div class="code-block" id="cb-cm-profile">
+      <button class="copy-btn" onclick="copyCode('cb-cm-profile', this)">Copia</button>
+      <pre>CREATE TABLE IF NOT EXISTS cm_profile (
+  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+                            DEFAULT auth.uid(),
+  nome          text,
+  cognome       text,
+  email         text,
+  avatar_url    text,
+  data_nascita  date,
+  sesso         text        CHECK (sesso IN ('M', 'F', 'Altro')),
+  altezza_cm    smallint    CHECK (altezza_cm > 50 AND altezza_cm < 300),
+  patologie     text,
+  farmaci       text,
+  note_mediche  text,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id)
+);
 
--- Opzione B: via CLI (da terminale locale)
-npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-... \
-  --project-ref jajlmmdsjlvzgcxiiypk</pre>
+CREATE OR REPLACE FUNCTION cm_profile_set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END;
+$$;
+
+CREATE TRIGGER cm_profile_updated_at
+  BEFORE UPDATE ON cm_profile
+  FOR EACH ROW EXECUTE FUNCTION cm_profile_set_updated_at();
+
+GRANT ALL ON TABLE cm_profile TO authenticated;
+GRANT ALL ON TABLE cm_profile TO service_role;
+
+ALTER TABLE cm_profile ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "profilo: select" ON cm_profile FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "profilo: insert" ON cm_profile FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "profilo: update" ON cm_profile FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "profilo: delete" ON cm_profile FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);</pre>
     </div>
-    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → Project Settings → Edge Functions → Secrets</div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
 </div>
 
-<footer>garsal-apps · 2026-03-27</footer>
+<footer>garsal-apps · 2026-03-28</footer>
 
 <script>
 function copyCode(blockId, btn) {
