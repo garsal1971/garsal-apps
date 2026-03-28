@@ -72,15 +72,14 @@
     <p>// aggiornato 2026-03-28</p>
   </header>
 
-  <!-- 1. ps_diet_consultations — aggiungi plan_json -->
-  <div class="item" id="item-plan-json">
+  <!-- 1. CREATE TABLE ps_diet_consultations -->
+  <div class="item" id="item-ps-diet">
     <div class="item-header">
       <div class="check">!</div>
       <div class="item-body">
-        <div class="item-title">ALTER TABLE ps_diet_consultations — aggiungi plan_json</div>
+        <div class="item-title">CREATE TABLE ps_diet_consultations</div>
         <div class="item-desc">
-          Aggiunge la colonna <code>plan_json</code> (jsonb) per salvare il JSON strutturato estratto dalla risposta Claude.<br>
-          Necessario per Diet Viewer. I record esistenti restano senza (colonna nullable).
+          Tabella per salvare prompt e risposte Claude con il piano dieta in JSON strutturato.
         </div>
         <div class="tags">
           <span class="tag sql-t">SQL</span>
@@ -89,22 +88,44 @@
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-plan-json">
-      <button class="copy-btn" onclick="copyCode('cb-plan-json', this)">Copia</button>
-      <pre>ALTER TABLE ps_diet_consultations
-  ADD COLUMN IF NOT EXISTS plan_json jsonb;</pre>
+    <div class="code-block" id="cb-ps-diet">
+      <button class="copy-btn" onclick="copyCode('cb-ps-diet', this)">Copia</button>
+      <pre>CREATE TABLE IF NOT EXISTS ps_diet_consultations (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+                          DEFAULT auth.uid(),
+  prompt      text        NOT NULL,
+  response    text        NOT NULL,
+  plan_json   jsonb,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ps_diet_consultations_user_date_idx
+  ON ps_diet_consultations (user_id, created_at DESC);
+
+GRANT ALL ON TABLE ps_diet_consultations TO authenticated;
+GRANT ALL ON TABLE ps_diet_consultations TO service_role;
+
+ALTER TABLE ps_diet_consultations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "dieta: select" ON ps_diet_consultations FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "dieta: insert" ON ps_diet_consultations FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "dieta: delete" ON ps_diet_consultations FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);</pre>
     </div>
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
-  <!-- 2. cm_apps — registra Diet Viewer -->
-  <div class="item" id="item-diet-viewer-app">
+  <!-- 2. INSERT cm_apps Diet Viewer -->
+  <div class="item" id="item-diet-viewer">
     <div class="item-header">
       <div class="check">!</div>
       <div class="item-body">
         <div class="item-title">INSERT cm_apps — registra Diet Viewer nel launcher</div>
         <div class="item-desc">
-          Aggiunge <code>diet-viewer.html</code> all'elenco delle app di AppSphere.
+          Aggiunge Diet Viewer all'elenco delle app di AppSphere.
         </div>
         <div class="tags">
           <span class="tag sql-t">SQL</span>
@@ -113,8 +134,8 @@
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-diet-viewer-app">
-      <button class="copy-btn" onclick="copyCode('cb-diet-viewer-app', this)">Copia</button>
+    <div class="code-block" id="cb-diet-viewer">
+      <button class="copy-btn" onclick="copyCode('cb-diet-viewer', this)">Copia</button>
       <pre>INSERT INTO cm_apps (title, description, html_file, active, score_query)
 VALUES (
   'Diet Viewer',
@@ -122,7 +143,8 @@ VALUES (
   'diet-viewer.html',
   true,
   'SELECT 0'
-);</pre>
+)
+ON CONFLICT DO NOTHING;</pre>
     </div>
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
