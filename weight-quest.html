@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.59</title>
+    <title>Weight Quest v3.5.60</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1121,8 +1121,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.59';
-        var BUILD_TIME  = '2026-03-28T09:00:00Z';
+        var APP_VERSION = 'v3.5.60';
+        var BUILD_TIME  = '2026-03-28T10:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5491,6 +5491,20 @@
                 if (fullText) {
                     boxEl.style.display = 'block';
                     preEl.textContent = fullText;
+                    // Avvisa se la risposta è stata troncata per limite token
+                    var truncWarning = document.getElementById('claudeTruncWarning');
+                    if (data.stop_reason === 'max_tokens') {
+                        if (!truncWarning) {
+                            truncWarning = document.createElement('div');
+                            truncWarning.id = 'claudeTruncWarning';
+                            truncWarning.style.cssText = 'background:#FEF3C7; border:1px solid #F59E0B; color:#92400E; padding:8px 12px; font-size:0.82rem; margin-top:8px;';
+                            boxEl.appendChild(truncWarning);
+                        }
+                        truncWarning.textContent = '⚠️ Risposta troncata: limite token raggiunto. Il JSON potrebbe essere incompleto.';
+                        truncWarning.style.display = 'block';
+                    } else if (truncWarning) {
+                        truncWarning.style.display = 'none';
+                    }
                     saveDietConsultation(prompt, fullText);
                 } else {
                     throw new Error('Risposta vuota dall\'API (content: ' + JSON.stringify(data.content) + ')');
@@ -5498,7 +5512,7 @@
 
                 statusEl.style.display = 'none';
                 btn.textContent = '✅ Completato — invia di nuovo';
-                log('Claude API: risposta ricevuta (' + fullText.length + ' caratteri)');
+                log('Claude API: risposta ricevuta (' + fullText.length + ' caratteri) stop_reason=' + data.stop_reason);
             } catch(e) {
                 clearInterval(dotsTimer);
                 statusEl.textContent = '❌ Errore: ' + e.message;
