@@ -1121,8 +1121,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.63';
-        var BUILD_TIME  = '2026-03-28T15:00:00Z';
+        var APP_VERSION = 'v3.5.64';
+        var BUILD_TIME  = '2026-03-28T15:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5589,7 +5589,11 @@
 
                 var response = await fetch(claudeEndpoint, {
                     method: 'POST',
-                    headers: { 'content-type': 'application/json' },
+                    headers: {
+                        'content-type': 'application/json',
+                        'Authorization': 'Bearer ' + (sbToken || CONFIG.supabaseKey),
+                        'apikey': CONFIG.supabaseKey
+                    },
                     body: JSON.stringify({ prompt: prompt })
                 });
 
