@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diet Viewer v1.0.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary:  #FF3366;
+            --secondary:#6C5CE7;
+            --success:  #00B894;
+            --warning:  #F39C12;
+            --danger:   #E74C3C;
+            --dark:     #1F2937;
+            --light:    #FFFFFF;
+            --muted:    #6B7280;
+            --accent:   #2563EB;
+            --border:   #E5E7EB;
+            --card-bg:  #FFFFFF;
+            --input-bg: #F9FAFB;
+            --macro-p:  #00B894;
+            --macro-c:  #F39C12;
+            --macro-g:  #F1C40F;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Darker Grotesque', system-ui, sans-serif;
+            background: #F3F4F6;
+            color: var(--dark);
+            min-height: 100vh;
+        }
+
+        /* ── Auth screen ── */
+        #authScreen {
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; background: var(--dark); color: #fff;
+            flex-direction: column; gap: 16px; text-align: center; padding: 24px;
+        }
+        #authScreen h1 { font-family: 'Space Mono', monospace; font-size: 1.4rem; color: var(--primary); }
+        #authScreen p  { font-size: 1rem; color: #9CA3AF; max-width: 320px; line-height: 1.6; }
+
+        /* ── App layout ── */
+        #appShell { display: none; }
+        #appShell.visible { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            background: var(--dark); color: #fff;
+            padding: 1.5rem 1rem;
+            display: flex; flex-direction: column; gap: 0;
+        }
+        .sidebar-logo {
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem; font-weight: 700;
+            color: var(--success); letter-spacing: 1px;
+            margin-bottom: 2rem; text-transform: uppercase;
+        }
+        .sidebar-logo span { display: block; font-size: 0.65rem; color: var(--muted); margin-top: 2px; letter-spacing: 0; text-transform: none; }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 0.65rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem; font-weight: 500;
+            color: #9CA3AF;
+            transition: background 0.2s, color 0.2s;
+            margin-bottom: 4px;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .nav-item.active { background: var(--primary); color: #fff; }
+        .nav-item .ni { font-size: 1.2rem; }
+
+        /* Consulenze list nella sidebar */
+        .sidebar-section-title {
+            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.1em; color: var(--muted);
+            padding: 1rem 0.75rem 0.4rem;
+        }
+        .consult-item {
+            padding: 0.55rem 0.75rem;
+            cursor: pointer;
+            border-radius: 6px;
+            margin-bottom: 3px;
+            transition: background 0.15s;
+        }
+        .consult-item:hover { background: rgba(255,255,255,0.08); }
+        .consult-item.active { background: rgba(108,92,231,0.3); border-left: 3px solid var(--secondary); }
+        .consult-item .ci-date { font-size: 0.78rem; color: #9CA3AF; }
+        .consult-item .ci-name { font-size: 0.88rem; color: #E5E7EB; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* ── Main content ── */
+        .main { padding: 1.5rem; overflow-y: auto; }
+
+        /* ── Pages ── */
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--dark); }
+        .card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--dark); }
+
+        /* ── Day grid ── */
+        .days-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1rem;
+        }
+        .day-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .day-header {
+            padding: 0.75rem 1rem;
+            background: var(--dark);
+            color: #fff;
+            display: flex; align-items: baseline; justify-content: space-between;
+        }
+        .day-header .day-name { font-family: 'Space Mono', monospace; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--success); }
+        .day-header .day-meal { font-size: 0.9rem; color: #D1D5DB; font-weight: 500; text-align: right; max-width: 200px; }
+        .day-body { padding: 0.75rem 1rem; }
+
+        /* Ingredient table */
+        .ingr-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 0.75rem; }
+        .ingr-table th {
+            text-align: left; padding: 4px 6px;
+            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--muted);
+            border-bottom: 2px solid var(--border);
+        }
+        .ingr-table th.r, .ingr-table td.r { text-align: right; }
+        .ingr-table td { padding: 5px 6px; border-bottom: 1px solid #F3F4F6; color: #374151; }
+        .ingr-table tr:last-child td { border-bottom: none; }
+        .ingr-table tr.total td {
+            font-weight: 700; color: var(--dark);
+            border-top: 2px solid var(--border); padding-top: 7px;
+        }
+
+        /* Macro bar */
+        .macro-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; gap: 2px; }
+        .macro-bar .seg { height: 100%; border-radius: 2px; }
+        .macro-bar .seg-p { background: var(--macro-p); }
+        .macro-bar .seg-c { background: var(--macro-c); }
+        .macro-bar .seg-g { background: var(--macro-g); }
+        .macro-legend { display: flex; gap: 12px; margin-top: 5px; flex-wrap: wrap; }
+        .macro-legend span { font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+        .macro-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* ── Macro page ── */
+        .macro-summary-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        .macro-summary-table th {
+            text-align: left; padding: 8px 10px;
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--muted);
+            border-bottom: 2px solid var(--border); background: var(--input-bg);
+        }
+        .macro-summary-table th.r, .macro-summary-table td.r { text-align: right; }
+        .macro-summary-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+        .macro-summary-table tr.avg td { font-weight: 700; background: #F0FDF4; color: var(--success); }
+        .kcal-bar-wrap { margin-top: 4px; background: #F3F4F6; border-radius: 3px; height: 6px; overflow: hidden; }
+        .kcal-bar-fill { height: 100%; background: var(--primary); border-radius: 3px; }
+
+        /* ── Empty / loading states ── */
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+        .empty-state .emoji { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+        .empty-state p { font-size: 1rem; line-height: 1.6; }
+        .loading-msg { color: var(--muted); font-size: 0.9rem; padding: 1rem 0; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            #appShell.visible { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+            .main { padding: 1rem; }
+            .days-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Auth screen -->
+<div id="authScreen">
+    <h1>🥗 Diet Viewer</h1>
+    <p>Apri questa app da <strong>AppSphere</strong> per accedere ai tuoi piani dieta.</p>
+</div>
+
+<!-- App shell -->
+<div id="appShell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            Diet Viewer
+            <span>v1.0.0</span>
+        </div>
+
+        <div class="nav-item active" data-page="piano" onclick="switchPage('piano')">
+            <span class="ni">🗓️</span> Piano Settimanale
+        </div>
+        <div class="nav-item" data-page="macro" onclick="switchPage('macro')">
+            <span class="ni">📊</span> Macro & Calorie
+        </div>
+
+        <div class="sidebar-section-title">Consulenze salvate</div>
+        <div id="consultList">
+            <div style="font-size:0.8rem; color:var(--muted); padding: 0 0.75rem;">Caricamento…</div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+
+        <!-- PAGE: Piano -->
+        <div id="pianoPage" class="page active">
+            <div id="pianoContent">
+                <div class="empty-state">
+                    <span class="emoji">🥗</span>
+                    <p>Seleziona una consulenza dalla barra laterale<br>per visualizzare il piano dieta.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE: Macro -->
+        <div id="macroPage" class="page">
+            <div id="macroContent">
+                <div class="empty-state">
+                    <span class="emoji">📊</span>
+                    <p>Seleziona una consulenza dalla barra laterale<br>per visualizzare il riepilogo macro.</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    var APP_VERSION = 'v1.0.0';
+    var BUILD_TIME  = '2026-03-28T11:00:00Z';
+    console.log('%c DIET VIEWER ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+        'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+    // ── Supabase config ──────────────────────────────────────────────────────
+    const _IS_DEV = ['localhost','127.0.0.1','0.0.0.0'].includes(window.location.hostname)
+                 || (window.location.hostname.endsWith('.netlify.app')
+                    && window.location.hostname.startsWith('dev--'));
+    const SUPABASE_URL = _IS_DEV
+        ? 'https://DEV_SUPABASE_PROJECT_REF.supabase.co'
+        : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+    const SUPABASE_KEY = _IS_DEV
+        ? 'DEV_SUPABASE_ANON_KEY'
+        : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+    let sb            = null;
+    let sbAccessToken = null;
+    let currentPlan   = null; // piano selezionato corrente
+    let currentId     = null;
+
+    function initWithToken(token) {
+        if (sb) return;
+        sbAccessToken = token;
+        localStorage.setItem('sb_token', token);
+        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth:   { persistSession: false, autoRefreshToken: false },
+            global: { headers: { Authorization: 'Bearer ' + token } }
+        });
+        showApp();
+    }
+
+    // ── Auth ─────────────────────────────────────────────────────────────────
+    function showApp() {
+        document.getElementById('authScreen').style.display = 'none';
+        document.getElementById('appShell').classList.add('visible');
+        loadConsultList();
+    }
+
+    // BroadcastChannel da AppSphere
+    const _authChannel = new BroadcastChannel('appsphere_auth');
+    _authChannel.onmessage = function(e) {
+        if (!e.data) return;
+        if (e.data.type === 'LOGOUT') {
+            sb = null; sbAccessToken = null;
+            localStorage.removeItem('sb_token');
+            document.getElementById('appShell').classList.remove('visible');
+            document.getElementById('authScreen').style.display = 'flex';
+        } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+            sbAccessToken = e.data.sbToken;
+            localStorage.setItem('sb_token', sbAccessToken);
+            if (sb) {
+                sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                    auth:   { persistSession: false, autoRefreshToken: false },
+                    global: { headers: { Authorization: 'Bearer ' + sbAccessToken } }
+                });
+            }
+        }
+    };
+
+    // postMessage da AppSphere (window.open legacy)
+    window.addEventListener('message', function(e) {
+        if (!e.data) return;
+        if ((e.data.type === 'SB_TOKEN' || e.data.type === 'TOKEN_REFRESH') && e.data.token && !sb) {
+            initWithToken(e.data.token);
+        }
+    });
+
+    // Fallback: localStorage
+    (function() {
+        var saved = localStorage.getItem('sb_token');
+        if (saved) { initWithToken(saved); }
+    })();
+
+    // ── Navigation ───────────────────────────────────────────────────────────
+    function switchPage(name) {
+        document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+        document.getElementById(name + 'Page').classList.add('active');
+        document.querySelectorAll('.nav-item[data-page]').forEach(function(n) {
+            n.classList.toggle('active', n.getAttribute('data-page') === name);
+        });
+        // Ri-renderizza se c'è un piano caricato
+        if (currentPlan) {
+            if (name === 'piano') renderPiano(currentPlan);
+            if (name === 'macro') renderMacro(currentPlan);
+        }
+    }
+
+    // ── Consulenze list ──────────────────────────────────────────────────────
+    async function loadConsultList() {
+        if (!sb) return;
+        var listEl = document.getElementById('consultList');
+        listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);padding:0 0.75rem;">Caricamento…</div>';
+
+        const { data, error } = await sb
+            .from('ps_diet_consultations')
+            .select('id, created_at, plan_json')
+            .not('plan_json', 'is', null)
+            .order('created_at', { ascending: false });
+
+        if (error || !data || data.length === 0) {
+            listEl.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);padding:0 0.75rem;">'
+                + (error ? 'Errore: ' + error.message : 'Nessun piano salvato.') + '</div>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        data.forEach(function(row) {
+            var dt  = new Date(row.created_at);
+            var dtS = dt.toLocaleDateString('it-IT') + ' ' + dt.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+            var giorni = row.plan_json && row.plan_json.piano_omad_settimanale;
+            var primoGiorno = giorni && giorni[0] ? giorni[0].pasto : '—';
+            var el = document.createElement('div');
+            el.className = 'consult-item' + (row.id === currentId ? ' active' : '');
+            el.innerHTML = '<div class="ci-date">' + dtS + '</div>'
+                         + '<div class="ci-name">' + escHtml(primoGiorno) + '</div>';
+            el.onclick = function() { selectConsult(row.id, row.plan_json); };
+            listEl.appendChild(el);
+        });
+    }
+
+    function selectConsult(id, planJson) {
+        currentId   = id;
+        currentPlan = planJson;
+        // Aggiorna active nella lista
+        document.querySelectorAll('.consult-item').forEach(function(el, i) {
+            el.classList.remove('active');
+        });
+        event.currentTarget.classList.add('active');
+        // Renderizza pagina corrente
+        var activePage = document.querySelector('.nav-item.active[data-page]');
+        var pageName   = activePage ? activePage.getAttribute('data-page') : 'piano';
+        if (pageName === 'piano') renderPiano(planJson);
+        else                      renderMacro(planJson);
+    }
+
+    // ── Render Piano ─────────────────────────────────────────────────────────
+    function renderPiano(planJson) {
+        var el = document.getElementById('pianoContent');
+        var giorni = planJson && planJson.piano_omad_settimanale;
+        if (!giorni || !giorni.length) {
+            el.innerHTML = '<div class="empty-state"><span class="emoji">⚠️</span><p>Nessun dato disponibile per questo piano.</p></div>';
+            return;
+        }
+
+        var html = '<div class="days-grid">';
+        giorni.forEach(function(giorno) {
+            var ingr   = giorno.ingredienti || [];
+            var totale = giorno.totale_pasto || {};
+            var kcalTot = totale.calorie || 0;
+            var pTot    = totale.proteine_g || 0;
+            var cTot    = totale.carboidrati_netti_g || 0;
+            var gTot    = totale.grassi_g || 0;
+
+            // Calcola calorie da macro per barra proporzionale
+            var kcalP = pTot * 4;
+            var kcalC = cTot * 4;
+            var kcalG = gTot * 9;
+            var kcalTotMacro = kcalP + kcalC + kcalG || 1;
+            var pct = function(v) { return (v / kcalTotMacro * 100).toFixed(1); };
+
+            html += '<div class="day-card">';
+            html += '<div class="day-header">';
+            html += '<span class="day-name">' + escHtml(giorno.giorno || '') + '</span>';
+            html += '<span class="day-meal">' + escHtml(giorno.pasto || '') + '</span>';
+            html += '</div>';
+            html += '<div class="day-body">';
+
+            // Tabella ingredienti
+            html += '<table class="ingr-table">';
+            html += '<thead><tr>'
+                  + '<th>Ingrediente</th>'
+                  + '<th class="r">g</th>'
+                  + '<th class="r">kcal</th>'
+                  + '<th class="r">P(g)</th>'
+                  + '<th class="r">C(g)</th>'
+                  + '<th class="r">G(g)</th>'
+                  + '</tr></thead><tbody>';
+
+            ingr.forEach(function(i) {
+                html += '<tr>'
+                      + '<td>' + escHtml(i.nome || '') + '</td>'
+                      + '<td class="r">' + fmtN(i.quantita_g) + '</td>'
+                      + '<td class="r">' + fmtN(i.calorie) + '</td>'
+                      + '<td class="r">' + fmtN(i.proteine_g) + '</td>'
+                      + '<td class="r">' + fmtN(i.carboidrati_netti_g) + '</td>'
+                      + '<td class="r">' + fmtN(i.grassi_g) + '</td>'
+                      + '</tr>';
+            });
+
+            // Riga totale
+            html += '<tr class="total">'
+                  + '<td>Totale pasto</td>'
+                  + '<td class="r">—</td>'
+                  + '<td class="r">' + fmtN(kcalTot) + '</td>'
+                  + '<td class="r">' + fmtN(pTot) + '</td>'
+                  + '<td class="r">' + fmtN(cTot) + '</td>'
+                  + '<td class="r">' + fmtN(gTot) + '</td>'
+                  + '</tr>';
+            html += '</tbody></table>';
+
+            // Barra macro
+            html += '<div class="macro-bar">'
+                  + '<div class="seg seg-p" style="flex:' + kcalP + '"></div>'
+                  + '<div class="seg seg-c" style="flex:' + kcalC + '"></div>'
+                  + '<div class="seg seg-g" style="flex:' + kcalG + '"></div>'
+                  + '</div>';
+            html += '<div class="macro-legend">'
+                  + '<span><span class="dot" style="background:var(--macro-p)"></span>Proteine ' + pct(kcalP) + '%</span>'
+                  + '<span><span class="dot" style="background:var(--macro-c)"></span>Carboidrati ' + pct(kcalC) + '%</span>'
+                  + '<span><span class="dot" style="background:var(--macro-g)"></span>Grassi ' + pct(kcalG) + '%</span>'
+                  + '</div>';
+
+            html += '</div></div>'; // day-body, day-card
+        });
+        html += '</div>'; // days-grid
+        el.innerHTML = html;
+    }
+
+    // ── Render Macro ─────────────────────────────────────────────────────────
+    function renderMacro(planJson) {
+        var el = document.getElementById('macroContent');
+        var giorni = planJson && planJson.piano_omad_settimanale;
+        if (!giorni || !giorni.length) {
+            el.innerHTML = '<div class="empty-state"><span class="emoji">⚠️</span><p>Nessun dato disponibile.</p></div>';
+            return;
+        }
+
+        var maxKcal = 0;
+        giorni.forEach(function(g) { var k = (g.totale_pasto || {}).calorie || 0; if (k > maxKcal) maxKcal = k; });
+
+        var totKcal = 0, totP = 0, totC = 0, totG = 0;
+        giorni.forEach(function(g) {
+            var t = g.totale_pasto || {};
+            totKcal += t.calorie || 0;
+            totP    += t.proteine_g || 0;
+            totC    += t.carboidrati_netti_g || 0;
+            totG    += t.grassi_g || 0;
+        });
+        var n = giorni.length || 1;
+
+        var html = '<div class="card">';
+        html += '<h2>📊 Riepilogo Macro Settimanale</h2>';
+        html += '<table class="macro-summary-table">';
+        html += '<thead><tr>'
+              + '<th>Giorno</th><th>Pasto</th>'
+              + '<th class="r">kcal</th>'
+              + '<th class="r">P (g)</th>'
+              + '<th class="r">C (g)</th>'
+              + '<th class="r">G (g)</th>'
+              + '<th>Calorie</th>'
+              + '</tr></thead><tbody>';
+
+        giorni.forEach(function(giorno) {
+            var t    = giorno.totale_pasto || {};
+            var kcal = t.calorie || 0;
+            var pct  = maxKcal > 0 ? (kcal / maxKcal * 100).toFixed(0) : 0;
+            html += '<tr>'
+                  + '<td><strong>' + escHtml(giorno.giorno || '') + '</strong></td>'
+                  + '<td style="font-size:0.82rem;color:var(--muted);">' + escHtml(giorno.pasto || '') + '</td>'
+                  + '<td class="r"><strong>' + fmtN(kcal) + '</strong></td>'
+                  + '<td class="r">' + fmtN(t.proteine_g) + '</td>'
+                  + '<td class="r">' + fmtN(t.carboidrati_netti_g) + '</td>'
+                  + '<td class="r">' + fmtN(t.grassi_g) + '</td>'
+                  + '<td style="min-width:100px;padding-top:10px;">'
+                  + '<div class="kcal-bar-wrap"><div class="kcal-bar-fill" style="width:' + pct + '%"></div></div>'
+                  + '</td>'
+                  + '</tr>';
+        });
+
+        // Riga media
+        html += '<tr class="avg">'
+              + '<td colspan="2">Media giornaliera</td>'
+              + '<td class="r">' + fmtN(totKcal / n) + '</td>'
+              + '<td class="r">' + fmtN(totP / n) + '</td>'
+              + '<td class="r">' + fmtN(totC / n) + '</td>'
+              + '<td class="r">' + fmtN(totG / n) + '</td>'
+              + '<td></td></tr>';
+
+        // Riga totale settimana
+        html += '<tr style="font-weight:700;background:#F9FAFB;">'
+              + '<td colspan="2">Totale settimana</td>'
+              + '<td class="r">' + fmtN(totKcal) + '</td>'
+              + '<td class="r">' + fmtN(totP) + '</td>'
+              + '<td class="r">' + fmtN(totC) + '</td>'
+              + '<td class="r">' + fmtN(totG) + '</td>'
+              + '<td></td></tr>';
+
+        html += '</tbody></table></div>';
+
+        // Legenda macro calorie
+        html += '<div class="card">';
+        html += '<h2>🔢 Distribuzione Macronutrienti (media)</h2>';
+        var avgP = totP / n, avgC = totC / n, avgG = totG / n;
+        var kcalP = avgP * 4, kcalC = avgC * 4, kcalG = avgG * 9;
+        var tot = kcalP + kcalC + kcalG || 1;
+        html += '<div style="margin-bottom:12px;">';
+        html += macroRow('Proteine',    kcalP, tot, 'var(--macro-p)', avgP + ' g · ' + (kcalP/tot*100).toFixed(1) + '%');
+        html += macroRow('Carboidrati', kcalC, tot, 'var(--macro-c)', avgC + ' g · ' + (kcalC/tot*100).toFixed(1) + '%');
+        html += macroRow('Grassi',      kcalG, tot, 'var(--macro-g)', avgG + ' g · ' + (kcalG/tot*100).toFixed(1) + '%');
+        html += '</div></div>';
+
+        el.innerHTML = html;
+    }
+
+    function macroRow(label, kcal, tot, color, detail) {
+        var pct = (kcal / tot * 100).toFixed(1);
+        return '<div style="margin-bottom:10px;">'
+             + '<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px;">'
+             + '<span style="font-weight:600;">' + label + '</span>'
+             + '<span style="color:var(--muted);">' + detail + '</span>'
+             + '</div>'
+             + '<div style="background:#F3F4F6;border-radius:4px;height:10px;overflow:hidden;">'
+             + '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:4px;"></div>'
+             + '</div></div>';
+    }
+
+    // ── Utilities ────────────────────────────────────────────────────────────
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function fmtN(v) {
+        if (v === undefined || v === null || v === '') return '—';
+        var n = parseFloat(v);
+        return isNaN(n) ? '—' : (Number.isInteger(n) ? n : n.toFixed(1));
+    }
+</script>
+</body>
+</html>
