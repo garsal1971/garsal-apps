@@ -328,7 +328,56 @@ UPDATE ps_weight_tracking
     <div class="platform-note">📍 supabase.com → progetto PROD → SQL Editor → Run  (dopo aver sostituito TUO-USER-UUID)</div>
   </div>
 
-  <!-- 3. Supabase secret ANTHROPIC_API_KEY -->
+  <!-- 3. ps_diet_consultations -->
+  <div class="item" id="item-ps-diet-consultations">
+    <div class="item-header">
+      <div class="check">!</div>
+      <div class="item-body">
+        <div class="item-title">CREATE TABLE ps_diet_consultations — storico consulenze AI</div>
+        <div class="item-desc">
+          Salva prompt inviati a Claude e relative risposte ricevute da Weight Quest.<br>
+          Un record per ogni chiamata andata a buon fine.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">ps_diet_consultations</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-ps-diet-consultations">
+      <button class="copy-btn" onclick="copyCode('cb-ps-diet-consultations', this)">Copia</button>
+      <pre>CREATE TABLE IF NOT EXISTS ps_diet_consultations (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+                          DEFAULT auth.uid(),
+  prompt      text        NOT NULL,
+  response    text        NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Indice per ordinamento cronologico
+CREATE INDEX IF NOT EXISTS ps_diet_consultations_created_at_idx
+  ON ps_diet_consultations (user_id, created_at DESC);
+
+-- GRANT
+GRANT ALL ON TABLE ps_diet_consultations TO authenticated;
+GRANT ALL ON TABLE ps_diet_consultations TO service_role;
+
+-- RLS
+ALTER TABLE ps_diet_consultations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "dieta: select" ON ps_diet_consultations FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "dieta: insert" ON ps_diet_consultations FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "dieta: delete" ON ps_diet_consultations FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 5. Supabase secret ANTHROPIC_API_KEY -->
   <div class="item" id="item-anthropic-secret">
     <div class="item-header">
       <div class="check">!</div>
