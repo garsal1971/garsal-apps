@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.61</title>
+    <title>Weight Quest v3.5.62</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1121,8 +1121,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.61';
-        var BUILD_TIME  = '2026-03-28T11:00:00Z';
+        var APP_VERSION = 'v3.5.62';
+        var BUILD_TIME  = '2026-03-28T12:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5438,6 +5438,101 @@
             }
         }
 
+        // ── Mock mode: imposta true per sviluppare senza chiamare l'API ──────
+        var CLAUDE_MOCK = false;
+
+        var CLAUDE_MOCK_RESPONSE = [
+            '## Analisi del metabolismo\n\n',
+            'Basandomi sui tuoi dati documentati, il tuo TDEE stimato è di circa 2.100 kcal/die.\n',
+            'Target OMAD: **1.500–1.600 kcal** (deficit ~550 kcal → ~0,5 kg/sett).\n\n',
+            '## Piano OMAD settimanale\n\n',
+            '**Lunedì** — Salmone al forno con verdure\n',
+            '**Martedì** — Pollo alla griglia con insalata\n',
+            '**Mercoledì** — Uova strapazzate con avocado\n',
+            '**Giovedì** — Merluzzo con spinaci saltati\n',
+            '**Venerdì** — Tagliata di manzo con rucola\n',
+            '**Sabato** — Tonno con fagiolini e olive\n',
+            '**Domenica** — Pollo al curry con zucchine\n\n',
+            '## Compatibilità periodo dieta\n\nIl periodo pianificato è realistico.\n\n',
+            '## File JSON\n\n',
+            '```json\n',
+            '{\n',
+            '  "piano_omad_settimanale": [\n',
+            '    {\n',
+            '      "giorno": "Lunedì",\n',
+            '      "pasto": "Salmone al forno con verdure",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Salmone","quantita_g":200,"calorie":416,"proteine_g":40,"carboidrati_netti_g":0,"grassi_g":26},\n',
+            '        {"nome":"Zucchine","quantita_g":150,"calorie":26,"proteine_g":2,"carboidrati_netti_g":3,"grassi_g":0},\n',
+            '        {"nome":"Olio EVO","quantita_g":15,"calorie":133,"proteine_g":0,"carboidrati_netti_g":0,"grassi_g":15}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":575,"proteine_g":42,"carboidrati_netti_g":3,"grassi_g":41}\n',
+            '    },\n',
+            '    {\n',
+            '      "giorno": "Martedì",\n',
+            '      "pasto": "Pollo alla griglia con insalata",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Petto di pollo","quantita_g":250,"calorie":290,"proteine_g":55,"carboidrati_netti_g":0,"grassi_g":6},\n',
+            '        {"nome":"Insalata mista","quantita_g":100,"calorie":20,"proteine_g":2,"carboidrati_netti_g":2,"grassi_g":0},\n',
+            '        {"nome":"Olio EVO","quantita_g":15,"calorie":133,"proteine_g":0,"carboidrati_netti_g":0,"grassi_g":15}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":443,"proteine_g":57,"carboidrati_netti_g":2,"grassi_g":21}\n',
+            '    },\n',
+            '    {\n',
+            '      "giorno": "Mercoledì",\n',
+            '      "pasto": "Uova strapazzate con avocado",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Uova intere","quantita_g":200,"calorie":286,"proteine_g":24,"carboidrati_netti_g":2,"grassi_g":20},\n',
+            '        {"nome":"Avocado","quantita_g":100,"calorie":160,"proteine_g":2,"carboidrati_netti_g":2,"grassi_g":15},\n',
+            '        {"nome":"Spinaci freschi","quantita_g":80,"calorie":18,"proteine_g":2,"carboidrati_netti_g":1,"grassi_g":0}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":464,"proteine_g":28,"carboidrati_netti_g":5,"grassi_g":35}\n',
+            '    },\n',
+            '    {\n',
+            '      "giorno": "Giovedì",\n',
+            '      "pasto": "Merluzzo con spinaci saltati",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Merluzzo","quantita_g":300,"calorie":252,"proteine_g":57,"carboidrati_netti_g":0,"grassi_g":2},\n',
+            '        {"nome":"Spinaci","quantita_g":150,"calorie":34,"proteine_g":4,"carboidrati_netti_g":2,"grassi_g":0},\n',
+            '        {"nome":"Olio EVO","quantita_g":20,"calorie":177,"proteine_g":0,"carboidrati_netti_g":0,"grassi_g":20}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":463,"proteine_g":61,"carboidrati_netti_g":2,"grassi_g":22}\n',
+            '    },\n',
+            '    {\n',
+            '      "giorno": "Venerdì",\n',
+            '      "pasto": "Tagliata di manzo con rucola",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Manzo magro","quantita_g":200,"calorie":330,"proteine_g":44,"carboidrati_netti_g":0,"grassi_g":16},\n',
+            '        {"nome":"Rucola","quantita_g":60,"calorie":15,"proteine_g":2,"carboidrati_netti_g":1,"grassi_g":0},\n',
+            '        {"nome":"Parmigiano","quantita_g":20,"calorie":83,"proteine_g":7,"carboidrati_netti_g":0,"grassi_g":6}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":428,"proteine_g":53,"carboidrati_netti_g":1,"grassi_g":22}\n',
+            '    },\n',
+            '    {\n',
+            '      "giorno": "Sabato",\n',
+            '      "pasto": "Tonno con fagiolini e olive",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Tonno al naturale","quantita_g":200,"calorie":208,"proteine_g":46,"carboidrati_netti_g":0,"grassi_g":2},\n',
+            '        {"nome":"Fagiolini","quantita_g":150,"calorie":38,"proteine_g":3,"carboidrati_netti_g":5,"grassi_g":0},\n',
+            '        {"nome":"Olive nere","quantita_g":30,"calorie":43,"proteine_g":0,"carboidrati_netti_g":1,"grassi_g":4}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":289,"proteine_g":49,"carboidrati_netti_g":6,"grassi_g":6}\n',
+            '    },\n',
+            '    {\n',
+            '      "giorno": "Domenica",\n',
+            '      "pasto": "Pollo al curry con zucchine",\n',
+            '      "ingredienti": [\n',
+            '        {"nome":"Petto di pollo","quantita_g":250,"calorie":290,"proteine_g":55,"carboidrati_netti_g":0,"grassi_g":6},\n',
+            '        {"nome":"Zucchine","quantita_g":150,"calorie":26,"proteine_g":2,"carboidrati_netti_g":3,"grassi_g":0},\n',
+            '        {"nome":"Olio EVO","quantita_g":15,"calorie":133,"proteine_g":0,"carboidrati_netti_g":0,"grassi_g":15}\n',
+            '      ],\n',
+            '      "totale_pasto":{"calorie":449,"proteine_g":57,"carboidrati_netti_g":3,"grassi_g":21}\n',
+            '    }\n',
+            '  ]\n',
+            '}\n',
+            '```\n'
+        ].join('');
+
         async function inviaAClaudeAPI() {
             var prompt = document.getElementById('dietaPromptText').value;
             if (!prompt) {
@@ -5449,6 +5544,17 @@
             var statusEl = document.getElementById('claudeInvioStatus');
             var boxEl    = document.getElementById('claudeRispostaBox');
             var preEl    = document.getElementById('claudeRispostaText');
+
+            // ── Mock mode ────────────────────────────────────────────────────
+            if (CLAUDE_MOCK) {
+                boxEl.style.display = 'block';
+                preEl.textContent = CLAUDE_MOCK_RESPONSE;
+                statusEl.style.display = 'none';
+                saveDietConsultation(prompt, CLAUDE_MOCK_RESPONSE);
+                log('Claude MOCK: risposta fake restituita');
+                return;
+            }
+            // ────────────────────────────────────────────────────────────────
 
             btn.disabled = true;
             btn.textContent = '⏳ Invio in corso…';
