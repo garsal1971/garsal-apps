@@ -1121,8 +1121,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.65';
-        var BUILD_TIME  = '2026-03-28T16:00:00Z';
+        var APP_VERSION = 'v3.5.66';
+        var BUILD_TIME  = '2026-03-28T17:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5192,32 +5192,35 @@
             lines.push('');
 
             lines.push('═══════════════════════════════════════');
-            lines.push('COSA TI CHIEDO (risposta concisa)');
+            lines.push('OUTPUT RICHIESTO');
             lines.push('═══════════════════════════════════════');
-            lines.push('Basandoti ESCLUSIVAMENTE sui dati sopra, rispondi in modo sintetico:');
+            lines.push('Rispondi con UNA SOLA RIGA di testo libero (max 2 frasi): stima TDEE, kcal target OMAD, deficit coerente con −' + rateRef + ' kg/sett.');
             lines.push('');
-            lines.push('**A) TDEE E TARGET OMAD** (max 3 righe)');
-            lines.push('   Stima TDEE, kcal target per il pasto OMAD, deficit coerente con −' + rateRef + ' kg/sett.');
+            lines.push('Poi produci ESCLUSIVAMENTE il blocco JSON seguente, completo per tutti e 7 i giorni.');
+            lines.push('Non aggiungere altro testo dopo il JSON.');
             lines.push('');
-            lines.push('**B) PIANO OMAD 7 GIORNI** — pasto serale 19:30-21:00');
-            lines.push('   Per ogni giorno: nome pasto, ingredienti principali con grammature.');
-            lines.push('   Cucina italiana, pratica. Rispetta eventuali interazioni farmacologiche.');
+            lines.push('```json');
+            lines.push('{');
+            lines.push('  "piano_omad_settimanale": [');
+            lines.push('    {');
+            lines.push('      "giorno": "Lunedì",');
+            lines.push('      "pasto": "Nome del pasto",');
+            lines.push('      "note": "eventuale avvertenza farmacologica o clinica (stringa, può essere vuota)",');
+            lines.push('      "ingredienti": [');
+            lines.push('        { "nome": "Ingrediente", "quantita_g": 200, "calorie": 300, "proteine_g": 30, "carboidrati_netti_g": 5, "grassi_g": 15 }');
+            lines.push('      ],');
+            lines.push('      "totale_pasto": { "calorie": 0, "proteine_g": 0, "carboidrati_netti_g": 0, "grassi_g": 0 }');
+            lines.push('    }');
+            lines.push('  ]');
+            lines.push('}');
+            lines.push('```');
             lines.push('');
-            lines.push('**C) JSON DEL PIANO** — OBBLIGATORIO, in blocco ```json');
-            lines.push('   Struttura esatta richiesta:');
-            lines.push('   {');
-            lines.push('     "piano_omad_settimanale": [');
-            lines.push('       {');
-            lines.push('         "giorno": "Lunedì",');
-            lines.push('         "pasto": "Nome pasto",');
-            lines.push('         "ingredienti": [');
-            lines.push('           { "nome": "Ingrediente", "quantita_g": 200, "calorie": 300, "proteine_g": 30, "carboidrati_netti_g": 5, "grassi_g": 15 }');
-            lines.push('         ],');
-            lines.push('         "totale_pasto": { "calorie": 0, "proteine_g": 0, "carboidrati_netti_g": 0, "grassi_g": 0 }');
-            lines.push('       }');
-            lines.push('     ]');
-            lines.push('   }');
-            lines.push('   Includi tutti e 7 i giorni. Il JSON deve essere valido e completo.');
+            lines.push('REGOLE:');
+            lines.push('- Tutti e 7 i giorni (Lunedì→Domenica) devono essere presenti');
+            lines.push('- Ogni giorno: 4-6 ingredienti con grammature precise');
+            lines.push('- Cucina italiana, pratica, ingredienti comuni');
+            lines.push('- Il JSON deve essere sintatticamente valido e completo');
+            lines.push('- Nessun testo aggiuntivo dopo il blocco ```');
 
             return lines.join('\n');
         }
