@@ -229,7 +229,62 @@ CREATE POLICY "dieta: delete" ON ps_diet_consultations FOR DELETE TO authenticat
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
-  <!-- 4. cm_profile -->
+  <!-- 4. ps_diet_consultations — aggiungi colonna plan_json -->
+  <div class="item" id="item-plan-json">
+    <div class="item-header">
+      <div class="check">!</div>
+      <div class="item-body">
+        <div class="item-title">ALTER TABLE ps_diet_consultations — aggiungi plan_json</div>
+        <div class="item-desc">
+          Aggiunge la colonna <code>plan_json</code> (jsonb) per salvare il JSON strutturato estratto dalla risposta Claude.<br>
+          Necessario per Diet Viewer. I record esistenti restano senza (colonna nullable).
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">ps_diet_consultations</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-plan-json">
+      <button class="copy-btn" onclick="copyCode('cb-plan-json', this)">Copia</button>
+      <pre>ALTER TABLE ps_diet_consultations
+  ADD COLUMN IF NOT EXISTS plan_json jsonb;</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 5. cm_apps — registra Diet Viewer -->
+  <div class="item" id="item-diet-viewer-app">
+    <div class="item-header">
+      <div class="check">!</div>
+      <div class="item-body">
+        <div class="item-title">INSERT cm_apps — registra Diet Viewer nel launcher</div>
+        <div class="item-desc">
+          Aggiunge <code>diet-viewer.html</code> all'elenco delle app di AppSphere.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">cm_apps</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-diet-viewer-app">
+      <button class="copy-btn" onclick="copyCode('cb-diet-viewer-app', this)">Copia</button>
+      <pre>INSERT INTO cm_apps (title, description, html_file, active, score_query)
+VALUES (
+  'Diet Viewer',
+  'Visualizza il piano dieta settimanale generato da Claude',
+  'diet-viewer.html',
+  true,
+  'SELECT 0'
+);</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 7. cm_profile -->
   <div class="item" id="item-cm-profile">
     <div class="item-header">
       <div class="check">!</div>
