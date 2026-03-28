@@ -1055,9 +1055,33 @@
 
                         <!-- Bottone invio -->
                         <button id="btnInviaAClaude" onclick="inviaAClaudeAPI()"
-                            style="width:100%; background:linear-gradient(135deg,#6C5CE7,#a29bfe); color:white; padding:14px; font-size:1rem; border:none; cursor:pointer; font-weight:bold; margin-bottom:14px;">
+                            style="width:100%; background:linear-gradient(135deg,#6C5CE7,#a29bfe); color:white; padding:14px; font-size:1rem; border:none; cursor:pointer; font-weight:bold; margin-bottom:8px;">
                             🤖 Invia a Claude e ottieni piano dieta
                         </button>
+
+                        <!-- Bottone "Chiedo io" -->
+                        <button onclick="toggleRispostaManuale()"
+                            style="width:100%; background:#F3F4F6; color:#374151; padding:11px; font-size:0.9rem; border:1px solid #D1D5DB; cursor:pointer; font-weight:600; margin-bottom:14px;">
+                            ✏️ Chiedo io — incolla qui la risposta
+                        </button>
+
+                        <!-- Box risposta manuale -->
+                        <div id="rispostaManualBox" style="display:none; margin-bottom:14px;">
+                            <textarea id="rispostaManualText"
+                                placeholder="Incolla qui la risposta di Claude (testo + blocco JSON)…"
+                                style="width:100%; min-height:260px; padding:12px; font-size:0.82rem; font-family:'Courier New',monospace; border:2px solid #6C5CE7; background:#f9fafb; resize:vertical; line-height:1.5; color:#333; display:block;"></textarea>
+                            <div style="display:flex; gap:8px; margin-top:8px;">
+                                <button onclick="salvaRispostaManuale()"
+                                    style="flex:1; background:#00B894; color:white; padding:10px; font-size:0.9rem; border:none; cursor:pointer; font-weight:bold;">
+                                    💾 Salva risposta
+                                </button>
+                                <button onclick="toggleRispostaManuale()"
+                                    style="background:#E5E7EB; color:#374151; padding:10px 16px; font-size:0.9rem; border:none; cursor:pointer;">
+                                    Annulla
+                                </button>
+                            </div>
+                            <div id="rispostaManualStatus" style="display:none; margin-top:8px; padding:8px 12px; font-size:0.85rem;"></div>
+                        </div>
 
                         <!-- Stato invio -->
                         <div id="claudeInvioStatus" style="display:none; padding:10px; background:#f9fafb; border:1px solid #E5E7EB; font-size:0.85rem; color:#555; margin-bottom:12px;"></div>
@@ -1121,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.66';
-        var BUILD_TIME  = '2026-03-28T17:00:00Z';
+        var APP_VERSION = 'v3.5.67';
+        var BUILD_TIME  = '2026-03-28T18:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5377,6 +5401,53 @@
 
         // ── CLAUDE API ────────────────────────────────────────────────
 
+        function toggleRispostaManuale() {
+            var box = document.getElementById('rispostaManualBox');
+            var isVisible = box.style.display !== 'none';
+            box.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                document.getElementById('rispostaManualText').focus();
+                document.getElementById('rispostaManualStatus').style.display = 'none';
+            }
+        }
+
+        function salvaRispostaManuale() {
+            var testo = (document.getElementById('rispostaManualText').value || '').trim();
+            var statusEl = document.getElementById('rispostaManualStatus');
+            if (!testo) {
+                statusEl.style.display = 'block';
+                statusEl.style.background = '#FEF3C7';
+                statusEl.style.color = '#92400E';
+                statusEl.textContent = '⚠️ Incolla prima la risposta nel campo testo.';
+                return;
+            }
+            var prompt = document.getElementById('dietaPromptText').value || '(prompt non disponibile)';
+            statusEl.style.display = 'block';
+            statusEl.style.background = '#F9FAFB';
+            statusEl.style.color = '#555';
+            statusEl.textContent = '⏳ Salvataggio in corso…';
+            saveDietConsultation(prompt, testo, function(ok, err) {
+                if (ok) {
+                    statusEl.style.background = '#D1FAE5';
+                    statusEl.style.color = '#065F46';
+                    statusEl.textContent = '✅ Risposta salvata correttamente.';
+                    // Mostra il testo anche nel box principale
+                    var boxEl = document.getElementById('claudeRispostaBox');
+                    var preEl = document.getElementById('claudeRispostaText');
+                    boxEl.style.display = 'block';
+                    preEl.textContent = testo;
+                    setTimeout(function() {
+                        document.getElementById('rispostaManualBox').style.display = 'none';
+                        document.getElementById('rispostaManualText').value = '';
+                    }, 1500);
+                } else {
+                    statusEl.style.background = '#FEE2E2';
+                    statusEl.style.color = '#991B1B';
+                    statusEl.textContent = '❌ Errore: ' + (err || 'salvataggio fallito');
+                }
+            });
+        }
+
         function copiaRispostaClaude() {
             var pre = document.getElementById('claudeRispostaText');
             if (!pre || !pre.textContent) return;
@@ -5726,7 +5797,7 @@
             return null;
         }
 
-        function saveDietConsultation(prompt, response) {
+        function saveDietConsultation(prompt, response, cb) {
             log('[SAVE] ===== INIZIO salvataggio =====');
             if (!sbToken) {
                 log('[SAVE] SKIP — sbToken mancante');
@@ -5759,15 +5830,18 @@
                     log('[SAVE] OK — consulenza salvata');
                     console.log('%c[SAVE] Salvato ✓', 'color:#00B894;font-weight:bold');
                     loadDietHistory();
+                    if (cb) cb(true, null);
                 } else {
                     r.text().then(function(t) {
                         log('[SAVE] ERRORE ' + r.status + ': ' + t);
                         console.error('[SAVE] ERRORE HTTP ' + r.status + ':', t);
+                        if (cb) cb(false, 'HTTP ' + r.status + ': ' + t.substring(0, 120));
                     });
                 }
             }).catch(function(e) {
                 log('[SAVE] ERRORE fetch: ' + e.message);
                 console.error('[SAVE] fetch error:', e);
+                if (cb) cb(false, e.message);
             });
         }
 
