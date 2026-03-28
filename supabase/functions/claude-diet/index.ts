@@ -1,7 +1,6 @@
 // Supabase Edge Function: proxy verso Anthropic API
-// Timeout: 150 secondi (vs 10s di Netlify Functions)
-// Deploy automatico via GitHub Actions quando il file cambia
-// v2 — redeploy 2026-03-28
+// Timeout: 150s Pro / 10s Free — usa claude-haiku per rispettare free tier
+// v3 — haiku + max_tokens 4096 — 2026-03-28
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,8 +52,8 @@ Deno.serve(async (req) => {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 16000,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
