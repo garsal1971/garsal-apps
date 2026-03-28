@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diet Viewer v1.0.0</title>
+    <title>Diet Viewer v1.0.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -176,6 +176,56 @@
         .empty-state p { font-size: 1rem; line-height: 1.6; }
         .loading-msg { color: var(--muted); font-size: 0.9rem; padding: 1rem 0; }
 
+        /* ── Shopping list ── */
+        .shop-controls {
+            display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+        .shop-controls label {
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--muted); display: block; margin-bottom: 4px;
+        }
+        .shop-controls select,
+        .shop-controls input[type="number"] {
+            padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+            font-family: inherit; font-size: 0.9rem; background: var(--input-bg);
+            color: var(--dark); appearance: auto;
+        }
+        .shop-controls input[type="number"] { width: 74px; }
+        .btn-generate {
+            padding: 9px 22px; background: var(--success); color: #fff;
+            border: none; border-radius: 6px; font-size: 0.9rem; font-weight: 700;
+            cursor: pointer; transition: background 0.2s; white-space: nowrap;
+        }
+        .btn-generate:hover { background: #00a07e; }
+        .shop-progress { font-size: 0.83rem; color: var(--muted); }
+        .btn-reset {
+            padding: 4px 12px; background: transparent; border: 1px solid var(--border);
+            border-radius: 4px; font-size: 0.8rem; color: var(--muted); cursor: pointer;
+        }
+        .btn-reset:hover { background: var(--border); }
+        .shop-list { list-style: none; }
+        .shop-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 14px; border-bottom: 1px solid var(--border);
+            cursor: pointer; transition: background 0.12s;
+        }
+        .shop-item:last-child { border-bottom: none; }
+        .shop-item:hover { background: #F9FAFB; }
+        .shop-item.checked { opacity: 0.42; }
+        .shop-item.checked .shop-name { text-decoration: line-through; color: var(--muted); }
+        .shop-item input[type="checkbox"] {
+            width: 18px; height: 18px; accent-color: var(--success);
+            cursor: pointer; flex-shrink: 0;
+        }
+        .shop-name { flex: 1; font-size: 0.95rem; font-weight: 500; color: #374151; }
+        .shop-qty { font-size: 0.83rem; color: var(--muted); font-family: 'Space Mono', monospace; white-space: nowrap; }
+        .shop-divider {
+            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--muted);
+            padding: 8px 14px 4px; background: var(--input-bg); border-bottom: 1px solid var(--border);
+        }
+
         /* ── Responsive ── */
         @media (max-width: 768px) {
             #appShell.visible { grid-template-columns: 1fr; }
@@ -199,7 +249,7 @@
     <aside class="sidebar">
         <div class="sidebar-logo">
             Diet Viewer
-            <span>v1.0.0</span>
+            <span>v1.0.1</span>
         </div>
 
         <div class="nav-item active" data-page="piano" onclick="switchPage('piano')">
@@ -207,6 +257,9 @@
         </div>
         <div class="nav-item" data-page="macro" onclick="switchPage('macro')">
             <span class="ni">📊</span> Macro & Calorie
+        </div>
+        <div class="nav-item" data-page="spesa" onclick="switchPage('spesa')">
+            <span class="ni">🛒</span> Lista della Spesa
         </div>
 
         <div class="sidebar-section-title">Consulenze salvate</div>
@@ -238,12 +291,31 @@
             </div>
         </div>
 
+        <!-- PAGE: Spesa -->
+        <div id="spesaPage" class="page">
+            <div class="card">
+                <h2>🛒 Lista della Spesa</h2>
+                <div class="shop-controls">
+                    <div>
+                        <label>Piano dieta</label>
+                        <select id="shopConsultSel"></select>
+                    </div>
+                    <div>
+                        <label>Per quanti giorni</label>
+                        <input type="number" id="shopDays" min="1" max="7" value="7">
+                    </div>
+                    <button class="btn-generate" onclick="generateShopList()">Genera lista</button>
+                </div>
+            </div>
+            <div id="shopListContent"></div>
+        </div>
+
     </main>
 </div>
 
 <script>
-    var APP_VERSION = 'v1.0.0';
-    var BUILD_TIME  = '2026-03-28T11:00:00Z';
+    var APP_VERSION = 'v1.0.1';
+    var BUILD_TIME  = '2026-03-28T14:00:00Z';
     console.log('%c DIET VIEWER ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -329,6 +401,8 @@
             if (name === 'piano') renderPiano(currentPlan);
             if (name === 'macro') renderMacro(currentPlan);
         }
+        // Inizializza pagina spesa
+        if (name === 'spesa') initSpesaPage();
     }
 
     // ── Consulenze list ──────────────────────────────────────────────────────
@@ -558,6 +632,177 @@
              + '<div style="background:#F3F4F6;border-radius:4px;height:10px;overflow:hidden;">'
              + '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:4px;"></div>'
              + '</div></div>';
+    }
+
+    // ── Spesa ────────────────────────────────────────────────────────────────
+
+    var shopConsultCache = []; // [{id, created_at, plan_json}]
+    var shopCurrentList  = []; // [{nome, qty_g, checked}]
+    var shopConsultId    = null;
+
+    async function initSpesaPage() {
+        if (!sb) return;
+        var sel = document.getElementById('shopConsultSel');
+
+        // Carica consulenze se non già in cache
+        if (shopConsultCache.length === 0) {
+            var { data, error } = await sb
+                .from('ps_diet_consultations')
+                .select('id, created_at, plan_json')
+                .not('plan_json', 'is', null)
+                .order('created_at', { ascending: false });
+            if (!error && data) shopConsultCache = data;
+        }
+
+        // Popola select
+        sel.innerHTML = '';
+        shopConsultCache.forEach(function(row) {
+            var dt = new Date(row.created_at);
+            var label = dt.toLocaleDateString('it-IT') + ' '
+                      + dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            var opt = document.createElement('option');
+            opt.value = row.id;
+            opt.textContent = label;
+            sel.appendChild(opt);
+        });
+
+        // Preseleziona consulenza corrente se disponibile
+        if (currentId && shopConsultCache.find(function(c) { return c.id === currentId; })) {
+            sel.value = currentId;
+        }
+
+        // Mostra lista salvata se esiste
+        var saved = loadShopState(sel.value);
+        if (saved && saved.items && saved.items.length) {
+            shopCurrentList = saved.items;
+            shopConsultId   = sel.value;
+            document.getElementById('shopDays').value = saved.days || 7;
+            renderShopList(saved.items);
+        }
+    }
+
+    function generateShopList() {
+        var sel   = document.getElementById('shopConsultSel');
+        var days  = Math.max(1, Math.min(7, parseInt(document.getElementById('shopDays').value) || 7));
+        var cid   = sel.value;
+
+        var consult = shopConsultCache.find(function(c) { return c.id === cid; });
+        if (!consult || !consult.plan_json) {
+            alert('Nessun piano trovato per questa consulenza.');
+            return;
+        }
+
+        var giorni = (consult.plan_json.piano_omad_settimanale || []).slice(0, days);
+
+        // Aggrega ingredienti per nome
+        var map = {};
+        giorni.forEach(function(g) {
+            (g.ingredienti || []).forEach(function(ingr) {
+                var nome = (ingr.nome || '').trim();
+                if (!nome) return;
+                map[nome] = (map[nome] || 0) + (parseFloat(ingr.quantita_g) || 0);
+            });
+        });
+
+        // Recupera stato checked precedente (se stessa consulenza)
+        var checkedSet = new Set();
+        if (shopConsultId === cid && shopCurrentList.length) {
+            shopCurrentList.forEach(function(i) { if (i.checked) checkedSet.add(i.nome); });
+        } else {
+            var saved = loadShopState(cid);
+            if (saved) saved.items.forEach(function(i) { if (i.checked) checkedSet.add(i.nome); });
+        }
+
+        var items = Object.keys(map).sort(function(a, b) { return a.localeCompare(b, 'it'); })
+            .map(function(nome) {
+                return { nome: nome, qty_g: Math.round(map[nome] * 10) / 10, checked: checkedSet.has(nome) };
+            });
+
+        shopCurrentList = items;
+        shopConsultId   = cid;
+        saveShopState(cid, days, items);
+        renderShopList(items);
+    }
+
+    function renderShopList(items) {
+        var el = document.getElementById('shopListContent');
+        if (!items || !items.length) {
+            el.innerHTML = '<div class="empty-state"><span class="emoji">🛒</span>'
+                         + '<p>Nessun ingrediente trovato per i giorni selezionati.</p></div>';
+            return;
+        }
+
+        var unchecked = items.filter(function(i) { return !i.checked; });
+        var checked   = items.filter(function(i) { return i.checked; });
+        var total = items.length, doneCount = checked.length;
+        var pct   = total > 0 ? (doneCount / total * 100).toFixed(0) : 0;
+
+        var html = '<div class="card">';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
+        html += '<span class="shop-progress">' + doneCount + ' / ' + total + ' acquistati</span>';
+        html += '<button class="btn-reset" onclick="resetShopList()">Azzera</button>';
+        html += '</div>';
+        html += '<div class="kcal-bar-wrap" style="margin-bottom:14px;height:8px;">'
+              + '<div class="kcal-bar-fill" style="width:' + pct + '%;background:var(--success);"></div>'
+              + '</div>';
+
+        html += '<ul class="shop-list">';
+
+        if (unchecked.length) {
+            if (checked.length) {
+                html += '<li class="shop-divider">Da acquistare (' + unchecked.length + ')</li>';
+            }
+            unchecked.forEach(function(item) {
+                var idx = items.indexOf(item);
+                html += shopItemHtml(item, idx);
+            });
+        }
+
+        if (checked.length) {
+            html += '<li class="shop-divider">Già acquistati (' + checked.length + ')</li>';
+            checked.forEach(function(item) {
+                var idx = items.indexOf(item);
+                html += shopItemHtml(item, idx);
+            });
+        }
+
+        html += '</ul></div>';
+        el.innerHTML = html;
+    }
+
+    function shopItemHtml(item, idx) {
+        return '<li class="shop-item' + (item.checked ? ' checked' : '') + '" onclick="toggleShopItem(' + idx + ')">'
+             + '<input type="checkbox"' + (item.checked ? ' checked' : '') + ' onclick="event.stopPropagation();toggleShopItem(' + idx + ')">'
+             + '<span class="shop-name">' + escHtml(item.nome) + '</span>'
+             + '<span class="shop-qty">' + (item.qty_g > 0 ? item.qty_g + ' g' : '—') + '</span>'
+             + '</li>';
+    }
+
+    function toggleShopItem(idx) {
+        if (!shopCurrentList[idx]) return;
+        shopCurrentList[idx].checked = !shopCurrentList[idx].checked;
+        var days = parseInt(document.getElementById('shopDays').value) || 7;
+        saveShopState(shopConsultId, days, shopCurrentList);
+        renderShopList(shopCurrentList);
+    }
+
+    function resetShopList() {
+        shopCurrentList.forEach(function(i) { i.checked = false; });
+        var days = parseInt(document.getElementById('shopDays').value) || 7;
+        saveShopState(shopConsultId, days, shopCurrentList);
+        renderShopList(shopCurrentList);
+    }
+
+    function saveShopState(consultId, days, items) {
+        if (!consultId) return;
+        localStorage.setItem('diet_shop_' + consultId, JSON.stringify({ days: days, items: items }));
+    }
+
+    function loadShopState(consultId) {
+        if (!consultId) return null;
+        var raw = localStorage.getItem('diet_shop_' + consultId);
+        if (!raw) return null;
+        try { return JSON.parse(raw); } catch(e) { return null; }
     }
 
     // ── Utilities ────────────────────────────────────────────────────────────
