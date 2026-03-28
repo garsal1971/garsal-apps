@@ -1,6 +1,7 @@
 // Supabase Edge Function: proxy verso Anthropic API
 // Timeout: 150 secondi (vs 10s di Netlify Functions)
 // Deploy automatico via GitHub Actions quando il file cambia
+// v2 — redeploy 2026-03-28
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
