@@ -1039,12 +1039,27 @@
 
                     <!-- Prompt generato -->
                     <div class="card">
-                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                            <h3 style="font-size:1rem; color:#333; margin:0;">📋 Prompt da copiare</h3>
+                        <h3 style="font-size:1rem; color:#333; margin-bottom:10px;">📋 Scegli il prompt</h3>
+                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px;">
+                            <button onclick="selezionaPrompt('corto')" id="btnPromptCorto"
+                                style="padding:10px 6px; font-size:0.82rem; font-weight:700; border:2px solid #E5E7EB; background:#fff; color:#374151; cursor:pointer; border-radius:4px; transition:all 0.15s;">
+                                📝 Corto<br><span style="font-size:0.72rem; font-weight:400; color:#6B7280;">~1 000 token</span>
+                            </button>
+                            <button onclick="selezionaPrompt('medio')" id="btnPromptMedio"
+                                style="padding:10px 6px; font-size:0.82rem; font-weight:700; border:2px solid #E5E7EB; background:#fff; color:#374151; cursor:pointer; border-radius:4px; transition:all 0.15s;">
+                                📄 Medio<br><span style="font-size:0.72rem; font-weight:400; color:#6B7280;">~2 000 token</span>
+                            </button>
+                            <button onclick="selezionaPrompt('lungo')" id="btnPromptLungo"
+                                style="padding:10px 6px; font-size:0.82rem; font-weight:700; border:2px solid #E5E7EB; background:#fff; color:#374151; cursor:pointer; border-radius:4px; transition:all 0.15s;">
+                                📑 Lungo<br><span style="font-size:0.72rem; font-weight:400; color:#6B7280;">~3 000 token</span>
+                            </button>
+                        </div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                            <span id="dietaPromptLabel" style="font-size:0.78rem; color:#6B7280;"></span>
                             <button onclick="copiaDietaPrompt()" style="background:#2563EB; color:white; padding:8px 16px; font-size:0.85rem; border:none; cursor:pointer;">📋 Copia</button>
                         </div>
                         <textarea id="dietaPromptText" readonly
-                            style="width:100%; min-height:380px; padding:12px; font-size:0.82rem; font-family:'Courier New',monospace; border:2px solid #E5E7EB; background:#f9fafb; resize:vertical; line-height:1.5; color:#333;"></textarea>
+                            style="width:100%; min-height:320px; padding:12px; font-size:0.82rem; font-family:'Courier New',monospace; border:2px solid #E5E7EB; background:#f9fafb; resize:vertical; line-height:1.5; color:#333;"></textarea>
                         <div id="dietaCopiatoMsg" style="display:none; text-align:center; color:#00B894; font-weight:bold; padding:8px 0; font-size:0.9rem;">✅ Copiato negli appunti!</div>
                     </div>
 
@@ -1145,8 +1160,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.67';
-        var BUILD_TIME  = '2026-03-28T18:00:00Z';
+        var APP_VERSION = 'v3.5.68';
+        var BUILD_TIME  = '2026-03-28T19:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5095,10 +5110,44 @@
             };
         }
 
+        // ── Stato globale dieta ────────────────────────────────────────
+        var _dietaCtx = null;
+
+        function _dietaReady(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, profile, nRecord) {
+            _dietaCtx = { analisi: analisi, pesoAttuale: pesoAttuale, pesoObiettivo: pesoObiettivo,
+                          nomeObiettivo: nomeObiettivo, dataInizioObiettivo: dataInizioObiettivo,
+                          dataFineObiettivo: dataFineObiettivo, profile: profile };
+            document.getElementById('dietaAnalisiStatus').style.display = 'none';
+            document.getElementById('dietaRisultato').style.display = 'block';
+            selezionaPrompt('medio');
+            log('Genera Dieta: ' + analisi.periods.length + ' periodi su ' + nRecord + ' record');
+        }
+
+        function selezionaPrompt(tipo) {
+            if (!_dietaCtx) return;
+            var c = _dietaCtx;
+            var testo = costruisciPromptDieta(c.analisi, c.pesoAttuale, c.pesoObiettivo,
+                c.nomeObiettivo, c.dataInizioObiettivo, c.dataFineObiettivo, c.profile, tipo);
+            document.getElementById('dietaPromptText').value = testo;
+            var approxTok = Math.round(testo.length / 4);
+            var labels = { corto: '📝 Corto', medio: '📄 Medio', lungo: '📑 Lungo' };
+            document.getElementById('dietaPromptLabel').textContent =
+                (labels[tipo] || tipo) + ' · ~' + approxTok.toLocaleString('it-IT') + ' token stimati';
+            ['corto','medio','lungo'].forEach(function(t) {
+                var btn = document.getElementById('btnPrompt' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (!btn) return;
+                btn.style.borderColor = t === tipo ? '#6C5CE7' : '#E5E7EB';
+                btn.style.background  = t === tipo ? '#F5F3FF' : '#fff';
+                btn.style.color       = t === tipo ? '#6C5CE7' : '#374151';
+            });
+        }
+
         // Costruisce il testo del prompt da dare all'AI
         // profile: { altezza_cm, eta, patologie, farmaci } (tutti opzionali)
-        function costruisciPromptDieta(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, profile) {
+        // tipo: 'corto' | 'medio' | 'lungo'
+        function costruisciPromptDieta(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, profile, tipo) {
             profile = profile || {};
+            tipo    = tipo || 'medio';
             var da_perdere = pesoAttuale && pesoObiettivo ? (pesoAttuale - pesoObiettivo).toFixed(1) : null;
             var rateRef = analisi.avgRate ? analisi.avgRate.toFixed(2) : '~0.5';
             var lines = [];
@@ -5114,137 +5163,178 @@
                 }
             }
 
-            lines.push('Sei un nutrizionista esperto. Ho bisogno di un piano alimentare personalizzato basato sui miei dati reali di peso.');
-            lines.push('');
-            lines.push('═══════════════════════════════════════');
-            lines.push('DATI PERSONALI E OBIETTIVO');
-            lines.push('═══════════════════════════════════════');
-            if (profile.eta)       lines.push('• Età:            ' + profile.eta + ' anni');
-            if (profile.altezza_cm) lines.push('• Altezza:        ' + profile.altezza_cm + ' cm');
-            if (pesoAttuale)   lines.push('• Peso attuale:   ' + pesoAttuale.toFixed(1) + ' kg');
-            if (pesoObiettivo) lines.push('• Peso obiettivo: ' + pesoObiettivo.toFixed(1) + ' kg' + (nomeObiettivo ? '  (' + nomeObiettivo + ')' : ''));
-            if (da_perdere && parseFloat(da_perdere) > 0) lines.push('• Da perdere:     ' + da_perdere + ' kg');
-            if (dataInizioObiettivo && dataFineObiettivo) {
-                lines.push('• Periodo dieta:  dal ' + fmtDateIt(dataInizioObiettivo) + ' al ' + fmtDateIt(dataFineObiettivo) +
-                    (durataPeriodo ? '  (' + durataPeriodo + ' giorni / ' + settPeriodo + ' settimane)' : ''));
+            // ── Helper condivisi ─────────────────────────────────────
+            function pushDatiPersonali() {
+                if (profile.eta)        lines.push('• Età: ' + profile.eta + ' anni');
+                if (profile.altezza_cm) lines.push('• Altezza: ' + profile.altezza_cm + ' cm');
+                if (pesoAttuale)        lines.push('• Peso attuale: ' + pesoAttuale.toFixed(1) + ' kg');
+                if (pesoObiettivo)      lines.push('• Peso obiettivo: ' + pesoObiettivo.toFixed(1) + ' kg' + (nomeObiettivo ? ' (' + nomeObiettivo + ')' : ''));
+                if (da_perdere && parseFloat(da_perdere) > 0) lines.push('• Da perdere: ' + da_perdere + ' kg');
+                lines.push('• Ritmo calo documentato: −' + rateRef + ' kg/settimana');
             }
-            lines.push('');
+            function pushPatologie() {
+                if (profile.patologie) {
+                    lines.push('Patologie: ' + profile.patologie.replace(/\n/g, '; '));
+                }
+                if (profile.farmaci) {
+                    lines.push('Farmaci: ' + profile.farmaci.replace(/\n/g, '; '));
+                }
+            }
+            function pushJsonSchema(conNote) {
+                lines.push('```json');
+                lines.push('{');
+                lines.push('  "piano_omad_settimanale": [');
+                lines.push('    {');
+                lines.push('      "giorno": "Lunedì",');
+                lines.push('      "pasto": "Nome del pasto",');
+                if (conNote) lines.push('      "note": "avvertenza farmacologica se presente, altrimenti stringa vuota",');
+                lines.push('      "ingredienti": [');
+                lines.push('        { "nome": "Ingrediente", "quantita_g": 200, "calorie": 300, "proteine_g": 30, "carboidrati_netti_g": 5, "grassi_g": 15 }');
+                lines.push('      ],');
+                lines.push('      "totale_pasto": { "calorie": 0, "proteine_g": 0, "carboidrati_netti_g": 0, "grassi_g": 0 }');
+                lines.push('    }');
+                lines.push('  ]');
+                lines.push('}');
+                lines.push('```');
+                lines.push('Tutti e 7 i giorni, 4-6 ingredienti/giorno, grammature precise, cucina italiana. JSON valido e completo, nessun testo dopo il blocco ```.');
+            }
 
-            lines.push('═══════════════════════════════════════');
-            lines.push('STORICO PESATE');
-            lines.push('═══════════════════════════════════════');
-            lines.push('• Misurazioni totali: ' + analisi.totalRecords + ' giorni distinti');
-            lines.push('• Periodo coperto:    ' + fmtDateIt(analisi.firstDate) + ' → ' + fmtDateIt(analisi.lastDate));
-            lines.push('• Peso massimo:       ' + analisi.maxWeight.toFixed(1) + ' kg');
-            lines.push('• Peso minimo:        ' + analisi.minWeight.toFixed(1) + ' kg');
-            lines.push('');
-
-            if (analisi.periods.length > 0) {
-                // Mostra solo gli ultimi 3 periodi più recenti
-                var totPeriodi = analisi.periods.length;
-                var periodiDaMostrare = analisi.periods.slice(-3);
-                lines.push('═══════════════════════════════════════');
-                lines.push('PERIODI DI CALO REALE (≥ 3 settimane, picco → minimo locale)');
-                lines.push('═══════════════════════════════════════');
-                if (totPeriodi > 3) {
-                    lines.push('Ho identificato ' + totPeriodi + ' periodi di calo documentati (mostro i 3 più recenti):');
-                } else {
-                    lines.push('Ho identificato ' + totPeriodi + ' periodo/i di calo documentato:');
+            // ════════════════════════════════════════════════════════
+            // PROMPT CORTO  (~800-1000 token di prompt)
+            // ════════════════════════════════════════════════════════
+            if (tipo === 'corto') {
+                lines.push('Sei un nutrizionista. Genera un piano OMAD settimanale (7 giorni, pasto serale 19:30-21:00) basato su questi dati:');
+                lines.push('');
+                pushDatiPersonali();
+                if (profile.patologie || profile.farmaci) {
+                    lines.push('');
+                    pushPatologie();
                 }
                 lines.push('');
-                periodiDaMostrare.forEach(function(p, idx) {
-                    var numPeriodo = totPeriodi > 3 ? (totPeriodi - 3 + idx + 1) : (idx + 1);
-                    lines.push('  Periodo ' + numPeriodo + ':');
-                    lines.push('    Dal ' + fmtDateIt(p.from) + ' (' + p.fromWeight.toFixed(1) + ' kg)');
-                    lines.push('    Al  ' + fmtDateIt(p.to)   + ' (' + p.toWeight.toFixed(1)   + ' kg)');
-                    lines.push('    Durata: ' + p.days + ' giorni  |  Perdita: −' + p.loss.toFixed(1) + ' kg  |  Ritmo: −' + p.weeklyRate.toFixed(2) + ' kg/sett');
+                lines.push('Dieta OMAD: 1 pasto serale · max 50 g carbo netti · proteine ≥' + (pesoAttuale ? Math.round(pesoAttuale * 1.8) : 130) + ' g · grassi sani · cucina italiana.');
+                lines.push('');
+                lines.push('Output: 1 riga con TDEE stimato e kcal target, poi SOLO il JSON (schema sotto). Nessun testo aggiuntivo.');
+                lines.push('');
+                pushJsonSchema(false);
+
+            // ════════════════════════════════════════════════════════
+            // PROMPT MEDIO  (~1500-2000 token di prompt)
+            // ════════════════════════════════════════════════════════
+            } else if (tipo === 'medio') {
+                lines.push('Sei un nutrizionista esperto. Pianifica una settimana OMAD personalizzata basandoti sui miei dati reali.');
+                lines.push('');
+                lines.push('── DATI PERSONALI ──');
+                pushDatiPersonali();
+                if (dataInizioObiettivo && dataFineObiettivo) {
+                    lines.push('• Periodo dieta: ' + fmtDateIt(dataInizioObiettivo) + ' → ' + fmtDateIt(dataFineObiettivo) +
+                        (durataPeriodo ? ' (' + durataPeriodo + ' giorni)' : ''));
+                }
+                lines.push('');
+                lines.push('── STORICO ──');
+                lines.push('• ' + analisi.totalRecords + ' misurazioni · ' + fmtDateIt(analisi.firstDate) + ' → ' + fmtDateIt(analisi.lastDate));
+                lines.push('• Range peso: ' + analisi.minWeight.toFixed(1) + ' – ' + analisi.maxWeight.toFixed(1) + ' kg');
+                if (analisi.periods.length > 0) {
+                    var periodi2 = analisi.periods.slice(-2);
+                    lines.push('• Ultimi ' + periodi2.length + ' periodi di calo documentati:');
+                    periodi2.forEach(function(p, i) {
+                        lines.push('  ' + (i + 1) + ') ' + fmtDateIt(p.from) + '→' + fmtDateIt(p.to) + ' | −' + p.loss.toFixed(1) + ' kg in ' + p.days + 'gg | −' + p.weeklyRate.toFixed(2) + ' kg/sett');
+                    });
+                }
+                lines.push('');
+                if (profile.patologie || profile.farmaci) {
+                    lines.push('── PATOLOGIE E FARMACI ──');
+                    if (profile.patologie) lines.push('Patologie: ' + profile.patologie.replace(/\n/g, '; '));
+                    if (profile.farmaci)   lines.push('Farmaci:   ' + profile.farmaci.replace(/\n/g, '; '));
                     lines.push('');
-                });
-                lines.push('RITMO MEDIO DI PERDITA (media di tutti i ' + totPeriodi + ' periodi):');
-                lines.push('  → −' + rateRef + ' kg/settimana');
+                }
+                lines.push('── PROTOCOLLO OMAD ──');
+                lines.push('• 1 pasto serale (19:30-21:00) · max 50-80 g carbo netti · proteine ≥1,8 g/kg · grassi sani (EVO, frutta secca, pesce grasso) · elimina zuccheri/pane/pasta.');
+                lines.push('');
+                lines.push('── OUTPUT ──');
+                lines.push('1 riga: TDEE stimato + kcal target OMAD + deficit coerente con −' + rateRef + ' kg/sett.');
+                lines.push('Poi SOLO il JSON completo per 7 giorni (schema sotto). Nessun altro testo.');
+                lines.push('');
+                pushJsonSchema(true);
+
+            // ════════════════════════════════════════════════════════
+            // PROMPT LUNGO  (~2500-3000 token di prompt)
+            // ════════════════════════════════════════════════════════
             } else {
+                lines.push('Sei un nutrizionista esperto. Ho bisogno di un piano alimentare personalizzato basato sui miei dati reali di peso.');
+                lines.push('');
                 lines.push('═══════════════════════════════════════');
-                lines.push('PERIODI DI CALO');
+                lines.push('DATI PERSONALI E OBIETTIVO');
                 lines.push('═══════════════════════════════════════');
-                lines.push('Non sono stati trovati periodi di calo ≥ 3 settimane nello storico.');
-                lines.push('Utilizza un ritmo di perdita prudenziale di −0.5 kg/settimana.');
+                if (profile.eta)        lines.push('• Età:            ' + profile.eta + ' anni');
+                if (profile.altezza_cm) lines.push('• Altezza:        ' + profile.altezza_cm + ' cm');
+                if (pesoAttuale)        lines.push('• Peso attuale:   ' + pesoAttuale.toFixed(1) + ' kg');
+                if (pesoObiettivo)      lines.push('• Peso obiettivo: ' + pesoObiettivo.toFixed(1) + ' kg' + (nomeObiettivo ? '  (' + nomeObiettivo + ')' : ''));
+                if (da_perdere && parseFloat(da_perdere) > 0) lines.push('• Da perdere:     ' + da_perdere + ' kg');
+                if (dataInizioObiettivo && dataFineObiettivo) {
+                    lines.push('• Periodo dieta:  dal ' + fmtDateIt(dataInizioObiettivo) + ' al ' + fmtDateIt(dataFineObiettivo) +
+                        (durataPeriodo ? '  (' + durataPeriodo + ' giorni / ' + settPeriodo + ' settimane)' : ''));
+                }
+                lines.push('');
+                lines.push('═══════════════════════════════════════');
+                lines.push('STORICO PESATE');
+                lines.push('═══════════════════════════════════════');
+                lines.push('• Misurazioni totali: ' + analisi.totalRecords + ' giorni distinti');
+                lines.push('• Periodo coperto:    ' + fmtDateIt(analisi.firstDate) + ' → ' + fmtDateIt(analisi.lastDate));
+                lines.push('• Peso massimo:       ' + analisi.maxWeight.toFixed(1) + ' kg');
+                lines.push('• Peso minimo:        ' + analisi.minWeight.toFixed(1) + ' kg');
+                lines.push('');
+                if (analisi.periods.length > 0) {
+                    var totPeriodi = analisi.periods.length;
+                    var periodiDaMostrare = analisi.periods.slice(-3);
+                    lines.push('═══════════════════════════════════════');
+                    lines.push('PERIODI DI CALO REALE (≥ 3 settimane)');
+                    lines.push('═══════════════════════════════════════');
+                    lines.push('Identificati ' + totPeriodi + ' periodi' + (totPeriodi > 3 ? ' (ultimi 3)' : '') + ':');
+                    lines.push('');
+                    periodiDaMostrare.forEach(function(p, idx) {
+                        var n = totPeriodi > 3 ? (totPeriodi - 3 + idx + 1) : (idx + 1);
+                        lines.push('  Periodo ' + n + ': dal ' + fmtDateIt(p.from) + ' (' + p.fromWeight.toFixed(1) + ' kg)');
+                        lines.push('            al  ' + fmtDateIt(p.to) + ' (' + p.toWeight.toFixed(1) + ' kg)');
+                        lines.push('            ' + p.days + ' giorni · −' + p.loss.toFixed(1) + ' kg · −' + p.weeklyRate.toFixed(2) + ' kg/sett');
+                        lines.push('');
+                    });
+                    lines.push('RITMO MEDIO (tutti i ' + totPeriodi + ' periodi): −' + rateRef + ' kg/settimana');
+                } else {
+                    lines.push('Nessun periodo di calo ≥ 3 settimane trovato. Usa ritmo prudenziale: −0,5 kg/sett.');
+                }
+                lines.push('');
+                lines.push('═══════════════════════════════════════');
+                lines.push('PATOLOGIE E FARMACI IN CORSO');
+                lines.push('═══════════════════════════════════════');
+                lines.push('⚠️ Il piano deve obbligatoriamente tenere conto di queste condizioni:');
+                lines.push('');
+                if (profile.patologie) {
+                    profile.patologie.split('\n').forEach(function(r) { r = r.trim(); if (r) lines.push('• ' + r); });
+                } else { lines.push('(nessuna patologia indicata)'); }
+                lines.push('');
+                lines.push('Farmaci attualmente assunti:');
+                if (profile.farmaci) {
+                    profile.farmaci.split('\n').forEach(function(r) { r = r.trim(); if (r) lines.push('  - ' + r); });
+                } else { lines.push('  (nessun farmaco)'); }
+                lines.push('');
+                lines.push('═══════════════════════════════════════');
+                lines.push('PROTOCOLLO OMAD (One Meal A Day)');
+                lines.push('═══════════════════════════════════════');
+                lines.push('• 1 pasto serale (19:30-21:00)');
+                lines.push('• Carboidrati netti: max 50-80 g/die → no pane/pasta/riso/zucchero/dolci; sì verdure a basso IG, legumi');
+                lines.push('• Proteine: ≥ 1,6-2,0 g/kg → carne magra, pesce, uova, latticini magri, legumi');
+                lines.push('• Grassi sani: olio EVO, avocado, frutta secca, pesce grasso (salmone, sgombro, sardine)');
+                lines.push('• Evitare: grassi saturi in eccesso, insaccati, carni grasse');
+                lines.push('• Acqua/tè/caffè non zuccherato liberi durante il digiuno');
+                lines.push('');
+                lines.push('═══════════════════════════════════════');
+                lines.push('OUTPUT RICHIESTO');
+                lines.push('═══════════════════════════════════════');
+                lines.push('1 sola riga di testo: TDEE stimato · kcal target OMAD · deficit coerente con −' + rateRef + ' kg/sett.');
+                lines.push('Poi ESCLUSIVAMENTE il blocco JSON per tutti e 7 i giorni. Nessun testo aggiuntivo dopo il JSON.');
+                lines.push('');
+                pushJsonSchema(true);
             }
-            lines.push('');
-
-            lines.push('═══════════════════════════════════════');
-            lines.push('PATOLOGIE E FARMACI IN CORSO');
-            lines.push('═══════════════════════════════════════');
-            lines.push('⚠️  IMPORTANTE: il piano deve tenere conto obbligatoriamente di queste condizioni:');
-            lines.push('');
-            if (profile.patologie) {
-                profile.patologie.split('\n').forEach(function(riga) {
-                    riga = riga.trim();
-                    if (riga) lines.push('• ' + riga);
-                });
-            } else {
-                lines.push('(nessuna patologia indicata nel profilo)');
-            }
-            lines.push('');
-            lines.push('Farmaci attualmente assunti:');
-            if (profile.farmaci) {
-                profile.farmaci.split('\n').forEach(function(riga) {
-                    riga = riga.trim();
-                    if (riga) lines.push('  - ' + riga);
-                });
-            } else {
-                lines.push('  (nessun farmaco indicato nel profilo)');
-            }
-            lines.push('');
-
-            lines.push('═══════════════════════════════════════');
-            lines.push('PROTOCOLLO ALIMENTARE RICHIESTO: OMAD');
-            lines.push('═══════════════════════════════════════');
-            lines.push('Tipo di dieta: OMAD — One Meal A Day (un unico pasto al giorno)');
-            lines.push('');
-            lines.push('Caratteristiche obbligatorie del piano:');
-            lines.push('  • UN SOLO PASTO GIORNALIERO SERALE (finestra alimentare 1-2 ore, es. 19:30-21:00)');
-            lines.push('  • BASSO CONTENUTO DI CARBOIDRATI: max 50-80 g/die di carboidrati netti');
-            lines.push('    → eliminare pane bianco, pasta, riso, zucchero, dolci');
-            lines.push('    → ammessi in piccole quantità: verdure a basso indice glicemico, legumi');
-            lines.push('  • ALTO CONTENUTO DI PROTEINE: almeno 1,6-2,0 g per kg di peso corporeo');
-            lines.push('    → carne magra, pesce, uova, latticini magri, legumi');
-            lines.push('  • GRASSI SANI come fonte energetica principale:');
-            lines.push('    → olio extravergine di oliva, avocado, frutta secca (noci, mandorle)');
-            lines.push('    → pesce grasso (salmone, sgombro, sardine) — beneficio anche per il colesterolo');
-            lines.push('    → EVITARE grassi saturi di origine animale in eccesso (burro, insaccati, carni grasse)');
-            lines.push('  • Acqua, tè/caffè non zuccherati liberi durante la finestra di digiuno');
-            lines.push('');
-
-            lines.push('═══════════════════════════════════════');
-            lines.push('OUTPUT RICHIESTO');
-            lines.push('═══════════════════════════════════════');
-            lines.push('Rispondi con UNA SOLA RIGA di testo libero (max 2 frasi): stima TDEE, kcal target OMAD, deficit coerente con −' + rateRef + ' kg/sett.');
-            lines.push('');
-            lines.push('Poi produci ESCLUSIVAMENTE il blocco JSON seguente, completo per tutti e 7 i giorni.');
-            lines.push('Non aggiungere altro testo dopo il JSON.');
-            lines.push('');
-            lines.push('```json');
-            lines.push('{');
-            lines.push('  "piano_omad_settimanale": [');
-            lines.push('    {');
-            lines.push('      "giorno": "Lunedì",');
-            lines.push('      "pasto": "Nome del pasto",');
-            lines.push('      "note": "eventuale avvertenza farmacologica o clinica (stringa, può essere vuota)",');
-            lines.push('      "ingredienti": [');
-            lines.push('        { "nome": "Ingrediente", "quantita_g": 200, "calorie": 300, "proteine_g": 30, "carboidrati_netti_g": 5, "grassi_g": 15 }');
-            lines.push('      ],');
-            lines.push('      "totale_pasto": { "calorie": 0, "proteine_g": 0, "carboidrati_netti_g": 0, "grassi_g": 0 }');
-            lines.push('    }');
-            lines.push('  ]');
-            lines.push('}');
-            lines.push('```');
-            lines.push('');
-            lines.push('REGOLE:');
-            lines.push('- Tutti e 7 i giorni (Lunedì→Domenica) devono essere presenti');
-            lines.push('- Ogni giorno: 4-6 ingredienti con grammature precise');
-            lines.push('- Cucina italiana, pratica, ingredienti comuni');
-            lines.push('- Il JSON deve essere sintatticamente valido e completo');
-            lines.push('- Nessun testo aggiuntivo dopo il blocco ```');
 
             return lines.join('\n');
         }
@@ -5361,19 +5451,11 @@
                                 if (p.patologie) profile.patologie = p.patologie;
                                 if (p.farmaci)   profile.farmaci   = p.farmaci;
                             }
-                            var prompt = costruisciPromptDieta(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, profile);
-                            document.getElementById('dietaPromptText').value = prompt;
-                            statusEl.style.display = 'none';
-                            risultatoEl.style.display = 'block';
-                            log('Genera Dieta: ' + analisi.periods.length + ' periodi su ' + weights.length + ' record');
+                            _dietaProfile = profile;
+                            _dietaReady(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, profile, weights.length);
                         })
                         .catch(function() {
-                            // Profilo non caricabile: genera prompt senza dati profilo
-                            var prompt = costruisciPromptDieta(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, {});
-                            document.getElementById('dietaPromptText').value = prompt;
-                            statusEl.style.display = 'none';
-                            risultatoEl.style.display = 'block';
-                            log('Genera Dieta (senza profilo): ' + analisi.periods.length + ' periodi su ' + weights.length + ' record');
+                            _dietaReady(analisi, pesoAttuale, pesoObiettivo, nomeObiettivo, dataInizioObiettivo, dataFineObiettivo, {}, weights.length);
                         });
                 })
                 .catch(function(e) {
