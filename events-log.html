@@ -1034,8 +1034,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v2.2.26';
-    var BUILD_TIME  = '2026-03-20T13:00:00Z';
+    var APP_VERSION = 'v2.2.27';
+    var BUILD_TIME  = '2026-03-29T12:00:00Z';
     console.log('%c Events Log ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1112,6 +1112,12 @@
         localStorage.removeItem('sb_token');
         document.getElementById('authOverlay').style.display = 'flex';
         return true;
+    }
+
+    function decodeJWT(token) {
+        try {
+            return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        } catch(e) { return null; }
     }
 
 // ==========================================
@@ -1977,7 +1983,8 @@ async function saveGroup(e) {
         showToast('✅ Gruppo aggiornato');
     } else {
         const newId = crypto.randomUUID();
-        const { error } = await sb.from('el_groups').insert([{ id: newId, ...data }]);
+        const userId = decodeJWT(sbAccessToken)?.sub;
+        const { error } = await sb.from('el_groups').insert([{ id: newId, user_id: userId, ...data }]);
         if (error) { showToast('❌ Errore creazione gruppo', true); setLoading(false); return; }
         groups.push({ id: newId, ...data });
         showToast('✅ Gruppo creato');
@@ -2045,7 +2052,8 @@ async function saveEvent(e) {
         showToast('✅ Evento aggiornato');
     } else {
         const newId = crypto.randomUUID();
-        const { error } = await sb.from('el_events').insert([{ id: newId, ...data }]);
+        const userId = decodeJWT(sbAccessToken)?.sub;
+        const { error } = await sb.from('el_events').insert([{ id: newId, user_id: userId, ...data }]);
         if (error) { showToast('❌ Errore creazione evento', true); setLoading(false); return; }
         events.push({ id: newId, ...data, groupId: data.group_id });
         showToast('✅ Evento creato');
@@ -2101,6 +2109,7 @@ async function confirmLog() {
 async function _saveLog(ev, note, loggedAt) {
     const newLog = {
         id:            crypto.randomUUID(),
+        user_id:       decodeJWT(sbAccessToken)?.sub,
         event_id:      ev.id,
         note:          note || null,
         logged_at:     loggedAt,
@@ -2192,6 +2201,7 @@ async function checkDaSelectEvents() {
             if (lastCountNum === null || currentVal > lastCountNum) {
                 const newLog = {
                     id:            crypto.randomUUID(),
+                    user_id:       decodeJWT(sbAccessToken)?.sub,
                     event_id:      ev.id,
                     note:          `count:${currentVal}`,
                     logged_at:     localDateTimeStr(),
