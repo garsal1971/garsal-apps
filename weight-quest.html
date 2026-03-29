@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.73</title>
+    <title>Weight Quest v3.5.74</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1145,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.73';
-        var BUILD_TIME  = '2026-03-29T15:00:00Z';
+        var APP_VERSION = 'v3.5.74';
+        var BUILD_TIME  = '2026-03-29T15:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5430,11 +5430,8 @@
                     // --- Card analisi ---
                     var analisiHtml = '';
 
-                    // Filtra periodi: solo ultimi 2 anni
-                    var _dueAnniFA = new Date();
-                    _dueAnniFA.setFullYear(_dueAnniFA.getFullYear() - 2);
-                    var _dueAnniFAStr = _dueAnniFA.toISOString().slice(0, 10);
-                    var periodiUI = analisi.periods.filter(function(p) { return p.from >= _dueAnniFAStr; });
+                    // Mostra gli ultimi 3 periodi (i più recenti)
+                    var periodiUI = analisi.periods.slice(-3);
 
                     // Riga superiore: media ritmo + n. periodi trovati
                     analisiHtml += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px;">';
