@@ -1160,8 +1160,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.69';
-        var BUILD_TIME  = '2026-03-29T09:00:00Z';
+        var APP_VERSION = 'v3.5.70';
+        var BUILD_TIME  = '2026-03-29T10:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -6022,16 +6022,25 @@
                 var dt = item.created_at ? new Date(item.created_at) : null;
                 var dtStr = dt ? dt.toLocaleDateString('it-IT') + ' ' + dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
                 var promptPreview = (item.prompt || '').substring(0, 120).replace(/\n/g, ' ') + '…';
-                var respPreview   = (item.response || '').substring(0, 200).replace(/\n/g, ' ') + '…';
                 var uid = 'hist-' + idx;
+                var itemId = item.id || '';
                 html += '<div style="border:1px solid #E5E7EB; margin-bottom:10px; overflow:hidden;">';
-                html += '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#f9fafb; cursor:pointer;" onclick="toggleDietHistoryItem(\'' + uid + '\')">';
-                html += '<div>';
+                // Header accordion
+                html += '<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#f9fafb;">';
+                html += '<div style="flex:1; min-width:0; cursor:pointer;" onclick="toggleDietHistoryItem(\'' + uid + '\')">';
                 html += '<div style="font-size:0.8rem; color:#888; margin-bottom:2px;">' + dtStr + '</div>';
-                html += '<div style="font-size:0.82rem; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px;">' + promptPreview + '</div>';
+                html += '<div style="font-size:0.82rem; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + promptPreview + '</div>';
                 html += '</div>';
-                html += '<span id="' + uid + '-arrow" style="font-size:0.8rem; color:#aaa; flex-shrink:0; margin-left:8px;">▼</span>';
+                html += '<div style="display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:8px;">';
+                if (itemId) {
+                    html += '<button onclick="deleteDietConsultation(\'' + itemId + '\')" '
+                          + 'style="background:#FEE2E2; color:#DC2626; border:none; padding:4px 10px; font-size:0.78rem; cursor:pointer; border-radius:3px; font-weight:600;" '
+                          + 'title="Elimina questa consulenza">🗑</button>';
+                }
+                html += '<span id="' + uid + '-arrow" style="font-size:0.8rem; color:#aaa; cursor:pointer;" onclick="toggleDietHistoryItem(\'' + uid + '\')">▼</span>';
                 html += '</div>';
+                html += '</div>';
+                // Body espandibile
                 html += '<div id="' + uid + '" style="display:none; padding:12px;">';
                 html += '<div style="margin-bottom:10px;">';
                 html += '<div style="font-size:0.75rem; font-weight:bold; color:#6C5CE7; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.05em;">Prompt</div>';
@@ -6045,6 +6054,21 @@
                 html += '</div>';
             });
             el.innerHTML = html;
+        }
+
+        function deleteDietConsultation(id) {
+            if (!confirm('Eliminare questa consulenza?')) return;
+            fetch(supabase.url + '/rest/v1/ps_diet_consultations?id=eq.' + encodeURIComponent(id), {
+                method: 'DELETE',
+                headers: supabase.headers
+            }).then(function(r) {
+                if (r.ok) {
+                    log('Consulenza ' + id + ' eliminata');
+                    loadDietHistory();
+                } else {
+                    r.text().then(function(t) { alert('Errore eliminazione: ' + r.status + ' ' + t); });
+                }
+            }).catch(function(e) { alert('Errore: ' + e.message); });
         }
 
         function toggleDietHistoryItem(uid) {
