@@ -1160,8 +1160,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.68';
-        var BUILD_TIME  = '2026-03-28T19:00:00Z';
+        var APP_VERSION = 'v3.5.69';
+        var BUILD_TIME  = '2026-03-29T00:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1980,6 +1980,7 @@
                 googleToken = null;
                 localStorage.removeItem('sb_token');
                 localStorage.removeItem('googleToken');
+                localStorage.removeItem('google_token');
                 supabase.setAuthToken(CONFIG.supabaseKey); // ripristina anon key
                 document.getElementById('mainSection').classList.add('hidden');
                 document.getElementById('authSection').classList.remove('hidden');
@@ -1990,6 +1991,11 @@
                 sbToken = newToken;
                 supabase.setAuthToken(newToken);
                 log('🔄 Token rinnovato silenziosamente (AppSphere)');
+            } else if (e.data.type === 'GOOGLE_TOKEN_REFRESH' && e.data.token) {
+                googleToken = e.data.token;
+                localStorage.setItem('google_token', googleToken);
+                localStorage.setItem('googleToken', googleToken); // chiave legacy
+                log('🔄 Google token aggiornato da AppSphere');
             }
         };
 
@@ -2051,6 +2057,25 @@
                 if (savedGoogle) {
                     googleToken = savedGoogle;
                     showMain();
+                    // Verifica non-bloccante in background: controlla se il token è ancora valido
+                    fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(savedGoogle))
+                        .then(function(r) { return r.json(); })
+                        .then(function(info) {
+                            if (info.error || !info.expires_in) {
+                                log('⚠️ Google token scaduto rilevato all\'avvio — pulizia preventiva');
+                                googleToken = null;
+                                localStorage.removeItem('google_token');
+                                localStorage.removeItem('googleToken');
+                            } else if (parseInt(info.expires_in, 10) < 300) {
+                                log('⚠️ Google token scade tra < 5 min — popup preventivo');
+                                openAuthPopup(function() { log('Google token rinnovato via popup preventivo'); });
+                            } else {
+                                log('✓ Google token valido, scade tra ' + Math.round(info.expires_in / 60) + ' min');
+                            }
+                        })
+                        .catch(function(e) {
+                            log('verifyGoogleToken error (non bloccante): ' + e.message);
+                        });
                     return;
                 }
                 // google_token assente: tenta di recuperarlo tramite refresh del token Supabase

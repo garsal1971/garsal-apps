@@ -1628,8 +1628,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.72';
-const BUILD_TIME  = '2026-03-27T16:00:00Z';
+const APP_VERSION = 'v1.5.73';
+const BUILD_TIME  = '2026-03-29T00:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2121,6 +2121,12 @@ async function refreshSession() {
       localStorage.setItem('refresh_token', data.refresh_token);
       setCookie('sb_refresh_token', data.refresh_token, 30);
     }
+    // Cattura il Google provider_token se Supabase lo ha rinnovato contestualmente
+    if (data.provider_token) {
+      localStorage.setItem('google_token', data.provider_token);
+      _authChannel.postMessage({ type: 'GOOGLE_TOKEN_REFRESH', token: data.provider_token });
+      console.log('🔄 Google provider_token rinnovato (' + APP_VERSION + ')');
+    }
     // Notifica tutte le app figlie: aggiornare il token senza ricaricare la pagina
     _authChannel.postMessage({ type: 'TOKEN_REFRESH', sbToken: data.access_token });
     console.log('🔄 Token rinnovato silenziosamente (' + APP_VERSION + ')');
@@ -2129,10 +2135,75 @@ async function refreshSession() {
   }
 }
 
-// Avvia il rinnovo automatico ogni 50 minuti (JWT Supabase scade dopo 60 min di default)
+// Decodifica il payload JWT senza verifica crittografica (solo lettura lato client)
+function decodeJwt(token) {
+  try {
+    const payload = token.split('.')[1];
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = atob(padded + '=='.slice((padded.length + 4) % 4 || 4));
+    return JSON.parse(json);
+  } catch (e) { return null; }
+}
+
+// Ritorna { valid, expiresIn } leggendo il claim 'exp' dal JWT — nessuna chiamata di rete
+function verifySupabaseToken(token) {
+  if (!token) return { valid: false, expiresIn: 0 };
+  const payload = decodeJwt(token);
+  if (!payload || !payload.exp) return { valid: false, expiresIn: 0 };
+  const expiresIn = payload.exp - Math.floor(Date.now() / 1000);
+  return { valid: expiresIn > 0, expiresIn };
+}
+
+// Chiama Google tokeninfo per verificare il provider token e leggere 'expires_in'.
+// Ritorna { valid, expiresIn } — non lancia eccezioni.
+async function verifyGoogleToken(token) {
+  if (!token) return { valid: false, expiresIn: 0 };
+  try {
+    const res = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`
+    );
+    if (!res.ok) return { valid: false, expiresIn: 0 };
+    const data = await res.json();
+    if (data.error) return { valid: false, expiresIn: 0 };
+    return { valid: true, expiresIn: parseInt(data.expires_in, 10) || 0 };
+  } catch (e) {
+    console.warn('verifyGoogleToken error:', e);
+    return { valid: false, expiresIn: 0 };
+  }
+}
+
+// Avvia il rinnovo automatico con scheduling dinamico basato sull'expiry reale del JWT.
+// Alla prima chiamata verifica anche il token Google proattivamente.
 function startTokenRefresh() {
-  if (_refreshInterval) clearInterval(_refreshInterval);
-  _refreshInterval = setInterval(refreshSession, 50 * 60 * 1000);
+  if (_refreshInterval) clearTimeout(_refreshInterval);
+
+  async function scheduleNextRefresh() {
+    const sbTok = localStorage.getItem('sb_token');
+    const { expiresIn } = verifySupabaseToken(sbTok);
+    // Refresh 5 minuti prima della scadenza; mai meno di 60 secondi (protezione anti-loop)
+    const delay = Math.max((expiresIn - 300) * 1000, 60 * 1000);
+    console.log(`⏱ Prossimo refresh token tra ${Math.round(delay / 60000)} min`);
+    _refreshInterval = setTimeout(async () => {
+      await refreshSession();
+      scheduleNextRefresh();
+    }, delay);
+  }
+
+  // Verifica proattiva del token Google all'avvio dello scheduler
+  const googleTok = localStorage.getItem('google_token');
+  verifyGoogleToken(googleTok).then(({ valid, expiresIn }) => {
+    if (!valid) {
+      console.warn('⚠️ Google token non valido — forzo refresh Supabase per tentare recupero');
+      refreshSession();
+    } else if (expiresIn < 600) {
+      console.warn(`⚠️ Google token scade tra ${expiresIn}s — forzo refresh anticipato`);
+      refreshSession();
+    } else {
+      console.log(`✓ Google token valido, scade tra ${Math.round(expiresIn / 60)} min`);
+    }
+  });
+
+  scheduleNextRefresh();
 }
 
 async function logout() {
