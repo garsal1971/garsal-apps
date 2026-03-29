@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diet Viewer v1.0.2</title>
+    <title>Diet Viewer v1.0.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -314,8 +314,8 @@
 </div>
 
 <script>
-    var APP_VERSION = 'v1.0.2';
-    var BUILD_TIME  = '2026-03-28T17:00:00Z';
+    var APP_VERSION = 'v1.0.3';
+    var BUILD_TIME  = '2026-03-29T16:00:00Z';
     console.log('%c DIET VIEWER ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -335,6 +335,7 @@
     let sbAccessToken = null;
     let currentPlan   = null; // piano selezionato corrente
     let currentId     = null;
+    const _urlId      = new URLSearchParams(window.location.search).get('id') || null;
 
     function initWithToken(token) {
         if (sb) return;
@@ -424,6 +425,7 @@
         }
 
         listEl.innerHTML = '';
+        var autoSelectRow = null;
         data.forEach(function(row) {
             var dt  = new Date(row.created_at);
             var dtS = dt.toLocaleDateString('it-IT') + ' ' + dt.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
@@ -433,19 +435,26 @@
             el.className = 'consult-item' + (row.id === currentId ? ' active' : '');
             el.innerHTML = '<div class="ci-date">' + dtS + '</div>'
                          + '<div class="ci-name">' + escHtml(primoGiorno) + '</div>';
-            el.onclick = function() { selectConsult(row.id, row.plan_json); };
+            el.onclick = function() { selectConsult(row.id, row.plan_json, el); };
             listEl.appendChild(el);
+            if (_urlId && row.id === _urlId) autoSelectRow = { id: row.id, planJson: row.plan_json, el: el };
         });
+        // Auto-seleziona dalla URL (?id=...)
+        if (autoSelectRow) {
+            selectConsult(autoSelectRow.id, autoSelectRow.planJson, autoSelectRow.el);
+            autoSelectRow.el.scrollIntoView({ block: 'nearest' });
+        }
     }
 
-    function selectConsult(id, planJson) {
+    function selectConsult(id, planJson, elTarget) {
         currentId   = id;
         currentPlan = planJson;
         // Aggiorna active nella lista
-        document.querySelectorAll('.consult-item').forEach(function(el, i) {
+        document.querySelectorAll('.consult-item').forEach(function(el) {
             el.classList.remove('active');
         });
-        event.currentTarget.classList.add('active');
+        var target = elTarget || (typeof event !== 'undefined' && event && event.currentTarget) || null;
+        if (target) target.classList.add('active');
         // Renderizza pagina corrente
         var activePage = document.querySelector('.nav-item.active[data-page]');
         var pageName   = activePage ? activePage.getAttribute('data-page') : 'piano';
