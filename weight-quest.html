@@ -1039,23 +1039,8 @@
 
                     <!-- Prompt generato -->
                     <div class="card">
-                        <h3 style="font-size:1rem; color:#333; margin-bottom:10px;">📋 Scegli il prompt</h3>
-                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:14px;">
-                            <button onclick="selezionaPrompt('corto')" id="btnPromptCorto"
-                                style="padding:10px 6px; font-size:0.82rem; font-weight:700; border:2px solid #E5E7EB; background:#fff; color:#374151; cursor:pointer; border-radius:4px; transition:all 0.15s;">
-                                📝 Corto<br><span style="font-size:0.72rem; font-weight:400; color:#6B7280;">~1 000 token</span>
-                            </button>
-                            <button onclick="selezionaPrompt('medio')" id="btnPromptMedio"
-                                style="padding:10px 6px; font-size:0.82rem; font-weight:700; border:2px solid #E5E7EB; background:#fff; color:#374151; cursor:pointer; border-radius:4px; transition:all 0.15s;">
-                                📄 Medio<br><span style="font-size:0.72rem; font-weight:400; color:#6B7280;">~2 000 token</span>
-                            </button>
-                            <button onclick="selezionaPrompt('lungo')" id="btnPromptLungo"
-                                style="padding:10px 6px; font-size:0.82rem; font-weight:700; border:2px solid #E5E7EB; background:#fff; color:#374151; cursor:pointer; border-radius:4px; transition:all 0.15s;">
-                                📑 Lungo<br><span style="font-size:0.72rem; font-weight:400; color:#6B7280;">~3 000 token</span>
-                            </button>
-                        </div>
                         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                            <span id="dietaPromptLabel" style="font-size:0.78rem; color:#6B7280;"></span>
+                            <h3 style="font-size:1rem; color:#333; margin:0;">📋 Prompt da copiare</h3>
                             <button onclick="copiaDietaPrompt()" style="background:#2563EB; color:white; padding:8px 16px; font-size:0.85rem; border:none; cursor:pointer;">📋 Copia</button>
                         </div>
                         <textarea id="dietaPromptText" readonly
@@ -1160,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.71';
-        var BUILD_TIME  = '2026-03-29T11:00:00Z';
+        var APP_VERSION = 'v3.5.72';
+        var BUILD_TIME  = '2026-03-29T12:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5144,7 +5129,7 @@
                           dataFineObiettivo: dataFineObiettivo, profile: profile };
             document.getElementById('dietaAnalisiStatus').style.display = 'none';
             document.getElementById('dietaRisultato').style.display = 'block';
-            selezionaPrompt('medio');
+            selezionaPrompt('corto');
             log('Genera Dieta: ' + analisi.periods.length + ' periodi su ' + nRecord + ' record');
         }
 
@@ -5154,17 +5139,6 @@
             var testo = costruisciPromptDieta(c.analisi, c.pesoAttuale, c.pesoObiettivo,
                 c.nomeObiettivo, c.dataInizioObiettivo, c.dataFineObiettivo, c.profile, tipo);
             document.getElementById('dietaPromptText').value = testo;
-            var approxTok = Math.round(testo.length / 4);
-            var labels = { corto: '📝 Corto', medio: '📄 Medio', lungo: '📑 Lungo' };
-            document.getElementById('dietaPromptLabel').textContent =
-                (labels[tipo] || tipo) + ' · ~' + approxTok.toLocaleString('it-IT') + ' token stimati';
-            ['corto','medio','lungo'].forEach(function(t) {
-                var btn = document.getElementById('btnPrompt' + t.charAt(0).toUpperCase() + t.slice(1));
-                if (!btn) return;
-                btn.style.borderColor = t === tipo ? '#6C5CE7' : '#E5E7EB';
-                btn.style.background  = t === tipo ? '#F5F3FF' : '#fff';
-                btn.style.color       = t === tipo ? '#6C5CE7' : '#374151';
-            });
         }
 
         // Costruisce il testo del prompt da dare all'AI
@@ -5176,6 +5150,14 @@
             var da_perdere = pesoAttuale && pesoObiettivo ? (pesoAttuale - pesoObiettivo).toFixed(1) : null;
             var rateRef = analisi.avgRate ? analisi.avgRate.toFixed(2) : '~0.5';
             var lines = [];
+
+            // Filtra periodi: solo ultimi 2 anni
+            var dueAnniFA = new Date();
+            dueAnniFA.setFullYear(dueAnniFA.getFullYear() - 2);
+            var dueAnniFAStr = dueAnniFA.toISOString().slice(0, 10);
+            var periodiFiltrati = (analisi.periods || []).filter(function(p) {
+                return p.from >= dueAnniFAStr;
+            });
 
             // Calcola durata periodo obiettivo in giorni/settimane
             var durataPeriodo = null;
@@ -5300,9 +5282,9 @@
                 lines.push('── STORICO ──');
                 lines.push('• ' + analisi.totalRecords + ' misurazioni · ' + fmtDateIt(analisi.firstDate) + ' → ' + fmtDateIt(analisi.lastDate));
                 lines.push('• Range peso: ' + analisi.minWeight.toFixed(1) + ' – ' + analisi.maxWeight.toFixed(1) + ' kg');
-                if (analisi.periods.length > 0) {
-                    var periodi2 = analisi.periods.slice(-2);
-                    lines.push('• Ultimi ' + periodi2.length + ' periodi di calo documentati:');
+                if (periodiFiltrati.length > 0) {
+                    var periodi2 = periodiFiltrati.slice(-2);
+                    lines.push('• Ultimi ' + periodi2.length + ' periodi di calo documentati (ultimi 2 anni):');
                     periodi2.forEach(function(p, i) {
                         lines.push('  ' + (i + 1) + ') ' + fmtDateIt(p.from) + '→' + fmtDateIt(p.to) + ' | −' + p.loss.toFixed(1) + ' kg in ' + p.days + 'gg | −' + p.weeklyRate.toFixed(2) + ' kg/sett');
                     });
@@ -5351,9 +5333,9 @@
                 lines.push('• Peso massimo:       ' + analisi.maxWeight.toFixed(1) + ' kg');
                 lines.push('• Peso minimo:        ' + analisi.minWeight.toFixed(1) + ' kg');
                 lines.push('');
-                if (analisi.periods.length > 0) {
-                    var totPeriodi = analisi.periods.length;
-                    var periodiDaMostrare = analisi.periods.slice(-3);
+                if (periodiFiltrati.length > 0) {
+                    var totPeriodi = periodiFiltrati.length;
+                    var periodiDaMostrare = periodiFiltrati.slice(-3);
                     lines.push('═══════════════════════════════════════');
                     lines.push('PERIODI DI CALO REALE (≥ 3 settimane)');
                     lines.push('═══════════════════════════════════════');
