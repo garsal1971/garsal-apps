@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.33</title>
+    <title>Tasks v19.18.34</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2177,8 +2177,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.33';
-        const BUILD_TIME  = '2026-03-21T16:00:00Z';
+        const APP_VERSION = 'v19.18.34';
+        const BUILD_TIME  = '2026-03-31T10:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -7129,6 +7129,45 @@
                 }
 
                 debugLog('✅ Completing task:', task.title, 'type:', task.type);
+
+                // Task multiplo: bypass RPC (bug text[] → jsonb nel DB), gestione diretta in JS
+                if (task.type === 'multiple') {
+                    let datesArray = task.multiple_dates;
+                    if (typeof datesArray === 'string') datesArray = JSON.parse(datesArray);
+
+                    const sortedDates = [...datesArray].sort();
+                    const currentDateStr = (task.next_occurrence_date || '').split('T')[0];
+                    const currentIndex = sortedDates.indexOf(currentDateStr);
+
+                    let nextOccurrence = null;
+                    if (currentIndex !== -1 && currentIndex < sortedDates.length - 1) {
+                        nextOccurrence = sortedDates[currentIndex + 1] + 'T00:00:00';
+                    }
+
+                    const fromStatus = task.status;
+                    const pts = task.success_points || 0;
+
+                    await sb.from('ts_history').insert([historyRecord(id, fromStatus, 'completed', 'completed', pts)]);
+
+                    await sb.from('ts_tasks').update({
+                        status: nextOccurrence === null ? 'terminated' : 'completed',
+                        last_completed_date: new Date().toISOString(),
+                        next_occurrence_date: nextOccurrence
+                    }).eq('id', id);
+
+                    if (nextOccurrence === null) {
+                        await sb.from('ts_history').insert([termRecord(id, 'completed')]);
+                        await deleteNotificationRules(id);
+                    }
+
+                    await loadTasks();
+                    await loadHistory();
+                    renderDashboard();
+                    renderCalendar();
+                    renderManagement();
+                    showToast('✅ Task completato!');
+                    return;
+                }
 
                 const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD locale
 
