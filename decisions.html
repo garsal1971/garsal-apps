@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="app-version" content="1.7.2">
-    <title>DecisionKeeper v1.7.8</title>
+    <title>DecisionKeeper v1.7.9</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -32,12 +32,35 @@
             box-sizing: border-box;
         }
 
+        /* ── GARSAL TOP BAR ── */
+        #garsal-top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: #0081C8;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 10px;
+            z-index: 3000;
+        }
+        #garsal-top-bar-text {
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 0.2px;
+        }
+
         body {
             font-family: 'Syne', sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             color: var(--dark);
             min-height: 100vh;
             position: relative;
+            padding-top: 56px;
         }
 
         /* Decorative background */
@@ -68,7 +91,7 @@
         .app-container {
             display: grid;
             grid-template-columns: 250px 1fr;
-            height: 100vh;
+            height: calc(100vh - 56px);
             position: relative;
             z-index: 1;
         }
@@ -1695,6 +1718,13 @@
     </style>
 </head>
 <body>
+    <!-- GARSAL TOP BAR -->
+    <div id="garsal-top-bar">
+        <a href="app-launcher.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+            <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
+            <div id="garsal-top-bar-text">Garsal Apps</div>
+        </a>
+    </div>
     <div class="app-container">
         <!-- Vertical Sidebar (Desktop) -->
         <aside class="sidebar">
@@ -2135,8 +2165,8 @@
         // ============================================
         // APPLICATION CODE
         // ============================================
-        const APP_VERSION = 'v1.7.8';
-        const BUILD_TIME  = '2026-03-31T10:00:00Z';
+        const APP_VERSION = 'v1.7.9';
+        const BUILD_TIME  = '2026-03-31T10:30:00Z';
         const VERSION_KEY = 'decisionKeeperVersion';
         console.log('%c DECISIONKEEPER ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#7B2FBE;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
