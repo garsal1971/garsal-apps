@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.36</title>
+    <title>Tasks v19.18.37</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -670,41 +670,98 @@
         }
 
         /* Flatpickr — integrazione design app */
+        /* ── Flatpickr calendar ── */
         .flatpickr-calendar {
             font-family: 'Darker Grotesque', sans-serif;
-            border: 2px solid var(--border);
-            border-radius: 4px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            overflow: hidden;
         }
-        .flatpickr-day.selected, .flatpickr-day.selected:hover {
-            background: var(--primary);
-            border-color: var(--primary);
+        /* Header: mese + frecce */
+        .flatpickr-months {
+            background: var(--accent);
+            padding: 4px 0;
         }
-        .flatpickr-day:hover {
-            background: var(--border);
-        }
-        .flatpickr-months .flatpickr-month,
-        .flatpickr-weekdays {
-            background: var(--dark);
+        .flatpickr-months .flatpickr-month {
+            background: var(--accent);
             color: #fff;
+            height: 36px;
+        }
+        .flatpickr-current-month {
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
         }
         .flatpickr-current-month .flatpickr-monthDropdown-months,
         .flatpickr-current-month input.cur-year {
             color: #fff;
+            font-weight: 700;
+        }
+        /* Frecce navigazione */
+        .flatpickr-prev-month,
+        .flatpickr-next-month {
+            fill: #fff;
+            color: #fff;
+        }
+        .flatpickr-prev-month svg,
+        .flatpickr-next-month svg {
+            fill: #fff;
+        }
+        .flatpickr-prev-month:hover,
+        .flatpickr-next-month:hover {
+            background: rgba(255,255,255,0.15);
+        }
+        .flatpickr-prev-month:hover svg,
+        .flatpickr-next-month:hover svg {
+            fill: #fff;
+        }
+        /* Riga giorni settimana */
+        .flatpickr-weekdays {
+            background: #EFF6FF;
         }
         span.flatpickr-weekday {
-            background: var(--dark);
-            color: rgba(255,255,255,0.7);
+            background: #EFF6FF;
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 0.78rem;
+        }
+        /* Celle giorni */
+        .flatpickr-days {
+            padding-top: 4px;
+        }
+        .flatpickr-day {
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 0.95rem;
+            border-radius: 6px;
+        }
+        .flatpickr-day.selected,
+        .flatpickr-day.selected:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+        .flatpickr-day.today {
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .flatpickr-day.today.selected {
+            color: #fff;
+        }
+        .flatpickr-day:hover {
+            background: #EFF6FF;
+        }
+        /* Sezione orario */
+        .flatpickr-time {
+            border-top: 1px solid var(--border);
         }
         .flatpickr-time input {
             font-family: 'Darker Grotesque', sans-serif;
             font-size: 1rem;
+            font-weight: 600;
         }
-        .flatpickr-days {
-            padding-top: 4px;
-        }
-        .flatpickr-calendar.hasTime .flatpickr-days {
-            padding-top: 4px;
+
         }
 
         /* Fix per dropdown visibility */
@@ -2183,8 +2240,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.36';
-        const BUILD_TIME  = '2026-03-31T11:30:00Z';
+        const APP_VERSION = 'v19.18.37';
+        const BUILD_TIME  = '2026-03-31T12:30:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
