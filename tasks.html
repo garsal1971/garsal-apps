@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.37</title>
+    <title>Tasks v19.18.38</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2240,8 +2240,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.37';
-        const BUILD_TIME  = '2026-03-31T12:30:00Z';
+        const APP_VERSION = 'v19.18.38';
+        const BUILD_TIME  = '2026-03-31T13:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -6454,11 +6454,15 @@
                     }).join('')}
                 </div>
                 ${showTelegramToggle ? `
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.15rem 0.1rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0.1rem;
+                              cursor: ${reminders.length > 0 ? 'pointer' : 'not-allowed'};
+                              opacity: ${reminders.length > 0 ? '1' : '0.4'};">
                     <input type="checkbox" id="telegramCompleteToggle"
-                           ${telegramCompleteButton ? 'checked' : ''}
+                           ${telegramCompleteButton && reminders.length > 0 ? 'checked' : ''}
+                           ${reminders.length === 0 ? 'disabled' : ''}
                            onchange="telegramCompleteButton = this.checked"
-                           style="width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0;">
+                           style="width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0;
+                                  cursor: ${reminders.length > 0 ? 'pointer' : 'not-allowed'};">
                     <span style="font-size: 0.82rem; color: var(--muted); user-select: none;">
                         Bottone "Fatto" su Telegram
                     </span>
@@ -6481,6 +6485,7 @@
             const index = reminders.indexOf(value);
             if (index > -1) {
                 reminders.splice(index, 1);
+                if (reminders.length === 0) telegramCompleteButton = false;
                 renderReminders();
             }
         }
