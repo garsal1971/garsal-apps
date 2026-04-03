@@ -69,89 +69,170 @@
 
   <header>
     <h1>Comandi — garsal-apps</h1>
-    <p>// aggiornato 2026-03-28</p>
+    <p>// aggiornato 2026-04-03</p>
   </header>
 
-  <!-- 1. CREATE TABLE ps_diet_consultations -->
-  <div class="item" id="item-ps-diet">
+  <!-- 1. Verifica job cron registrati -->
+  <div class="item" id="item-cron-jobs">
     <div class="item-header">
-      <div class="check">!</div>
+      <div class="check">?</div>
       <div class="item-body">
-        <div class="item-title">CREATE TABLE ps_diet_consultations</div>
+        <div class="item-title">Verifica job cron registrati</div>
         <div class="item-desc">
-          Tabella per salvare prompt e risposte Claude con il piano dieta in JSON strutturato.
+          Mostra tutti i cron job attivi: nome, schedule e stato.
         </div>
         <div class="tags">
           <span class="tag sql-t">SQL</span>
           <span class="tag warn">PROD</span>
-          <span class="tag db">ps_diet_consultations</span>
+          <span class="tag db">cron.job</span>
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-ps-diet">
-      <button class="copy-btn" onclick="copyCode('cb-ps-diet', this)">Copia</button>
-      <pre>CREATE TABLE IF NOT EXISTS ps_diet_consultations (
-  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
-                          DEFAULT auth.uid(),
-  prompt      text        NOT NULL,
-  response    text        NOT NULL,
-  plan_json   jsonb,
-  created_at  timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS ps_diet_consultations_user_date_idx
-  ON ps_diet_consultations (user_id, created_at DESC);
-
-GRANT ALL ON TABLE ps_diet_consultations TO authenticated;
-GRANT ALL ON TABLE ps_diet_consultations TO service_role;
-
-ALTER TABLE ps_diet_consultations ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "dieta: select" ON ps_diet_consultations FOR SELECT TO authenticated
-  USING (auth.uid() = user_id);
-CREATE POLICY "dieta: insert" ON ps_diet_consultations FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "dieta: delete" ON ps_diet_consultations FOR DELETE TO authenticated
-  USING (auth.uid() = user_id);</pre>
+    <div class="code-block" id="cb-cron-jobs">
+      <button class="copy-btn" onclick="copyCode('cb-cron-jobs', this)">Copia</button>
+      <pre>SELECT jobname, schedule, active
+FROM cron.job
+ORDER BY jobname;</pre>
     </div>
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
-  <!-- 2. INSERT cm_apps Diet Viewer -->
-  <div class="item" id="item-diet-viewer">
+  <!-- 2. Ultime esecuzioni fill-notification-queue -->
+  <div class="item" id="item-fill-runs">
     <div class="item-header">
-      <div class="check">!</div>
+      <div class="check">?</div>
       <div class="item-body">
-        <div class="item-title">INSERT cm_apps — registra Diet Viewer nel launcher</div>
+        <div class="item-title">Ultime esecuzioni — fill-notification-queue</div>
         <div class="item-desc">
-          Aggiunge Diet Viewer all'elenco delle app di AppSphere.
+          Mostra le ultime 10 esecuzioni del cron fill-notification-queue con stato e dettagli.
         </div>
         <div class="tags">
           <span class="tag sql-t">SQL</span>
           <span class="tag warn">PROD</span>
-          <span class="tag db">cm_apps</span>
+          <span class="tag db">cron.job_run_details</span>
         </div>
       </div>
     </div>
-    <div class="code-block" id="cb-diet-viewer">
-      <button class="copy-btn" onclick="copyCode('cb-diet-viewer', this)">Copia</button>
-      <pre>INSERT INTO cm_apps (title, description, html_file, active, score_query)
-VALUES (
-  'Diet Viewer',
-  'Visualizza il piano dieta settimanale generato da Claude',
-  'diet-viewer.html',
-  true,
-  'SELECT 0'
-)
-ON CONFLICT DO NOTHING;</pre>
+    <div class="code-block" id="cb-fill-runs">
+      <button class="copy-btn" onclick="copyCode('cb-fill-runs', this)">Copia</button>
+      <pre>SELECT runid, start_time, end_time, status, return_message
+FROM cron.job_run_details
+WHERE jobname = 'fill-notification-queue'
+ORDER BY start_time DESC
+LIMIT 10;</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 3. Ultime esecuzioni send-notifications -->
+  <div class="item" id="item-send-runs">
+    <div class="item-header">
+      <div class="check">?</div>
+      <div class="item-body">
+        <div class="item-title">Ultime esecuzioni — send-notifications</div>
+        <div class="item-desc">
+          Mostra le ultime 10 esecuzioni del cron send-notifications con stato e dettagli.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">cron.job_run_details</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-send-runs">
+      <button class="copy-btn" onclick="copyCode('cb-send-runs', this)">Copia</button>
+      <pre>SELECT runid, start_time, end_time, status, return_message
+FROM cron.job_run_details
+WHERE jobname = 'send-notifications'
+ORDER BY start_time DESC
+LIMIT 10;</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 4. Stato coda notifiche -->
+  <div class="item" id="item-queue-status">
+    <div class="item-header">
+      <div class="check">?</div>
+      <div class="item-body">
+        <div class="item-title">Stato coda notifiche (cm_notification_queue)</div>
+        <div class="item-desc">
+          Conta le notifiche per stato — utile per verificare che fill-notification-queue stia popolando la coda.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">cm_notification_queue</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-queue-status">
+      <button class="copy-btn" onclick="copyCode('cb-queue-status', this)">Copia</button>
+      <pre>SELECT status, COUNT(*) AS totale
+FROM cm_notification_queue
+GROUP BY status
+ORDER BY status;</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 5. Prossime notifiche pending -->
+  <div class="item" id="item-pending">
+    <div class="item-header">
+      <div class="check">?</div>
+      <div class="item-body">
+        <div class="item-title">Prossime notifiche pending</div>
+        <div class="item-desc">
+          Le prossime 20 notifiche in stato pending ordinate per fire_at.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">cm_notification_queue</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-pending">
+      <button class="copy-btn" onclick="copyCode('cb-pending', this)">Copia</button>
+      <pre>SELECT id, rule_id, app, title, body, fire_at, occurrence_id
+FROM cm_notification_queue
+WHERE status = 'pending'
+ORDER BY fire_at ASC
+LIMIT 20;</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
+  <!-- 6. Vault: verifica chiave service role -->
+  <div class="item" id="item-vault">
+    <div class="item-header">
+      <div class="check">?</div>
+      <div class="item-body">
+        <div class="item-title">Vault — verifica chiave supabase_service_role_key</div>
+        <div class="item-desc">
+          Controlla che il Vault contenga la chiave usata dal cron per autenticarsi alle edge functions.
+          Se non esiste, il cron riceve 401 e non esegue.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">vault.decrypted_secrets</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-vault">
+      <button class="copy-btn" onclick="copyCode('cb-vault', this)">Copia</button>
+      <pre>SELECT name, created_at, updated_at
+FROM vault.decrypted_secrets
+WHERE name = 'supabase_service_role_key';</pre>
     </div>
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
 
 </div>
 
-<footer>garsal-apps · 2026-03-28</footer>
+<footer>garsal-apps · 2026-04-03</footer>
 
 <script>
 function copyCode(blockId, btn) {
