@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.79</title>
+    <title>Weight Quest v3.5.80</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1145,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.79';
-        var BUILD_TIME  = '2026-04-03T16:30:00Z';
+        var APP_VERSION = 'v3.5.80';
+        var BUILD_TIME  = '2026-04-03T17:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2644,32 +2644,54 @@
         // Richiede silenziosamente un nuovo Google token al launcher via BroadcastChannel.
         // Prima invia REQUEST_GOOGLE_TOKEN, poi aspetta GOOGLE_TOKEN_REFRESH entro 3 secondi.
         // Se ottiene una risposta chiama onSuccess(), altrimenti onFail() (che apre il popup).
+        // Rinnova silenziosamente il Google token via Supabase refresh_token.
+        // Il launcher non è più aperto (usa window.location.href), quindi il BroadcastChannel
+        // non funziona. Usiamo direttamente l'endpoint Supabase che — se ha il Google
+        // refresh token memorizzato — restituisce un nuovo provider_token.
+        // Se Supabase non lo restituisce, apre il popup come fallback.
         function requestGoogleTokenSilent(onSuccess, onFail) {
-            log('🔄 Rinnovo silenzioso Google token richiesto al launcher...');
-            var settled = false;
-            var timer = setTimeout(function() {
-                if (settled) return;
-                settled = true;
-                log('⚠️ Nessuna risposta dal launcher entro 3s — apro popup');
+            log('🔄 Tentativo rinnovo silenzioso token Google via Supabase...');
+
+            var refreshTok = localStorage.getItem('refresh_token');
+            if (!refreshTok) {
+                log('⚠️ Nessun refresh_token in localStorage — popup necessario');
                 if (onFail) onFail();
-            }, 3000);
+                return;
+            }
 
-            var origHandler = _authChannel.onmessage;
-            _authChannel.onmessage = function(e) {
-                if (origHandler) origHandler(e);
-                if (!e.data || e.data.type !== 'GOOGLE_TOKEN_REFRESH' || !e.data.token) return;
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                _authChannel.onmessage = origHandler;
-                googleToken = e.data.token;
-                localStorage.setItem('google_token', googleToken);
-                localStorage.setItem('googleToken', googleToken);
-                log('✅ Google token rinnovato silenziosamente');
-                if (onSuccess) onSuccess();
-            };
-
-            _authChannel.postMessage({ type: 'REQUEST_GOOGLE_TOKEN' });
+            fetch(CONFIG.supabaseUrl + '/auth/v1/token?grant_type=refresh_token', {
+                method: 'POST',
+                headers: { 'apikey': CONFIG.supabaseKey, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshTok })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                // Aggiorna sempre il Supabase token se presente
+                if (data.access_token) {
+                    sbToken = data.access_token;
+                    localStorage.setItem('sb_token', sbToken);
+                    supabase.setAuthToken(sbToken);
+                    log('✅ Supabase token rinnovato');
+                }
+                if (data.refresh_token) {
+                    localStorage.setItem('refresh_token', data.refresh_token);
+                }
+                // provider_token = Google access token
+                if (data.provider_token) {
+                    googleToken = data.provider_token;
+                    localStorage.setItem('google_token', googleToken);
+                    localStorage.setItem('googleToken', googleToken);
+                    log('✅ Google token rinnovato via Supabase (provider_token)');
+                    if (onSuccess) onSuccess();
+                } else {
+                    log('⚠️ Supabase non ha restituito provider_token — apro popup');
+                    if (onFail) onFail();
+                }
+            })
+            .catch(function(e) {
+                log('⚠️ Errore refresh Supabase: ' + e.message + ' — apro popup');
+                if (onFail) onFail();
+            });
         }
 
         function openAuthPopup(onSuccess) {
@@ -2707,6 +2729,14 @@
         }
 
         function syncFit() {
+            // Rileggi il token da localStorage: il launcher potrebbe averlo
+            // aggiornato in localStorage prima di navigare verso questa pagina.
+            var storedToken = localStorage.getItem('google_token') || localStorage.getItem('googleToken');
+            if (storedToken && storedToken !== googleToken) {
+                googleToken = storedToken;
+                log('🔄 Google token riletto da localStorage');
+            }
+
             if (!googleToken) {
                 openAuthPopup(function() { syncFit(); });
                 return;
