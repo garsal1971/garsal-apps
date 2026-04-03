@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.69</title>
+    <title>Habit Stack Tracker v9.3.70</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1675,8 +1675,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.69';
-        const BUILD_TIME  = '2026-04-03T12:00:00Z';
+        const APP_VERSION = 'v9.3.70';
+        const BUILD_TIME  = '2026-04-03T13:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2369,6 +2369,26 @@
             if (btnSkip) {
                 btnSkip.classList.remove('btn-failed');
                 if (isFailed) btnSkip.classList.add('btn-failed');
+            }
+
+            // Ricalcola disabled e visibilità bottoni in base al nuovo stato
+            const _today = new Date(); _today.setHours(0, 0, 0, 0);
+            const _cardDate = new Date(dateStr + 'T12:00:00');
+            const _isPast = _cardDate < _today;
+            const _isToday = dateStr === localDateStr();
+            const _habitM = habits.find(h => h.id === habitId);
+            const _startDateM = parseDateLocal(_habitM?.started_at) || new Date(_habitM?.created_at);
+            _startDateM.setHours(12, 0, 0, 0);
+            const _canComplete = (_isToday || isFailed) && _cardDate >= _startDateM;
+
+            if (btnComplete) btnComplete.disabled = !_canComplete;
+            if (btnSkip) {
+                if (_isPast && isCompleted) {
+                    btnSkip.style.display = 'none';
+                } else {
+                    btnSkip.style.display = '';
+                    btnSkip.disabled = !_canComplete;
+                }
             }
 
             // Aggiorna lo stato della card
@@ -4629,6 +4649,26 @@
                 if (btnFailClass) btnSkip.classList.add(btnFailClass);
             }
 
+            // Ricalcola disabled e visibilità bottoni in base al nuovo stato
+            const _today = new Date(); _today.setHours(0, 0, 0, 0);
+            const _cardDate = new Date(dateStr + 'T12:00:00');
+            const _isPast = _cardDate < _today;
+            const _isToday = dateStr === localDateStr();
+            const _habit = habits.find(h => h.id === habitId);
+            const _startDate = parseDateLocal(_habit?.started_at) || new Date(_habit?.created_at);
+            _startDate.setHours(12, 0, 0, 0);
+            const _canComplete = (_isToday || isFailed) && _cardDate >= _startDate;
+
+            if (btnComplete) btnComplete.disabled = !_canComplete;
+            if (btnSkip) {
+                if (_isPast && isCompleted) {
+                    btnSkip.style.display = 'none';
+                } else {
+                    btnSkip.style.display = '';
+                    btnSkip.disabled = !_canComplete;
+                }
+            }
+
             updateHabitHeader(habitId);
             console.log(`✅ Card aggiornata`);
         }
@@ -4667,6 +4707,18 @@
                 btnSkip.classList.remove('btn-failed', 'btn-missed');
                 if (btnFailClass) btnSkip.classList.add(btnFailClass);
             }
+
+            // Ricalcola disabled in base al nuovo stato
+            const _today = new Date(); _today.setHours(0, 0, 0, 0);
+            const _cardDate = new Date(dateStr + 'T12:00:00');
+            const _isToday = dateStr === localDateStr();
+            const _habitW = habits.find(h => h.id === habitId);
+            const _startDateW = parseDateLocal(_habitW?.started_at) || new Date(_habitW?.created_at);
+            _startDateW.setHours(12, 0, 0, 0);
+            const _canComplete = (_isToday || isFailed) && _cardDate >= _startDateW;
+
+            if (btnComplete) btnComplete.disabled = !_canComplete;
+            if (btnSkip) btnSkip.disabled = !_canComplete;
 
             // Aggiorna lo stato della card settimana se tutti i giorni sono completati
             const card = weekDay.closest('.day-card');
