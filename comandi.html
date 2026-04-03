@@ -41,6 +41,11 @@
   .tag.sql-t  { background: #78350F44; color: #FCD34D; border: 1px solid #78350F44; }
   .tag.warn   { background: #78350F66; color: #FDE68A;  border: 1px solid #B45309; }
   .tag.db     { background: #064E3B44; color: #34D399;  border: 1px solid #065F4644; }
+  .tag.fix    { background: #7F1D1D66; color: #FCA5A5;  border: 1px solid #991B1B; }
+
+  .item.fix-item { border-color: #991B1B88; }
+  .item.fix-item .item-title { color: #FCA5A5; }
+  .item.fix-item .check { background: #7F1D1D; color: #FCA5A5; border-color: #991B1B; }
 
   .code-block { position: relative; padding: 14px 16px; background: #0B1423; }
   .code-block pre {
@@ -71,6 +76,52 @@
     <h1>Comandi — garsal-apps</h1>
     <p>// aggiornato 2026-04-03</p>
   </header>
+
+  <!-- FIX: Ricrea cron fill-notification-queue con Vault auth -->
+  <div class="item fix-item" id="item-fix-cron">
+    <div class="item-header">
+      <div class="check">FIX</div>
+      <div class="item-body">
+        <div class="item-title">FIX — Ricrea cron fill-notification-queue (Vault auth)</div>
+        <div class="item-desc">
+          Il cron fallisce con <code>unrecognized configuration parameter "app.service_role_key"</code>
+          perché usa <code>current_setting()</code> invece del Vault.
+          Questo comando reschedula il job leggendo la chiave da <code>vault.decrypted_secrets</code>.
+        </div>
+        <div class="tags">
+          <span class="tag fix">FIX</span>
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">cron.job</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-fix-cron">
+      <button class="copy-btn" onclick="copyCode('cb-fix-cron', this)">Copia</button>
+      <pre>SELECT cron.unschedule('fill-notification-queue');
+
+SELECT cron.schedule(
+    'fill-notification-queue',
+    '0 */6 * * *',
+    $$
+    SELECT net.http_post(
+        url     := 'https://jajlmmdsjlvzgcxiiypk.supabase.co/functions/v1/fill-notification-queue',
+        headers := jsonb_build_object(
+            'Content-Type',  'application/json',
+            'Authorization', 'Bearer ' || (
+                SELECT decrypted_secret
+                FROM   vault.decrypted_secrets
+                WHERE  name = 'supabase_service_role_key'
+                LIMIT  1
+            )
+        ),
+        body    := '{}'::jsonb
+    ) AS request_id;
+    $$
+);</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
 
   <!-- 1. Verifica job cron registrati -->
   <div class="item" id="item-cron-jobs">
