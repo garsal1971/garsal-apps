@@ -77,6 +77,59 @@
     <p>// aggiornato 2026-04-03</p>
   </header>
 
+  <!-- FIX: DecisionKeeper — user_id e RLS -->
+  <div class="item fix-item" id="item-fix-decisions">
+    <div class="item-header">
+      <div class="check">FIX</div>
+      <div class="item-body">
+        <div class="item-title">FIX — DecisionKeeper: user_id + RLS su dc_decisions e dc_logs</div>
+        <div class="item-desc">
+          Aggiunge <code>user_id</code> a <code>dc_logs</code>, abilita RLS su entrambe le tabelle
+          e crea le policy per isolare i dati per utente.
+        </div>
+        <div class="tags">
+          <span class="tag fix">FIX</span>
+          <span class="tag sql-t">SQL</span>
+          <span class="tag warn">PROD</span>
+          <span class="tag db">dc_decisions · dc_logs</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-fix-decisions">
+      <button class="copy-btn" onclick="copyCode('cb-fix-decisions', this)">Copia</button>
+      <pre>-- 1. Aggiungi user_id a dc_logs (se non esiste già)
+ALTER TABLE dc_logs
+  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- 2. Rendi user_id NOT NULL con default auth.uid() su dc_decisions
+ALTER TABLE dc_decisions
+  ALTER COLUMN user_id SET DEFAULT auth.uid();
+
+-- 3. Abilita RLS
+ALTER TABLE dc_decisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dc_logs      ENABLE ROW LEVEL SECURITY;
+
+-- 4. Policy dc_decisions
+CREATE POLICY "decisions: select" ON dc_decisions FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "decisions: insert" ON dc_decisions FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "decisions: update" ON dc_decisions FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "decisions: delete" ON dc_decisions FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 5. Policy dc_logs
+CREATE POLICY "logs: select" ON dc_logs FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+CREATE POLICY "logs: insert" ON dc_logs FOR INSERT TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "logs: delete" ON dc_logs FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);</pre>
+    </div>
+    <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
+  </div>
+
   <!-- FIX: Ricrea cron fill-notification-queue con Vault auth -->
   <div class="item fix-item" id="item-fix-cron">
     <div class="item-header">
