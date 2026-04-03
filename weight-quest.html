@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.76</title>
+    <title>Weight Quest v3.5.77</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1145,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.76';
-        var BUILD_TIME  = '2026-04-03T14:00:00Z';
+        var APP_VERSION = 'v3.5.77';
+        var BUILD_TIME  = '2026-04-03T15:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2717,7 +2717,11 @@
             }
             
             log('Inizio sincronizzazione Google Fit...');
+            log('Token Google: ' + (googleToken ? googleToken.substring(0, 12) + '...' : 'ASSENTE'));
             log('Recupero TUTTE le singole pesate degli ultimi 3 mesi');
+
+            // Auto-apri il log durante la sync per mostrare il progresso
+            document.getElementById('debugLog').classList.add('active');
 
             var endTime = Date.now() * 1000000; // Converti in nanosecondi
             var startTime = (Date.now() - (90 * 24 * 60 * 60 * 1000)) * 1000000; // Ultimi 90 giorni in nanosecondi
@@ -2730,18 +2734,36 @@
                 }
             })
             .then(function(response) {
-                if (!response.ok) throw new Error('Errore nel recupero datasources (HTTP ' + response.status + ' — token scaduto?)');
+                log('DataSources HTTP: ' + response.status);
+                if (response.status === 401) throw new Error('401 — token Google scaduto');
+                if (response.status === 403) throw new Error('403 — permessi insufficienti: riautentica da AppSphere');
+                if (response.status === 429) throw new Error('429 — troppe richieste a Google Fit, riprova tra qualche minuto');
+                if (!response.ok) {
+                    return response.text().then(function(t) {
+                        throw new Error('HTTP ' + response.status + ': ' + t.substring(0, 200));
+                    });
+                }
                 return response.json();
             })
             .then(function(sources) {
-                log('DataSources ricevute: ' + (sources.dataSource ? sources.dataSource.length : 0));
+                var allSources = sources.dataSource || [];
+                log('DataSources totali: ' + allSources.length);
+                if (allSources.length === 0) {
+                    log('⚠️ Nessuna data source in Google Fit — account mai usato o permessi revocati');
+                }
 
                 // Trova tutte le fonti di peso
-                var weightSources = sources.dataSource.filter(function(ds) {
+                var weightSources = allSources.filter(function(ds) {
                     return ds.dataType && ds.dataType.name === 'com.google.weight';
                 });
 
-                log('Fonti di peso trovate: ' + weightSources.length);
+                log('Fonti peso (com.google.weight): ' + weightSources.length);
+                weightSources.forEach(function(ds) {
+                    log('  → ' + ds.dataStreamId);
+                });
+                if (weightSources.length === 0) {
+                    throw new Error('Nessuna fonte peso trovata in Google Fit — registra almeno una pesata nell\'app Fit');
+                }
 
                 // Recupera dati da TUTTE le fonti
                 var promises = weightSources.map(function(source) {
@@ -2755,12 +2777,15 @@
                             'Authorization': 'Bearer ' + googleToken
                         }
                     }).then(function(r) {
+                        log('Dataset ' + source.dataStreamId.split(':').pop() + ': HTTP ' + r.status);
                         if (!r.ok) {
-                            log('Errore da fonte: ' + source.dataStreamName + ' (HTTP ' + r.status + ')');
-                            return { point: [] };
+                            return r.text().then(function(t) {
+                                log('  ⚠️ Errore: ' + t.substring(0, 150));
+                                return { point: [] };
+                            });
                         }
                         return r.json().then(function(d) {
-                            log('Fonte ' + source.dataStreamName + ': ' + (d.point ? d.point.length : 0) + ' punti');
+                            log('  ✓ ' + (d.point ? d.point.length : 0) + ' punti trovati');
                             return d;
                         });
                     });
@@ -2795,19 +2820,28 @@
                 loadData();
             })
             .catch(function(error) {
-                log('ERROR SYNC: ' + error.message);
-                // Token Google scaduto (401): prova rinnovo silenzioso via launcher,
-                // solo se fallisce apre il popup di autenticazione.
-                if (error.message && error.message.indexOf('401') !== -1) {
+                log('❌ SYNC FALLITA: ' + error.message);
+                var msg = error.message || '';
+                if (msg.indexOf('401') !== -1) {
+                    // Token scaduto: prova rinnovo silenzioso, poi popup come fallback
                     googleToken = null;
                     localStorage.removeItem('googleToken');
                     localStorage.removeItem('google_token');
+                    log('🔄 Token scaduto — tentativo rinnovo silenzioso...');
                     requestGoogleTokenSilent(
                         function() { syncFit(); },
                         function() { openAuthPopup(function() { syncFit(); }); }
                     );
+                } else if (msg.indexOf('403') !== -1) {
+                    alert('Permessi Google Fit insufficienti.\n\nSoluzione: esci e rientra da AppSphere per rinnovare le autorizzazioni Google.');
+                } else if (msg.indexOf('429') !== -1) {
+                    alert('Google Fit ha limitato le richieste (troppe chiamate).\nRiprova tra 1-2 minuti.');
+                } else if (msg.indexOf('NetworkError') !== -1 || msg.indexOf('Failed to fetch') !== -1) {
+                    alert('Errore di rete. Controlla la connessione Internet e riprova.');
+                } else if (msg.indexOf('Nessuna fonte peso') !== -1) {
+                    alert(msg + '\n\nApri Google Fit, inserisci una pesata, poi riprova la sincronizzazione.');
                 } else {
-                    alert('Errore sincronizzazione: ' + error.message);
+                    alert('Errore sincronizzazione:\n' + msg + '\n\nControlla il log debug per dettagli.');
                 }
             });
         }
@@ -2865,6 +2899,8 @@
             }
 
             // Inserisci usando singole chiamate HTTP dirette
+            log('Salvataggio su Supabase: ' + uniqueWeights.length + ' pesate uniche');
+            log('Token Supabase: ' + (supabase.headers['Authorization'] ? supabase.headers['Authorization'].substring(0, 20) + '...' : 'ASSENTE'));
             var url = supabase.url + '/rest/v1/ps_weight_tracking';
             var headers = Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal,resolution=merge-duplicates' });
 
