@@ -97,19 +97,15 @@
     </div>
     <div class="code-block" id="cb-fix-decisions">
       <button class="copy-btn" onclick="copyCode('cb-fix-decisions', this)">Copia</button>
-      <pre>-- 1. Aggiungi user_id a dc_logs (se non esiste già)
-ALTER TABLE dc_logs
-  ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
-
--- 2. Rendi user_id NOT NULL con default auth.uid() su dc_decisions
+      <pre>-- 1. Rendi user_id NOT NULL con default auth.uid() su dc_decisions
 ALTER TABLE dc_decisions
   ALTER COLUMN user_id SET DEFAULT auth.uid();
 
--- 3. Abilita RLS
+-- 2. Abilita RLS
 ALTER TABLE dc_decisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dc_logs      ENABLE ROW LEVEL SECURITY;
 
--- 4. Policy dc_decisions
+-- 3. Policy dc_decisions
 CREATE POLICY "decisions: select" ON dc_decisions FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
 CREATE POLICY "decisions: insert" ON dc_decisions FOR INSERT TO authenticated
@@ -119,13 +115,25 @@ CREATE POLICY "decisions: update" ON dc_decisions FOR UPDATE TO authenticated
 CREATE POLICY "decisions: delete" ON dc_decisions FOR DELETE TO authenticated
   USING (auth.uid() = user_id);
 
--- 5. Policy dc_logs
+-- 4. Policy dc_logs — usa la relazione con dc_decisions
 CREATE POLICY "logs: select" ON dc_logs FOR SELECT TO authenticated
-  USING (auth.uid() = user_id);
+  USING (EXISTS (
+    SELECT 1 FROM dc_decisions
+    WHERE dc_decisions.id = dc_logs.decision_id
+      AND dc_decisions.user_id = auth.uid()
+  ));
 CREATE POLICY "logs: insert" ON dc_logs FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM dc_decisions
+    WHERE dc_decisions.id = dc_logs.decision_id
+      AND dc_decisions.user_id = auth.uid()
+  ));
 CREATE POLICY "logs: delete" ON dc_logs FOR DELETE TO authenticated
-  USING (auth.uid() = user_id);</pre>
+  USING (EXISTS (
+    SELECT 1 FROM dc_decisions
+    WHERE dc_decisions.id = dc_logs.decision_id
+      AND dc_decisions.user_id = auth.uid()
+  ));</pre>
     </div>
     <div class="platform-note">📍 supabase.com → progetto PROD (jajlmmdsjlvzgcxiiypk) → SQL Editor → Run</div>
   </div>
