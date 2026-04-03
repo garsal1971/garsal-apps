@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.72</title>
+<title>AppSphere v1.5.74</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1628,8 +1628,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.73';
-const BUILD_TIME  = '2026-03-29T00:00:00Z';
+const APP_VERSION = 'v1.5.74';
+const BUILD_TIME  = '2026-04-03T14:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2094,6 +2094,21 @@ function loginWithGoogle() {
 
 const _authChannel = new BroadcastChannel('appsphere_auth');
 let _refreshInterval = null;
+
+// Risponde alle richieste di token Google dalle app figlie (es. weight-quest).
+// Invia subito il token corrente dal localStorage, poi tenta un refresh Supabase
+// per ottenere un token più fresco (utile quando il token è scaduto).
+_authChannel.onmessage = async function(e) {
+  if (!e.data || e.data.type !== 'REQUEST_GOOGLE_TOKEN') return;
+  console.log('📡 REQUEST_GOOGLE_TOKEN ricevuto — rispondo con token corrente');
+  const tok = localStorage.getItem('google_token');
+  if (tok) {
+    _authChannel.postMessage({ type: 'GOOGLE_TOKEN_REFRESH', token: tok });
+  }
+  // Tenta anche un refresh Supabase: se ottiene un nuovo provider_token
+  // lo manderà automaticamente via GOOGLE_TOKEN_REFRESH dentro refreshSession()
+  await refreshSession();
+};
 
 // Rinnova il JWT tramite refresh_token senza richiedere un nuovo login.
 // In caso di errore fa logout forzato. Distribuisce il nuovo token a tutte le app figlie.
