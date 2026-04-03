@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.77</title>
+    <title>Weight Quest v3.5.78</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1145,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.77';
-        var BUILD_TIME  = '2026-04-03T15:00:00Z';
+        var APP_VERSION = 'v3.5.78';
+        var BUILD_TIME  = '2026-04-03T16:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2765,30 +2765,40 @@
                     throw new Error('Nessuna fonte peso trovata in Google Fit — registra almeno una pesata nell\'app Fit');
                 }
 
-                // Recupera dati da TUTTE le fonti
+                // Recupera dati da TUTTE le fonti, gestendo la paginazione (nextPageToken).
+                // Google Fit restituisce i punti dal più vecchio al più recente:
+                // senza paginazione le pesate recenti vengono tagliate.
                 var promises = weightSources.map(function(source) {
                     var datasetId = startTime + '-' + endTime;
-                    var url = 'https://www.googleapis.com/fitness/v1/users/me/dataSources/' +
-                              source.dataStreamId + '/datasets/' + datasetId;
+                    var baseUrl = 'https://www.googleapis.com/fitness/v1/users/me/dataSources/' +
+                                  source.dataStreamId + '/datasets/' + datasetId;
+                    var shortName = source.dataStreamId.split(':').pop();
 
-                    return fetch(url, {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': 'Bearer ' + googleToken
-                        }
-                    }).then(function(r) {
-                        log('Dataset ' + source.dataStreamId.split(':').pop() + ': HTTP ' + r.status);
-                        if (!r.ok) {
-                            return r.text().then(function(t) {
-                                log('  ⚠️ Errore: ' + t.substring(0, 150));
-                                return { point: [] };
+                    function fetchPage(pageToken, accumulated) {
+                        var url = baseUrl + (pageToken ? '?pageToken=' + encodeURIComponent(pageToken) : '');
+                        return fetch(url, {
+                            method: 'GET',
+                            headers: { 'Authorization': 'Bearer ' + googleToken }
+                        }).then(function(r) {
+                            if (!r.ok) {
+                                return r.text().then(function(t) {
+                                    log('  ⚠️ ' + shortName + ' HTTP ' + r.status + ': ' + t.substring(0, 150));
+                                    return { point: accumulated };
+                                });
+                            }
+                            return r.json().then(function(d) {
+                                var points = accumulated.concat(d.point || []);
+                                if (d.nextPageToken) {
+                                    log('  → ' + shortName + ': ' + points.length + ' punti, carico pagina successiva...');
+                                    return fetchPage(d.nextPageToken, points);
+                                }
+                                log('  ✓ ' + shortName + ': ' + points.length + ' punti totali');
+                                return { point: points };
                             });
-                        }
-                        return r.json().then(function(d) {
-                            log('  ✓ ' + (d.point ? d.point.length : 0) + ' punti trovati');
-                            return d;
                         });
-                    });
+                    }
+
+                    return fetchPage(null, []);
                 });
                 
                 return Promise.all(promises);
