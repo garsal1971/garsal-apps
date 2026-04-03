@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.68</title>
+    <title>Habit Stack Tracker v9.3.69</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1675,8 +1675,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.68';
-        const BUILD_TIME  = '2026-03-21T13:00:00Z';
+        const APP_VERSION = 'v9.3.69';
+        const BUILD_TIME  = '2026-04-03T12:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3388,8 +3388,8 @@
                 const dayIsFuture = date > today;
                 const isBeforeStart = date < startDate; // Prima della data inizio stack
                 
-                // Può completare SOLO se è oggi E dopo started_at
-                const canComplete = isToday && !isBeforeStart;
+                // Può completare se è oggi, oppure se il giorno è passato ma fallito (X giallo)
+                const canComplete = (isToday || isFailed) && !isBeforeStart;
                 
                 // Debug
                 if (dateStr === '2026-02-13' || dateStr === '2026-02-14' || dateStr === '2026-02-15') {
@@ -3515,7 +3515,7 @@
                     const isCompleted = completion && completion.status === 'completed';
                     const isFailed = completion && (completion.status === 'failed' || completion.status === 'missed');
                     const btnFailClass = completion?.status === 'missed' ? 'btn-missed' : isFailed ? 'btn-failed' : '';
-                    const canComplete = isToday && !isBeforeStart; // Solo oggi E dopo started_at
+                    const canComplete = (isToday || isFailed) && !isBeforeStart; // Oggi o passato fallito
                     const hideFailBtn = isPast && isCompleted; // giorni passati completati: nascondi ✗
 
                     return `
@@ -3563,7 +3563,7 @@
                 const isFailed = completion && (completion.status === 'failed' || completion.status === 'missed');
                 const cardStatusClass = completion?.status === 'missed' ? 'missed' : isFailed ? 'failed' : '';
                 const btnFailClass = completion?.status === 'missed' ? 'btn-missed' : isFailed ? 'btn-failed' : '';
-                const canComplete = isToday && !isBeforeStart; // Solo oggi E dopo started_at
+                const canComplete = (isToday || isFailed) && !isBeforeStart; // Oggi o passato fallito
                 const hideFailBtn = isPast && isCompleted; // giorni passati completati: nascondi ✗
 
                 return `
