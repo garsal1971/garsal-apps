@@ -1140,13 +1140,31 @@
         </div>
     </div>
 
+    <!-- GOOGLE AUTH MODAL -->
+    <div id="googleAuthModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:3000; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:0; padding:28px 24px; max-width:340px; width:92%; box-shadow:0 8px 40px rgba(0,0,0,0.3); text-align:center;">
+            <div style="font-size:2.5em; margin-bottom:12px;">🔐</div>
+            <h3 style="margin:0 0 10px 0; color:#333; font-size:1.1em;">Connessione Google Fit</h3>
+            <p id="googleAuthMsg" style="margin:0 0 22px 0; color:#666; font-size:0.92em; line-height:1.5;">La sessione Google è scaduta.<br>Riconnettiti per sincronizzare Google Fit.</p>
+            <button id="googleAuthConnectBtn" onclick="googleAuthConnect()"
+                style="width:100%; background:#4285F4; color:white; border:none; padding:13px; font-weight:bold; cursor:pointer; font-size:1em; margin-bottom:10px; display:flex; align-items:center; justify-content:center; gap:10px;">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#fff" d="M44.5 20H24v8.5h11.8C34.7 33.9 29.8 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.4-.1-2.7-.5-4z"/></svg>
+                Connetti Google Fit
+            </button>
+            <button onclick="closeGoogleAuthModal()"
+                style="width:100%; background:#f0f0f0; color:#555; border:none; padding:11px; font-weight:bold; cursor:pointer; font-size:0.95em;">
+                ✕ Annulla
+            </button>
+        </div>
+    </div>
+
     <!-- DEBUG -->
     <button id="debugBtn">🐛</button>
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.85';
-        var BUILD_TIME  = '2026-04-04T11:00:00Z';
+        var APP_VERSION = 'v3.5.86';
+        var BUILD_TIME  = '2026-04-04T12:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2070,8 +2088,8 @@
                                 localStorage.removeItem('google_token');
                                 localStorage.removeItem('googleToken');
                             } else if (parseInt(info.expires_in, 10) < 300) {
-                                log('⚠️ Google token scade tra < 5 min — popup preventivo');
-                                openAuthPopup(function() { log('Google token rinnovato via popup preventivo'); });
+                                log('⚠️ Google token scade tra < 5 min — mostro modal riconnessione');
+                                showGoogleAuthModal('Il token Google sta per scadere.<br>Riconnettiti per evitare interruzioni durante la sincronizzazione.', function() { log('Google token rinnovato via modal preventivo'); });
                             } else {
                                 log('✓ Google token valido, scade tra ' + Math.round(info.expires_in / 60) + ' min');
                             }
@@ -2712,6 +2730,28 @@
             });
         }
 
+        // Callback salvato per il modal Google auth
+        var _googleAuthCallback = null;
+
+        function showGoogleAuthModal(msg, onSuccess) {
+            _googleAuthCallback = onSuccess || null;
+            document.getElementById('googleAuthMsg').innerHTML =
+                msg || 'La sessione Google è scaduta.<br>Riconnettiti per sincronizzare Google Fit.';
+            document.getElementById('googleAuthModal').style.display = 'flex';
+        }
+
+        function closeGoogleAuthModal() {
+            document.getElementById('googleAuthModal').style.display = 'none';
+            _googleAuthCallback = null;
+        }
+
+        // Chiamato dal click del bottone nel modal (user-initiated → popup non bloccato su mobile)
+        function googleAuthConnect() {
+            var cb = _googleAuthCallback;
+            closeGoogleAuthModal();
+            openAuthPopup(cb || function() {});
+        }
+
         function openAuthPopup(onSuccess) {
             var popup = window.open('app-launcher.html', 'appsphere_auth', 'width=480,height=640,left=200,top=100');
             if (!popup) {
@@ -2756,7 +2796,7 @@
             }
 
             if (!googleToken) {
-                openAuthPopup(function() { syncFit(); });
+                showGoogleAuthModal('Accesso a Google Fit richiesto.<br>Clicca per connetterti al tuo account Google.', function() { syncFit(); });
                 return;
             }
             if (!userData.milestones || userData.milestones.length < 2) {
@@ -2897,14 +2937,16 @@
                 log('❌ SYNC FALLITA: ' + error.message);
                 var msg = error.message || '';
                 if (msg.indexOf('401') !== -1) {
-                    // Token scaduto: prova rinnovo silenzioso, poi popup come fallback
+                    // Token scaduto: prima tenta rinnovo silenzioso, poi mostra modal
                     googleToken = null;
                     localStorage.removeItem('googleToken');
                     localStorage.removeItem('google_token');
                     log('🔄 Token scaduto — tentativo rinnovo silenzioso...');
                     requestGoogleTokenSilent(
                         function() { syncFit(); },
-                        function() { openAuthPopup(function() { syncFit(); }); }
+                        function() {
+                            showGoogleAuthModal('Il token Google è scaduto.<br>Riconnettiti per continuare la sincronizzazione.', function() { syncFit(); });
+                        }
                     );
                 } else if (msg.indexOf('403') !== -1) {
                     alert('Permessi Google Fit insufficienti.\n\nSoluzione: esci e rientra da AppSphere per rinnovare le autorizzazioni Google.');
