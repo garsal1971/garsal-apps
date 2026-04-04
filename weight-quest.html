@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.82</title>
+    <title>Weight Quest v3.5.83</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1145,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.82';
-        var BUILD_TIME  = '2026-04-04T08:00:00Z';
+        var APP_VERSION = 'v3.5.83';
+        var BUILD_TIME  = '2026-04-04T08:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2855,9 +2855,15 @@
                     var msg = 'Sincronizzazione completata!\n' +
                               syncInfo.count + ' pesate salvate\n' +
                               'Dal: ' + syncInfo.from + '\nAl: ' + syncInfo.to;
+                    if (syncInfo.lastWeight !== null) {
+                        msg += '\n\nUltima pesata: ' + syncInfo.lastWeight + ' kg\n' +
+                               'Ora locale: ' + syncInfo.to + ' ' + syncInfo.lastTime + '\n' +
+                               'UTC raw:     ' + (syncInfo.lastTsUtc || '—');
+                        log('Ultima pesata: ' + syncInfo.lastWeight + ' kg — locale: ' + syncInfo.to + ' ' + syncInfo.lastTime + ' — UTC: ' + syncInfo.lastTsUtc);
+                    }
                     if (syncInfo.to && syncInfo.to < today) {
                         msg += '\n\n⚠️ Dati fino al ' + syncInfo.to + ' (oggi: ' + today + ').\n' +
-                               'Se hai pesate di oggi non ancora presenti,\napri Google Fit sul telefono per forzare la sincronizzazione e riprova.';
+                               'Apri Google Fit sul telefono per forzare la sync e riprova.';
                         log('⚠️ Ultimo dato: ' + syncInfo.to + ' — Google Fit non ha ancora sincronizzato oggi');
                     }
                     alert(msg);
@@ -2996,10 +3002,14 @@
                 }
                 log('Tutte le pesate salvate! Status: ' + response.status);
                 // Restituisce info sul range salvato per il messaggio post-sync
+                var last = uniqueWeights.length > 0 ? uniqueWeights[uniqueWeights.length - 1] : null;
                 return {
                     count: uniqueWeights.length,
-                    from: uniqueWeights.length > 0 ? uniqueWeights[0].date : null,
-                    to: uniqueWeights.length > 0 ? uniqueWeights[uniqueWeights.length - 1].date : null
+                    from:      uniqueWeights.length > 0 ? uniqueWeights[0].date : null,
+                    to:        last ? last.date : null,
+                    lastTime:  last ? last.time : null,
+                    lastWeight: last ? last.weight : null,
+                    lastTsUtc: last ? new Date(last.timestamp).toISOString() : null
                 };
             });
             }); // chiude Promise.all(deletePromises)
