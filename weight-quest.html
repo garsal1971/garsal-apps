@@ -1145,8 +1145,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.84';
-        var BUILD_TIME  = '2026-04-04T09:00:00Z';
+        var APP_VERSION = 'v3.5.85';
+        var BUILD_TIME  = '2026-04-04T11:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1433,9 +1433,8 @@
         var insertWeightTargetDate = null;
         var insertWeightTargetTimestamp = null; // null = insert, number = edit (same timestamp)
 
-        function showInsertWeightModal(date, currentWeight) {
+        function showInsertWeightModal(date, currentWeight, suggestWeight) {
             insertWeightTargetDate = date;
-            // Timestamp fisso: mezzogiorno del giorno → on_conflict=timestamp aggiorna sempre lo stesso record
             insertWeightTargetTimestamp = Math.floor(new Date(date + 'T12:00:00').getTime());
 
             var parts = date.split('-');
@@ -1444,7 +1443,8 @@
                 isEdit ? '✏️ Modifica peso' : '📝 Inserisci peso reale';
             document.getElementById('insertWeightDateLabel').textContent =
                 'Data: ' + parts[2] + '-' + parts[1] + '-' + parts[0];
-            document.getElementById('insertWeightInput').value = isEdit ? currentWeight : '';
+            document.getElementById('insertWeightInput').value =
+                isEdit ? currentWeight : (suggestWeight !== undefined ? suggestWeight : '');
             var btn = document.getElementById('insertWeightSaveBtn');
             btn.disabled = false;
             btn.textContent = '💾 Salva';
@@ -1528,6 +1528,12 @@
                 bIns.style.cssText = 'width:100%; margin-bottom:8px; background:#00B894; color:white; border:none; padding:13px; border-radius: 0; font-weight:bold; cursor:pointer; font-size:1em;';
                 bIns.addEventListener('click', function() { closeRowDetailModal(); showInsertWeightModal(info.date); });
                 btnArea.appendChild(bIns);
+            } else if (info.hasSync && !info.hasManual) {
+                var bAdd = document.createElement('button');
+                bAdd.textContent = '+ Aggiungi peso';
+                bAdd.style.cssText = 'width:100%; margin-bottom:8px; background:#00B894; color:white; border:none; padding:13px; border-radius: 0; font-weight:bold; cursor:pointer; font-size:1em;';
+                bAdd.addEventListener('click', function() { closeRowDetailModal(); showInsertWeightModal(info.date, undefined, info.minWeight); });
+                btnArea.appendChild(bAdd);
             } else if (info.hasManual && !info.hasSync) {
                 var bEdit = document.createElement('button');
                 bEdit.textContent = '✏️ Modifica pesata';
@@ -1540,6 +1546,18 @@
                 bDel.style.cssText = 'width:100%; margin-bottom:8px; background:#E74C3C; color:white; border:none; padding:13px; border-radius: 0; font-weight:bold; cursor:pointer; font-size:1em;';
                 bDel.addEventListener('click', function() { closeRowDetailModal(); deleteManualWeight(info.manualEntry.timestamp, info.date); });
                 btnArea.appendChild(bDel);
+            } else if (info.hasSync && info.hasManual) {
+                var bEdit2 = document.createElement('button');
+                bEdit2.textContent = '✏️ Modifica pesata manuale';
+                bEdit2.style.cssText = 'width:100%; margin-bottom:8px; background:#2563EB; color:white; border:none; padding:13px; border-radius: 0; font-weight:bold; cursor:pointer; font-size:1em;';
+                bEdit2.addEventListener('click', function() { closeRowDetailModal(); showInsertWeightModal(info.date, info.manualEntry.weight); });
+                btnArea.appendChild(bEdit2);
+
+                var bDel2 = document.createElement('button');
+                bDel2.textContent = '🗑️ Elimina pesata manuale';
+                bDel2.style.cssText = 'width:100%; margin-bottom:8px; background:#E74C3C; color:white; border:none; padding:13px; border-radius: 0; font-weight:bold; cursor:pointer; font-size:1em;';
+                bDel2.addEventListener('click', function() { closeRowDetailModal(); deleteManualWeight(info.manualEntry.timestamp, info.date); });
+                btnArea.appendChild(bDel2);
             }
             content.appendChild(btnArea);
 
@@ -4469,6 +4487,15 @@
                         return function(e) { e.stopPropagation(); showInsertWeightModal(d); };
                     })(date));
                     btnInline.appendChild(insertBtn);
+                } else if (hasSync && !hasManual) {
+                    var addBtn = document.createElement('button');
+                    addBtn.textContent = '+ Aggiungi peso';
+                    addBtn.title = 'Aggiungi peso manuale per questo giorno';
+                    addBtn.style.cssText = 'margin-left:6px; background:none; border:1px solid #ddd; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 6px; opacity:0.7; vertical-align:middle;';
+                    addBtn.addEventListener('click', (function(d, w) {
+                        return function(e) { e.stopPropagation(); showInsertWeightModal(d, undefined, w); };
+                    })(date, minWeight));
+                    btnInline.appendChild(addBtn);
                 } else if (hasManual && !hasSync) {
                     var editBtn = document.createElement('button');
                     editBtn.textContent = '✏️';
@@ -4487,6 +4514,24 @@
                         return function(e) { e.stopPropagation(); deleteManualWeight(ts, d); };
                     })(manualEntry.timestamp, date));
                     btnInline.appendChild(delBtn);
+                } else if (hasSync && hasManual) {
+                    var editBtn2 = document.createElement('button');
+                    editBtn2.textContent = '✏️';
+                    editBtn2.title = 'Modifica pesata manuale';
+                    editBtn2.style.cssText = 'margin-left:4px; background:none; border:1px solid #ddd; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
+                    editBtn2.addEventListener('click', (function(d, w) {
+                        return function(e) { e.stopPropagation(); showInsertWeightModal(d, w); };
+                    })(date, manualEntry.weight));
+                    btnInline.appendChild(editBtn2);
+
+                    var delBtn2 = document.createElement('button');
+                    delBtn2.textContent = '🗑️';
+                    delBtn2.title = 'Elimina pesata manuale';
+                    delBtn2.style.cssText = 'margin-left:2px; background:none; border:1px solid #ffcccc; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
+                    delBtn2.addEventListener('click', (function(ts, d) {
+                        return function(e) { e.stopPropagation(); deleteManualWeight(ts, d); };
+                    })(manualEntry.timestamp, date));
+                    btnInline.appendChild(delBtn2);
                 }
                 tdDate.appendChild(btnInline);
 
