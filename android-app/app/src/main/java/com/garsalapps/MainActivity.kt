@@ -19,6 +19,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.WeightRecord
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -38,8 +39,9 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_OAUTH           = "oauth_pending"
 
     // ActivityResultLauncher per i permessi Health Connect
+    // Usa il contratto specifico di HC (non RequestMultiplePermissions standard)
     private val healthConnectPermissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        PermissionController.createRequestPermissionResultContract()
     ) { /* risultato ignorato: il bridge rileverà i permessi al prossimo requestWeightSync */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,8 +116,7 @@ class MainActivity : AppCompatActivity() {
         val permissions = setOf(
             HealthPermission.getReadPermission(WeightRecord::class)
         )
-        // Usa il launcher per richiedere i permessi HC come normali permission Android
-        healthConnectPermissionsLauncher.launch(permissions.map { it }.toTypedArray())
+        healthConnectPermissionsLauncher.launch(permissions)
     }
 
     private fun setupWebView() {
