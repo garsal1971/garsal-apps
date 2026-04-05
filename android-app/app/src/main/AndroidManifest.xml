@@ -44,7 +44,16 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="garsalapps" android:host="oauth" />
             </intent-filter>
+            <!-- Necessario per apparire nella lista app di Health Connect -->
+            <intent-filter>
+                <action android:name="androidx.health.connect.client.SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
         </activity>
+
+        <!-- URL privacy policy richiesto da Health Connect -->
+        <meta-data
+            android:name="health_privacy_policy_url"
+            android:value="https://garsal.netlify.app/" />
 
         <!-- WorkManager per notifiche schedulate -->
         <provider
