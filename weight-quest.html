@@ -765,6 +765,9 @@
             <div class="icon-nav-item" data-action="sync">
                 <span class="icon">🔄</span>
             </div>
+            <div class="icon-nav-item" data-action="sync-hc" id="hcNavItem" style="display:none">
+                <span class="icon">💪</span>
+            </div>
         </div>
 
         <!-- CONTENT WRAPPER -->
@@ -788,6 +791,10 @@
                     <div class="sidebar-nav-item" data-action="sync">
                         <span class="nav-icon">🔄</span>
                         <span>Sincronizza</span>
+                    </div>
+                    <div class="sidebar-nav-item" data-action="sync-hc" id="hcSidebarItem" style="display:none">
+                        <span class="nav-icon">💪</span>
+                        <span>Salute</span>
                     </div>
                 </nav>
             </div>
@@ -1163,8 +1170,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.87';
-        var BUILD_TIME  = '2026-04-04T13:00:00Z';
+        var APP_VERSION = 'v3.5.88';
+        var BUILD_TIME  = '2026-04-05T10:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1909,8 +1916,9 @@
                 document.querySelectorAll('.icon-nav-item').forEach(function(item) {
                     item.addEventListener('click', function() {
                         if (this.getAttribute('data-action') === 'sync') { syncFit(); return; }
+                        if (this.getAttribute('data-action') === 'sync-hc') { syncFitNative(); return; }
                         var pageName = this.getAttribute('data-page');
-                        
+
                         // Update active tab
                         document.querySelectorAll('.icon-nav-item').forEach(function(i) {
                             i.classList.remove('active');
@@ -1943,6 +1951,7 @@
                 document.querySelectorAll('.sidebar-nav-item').forEach(function(item) {
                     item.addEventListener('click', function() {
                         if (this.getAttribute('data-action') === 'sync') { syncFit(); return; }
+                        if (this.getAttribute('data-action') === 'sync-hc') { syncFitNative(); return; }
                         var pageName = this.getAttribute('data-page');
 
                         // Update active state
@@ -2136,7 +2145,18 @@
             log('Mostro sezione principale');
             document.getElementById('authSection').classList.add('hidden');
             document.getElementById('mainSection').classList.remove('hidden');
-            
+
+            // Mostra bottone "Salute" (Health Connect) solo nell'app Android nativa
+            if (typeof window.HealthConnectBridge !== 'undefined' &&
+                typeof window.AndroidBridge !== 'undefined' &&
+                window.AndroidBridge.isNativeApp()) {
+                var hcNav = document.getElementById('hcNavItem');
+                var hcSidebar = document.getElementById('hcSidebarItem');
+                if (hcNav) hcNav.style.display = '';
+                if (hcSidebar) hcSidebar.style.display = '';
+                log('✓ Health Connect bridge rilevato — bottone Salute attivo');
+            }
+
             // Carica obiettivo più recente dal DB
             // (reloadWeightData verrà chiamato automaticamente da loadObjectiveById)
             loadActiveObjective()
@@ -2797,6 +2817,44 @@
                     }
                 } catch(ex) { clearInterval(checkClosed); }
             }, 500);
+        }
+
+        // ─── HEALTH CONNECT SYNC (solo app Android nativa) ───────────────────────
+        function syncFitNative() {
+            if (typeof window.HealthConnectBridge === 'undefined') {
+                alert('Health Connect non disponibile in questa versione.');
+                return;
+            }
+            if (!window.HealthConnectBridge.isAvailable()) {
+                // Permessi non ancora concessi: chiede all'app di aprire la schermata permessi
+                window.HealthConnectBridge.requestPermissions();
+                showToast('Concedi i permessi a Health Connect e riprova la sincronizzazione.');
+                return;
+            }
+            log('Inizio sync Health Connect (90 giorni)...');
+            var callbackId = Date.now().toString();
+            window['__hcCallback_' + callbackId] = function(data) {
+                delete window['__hcCallback_' + callbackId];
+                if (!data.ok) {
+                    log('❌ Errore Health Connect: ' + data.error);
+                    alert('Errore Health Connect:\n' + data.error);
+                    return;
+                }
+                log('Health Connect: ' + data.points.length + ' pesate ricevute');
+                if (data.points.length === 0) {
+                    alert('Nessuna pesata trovata in Health Connect negli ultimi 90 giorni.');
+                    return;
+                }
+                // Converte nel formato interno (stesso di Google Fit)
+                var fitPoints = data.points.map(function(p) {
+                    return {
+                        startTimeNanos: String(Math.floor(p.timestamp) * 1000000),
+                        value: [{ fpVal: p.weight }]
+                    };
+                });
+                processWeights({ point: fitPoints });
+            };
+            window.HealthConnectBridge.requestWeightSync(callbackId);
         }
 
         function syncFit() {
