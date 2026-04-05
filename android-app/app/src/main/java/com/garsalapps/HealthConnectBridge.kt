@@ -11,83 +11,68 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-/**
- * Bridge JavaScript esposto al WebView come window.HealthConnectBridge.
- * Permette a weight-quest.html di leggere i dati peso da Android Health Connect
- * senza esporre token o credenziali Google: i dati sono on-device.
- *
- * Metodi esposti:
- *  - isAvailable()         → Boolean (HC installato + permessi concessi)
- *  - requestPermissions()  → Unit (apre schermata permessi HC)
- *  - requestWeightSync(id) → async, chiama window.__hcCallback_<id>(json)
- */
 class HealthConnectBridge(
     private val activity: MainActivity,
     private val webView: WebView
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-    private val client: HealthConnectClient? by lazy {
-        try {
-            if (HealthConnectClient.getSdkStatus(activity) == HealthConnectClient.SDK_AVAILABLE) {
-                HealthConnectClient.getOrCreate(activity)
-            } else null
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     private val readWeightPermission = HealthPermission.getReadPermission(WeightRecord::class)
 
-    /**
-     * Ritorna true se Health Connect è installato e il permesso READ_WEIGHT è stato concesso.
-     * Chiamata dal thread JavaScript — deve essere sincrona.
-     */
+    /** Controlla solo se l'SDK è installato sul dispositivo (sincrono, no runBlocking). */
     @JavascriptInterface
-    fun isAvailable(): Boolean {
-        val c = client ?: return false
+    fun isSdkAvailable(): Boolean {
         return try {
-            runBlocking {
-                val granted = c.permissionController.getGrantedPermissions()
-                readWeightPermission in granted
-            }
+            HealthConnectClient.getSdkStatus(activity) == HealthConnectClient.SDK_AVAILABLE
         } catch (e: Exception) {
             false
         }
     }
 
     /**
-     * Chiede all'Activity di aprire la schermata di consenso permessi Health Connect.
-     * Dopo che l'utente concede i permessi, può richiamare requestWeightSync.
-     */
-    @JavascriptInterface
-    fun requestPermissions() {
-        activity.runOnUiThread {
-            activity.requestHealthConnectPermissions()
-        }
-    }
-
-    /**
-     * Legge i record peso degli ultimi 90 giorni da Health Connect (asincrono).
-     * Al termine chiama window.__hcCallback_<callbackId>(json) nel WebView.
+     * Punto di ingresso principale chiamato dal JS.
      *
-     * JSON successo:  {"ok":true,"points":[{"timestamp":1234567890,"weight":79.5},...]}
-     * JSON errore:    {"ok":false,"error":"messaggio"}
+     * Flusso:
+     *  1. Verifica che HC sia installato
+     *  2. Verifica i permessi
+     *  3a. Se permessi mancanti → apre la schermata HC e ritorna {"ok":false,"error":"PERMISSION_REQUESTED"}
+     *  3b. Se permessi ok → legge i record e ritorna {"ok":true,"points":[...]}
      */
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
         scope.launch {
             val json = try {
-                val c = client ?: throw Exception("Health Connect non disponibile")
+                // 1. SDK installato?
+                val sdkStatus = HealthConnectClient.getSdkStatus(activity)
+                if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+                    val msg = when (sdkStatus) {
+                        HealthConnectClient.SDK_UNAVAILABLE -> "Health Connect non installato"
+                        HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "Aggiorna Health Connect dal Play Store"
+                        else -> "Health Connect non disponibile (status $sdkStatus)"
+                    }
+                    return@launch callback(callbackId, """{"ok":false,"error":"$msg"}""")
+                }
 
-                val end = Instant.now()
+                val client = HealthConnectClient.getOrCreate(activity)
+
+                // 2. Permessi concessi?
+                val granted = client.permissionController.getGrantedPermissions()
+                if (readWeightPermission !in granted) {
+                    // Apre la schermata permessi HC sul thread UI
+                    withContext(Dispatchers.Main) {
+                        activity.requestHealthConnectPermissions()
+                    }
+                    return@launch callback(callbackId,
+                        """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}""")
+                }
+
+                // 3. Legge i dati peso (ultimi 90 giorni)
+                val end   = Instant.now()
                 val start = end.minus(90, ChronoUnit.DAYS)
-
-                val response = c.readRecords(
+                val response = client.readRecords(
                     ReadRecordsRequest(
                         recordType = WeightRecord::class,
                         timeRangeFilter = TimeRangeFilter.between(start, end)
@@ -95,25 +80,25 @@ class HealthConnectBridge(
                 )
 
                 val points = response.records.joinToString(",") { r ->
-                    val ts = r.time.toEpochMilli()
-                    val kg = r.weight.inKilograms
-                    // Usa format con punto decimale (locale-safe)
-                    """{"timestamp":$ts,"weight":${String.format("%.2f", kg)}}"""
+                    """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
                 }
                 """{"ok":true,"points":[$points]}"""
+
             } catch (e: Exception) {
-                val msg = (e.message ?: "Errore sconosciuto")
-                    .take(200)
-                    .replace("\"", "'")
+                val msg = (e.message ?: "Errore sconosciuto").take(200).replace("\"", "'")
                 """{"ok":false,"error":"$msg"}"""
             }
 
-            webView.post {
-                webView.evaluateJavascript(
-                    "if(window.__hcCallback_$callbackId)window.__hcCallback_$callbackId($json);",
-                    null
-                )
-            }
+            callback(callbackId, json)
+        }
+    }
+
+    private fun callback(callbackId: String, json: String) {
+        webView.post {
+            webView.evaluateJavascript(
+                "if(window.__hcCallback_$callbackId)window.__hcCallback_$callbackId($json);",
+                null
+            )
         }
     }
 }
