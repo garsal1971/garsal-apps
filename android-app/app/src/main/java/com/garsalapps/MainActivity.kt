@@ -10,6 +10,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -17,6 +18,9 @@ import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.WeightRecord
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -32,6 +36,11 @@ class MainActivity : AppCompatActivity() {
     private val OAUTH_CALLBACK_SCHEME = "garsalapps"
     private val OAUTH_CALLBACK_HOST   = "oauth"
     private val PREFS_OAUTH           = "oauth_pending"
+
+    // ActivityResultLauncher per i permessi Health Connect
+    private val healthConnectPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { /* risultato ignorato: il bridge rileverà i permessi al prossimo requestWeightSync */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,6 +106,18 @@ class MainActivity : AppCompatActivity() {
         fun isNativeApp(): Boolean = true
     }
 
+    /**
+     * Apre la schermata di consenso permessi di Health Connect.
+     * Chiamato da HealthConnectBridge.requestPermissions() via runOnUiThread.
+     */
+    fun requestHealthConnectPermissions() {
+        val permissions = setOf(
+            HealthPermission.getReadPermission(WeightRecord::class)
+        )
+        // Usa il launcher per richiedere i permessi HC come normali permission Android
+        healthConnectPermissionsLauncher.launch(permissions.map { it }.toTypedArray())
+    }
+
     private fun setupWebView() {
         webView.visibility = View.GONE
         webView.apply {
@@ -111,6 +132,9 @@ class MainActivity : AppCompatActivity() {
             }
             // Espone window.AndroidBridge al JavaScript della pagina
             addJavascriptInterface(AndroidBridge(), "AndroidBridge")
+            // Espone window.HealthConnectBridge per la sync dati peso da Health Connect
+            addJavascriptInterface(HealthConnectBridge(this@MainActivity, this), "HealthConnectBridge")
+
             webViewClient = object : WebViewClient() {
 
                 /**
