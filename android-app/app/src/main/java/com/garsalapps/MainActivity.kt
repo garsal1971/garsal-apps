@@ -102,28 +102,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Apre la schermata di consenso permessi di Health Connect tramite startActivity.
-     * Non usiamo ActivityResultLauncher perché ha vincoli di lifecycle che possono
-     * causare il mancato avvio del dialog. Il risultato viene ignorato: il bridge
-     * ricontrolla i permessi al prossimo requestWeightSync.
+     * Apre la schermata permessi Health Connect con 3 approcci in cascata:
+     *
+     * 1. SDK HC standard (alpha07) senza package hardcoded → funziona su HC Play Store
+     * 2. android.health.connect.action.MANAGE_HEALTH_PERMISSIONS → Android 14+ HC integrato
+     * 3. Avvio diretto dell'app HC (fallback ultimo)
      */
     fun requestHealthConnectPermissions() {
+        val readWeight = HealthPermission.getReadPermission(WeightRecord::class)
+
+        // Approccio 1: SDK HC — rimuoviamo setPackage() per compatibilità Android 14+
         try {
             val intent = PermissionController
                 .createRequestPermissionResultContract()
-                .createIntent(
-                    this,
-                    setOf(HealthPermission.getReadPermission(WeightRecord::class))
-                )
+                .createIntent(this, setOf(readWeight))
+                .apply { setPackage(null) }   // non forzare com.google.android.apps.healthdata
             startActivity(intent)
-        } catch (e: Exception) {
-            // Fallback: apri direttamente l'app Health Connect
-            try {
-                val fallback = packageManager
-                    .getLaunchIntentForPackage("com.google.android.apps.healthdata")
-                if (fallback != null) startActivity(fallback)
-            } catch (_: Exception) { }
-        }
+            return
+        } catch (_: Exception) { }
+
+        // Approccio 2: Android 14+ — apre direttamente la pagina permessi della nostra app
+        try {
+            startActivity(
+                android.content.Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS")
+                    .putExtra(android.content.Intent.EXTRA_PACKAGE_NAME, packageName)
+            )
+            return
+        } catch (_: Exception) { }
+
+        // Approccio 3: apri l'app HC (l'utente naviga manualmente ai permessi)
+        try {
+            val hcIntent = packageManager.getLaunchIntentForPackage("com.google.android.apps.healthdata")
+                ?: packageManager.getLaunchIntentForPackage("com.android.healthconnect.controller")
+            if (hcIntent != null) startActivity(hcIntent)
+        } catch (_: Exception) { }
     }
 
     private fun setupWebView() {
