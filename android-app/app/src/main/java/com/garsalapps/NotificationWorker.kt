@@ -17,7 +17,7 @@ class NotificationWorker(
 
     override suspend fun doWork(): Result {
         val type    = inputData.getString("type")    ?: return Result.failure()
-        val title   = inputData.getString("title")   ?: "AppSphere"
+        val title   = inputData.getString("title")   ?: "GarsalApps"
         val message = inputData.getString("message") ?: ""
 
         sendNotification(type, title, message)
