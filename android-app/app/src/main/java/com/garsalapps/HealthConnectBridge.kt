@@ -11,7 +11,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -20,7 +19,6 @@ class HealthConnectBridge(
     private val webView: WebView
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val readWeightPermission = HealthPermission.getReadPermission(WeightRecord::class)
 
     /** Controlla solo se l'SDK è installato sul dispositivo (sincrono, no runBlocking). */
     @JavascriptInterface
@@ -35,11 +33,10 @@ class HealthConnectBridge(
     /**
      * Punto di ingresso principale chiamato dal JS.
      *
-     * Flusso:
-     *  1. Verifica che HC sia installato
-     *  2. Verifica i permessi
-     *  3a. Se permessi mancanti → apre la schermata HC e ritorna {"ok":false,"error":"PERMISSION_REQUESTED"}
-     *  3b. Se permessi ok → legge i record e ritorna {"ok":true,"points":[...]}
+     * Strategia permessi: tenta subito la lettura dei dati. Se HC lancia
+     * SecurityException significa che i permessi non sono concessi → apre HC.
+     * Evita getGrantedPermissions() che su alcuni dispositivi/versioni SDK
+     * restituisce set vuoto anche quando i permessi sono stati concessi.
      */
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
@@ -58,18 +55,8 @@ class HealthConnectBridge(
 
                 val client = HealthConnectClient.getOrCreate(activity)
 
-                // 2. Permessi concessi?
-                val granted = client.permissionController.getGrantedPermissions()
-                if (readWeightPermission !in granted) {
-                    // Apre la schermata permessi HC sul thread UI
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        activity.requestHealthConnectPermissions()
-                    }
-                    return@launch callback(callbackId,
-                        """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}""")
-                }
-
-                // 3. Legge i dati peso (ultimi 90 giorni)
+                // 2. Leggi direttamente i dati (ultimi 90 giorni).
+                //    Se i permessi mancano HC lancia SecurityException → gestiamo sotto.
                 val end   = Instant.now()
                 val start = end.minus(90, ChronoUnit.DAYS)
                 val response = client.readRecords(
@@ -83,6 +70,13 @@ class HealthConnectBridge(
                     """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
                 }
                 """{"ok":true,"points":[$points]}"""
+
+            } catch (e: SecurityException) {
+                // Permessi non concessi → apre schermata HC sul thread UI
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    activity.requestHealthConnectPermissions()
+                }
+                """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
 
             } catch (e: Exception) {
                 val msg = (e.message ?: "Errore sconosciuto").take(200).replace("\"", "'")
