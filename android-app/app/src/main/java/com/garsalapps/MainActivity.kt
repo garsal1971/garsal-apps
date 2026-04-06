@@ -10,7 +10,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -37,12 +36,6 @@ class MainActivity : AppCompatActivity() {
     private val OAUTH_CALLBACK_SCHEME = "garsalapps"
     private val OAUTH_CALLBACK_HOST   = "oauth"
     private val PREFS_OAUTH           = "oauth_pending"
-
-    // ActivityResultLauncher per i permessi Health Connect
-    // Usa il contratto specifico di HC (non RequestMultiplePermissions standard)
-    private val healthConnectPermissionsLauncher = registerForActivityResult(
-        PermissionController.createRequestPermissionResultContract()
-    ) { /* risultato ignorato: il bridge rileverà i permessi al prossimo requestWeightSync */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,14 +102,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Apre la schermata di consenso permessi di Health Connect.
-     * Chiamato da HealthConnectBridge.requestPermissions() via runOnUiThread.
+     * Apre la schermata di consenso permessi di Health Connect tramite startActivity.
+     * Non usiamo ActivityResultLauncher perché ha vincoli di lifecycle che possono
+     * causare il mancato avvio del dialog. Il risultato viene ignorato: il bridge
+     * ricontrolla i permessi al prossimo requestWeightSync.
      */
     fun requestHealthConnectPermissions() {
-        val permissions = setOf(
-            HealthPermission.getReadPermission(WeightRecord::class)
-        )
-        healthConnectPermissionsLauncher.launch(permissions)
+        try {
+            val intent = PermissionController
+                .createRequestPermissionResultContract()
+                .createIntent(
+                    this,
+                    setOf(HealthPermission.getReadPermission(WeightRecord::class))
+                )
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback: apri direttamente l'app Health Connect
+            try {
+                val fallback = packageManager
+                    .getLaunchIntentForPackage("com.google.android.apps.healthdata")
+                if (fallback != null) startActivity(fallback)
+            } catch (_: Exception) { }
+        }
     }
 
     private fun setupWebView() {
