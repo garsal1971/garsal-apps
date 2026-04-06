@@ -62,7 +62,7 @@ class HealthConnectBridge(
                 val granted = client.permissionController.getGrantedPermissions()
                 if (readWeightPermission !in granted) {
                     // Apre la schermata permessi HC sul thread UI
-                    withContext(Dispatchers.Main) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
                         activity.requestHealthConnectPermissions()
                     }
                     return@launch callback(callbackId,
