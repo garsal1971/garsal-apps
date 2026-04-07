@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -20,7 +21,6 @@ class HealthConnectBridge(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /** Controlla solo se l'SDK è installato sul dispositivo (sincrono, no runBlocking). */
     @JavascriptInterface
     fun isSdkAvailable(): Boolean {
         return try {
@@ -30,58 +30,49 @@ class HealthConnectBridge(
         }
     }
 
-    /**
-     * Punto di ingresso principale chiamato dal JS.
-     *
-     * Strategia permessi: tenta subito la lettura dei dati. Se HC lancia
-     * SecurityException significa che i permessi non sono concessi → apre HC.
-     * Evita getGrantedPermissions() che su alcuni dispositivi/versioni SDK
-     * restituisce set vuoto anche quando i permessi sono stati concessi.
-     */
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
         scope.launch {
-            val json = try {
-                // 1. SDK installato?
-                val sdkStatus = HealthConnectClient.getSdkStatus(activity)
-                if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
-                    val msg = when (sdkStatus) {
-                        HealthConnectClient.SDK_UNAVAILABLE -> "Health Connect non installato"
-                        HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "Aggiorna Health Connect dal Play Store"
-                        else -> "Health Connect non disponibile (status $sdkStatus)"
+            // Timeout globale 12 secondi — se HC non risponde il callback scatta comunque
+            val json = withTimeoutOrNull(12_000L) {
+                try {
+                    val sdkStatus = HealthConnectClient.getSdkStatus(activity)
+                    if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+                        val msg = when (sdkStatus) {
+                            HealthConnectClient.SDK_UNAVAILABLE -> "Health Connect non installato"
+                            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> "Aggiorna Health Connect dal Play Store"
+                            else -> "HC non disponibile (status $sdkStatus)"
+                        }
+                        return@withTimeoutOrNull """{"ok":false,"error":"$msg"}"""
                     }
-                    return@launch callback(callbackId, """{"ok":false,"error":"$msg"}""")
-                }
 
-                val client = HealthConnectClient.getOrCreate(activity)
+                    val client = HealthConnectClient.getOrCreate(activity)
 
-                // 2. Leggi direttamente i dati (ultimi 90 giorni).
-                //    Se i permessi mancano HC lancia SecurityException → gestiamo sotto.
-                val end   = Instant.now()
-                val start = end.minus(90, ChronoUnit.DAYS)
-                val response = client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = WeightRecord::class,
-                        timeRangeFilter = TimeRangeFilter.between(start, end)
+                    val end   = Instant.now()
+                    val start = end.minus(90, ChronoUnit.DAYS)
+                    val response = client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = WeightRecord::class,
+                            timeRangeFilter = TimeRangeFilter.between(start, end)
+                        )
                     )
-                )
 
-                val points = response.records.joinToString(",") { r ->
-                    """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
+                    val points = response.records.joinToString(",") { r ->
+                        """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
+                    }
+                    """{"ok":true,"points":[$points]}"""
+
+                } catch (e: SecurityException) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        activity.requestHealthConnectPermissions()
+                    }
+                    """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
+
+                } catch (e: Exception) {
+                    val msg = (e.message ?: "Errore sconosciuto").take(200).replace("\"", "'")
+                    """{"ok":false,"error":"$msg"}"""
                 }
-                """{"ok":true,"points":[$points]}"""
-
-            } catch (e: SecurityException) {
-                // Permessi non concessi → apre schermata HC sul thread UI
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    activity.requestHealthConnectPermissions()
-                }
-                """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
-
-            } catch (e: Exception) {
-                val msg = (e.message ?: "Errore sconosciuto").take(200).replace("\"", "'")
-                """{"ok":false,"error":"$msg"}"""
-            }
+            } ?: """{"ok":false,"error":"Timeout: Health Connect non risponde (12s)"}"""
 
             callback(callbackId, json)
         }
