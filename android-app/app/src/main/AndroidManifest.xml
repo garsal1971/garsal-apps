@@ -51,6 +51,22 @@
             </intent-filter>
         </activity>
 
+        <!--
+            activity-alias richiesto da Android 14+ per apparire in Health Connect.
+            HC usa VIEW_PERMISSION_USAGE + HEALTH_PERMISSIONS per trovare le app compatibili.
+            Senza questo, GarsalApps non compare mai nella lista "Le tue app per la salute".
+        -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
         <!-- URL privacy policy richiesto da Health Connect -->
         <meta-data
             android:name="health_privacy_policy_url"
