@@ -14,6 +14,12 @@
     Content-Type = "application/json"
     Access-Control-Allow-Origin = "*"
 
+[[headers]]
+  for = "/releases/*.apk"
+  [headers.values]
+    Content-Type = "application/vnd.android.package-archive"
+    Content-Disposition = "attachment"
+
 # ── Branch deploy per dev/** ──────────────────────────────────────────────────
 # I branch dev/** ottengono un URL preview: dev--<branch>--<sitename>.netlify.app
 # NON vengono auto-mergiati su master (workflow separato deploy-dev.yml).
