@@ -63,22 +63,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Copia APK nella cartella releases/
-          mkdir -p releases
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk releases/GarsalApps-latest.apk
+          # Leggi versione e salva APK in /tmp PRIMA di switchare branch
+          # (git checkout master fallisce se releases/ esiste come file untracked)
+          VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk /tmp/GarsalApps-latest.apk
 
-          # Aggiorna anche su master direttamente
+          # Switch su master aggiornato
           git fetch origin master
           git checkout master
           git reset --hard origin/master
 
           mkdir -p releases
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk releases/GarsalApps-latest.apk
+          cp /tmp/GarsalApps-latest.apk releases/GarsalApps-latest.apk
 
           git add releases/GarsalApps-latest.apk
           git diff --staged --quiet && echo "APK non cambiato, skip commit" && exit 0
 
-          # Legge la versionName dall'app/build.gradle
-          VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
           git commit -m "chore: aggiorna APK GarsalApps v${VERSION} [skip actions]"
           git push origin master
