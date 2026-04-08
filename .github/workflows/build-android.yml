@@ -1,5 +1,5 @@
 name: Build Android APK
-# v2 — fix race condition con deploy.yml (git reset --hard origin/master)
+# v3 — sdkmanager path dinamico, skip install se già presente
 
 on:
   push:
@@ -31,8 +31,18 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          # Trova sdkmanager dinamicamente (il path può variare tra versioni del runner)
+          SDKMANAGER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools" \
+            -name "sdkmanager" -type f 2>/dev/null | sort | tail -1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "WARNING: sdkmanager non trovato, continuo senza accettazione licenze"
+          else
+            echo "Usando sdkmanager: $SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            # platforms;android-34 e build-tools;34.0.0 sono pre-installati su ubuntu-latest
+            # L'installazione esplicita causa errore se già presenti; usiamo || true
+            "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" 2>&1 || true
+          fi
 
       - name: Make gradlew executable
         run: chmod +x android-app/gradlew
