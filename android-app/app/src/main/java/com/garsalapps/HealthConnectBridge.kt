@@ -53,7 +53,7 @@ class HealthConnectBridge(
                     val response = client.readRecords(
                         ReadRecordsRequest(
                             recordType = WeightRecord::class,
-                            timeRangeFilter = TimeRangeFilter.between(start, end)
+                            timeRangeFilter = TimeRangeFilter(startTime = start, endTime = end)
                         )
                     )
 
