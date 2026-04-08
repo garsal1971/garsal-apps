@@ -21,6 +21,8 @@ class HealthConnectBridge(
     private val webView: WebView
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    // Guard anti-loop: apre la schermata permessi solo una volta per sessione
+    private var permissionsRequested = false
 
     @JavascriptInterface
     fun isSdkAvailable(): Boolean {
@@ -69,10 +71,18 @@ class HealthConnectBridge(
 
                 } catch (e: SecurityException) {
                     Log.w("HCBridge", "SecurityException — permessi mancanti: ${e.message}")
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        activity.requestHealthConnectPermissions()
+                    if (!permissionsRequested) {
+                        permissionsRequested = true
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            activity.requestHealthConnectPermissions()
+                        }
+                        """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
+                    } else {
+                        // Seconda SecurityException dopo aver già aperto la schermata:
+                        // i permessi non sono stati concessi o non ancora propagati
+                        permissionsRequested = false
+                        """{"ok":false,"error":"[SecurityException] Permessi HC non attivi. Vai in Impostazioni → Connessione Salute → GarsalApps e abilita la lettura del Peso."}"""
                     }
-                    """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
 
                 } catch (e: Exception) {
                     // Include il tipo di eccezione nel messaggio per diagnostica
