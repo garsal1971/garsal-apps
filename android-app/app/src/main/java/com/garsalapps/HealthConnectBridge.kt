@@ -33,8 +33,8 @@ class HealthConnectBridge(
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
         scope.launch {
-            // Timeout globale 12 secondi — se HC non risponde il callback scatta comunque
-            val json = withTimeoutOrNull(12_000L) {
+            // Timeout 30s — HC su cold start (servizio non attivo) può impiegare > 12s
+            val json = withTimeoutOrNull(30_000L) {
                 try {
                     val sdkStatus = HealthConnectClient.getSdkStatus(activity)
                     if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
@@ -72,7 +72,7 @@ class HealthConnectBridge(
                     val msg = (e.message ?: "Errore sconosciuto").take(200).replace("\"", "'")
                     """{"ok":false,"error":"$msg"}"""
                 }
-            } ?: """{"ok":false,"error":"Timeout: Health Connect non risponde (12s)"}"""
+            } ?: """{"ok":false,"error":"Timeout: Health Connect non risponde (30s). Assicurati che Health Connect sia installato e i permessi concessi."}"""
 
             callback(callbackId, json)
         }
