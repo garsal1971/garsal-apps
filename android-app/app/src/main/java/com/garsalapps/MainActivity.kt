@@ -11,7 +11,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -37,14 +36,6 @@ class MainActivity : AppCompatActivity() {
     private val OAUTH_CALLBACK_SCHEME = "garsalapps"
     private val OAUTH_CALLBACK_HOST   = "oauth"
     private val PREFS_OAUTH           = "oauth_pending"
-
-    // Launcher per la richiesta permessi Health Connect via startActivityForResult
-    // (requestPermissionsActivityContract non disponibile in connect-client:1.1.0-rc01)
-    private val hcPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        Log.d("MainActivity", "HC permissions activity returned: code=${result.resultCode}")
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,6 +105,10 @@ class MainActivity : AppCompatActivity() {
      * Richiede i permessi Health Connect tramite ActivityResultLauncher
      * (equivalente di startActivityForResult — registra correttamente il risultato).
      */
+    /**
+     * Apre la schermata permessi Health Connect tramite startActivity.
+     * Ripristinato da ActivityResultLauncher che causava regressione (schermata non si apriva).
+     */
     fun requestHealthConnectPermissions() {
         val permission = HealthPermission.getReadPermission(WeightRecord::class)
         val permissions = arrayListOf(permission)
@@ -121,25 +116,36 @@ class MainActivity : AppCompatActivity() {
         val extra  = "android.health.connect.extra.PERMISSIONS"
         Log.d("MainActivity", "Richiesta permessi HC: $permission")
 
-        // HC integrato Android 14+
+        // 1. HC integrato Android 14+
         try {
-            hcPermissionLauncher.launch(
-                Intent(action)
-                    .setPackage("com.android.healthconnect.controller")
-                    .putStringArrayListExtra(extra, permissions)
-            )
+            startActivity(Intent(action)
+                .setPackage("com.android.healthconnect.controller")
+                .putStringArrayListExtra(extra, permissions))
             return
         } catch (_: Exception) { }
 
-        // HC da Play Store (Android 9–13)
+        // 2. HC da Play Store (Android 9–13)
         try {
-            hcPermissionLauncher.launch(
-                Intent(action)
-                    .setPackage("com.google.android.apps.healthdata")
-                    .putStringArrayListExtra(extra, permissions)
-            )
+            startActivity(Intent(action)
+                .setPackage("com.google.android.apps.healthdata")
+                .putStringArrayListExtra(extra, permissions))
+            return
+        } catch (_: Exception) { }
+
+        // 3. MANAGE_HEALTH_PERMISSIONS — apre permessi app in HC
+        try {
+            startActivity(Intent("android.health.connect.action.MANAGE_HEALTH_PERMISSIONS")
+                .putExtra(Intent.EXTRA_PACKAGE_NAME, packageName))
+            return
+        } catch (_: Exception) { }
+
+        // 4. Apri HC direttamente (fallback)
+        try {
+            val hcIntent = packageManager.getLaunchIntentForPackage("com.android.healthconnect.controller")
+                ?: packageManager.getLaunchIntentForPackage("com.google.android.apps.healthdata")
+            if (hcIntent != null) startActivity(hcIntent)
         } catch (e: Exception) {
-            Log.e("MainActivity", "Impossibile aprire schermata permessi HC: ${e.message}")
+            Log.e("MainActivity", "Impossibile aprire HC: ${e.message}")
         }
     }
 
