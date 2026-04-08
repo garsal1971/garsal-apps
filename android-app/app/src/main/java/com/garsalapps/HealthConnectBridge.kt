@@ -1,5 +1,6 @@
 package com.garsalapps
 
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.health.connect.client.HealthConnectClient
@@ -37,6 +38,7 @@ class HealthConnectBridge(
             val json = withTimeoutOrNull(30_000L) {
                 try {
                     val sdkStatus = HealthConnectClient.getSdkStatus(activity)
+                    Log.d("HCBridge", "SDK status: $sdkStatus")
                     if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
                         val msg = when (sdkStatus) {
                             HealthConnectClient.SDK_UNAVAILABLE -> "Health Connect non installato"
@@ -46,10 +48,12 @@ class HealthConnectBridge(
                         return@withTimeoutOrNull """{"ok":false,"error":"$msg"}"""
                     }
 
+                    Log.d("HCBridge", "Creazione client HC...")
                     val client = HealthConnectClient.getOrCreate(activity)
 
                     val end   = Instant.now()
                     val start = end.minus(90, ChronoUnit.DAYS)
+                    Log.d("HCBridge", "Lettura record peso (90 giorni)...")
                     val response = client.readRecords(
                         ReadRecordsRequest(
                             recordType = WeightRecord::class,
@@ -57,22 +61,29 @@ class HealthConnectBridge(
                         )
                     )
 
+                    Log.d("HCBridge", "Record ricevuti: ${response.records.size}")
                     val points = response.records.joinToString(",") { r ->
                         """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
                     }
                     """{"ok":true,"points":[$points]}"""
 
                 } catch (e: SecurityException) {
+                    Log.w("HCBridge", "SecurityException — permessi mancanti: ${e.message}")
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         activity.requestHealthConnectPermissions()
                     }
                     """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
 
                 } catch (e: Exception) {
-                    val msg = (e.message ?: "Errore sconosciuto").take(200).replace("\"", "'")
+                    // Include il tipo di eccezione nel messaggio per diagnostica
+                    Log.e("HCBridge", "Errore HC: ${e.javaClass.name}: ${e.message}", e)
+                    val msg = "[${e.javaClass.simpleName}] ${e.message ?: "Errore sconosciuto"}".take(200).replace("\"", "'")
                     """{"ok":false,"error":"$msg"}"""
                 }
-            } ?: """{"ok":false,"error":"Timeout: Health Connect non risponde (30s). Assicurati che Health Connect sia installato e i permessi concessi."}"""
+            } ?: run {
+                Log.e("HCBridge", "Timeout 30s scaduto senza risposta da HC")
+                """{"ok":false,"error":"Timeout 30s: HC non risponde. Prova ad aprire Health Connect una volta e riprova."}"""
+            }
 
             callback(callbackId, json)
         }
