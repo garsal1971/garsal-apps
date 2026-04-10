@@ -413,6 +413,72 @@ LIMIT  10;</pre>
   </div>
 
 
+  <!-- 2.4 Ripristina attività archiviata — Habit Tracker -->
+  <div class="card info">
+    <div class="card-header">
+      <div class="badge sql">SQL</div>
+      <div class="card-body">
+        <div class="card-title">Ripristina attività archiviata — Habit Stack Tracker</div>
+        <div class="card-desc">
+          Ricrea un habit attivo a partire da un record in <code>hb_archived_stacks</code>.
+          Utile quando un ciclo è stato archiviato per errore o si vuole riprendere
+          un'abitudine interrotta. I campi di configurazione non salvati nell'archivio
+          (<code>frequency</code>, <code>goal</code>, ecc.) vanno impostati manualmente.
+        </div>
+        <div class="tags">
+          <span class="tag sql-t">SQL</span>
+          <span class="tag prod">PROD</span>
+          <span class="tag supabase">hb_habits · hb_archived_stacks</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="cb-find-archive">
+      <button class="copy-btn" onclick="copyCode('cb-find-archive', this)">Copia</button>
+      <pre>-- 1. Trova l'ID del ciclo archiviato da ripristinare
+SELECT id, habit_name, started_at, ended_at, reason, total_completions
+FROM   hb_archived_stacks
+ORDER  BY ended_at DESC;</pre>
+    </div>
+    <div class="code-block" id="cb-restore-habit">
+      <button class="copy-btn" onclick="copyCode('cb-restore-habit', this)">Copia</button>
+      <pre>-- 2. Ripristina il ciclo archiviato come nuovo habit attivo
+--    Sostituisci '<ID_ARCHIVIO>' con il valore trovato sopra.
+--    Adatta frequency, goal, max_failures, points_* al caso reale.
+
+INSERT INTO hb_habits (
+    name,
+    category_id,
+    started_at,
+    status,
+    current_failures,
+    frequency,
+    goal,
+    max_failures,
+    points_reward,
+    points_penalty
+)
+SELECT
+    habit_name,
+    category_id,
+    CURRENT_DATE,   -- oppure una data specifica: '2026-04-10'
+    'active',
+    0,
+    'daily',        -- adattare: 'weekly' | 'daily_multiple'
+    30,             -- numero di giorni del ciclo
+    3,              -- jolly disponibili
+    10,             -- punti premio al completamento
+    5               -- punti penalità per game over
+FROM   hb_archived_stacks
+WHERE  id = '&lt;ID_ARCHIVIO&gt;';
+
+-- 3. Verifica: il nuovo habit deve comparire con status = 'active'
+SELECT id, name, started_at, status, current_failures
+FROM   hb_habits
+ORDER  BY created_at DESC
+LIMIT  5;</pre>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════════
        SEZIONE 3 — TEST E VERIFICA
   ═══════════════════════════════════════════════════════════ -->
