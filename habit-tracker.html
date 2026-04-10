@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.72</title>
+    <title>Habit Stack Tracker v9.3.71</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1678,8 +1678,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.72';
-        const BUILD_TIME  = '2026-04-10T13:00:00Z';
+        const APP_VERSION = 'v9.3.71';
+        const BUILD_TIME  = '2026-04-10T12:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -4686,58 +4686,6 @@
             }
         }
 
-        async function ripristinaArchivedStack() {
-            const sel       = document.getElementById('ripristinaArchiveSelect');
-            const archiveId = sel ? sel.value : '';
-            if (!archiveId) { showToast('Seleziona un ciclo archiviato'); return; }
-
-            const startDate = (document.getElementById('ripristinaStartDate')?.value) || localDateStr();
-            const archive   = archivedStacks.find(s => s.id === archiveId);
-            if (!archive) { showToast('Ciclo non trovato'); return; }
-
-            if (!confirm(`Ripristinare "${archive.habit_name}" come nuova attività attiva dal ${startDate}?`)) return;
-
-            try {
-                // Crea un nuovo habit con i dati disponibili dall'archivio.
-                // I campi di configurazione non archiviati (frequency, goal, ecc.)
-                // vengono impostati a valori predefiniti — modificabili in seguito.
-                const { data: newHabit, error } = await supabaseClient
-                    .from('hb_habits')
-                    .insert([{
-                        name:          archive.habit_name,
-                        category_id:   archive.category_id || null,
-                        started_at:    startDate,
-                        status:        'active',
-                        current_failures: 0,
-                        frequency:     'daily',
-                        goal:          30,
-                        max_failures:  3,
-                        points_reward: 10,
-                        points_penalty: 5
-                    }])
-                    .select()
-                    .single();
-
-                if (error) throw error;
-
-                console.log('✅ Attività ripristinata dall\'archivio:', newHabit?.id);
-                showToast(`✅ "${archive.habit_name}" ripristinata!`);
-
-                await loadHabits();
-                await loadCompletions();
-                habits.forEach(h => { h._streak = computeHabitStreak(h); });
-                recalculateTotalScore();
-                renderDashboard();
-                renderHabits();
-                await loadArchivedStacks();
-                renderArchive();
-
-            } catch (err) {
-                console.error('❌ Errore ripristinaArchivedStack:', err);
-                showToast('Errore nel ripristino: ' + (err.message || err));
-            }
-        }
-
         function updateSingleCard(habitId, dateStr, newState) {
             console.log(`🔄 updateSingleCard: habit=${habitId}, date=${dateStr}, newState=${newState}`);
             
@@ -6598,28 +6546,7 @@
             if (!stacksHtml && !inactiveHtml) {
                 container.innerHTML = '<p style="opacity: 0.7; text-align: center; padding: 2rem;">Nessun archivio disponibile.</p>';
             } else {
-                // Pannello ripristino — select + data + bottone
-                const ripristinaPanel = archivedStacks.length === 0 ? '' : `
-                    <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:14px 16px; margin-bottom:1.5rem; display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;">
-                        <div style="flex:1; min-width:180px;">
-                            <label style="display:block; font-size:0.75em; color:#888; font-weight:bold; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:5px;">🔁 Ripristina attività archiviata</label>
-                            <select id="ripristinaArchiveSelect" style="width:100%; padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:0.95em; background:white; color:#333;">
-                                <option value="">— Seleziona un ciclo archiviato —</option>
-                                ${archivedStacks.map(s => `<option value="${s.id}">${s.habit_name} (${s.started_at || '?'} → ${s.ended_at || '?'})</option>`).join('')}
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display:block; font-size:0.75em; color:#888; font-weight:bold; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:5px;">Data inizio</label>
-                            <input type="date" id="ripristinaStartDate" value="${localDateStr()}"
-                                style="padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:0.95em; color:#333;">
-                        </div>
-                        <button onclick="ripristinaArchivedStack()"
-                            style="padding:9px 18px; background:#00B894; color:white; border:none; border-radius:6px; font-weight:bold; font-size:0.92em; cursor:pointer; white-space:nowrap;">
-                            🔁 Ripristina
-                        </button>
-                    </div>
-                `;
-                container.innerHTML = ripristinaPanel + stacksHtml + inactiveHtml;
+                container.innerHTML = stacksHtml + inactiveHtml;
             }
         }
 
