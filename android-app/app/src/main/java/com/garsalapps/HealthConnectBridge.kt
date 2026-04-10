@@ -1,5 +1,6 @@
 package com.garsalapps
 
+import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -8,6 +9,7 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,7 +38,7 @@ class HealthConnectBridge(
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
         scope.launch {
-            // Timeout 30s — HC su cold start (servizio non attivo) può impiegare > 12s
+            // Timeout 30s — HC su cold start può impiegare > 12s
             val json = withTimeoutOrNull(30_000L) {
                 try {
                     val sdkStatus = HealthConnectClient.getSdkStatus(activity)
@@ -69,8 +71,12 @@ class HealthConnectBridge(
                     }
                     """{"ok":true,"points":[$points]}"""
 
+                } catch (e: CancellationException) {
+                    // Re-throw: permette a withTimeoutOrNull di funzionare correttamente
+                    throw e
+
                 } catch (e: SecurityException) {
-                    Log.w("HCBridge", "SecurityException — permessi mancanti: ${e.message}")
+                    Log.w("HCBridge", "SecurityException: ${e.message}")
                     if (!permissionsRequested) {
                         permissionsRequested = true
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -78,31 +84,36 @@ class HealthConnectBridge(
                         }
                         """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
                     } else {
-                        // Seconda SecurityException dopo aver già aperto la schermata:
-                        // i permessi non sono stati concessi o non ancora propagati
                         permissionsRequested = false
-                        """{"ok":false,"error":"[SecurityException] Permessi HC non attivi. Vai in Impostazioni → Connessione Salute → GarsalApps e abilita la lettura del Peso."}"""
+                        """{"ok":false,"error":"Permessi HC non attivi. Vai in Impostazioni → Connessione Salute → GarsalApps e abilita la lettura del Peso."}"""
                     }
 
                 } catch (e: Exception) {
-                    // Include il tipo di eccezione nel messaggio per diagnostica
-                    Log.e("HCBridge", "Errore HC: ${e.javaClass.name}: ${e.message}", e)
-                    val msg = "[${e.javaClass.simpleName}] ${e.message ?: "Errore sconosciuto"}".take(200).replace("\"", "'")
-                    """{"ok":false,"error":"$msg"}"""
+                    Log.e("HCBridge", "Errore: ${e.javaClass.name}: ${e.message}", e)
+                    val cls = e.javaClass.simpleName
+                    val msg = (e.message ?: "Errore sconosciuto").take(150)
+                        .replace("\\", "/").replace("\"", "'").replace("\n", " ")
+                    """{"ok":false,"error":"[$cls] $msg"}"""
                 }
             } ?: run {
-                Log.e("HCBridge", "Timeout 30s scaduto senza risposta da HC")
-                """{"ok":false,"error":"Timeout 30s: HC non risponde. Prova ad aprire Health Connect una volta e riprova."}"""
+                Log.e("HCBridge", "Timeout 30s scaduto")
+                """{"ok":false,"error":"Timeout 30s: HC non risponde. Apri Health Connect una volta e riprova."}"""
             }
 
+            Log.d("HCBridge", "Invio callback: ${json.take(80)}")
             callback(callbackId, json)
         }
     }
 
+    /**
+     * Callback via Base64 per evitare problemi di escaping JS con caratteri speciali nel JSON.
+     * atob() in JavaScript decodifica la stringa Base64 → JSON.parse() crea l'oggetto.
+     */
     private fun callback(callbackId: String, json: String) {
+        val b64 = Base64.encodeToString(json.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         webView.post {
             webView.evaluateJavascript(
-                "if(window.__hcCallback_$callbackId)window.__hcCallback_$callbackId($json);",
+                "try{var _d=JSON.parse(atob('$b64'));if(window.__hcCallback_$callbackId)window.__hcCallback_$callbackId(_d);}catch(_e){console.error('HC callback error',_e);}",
                 null
             )
         }
