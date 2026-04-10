@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.90</title>
+    <title>Weight Quest v3.5.91</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1147,6 +1147,38 @@
         </div>
     </div>
 
+    <!-- DAY DETAIL MODAL — lista completa pesate del giorno -->
+    <div id="dayDetailModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.55); z-index:2200; align-items:center; justify-content:center;">
+        <div style="background:white; border-radius:16px; padding:24px; width:min(460px,92vw); max-height:82vh; overflow-y:auto; position:relative; box-shadow:0 8px 40px rgba(0,0,0,0.25);">
+            <button onclick="closeDayDetailModal()" style="position:absolute; top:12px; right:14px; background:#f0f0f0; border:none; border-radius:50%; width:30px; height:30px; cursor:pointer; font-size:1em; line-height:1; display:flex; align-items:center; justify-content:center;">✕</button>
+            <h3 id="dayDetailTitle" style="margin:0 0 16px 0; color:#333; font-size:1.1em; padding-right:36px;"></h3>
+            <div id="dayDetailList"></div>
+            <div style="margin-top:16px; text-align:right;">
+                <button id="dayDetailAddBtn" onclick="showAddManualInDay()" style="background:#00B894; color:white; border:none; padding:9px 16px; border-radius:8px; font-weight:bold; cursor:pointer; font-size:0.9em;">+ Aggiungi pesata</button>
+            </div>
+            <!-- Form inline aggiunta / modifica pesata manuale -->
+            <div id="dayDetailForm" style="display:none; margin-top:16px; background:#f9fafb; border-radius:10px; padding:16px; border:1px solid #e5e7eb;">
+                <div style="font-size:0.78em; font-weight:bold; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px;">Nuova pesata manuale</div>
+                <div style="display:flex; gap:10px; margin-bottom:12px;">
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:12px; color:#666; margin-bottom:4px;">Peso (kg)</label>
+                        <input type="number" id="dayDetailWeight" step="0.1" min="30" max="300" placeholder="es. 75.3"
+                            style="width:100%; padding:9px; border:2px solid #E5E7EB; border-radius:6px; font-size:1em; box-sizing:border-box;">
+                    </div>
+                    <div style="flex:1;">
+                        <label style="display:block; font-size:12px; color:#666; margin-bottom:4px;">Orario</label>
+                        <input type="time" id="dayDetailTime" value="08:00"
+                            style="width:100%; padding:9px; border:2px solid #E5E7EB; border-radius:6px; font-size:1em; box-sizing:border-box;">
+                    </div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button id="dayDetailSaveBtn" onclick="saveDayDetailEntry()" style="flex:1; background:#00B894; color:white; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:0.92em;">💾 Salva</button>
+                    <button onclick="hideDayDetailForm()" style="flex:1; background:#f0f0f0; color:#333; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:0.92em;">Annulla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- GOOGLE AUTH MODAL -->
     <div id="googleAuthModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:3000; align-items:center; justify-content:center;">
         <div style="background:white; border-radius:0; padding:28px 24px; max-width:340px; width:92%; box-shadow:0 8px 40px rgba(0,0,0,0.3); text-align:center;">
@@ -1170,8 +1202,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.90';
-        var BUILD_TIME  = '2026-04-10T09:00:00Z';
+        var APP_VERSION = 'v3.5.91';
+        var BUILD_TIME  = '2026-04-10T10:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1458,6 +1490,10 @@
         var insertWeightTargetDate = null;
         var insertWeightTargetTimestamp = null; // null = insert, number = edit (same timestamp)
 
+        // Stato modal dettaglio giornata
+        var dayDetailTargetDate = null;       // data corrente nella modal
+        var dayDetailEditTimestamp = null;    // null = nuova pesata, altrimenti timestamp da modificare
+
         function showInsertWeightModal(date, currentWeight, suggestWeight) {
             insertWeightTargetDate = date;
             insertWeightTargetTimestamp = Math.floor(new Date(date + 'T12:00:00').getTime());
@@ -1669,6 +1705,227 @@
                 log('ERROR deleteManualWeight: ' + err.message);
                 alert('Errore nell\'eliminazione: ' + err.message);
             }
+        }
+
+        // ── Day Detail Modal ────────────────────────────────────────────
+
+        function showDayDetail(date, dayData) {
+            dayDetailTargetDate = date;
+            dayDetailEditTimestamp = null;
+            hideDayDetailForm();
+            var parts = date.split('-');
+            document.getElementById('dayDetailTitle').textContent =
+                '📅 ' + parts[2] + '/' + parts[1] + '/' + parts[0];
+            renderDayDetailList(date, dayData || []);
+            document.getElementById('dayDetailModal').style.display = 'flex';
+        }
+
+        function closeDayDetailModal() {
+            document.getElementById('dayDetailModal').style.display = 'none';
+            dayDetailTargetDate = null;
+            dayDetailEditTimestamp = null;
+            hideDayDetailForm();
+        }
+
+        function hideDayDetailForm() {
+            var f = document.getElementById('dayDetailForm');
+            if (f) f.style.display = 'none';
+            dayDetailEditTimestamp = null;
+        }
+
+        function showAddManualInDay() {
+            dayDetailEditTimestamp = null;
+            document.getElementById('dayDetailWeight').value = '';
+            var now = new Date();
+            var hh = String(now.getHours()).padStart(2, '0');
+            var mm = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('dayDetailTime').value = hh + ':' + mm;
+            document.getElementById('dayDetailForm').style.display = 'block';
+            document.getElementById('dayDetailWeight').focus();
+        }
+
+        function editDayDetailEntry(record) {
+            dayDetailEditTimestamp = record.timestamp;
+            document.getElementById('dayDetailWeight').value = record.weight;
+            var d = new Date(record.timestamp);
+            var hh = String(d.getHours()).padStart(2, '0');
+            var mm = String(d.getMinutes()).padStart(2, '0');
+            document.getElementById('dayDetailTime').value = hh + ':' + mm;
+            document.getElementById('dayDetailForm').style.display = 'block';
+            document.getElementById('dayDetailWeight').focus();
+        }
+
+        async function deleteDayEntry(timestamp) {
+            if (!confirm('Eliminare questa pesata manuale?')) return;
+            try {
+                var url = supabase.url + '/rest/v1/ps_weight_tracking?timestamp=eq.' + timestamp;
+                var response = await fetch(url, {
+                    method: 'DELETE',
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' })
+                });
+                if (!response.ok) {
+                    var text = await response.text();
+                    throw new Error('HTTP ' + response.status + ': ' + text);
+                }
+                log('✓ Pesata manuale eliminata (ts=' + timestamp + ')');
+                closeDayDetailModal();
+                loadData();
+            } catch (err) {
+                log('ERROR deleteDayEntry: ' + err.message);
+                alert('Errore nell\'eliminazione: ' + err.message);
+            }
+        }
+
+        async function saveDayDetailEntry() {
+            var weightVal = parseFloat(document.getElementById('dayDetailWeight').value);
+            var timeVal   = document.getElementById('dayDetailTime').value; // "HH:MM"
+            if (!isFinite(weightVal) || weightVal < 30 || weightVal > 300) {
+                alert('Inserisci un peso valido (30–300 kg)');
+                return;
+            }
+            if (!timeVal || !/^\d{2}:\d{2}$/.test(timeVal)) {
+                alert('Inserisci un orario valido');
+                return;
+            }
+            var date = dayDetailTargetDate;
+            var newTimestamp = Math.floor(new Date(date + 'T' + timeVal + ':00').getTime());
+            var target = getInterpolatedTarget(date);
+            var record = {
+                date: date,
+                time: 'Manuale',
+                timestamp: newTimestamp,
+                weight: parseFloat(weightVal.toFixed(2)),
+                target_weight: target
+            };
+            var btn = document.getElementById('dayDetailSaveBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Salvataggio...';
+            try {
+                // Se stiamo modificando e l'orario è cambiato, elimina il vecchio record
+                if (dayDetailEditTimestamp !== null && dayDetailEditTimestamp !== newTimestamp) {
+                    var delUrl = supabase.url + '/rest/v1/ps_weight_tracking?timestamp=eq.' + dayDetailEditTimestamp;
+                    var delResp = await fetch(delUrl, {
+                        method: 'DELETE',
+                        headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' })
+                    });
+                    if (!delResp.ok) {
+                        var delText = await delResp.text();
+                        throw new Error('Elimina: HTTP ' + delResp.status + ': ' + delText);
+                    }
+                }
+                // Inserisci / aggiorna il record
+                var url = supabase.url + '/rest/v1/ps_weight_tracking?on_conflict=timestamp';
+                var response = await fetch(url, {
+                    method: 'POST',
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+                    body: JSON.stringify([record])
+                });
+                if (!response.ok) {
+                    var text = await response.text();
+                    throw new Error('HTTP ' + response.status + ': ' + text);
+                }
+                log('✓ Pesata manuale salvata: ' + weightVal + ' kg alle ' + timeVal + ' per ' + date);
+                closeDayDetailModal();
+                loadData();
+            } catch (err) {
+                log('ERROR saveDayDetailEntry: ' + err.message);
+                alert('Errore nel salvataggio: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = '💾 Salva';
+            }
+        }
+
+        function renderDayDetailList(date, dayData) {
+            var list = document.getElementById('dayDetailList');
+            list.innerHTML = '';
+
+            var autoRecs   = dayData.filter(function(r) { return r.time !== 'Manuale'; });
+            var manualRecs = dayData.filter(function(r) { return r.time === 'Manuale'; });
+
+            // ── Sezione Automatiche
+            var secAuto = document.createElement('div');
+            secAuto.style.marginBottom = '16px';
+            var titleAuto = document.createElement('div');
+            titleAuto.textContent = '📲 Pesate automatiche';
+            titleAuto.style.cssText = 'font-size:0.75em; font-weight:bold; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;';
+            secAuto.appendChild(titleAuto);
+
+            if (autoRecs.length === 0) {
+                var emptyA = document.createElement('div');
+                emptyA.textContent = 'Nessuna pesata automatica';
+                emptyA.style.cssText = 'color:#bbb; font-size:0.86em; padding:5px 0;';
+                secAuto.appendChild(emptyA);
+            } else {
+                autoRecs.forEach(function(r) {
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:7px 4px; border-bottom:1px solid #f3f4f6;';
+                    var tBadge = document.createElement('span');
+                    tBadge.textContent = r.time || '--';
+                    tBadge.style.cssText = 'font-size:0.85em; color:#666; min-width:42px;';
+                    var wBadge = document.createElement('span');
+                    wBadge.textContent = r.weight != null ? r.weight.toFixed(1) + ' kg' : '--';
+                    wBadge.style.cssText = 'font-weight:bold; color:#333;';
+                    row.appendChild(tBadge);
+                    row.appendChild(wBadge);
+                    secAuto.appendChild(row);
+                });
+            }
+            list.appendChild(secAuto);
+
+            // ── Sezione Manuali
+            var secMan = document.createElement('div');
+            var titleMan = document.createElement('div');
+            titleMan.textContent = '✏️ Pesate manuali';
+            titleMan.style.cssText = 'font-size:0.75em; font-weight:bold; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;';
+            secMan.appendChild(titleMan);
+
+            if (manualRecs.length === 0) {
+                var emptyM = document.createElement('div');
+                emptyM.textContent = 'Nessuna pesata manuale';
+                emptyM.style.cssText = 'color:#bbb; font-size:0.86em; padding:5px 0;';
+                secMan.appendChild(emptyM);
+            } else {
+                manualRecs.forEach(function(r) {
+                    var d = new Date(r.timestamp);
+                    var hh = String(d.getHours()).padStart(2, '0');
+                    var mm = String(d.getMinutes()).padStart(2, '0');
+                    var timeStr = hh + ':' + mm;
+
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex; align-items:center; gap:10px; padding:7px 4px; border-bottom:1px solid #f3f4f6;';
+
+                    var tBadge = document.createElement('span');
+                    tBadge.textContent = timeStr;
+                    tBadge.style.cssText = 'font-size:0.85em; color:#666; min-width:42px;';
+
+                    var wBadge = document.createElement('span');
+                    wBadge.textContent = r.weight != null ? r.weight.toFixed(1) + ' kg' : '--';
+                    wBadge.style.cssText = 'font-weight:bold; color:#333; flex:1;';
+
+                    var editBtn = document.createElement('button');
+                    editBtn.textContent = '✏️';
+                    editBtn.title = 'Modifica';
+                    editBtn.style.cssText = 'background:none; border:1px solid #d1d5db; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:0.88em;';
+                    editBtn.addEventListener('click', (function(rec) {
+                        return function(e) { e.stopPropagation(); editDayDetailEntry(rec); };
+                    })(r));
+
+                    var delBtn = document.createElement('button');
+                    delBtn.textContent = '🗑️';
+                    delBtn.title = 'Elimina';
+                    delBtn.style.cssText = 'background:none; border:1px solid #fca5a5; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:0.88em;';
+                    delBtn.addEventListener('click', (function(ts) {
+                        return function(e) { e.stopPropagation(); deleteDayEntry(ts); };
+                    })(r.timestamp));
+
+                    row.appendChild(tBadge);
+                    row.appendChild(wBadge);
+                    row.appendChild(editBtn);
+                    row.appendChild(delBtn);
+                    secMan.appendChild(row);
+                });
+            }
+            list.appendChild(secMan);
         }
 
         // ── Milestone Progress Bar ──────────────────────────────────────
@@ -4685,25 +4942,10 @@
                 }
                 tdDate.appendChild(btnInline);
 
-                tr.addEventListener('click', (function(rowInfo) {
-                    return function() {
-                        if (window.innerWidth <= 768) showWeightRowDetail(rowInfo);
-                    };
-                })({
-                    date: date,
-                    isInterpolated: isInterpolated,
-                    hasSync: hasSync,
-                    hasManual: hasManual,
-                    manualEntry: manualEntry,
-                    target: target,
-                    minWeight: minWeight,
-                    maxWeight: maxWeight,
-                    minTime: minTime,
-                    maxTime: maxTime,
-                    interpWeight: interpWeight,
-                    dailyScore: dailyScore,
-                    cumulativeScore: tableCumulMap[date]
-                }));
+                tr.style.cursor = 'pointer';
+                tr.addEventListener('click', (function(d, dd) {
+                    return function() { showDayDetail(d, dd); };
+                })(date, dayData));
 
                 tr.appendChild(tdDate);
 
