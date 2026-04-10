@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.84</title>
+    <title>Weight Quest v3.5.90</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1170,8 +1170,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.89';
-        var BUILD_TIME  = '2026-04-05T21:00:00Z';
+        var APP_VERSION = 'v3.5.90';
+        var BUILD_TIME  = '2026-04-10T09:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1610,12 +1610,19 @@
 
             log('Salvataggio peso manuale: ' + weight + ' kg per ' + date);
 
-            // Cattura minimo globale prima del salvataggio (per rilevare soglie intere)
-            preSmileWeight = (userData.weights && userData.weights.length > 0)
-                ? Math.min.apply(null, userData.weights
-                    .filter(function(r) { return r.weight != null && isFinite(r.weight); })
-                    .map(function(r) { return r.weight; }))
-                : weight + 1; // Se nessun dato, tratta come primo inserimento
+            // Cattura il minimo dei massimi giornalieri prima del salvataggio.
+            // La celebrazione scatta solo se anche il valore peggiore della giornata
+            // scende sotto la soglia (non basta una singola misura favorevole).
+            if (userData.weights && userData.weights.length > 0) {
+                var prevDailyMaxes = getDailyMaxWeights(
+                    userData.weights.filter(function(r) { return r.weight != null && isFinite(r.weight); })
+                );
+                preSmileWeight = prevDailyMaxes.length
+                    ? Math.min.apply(null, prevDailyMaxes.map(function(r) { return r.weight; }))
+                    : weight + 1;
+            } else {
+                preSmileWeight = weight + 1; // Se nessun dato, tratta come primo inserimento
+            }
 
             var btn = document.getElementById('insertWeightSaveBtn');
             btn.disabled = true;
@@ -1667,6 +1674,23 @@
         // ── Milestone Progress Bar ──────────────────────────────────────
         function getMilestonePtsKey(obj) {
             return 'wq_mpts_' + (obj ? obj.id : 'new');
+        }
+
+        // Per ogni giornata restituisce il peso massimo (peggiore) di quella giornata.
+        // Un traguardo si considera raggiunto solo quando anche la misurazione peggiore
+        // del giorno scende sotto la soglia (max_giornaliero < soglia).
+        function getDailyMaxWeights(weights) {
+            var byDate = {};
+            weights.forEach(function(r) {
+                if (r.date && r.weight != null && isFinite(r.weight)) {
+                    if (!(r.date in byDate) || r.weight > byDate[r.date]) {
+                        byDate[r.date] = r.weight;
+                    }
+                }
+            });
+            return Object.keys(byDate).map(function(d) {
+                return { date: d, weight: byDate[d] };
+            }).sort(function(a, b) { return a.date < b.date ? -1 : 1; });
         }
 
         // Restituisce array di soglie intere [topT, topT-1, ..., botT] per l'obiettivo corrente
@@ -1732,14 +1756,17 @@
                 }).slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; });
             }
 
-            var globalMin = objWeights.length
-                ? Math.min.apply(null, objWeights.map(function(r) { return r.weight; }))
+            // Massimo giornaliero: il traguardo è raggiunto solo quando
+            // anche la misura peggiore della giornata scende sotto la soglia.
+            var dailyMaxes = getDailyMaxWeights(objWeights);
+            var minDailyMax = dailyMaxes.length
+                ? Math.min.apply(null, dailyMaxes.map(function(r) { return r.weight; }))
                 : Infinity;
 
-            // Per ogni soglia, trova la prima data in cui weight < t
+            // Prima data in cui il massimo della giornata è < t
             function firstDateBelow(t) {
-                for (var i = 0; i < objWeights.length; i++) {
-                    if (objWeights[i].weight < t) return objWeights[i].date;
+                for (var i = 0; i < dailyMaxes.length; i++) {
+                    if (dailyMaxes[i].weight < t) return dailyMaxes[i].date;
                 }
                 return null;
             }
@@ -1748,7 +1775,7 @@
             bar.innerHTML = '';
             bar.style.display = 'flex';
             thresholds.forEach(function(t, i) {
-                var reached = isFinite(globalMin) && globalMin < t;
+                var reached = isFinite(minDailyMax) && minDailyMax < t;
                 var firstDate = reached ? firstDateBelow(t) : null;
 
                 var div = document.createElement('div');
@@ -1787,7 +1814,7 @@
             // Mostra distribuzione punti sotto il campo input
             if (distrib && totalPts > 0) {
                 var reached = thresholds.filter(function(t, i) {
-                    return isFinite(globalMin) && globalMin < t;
+                    return isFinite(minDailyMax) && minDailyMax < t;
                 }).length;
                 distrib.textContent = ptsArr.map(function(p, i) {
                     return '< ' + thresholds[i] + ' kg: +' + p + ' pt';
@@ -1807,10 +1834,14 @@
             var endW    = parseFloat(obj.end_weight);
             if (!isFinite(startW) || !isFinite(endW)) return;
 
-            // Minimo peso attuale su tutti i dati caricati
+            // Minimo del massimo giornaliero: la soglia scatta solo quando
+            // anche la misura peggiore della giornata è sotto la soglia.
             var validWeights = data.filter(function(r) { return r.weight != null && isFinite(r.weight); });
             if (!validWeights.length) return;
-            var newMin = Math.min.apply(null, validWeights.map(function(r) { return r.weight; }));
+            var newDailyMaxes = getDailyMaxWeights(validWeights);
+            var newMin = newDailyMaxes.length
+                ? Math.min.apply(null, newDailyMaxes.map(function(r) { return r.weight; }))
+                : Infinity;
 
             // Soglie intere rilevanti: stessa logica di getMilestoneThresholds
             var topThreshold  = Math.floor(startW) - 1;  // es. startW=79 → 78
