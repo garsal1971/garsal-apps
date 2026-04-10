@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.70</title>
+    <title>Habit Stack Tracker v9.3.71</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1546,6 +1546,9 @@
             <button onclick="closeGameOver(false)" style="width: 100%; margin-top: 0.75rem; font-size: 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
                 ⛔ Interrompi
             </button>
+            <button id="ripristinaGameOverBtn" onclick="ripristinaGameOver()" style="width: 100%; margin-top: 0.75rem; font-size: 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
+                🔁 Ripristina
+            </button>
             <button id="undoGameOverBtn" onclick="undoGameOver()" style="width: 100%; margin-top: 0.75rem; font-size: 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
                 ↩ Annulla ultimo fallimento
             </button>
@@ -1675,8 +1678,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.70';
-        const BUILD_TIME  = '2026-04-03T13:00:00Z';
+        const APP_VERSION = 'v9.3.71';
+        const BUILD_TIME  = '2026-04-10T12:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -4607,6 +4610,79 @@
             } catch (error) {
                 console.error('❌ Errore undoGameOver:', error);
                 showToast('Errore durante l\'annullamento');
+            }
+        }
+
+        async function ripristinaGameOver() {
+            const habitId = window.currentResetHabitId;
+            if (!habitId) return;
+            const habitData = window.currentResetHabitData;
+            if (!habitData) { showToast('Dati habitat non disponibili'); return; }
+
+            try {
+                const startedAt = habitData.started_at;
+
+                // PASSO 1 — Cancella tutte le completion 'missed' dall'inizio dello stack
+                await supabaseClient
+                    .from('hb_completions')
+                    .delete()
+                    .eq('habit_id', habitId)
+                    .eq('status', 'missed')
+                    .gte('completed_at', startedAt + 'T00:00:00');
+
+                if (window.currentResetAlreadyProcessed) {
+                    // PASSO 2a — Stack già archiviato:
+                    //   a) elimina il record da hb_archived_stacks
+                    await supabaseClient
+                        .from('hb_archived_stacks')
+                        .delete()
+                        .eq('habit_id', habitId)
+                        .eq('started_at', startedAt);
+
+                    //   b) ri-inserisce l'habit in hb_habits con l'id originale
+                    await supabaseClient.from('hb_habits').insert([{
+                        id: habitData.id,
+                        name: habitData.name,
+                        description: habitData.description,
+                        category_id: habitData.category_id,
+                        frequency: habitData.frequency,
+                        weekdays: habitData.weekdays,
+                        daily_times: habitData.daily_times,
+                        goal: habitData.goal,
+                        max_failures: habitData.max_failures,
+                        points_reward: habitData.points_reward,
+                        points_penalty: habitData.points_penalty,
+                        started_at: startedAt,
+                        status: 'active',
+                        current_failures: 0
+                    }]);
+                } else {
+                    // PASSO 2b — Stack ancora attivo: azzera i failures
+                    await supabaseClient
+                        .from('hb_habits')
+                        .update({ current_failures: 0 })
+                        .eq('id', habitId);
+                }
+
+                // PASSO 3 — Chiudi modal e ricarica
+                document.getElementById('gameOverModal').classList.remove('active');
+                window.currentResetHabitId = null;
+                window.currentResetAlreadyProcessed = false;
+                window.currentResetHabitData = null;
+
+                showToast('✅ Stack ripristinato!');
+
+                await loadHabits();
+                await loadCompletions();
+                habits.forEach(h => { h._streak = computeHabitStreak(h); });
+                recalculateTotalScore();
+                renderDashboard();
+                renderHabits();
+                showNextGameOver();
+
+            } catch (err) {
+                console.error('❌ Errore ripristinaGameOver:', err);
+                showToast('Errore nel ripristino');
             }
         }
 
