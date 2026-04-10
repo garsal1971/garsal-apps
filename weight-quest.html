@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.94</title>
+    <title>Weight Quest v3.5.95</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1202,8 +1202,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.94';
-        var BUILD_TIME  = '2026-04-10T11:30:00Z';
+        var APP_VERSION = 'v3.5.95';
+        var BUILD_TIME  = '2026-04-10T12:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1743,6 +1743,9 @@
             var hh = String(now.getHours()).padStart(2, '0');
             var mm = String(now.getMinutes()).padStart(2, '0');
             document.getElementById('dayDetailTime').value = hh + ':' + mm;
+            // Assicura sempre il bottone abilitato
+            var btn = document.getElementById('dayDetailSaveBtn');
+            if (btn) { btn.disabled = false; btn.textContent = '💾 Salva'; }
             document.getElementById('dayDetailForm').style.display = 'block';
             document.getElementById('dayDetailWeight').focus();
         }
@@ -1771,8 +1774,14 @@
                     throw new Error('HTTP ' + response.status + ': ' + text);
                 }
                 log('✓ Pesata manuale eliminata (ts=' + timestamp + ')');
-                closeDayDetailModal();
-                loadData();
+                // Aggiorna userData.weights localmente e re-renderizza la lista
+                if (userData.weights) {
+                    userData.weights = userData.weights.filter(function(r) { return r.timestamp !== timestamp; });
+                }
+                var newDayData = (userData.weights || []).filter(function(r) { return r.date === dayDetailTargetDate; });
+                renderDayDetailList(dayDetailTargetDate, newDayData);
+                hideDayDetailForm();
+                loadData(); // aggiorna tabella + punteggi in background
             } catch (err) {
                 log('ERROR deleteDayEntry: ' + err.message);
                 alert('Errore nell\'eliminazione: ' + err.message);
@@ -1828,8 +1837,19 @@
                     throw new Error('HTTP ' + response.status + ': ' + text);
                 }
                 log('✓ Pesata manuale salvata: ' + weightVal + ' kg alle ' + timeVal + ' per ' + date);
-                closeDayDetailModal();
-                loadData();
+                // Aggiorna userData.weights localmente
+                if (userData.weights) {
+                    if (dayDetailEditTimestamp !== null && dayDetailEditTimestamp !== newTimestamp) {
+                        userData.weights = userData.weights.filter(function(r) { return r.timestamp !== dayDetailEditTimestamp; });
+                    }
+                    userData.weights = userData.weights.filter(function(r) { return r.timestamp !== newTimestamp; });
+                    userData.weights.push(Object.assign({}, record));
+                }
+                // Re-renderizza la lista nella modal (rimane aperta)
+                var newDayData = (userData.weights || []).filter(function(r) { return r.date === date; });
+                renderDayDetailList(date, newDayData);
+                hideDayDetailForm(); // nasconde form e re-abilita il bottone
+                loadData(); // aggiorna tabella + punteggi in background
             } catch (err) {
                 log('ERROR saveDayDetailEntry: ' + err.message);
                 alert('Errore nel salvataggio: ' + err.message);
