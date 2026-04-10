@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.91</title>
+    <title>Weight Quest v3.5.92</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1202,8 +1202,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.91';
-        var BUILD_TIME  = '2026-04-10T10:00:00Z';
+        var APP_VERSION = 'v3.5.92';
+        var BUILD_TIME  = '2026-04-10T10:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -4882,65 +4882,6 @@
                 }
                 tdDate.appendChild(iconInline);
                 tdDate.appendChild(document.createTextNode(date));
-
-                var btnInline = document.createElement('span');
-                btnInline.className = 'row-detail-inline';
-                if (isInterpolated) {
-                    var insertBtn = document.createElement('button');
-                    insertBtn.textContent = '📝';
-                    insertBtn.title = 'Inserisci peso reale per questo giorno';
-                    insertBtn.style.cssText = 'margin-left:6px; background:none; border:1px solid #ddd; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
-                    insertBtn.addEventListener('click', (function(d) {
-                        return function(e) { e.stopPropagation(); showInsertWeightModal(d); };
-                    })(date));
-                    btnInline.appendChild(insertBtn);
-                } else if (hasSync && !hasManual) {
-                    var addBtn = document.createElement('button');
-                    addBtn.textContent = '+ Aggiungi peso';
-                    addBtn.title = 'Aggiungi peso manuale per questo giorno';
-                    addBtn.style.cssText = 'margin-left:6px; background:none; border:1px solid #ddd; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 6px; opacity:0.7; vertical-align:middle;';
-                    addBtn.addEventListener('click', (function(d, w) {
-                        return function(e) { e.stopPropagation(); showInsertWeightModal(d, undefined, w); };
-                    })(date, minWeight));
-                    btnInline.appendChild(addBtn);
-                } else if (hasManual && !hasSync) {
-                    var editBtn = document.createElement('button');
-                    editBtn.textContent = '✏️';
-                    editBtn.title = 'Modifica questa pesata';
-                    editBtn.style.cssText = 'margin-left:4px; background:none; border:1px solid #ddd; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
-                    editBtn.addEventListener('click', (function(d, w) {
-                        return function(e) { e.stopPropagation(); showInsertWeightModal(d, w); };
-                    })(date, manualEntry.weight));
-                    btnInline.appendChild(editBtn);
-
-                    var delBtn = document.createElement('button');
-                    delBtn.textContent = '🗑️';
-                    delBtn.title = 'Elimina e ripristina interpolazione';
-                    delBtn.style.cssText = 'margin-left:2px; background:none; border:1px solid #ffcccc; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
-                    delBtn.addEventListener('click', (function(ts, d) {
-                        return function(e) { e.stopPropagation(); deleteManualWeight(ts, d); };
-                    })(manualEntry.timestamp, date));
-                    btnInline.appendChild(delBtn);
-                } else if (hasSync && hasManual) {
-                    var editBtn2 = document.createElement('button');
-                    editBtn2.textContent = '✏️';
-                    editBtn2.title = 'Modifica pesata manuale';
-                    editBtn2.style.cssText = 'margin-left:4px; background:none; border:1px solid #ddd; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
-                    editBtn2.addEventListener('click', (function(d, w) {
-                        return function(e) { e.stopPropagation(); showInsertWeightModal(d, w); };
-                    })(date, manualEntry.weight));
-                    btnInline.appendChild(editBtn2);
-
-                    var delBtn2 = document.createElement('button');
-                    delBtn2.textContent = '🗑️';
-                    delBtn2.title = 'Elimina pesata manuale';
-                    delBtn2.style.cssText = 'margin-left:2px; background:none; border:1px solid #ffcccc; border-radius: 0; cursor:pointer; font-size:0.75em; padding:1px 4px; opacity:0.6; vertical-align:middle;';
-                    delBtn2.addEventListener('click', (function(ts, d) {
-                        return function(e) { e.stopPropagation(); deleteManualWeight(ts, d); };
-                    })(manualEntry.timestamp, date));
-                    btnInline.appendChild(delBtn2);
-                }
-                tdDate.appendChild(btnInline);
 
                 tr.style.cursor = 'pointer';
                 tr.addEventListener('click', (function(d, dd) {
