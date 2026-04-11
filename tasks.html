@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.39</title>
+    <title>Tasks v19.18.41</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1620,7 +1620,7 @@
                 <!-- View Selector -->
                 <div class="card" style="margin-bottom: 1.5rem;">
                     <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-primary" onclick="switchPlannerView('dashboard')" id="btnDashboardView" style="flex: 1; min-width: 0;">Dashboard</button>
+                        <button class="btn btn-primary" onclick="switchPlannerView('dashboard')" id="btnDashboardView" style="flex: 1; min-width: 0;">Panoramica</button>
                         <button class="btn btn-secondary" onclick="switchPlannerView('month')" id="btnMonthView" style="flex: 1; min-width: 0;">Mese</button>
                         <button class="btn btn-secondary" onclick="switchPlannerView('week')" id="btnWeekView" style="flex: 1; min-width: 0;">Settimana</button>
                     </div>
@@ -1644,7 +1644,7 @@
                 <!-- Tab Selector -->
                 <div class="card" style="margin-bottom: 1.5rem;">
                     <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-primary" onclick="switchManagementView('tasks')" id="btnTasksView" style="flex: 1; min-width: 0;">Tasks</button>
+                        <button class="btn btn-primary" onclick="switchManagementView('tasks')" id="btnTasksView" style="flex: 1; min-width: 0;">Attività</button>
                         <button class="btn btn-secondary" onclick="switchManagementView('categories')" id="btnCategoriesView" style="flex: 1; min-width: 0;">Categorie</button>
                         <button class="btn btn-secondary" onclick="switchManagementView('notes')" id="btnNotesView" style="flex: 1; min-width: 0;">Appunti</button>
                     </div>
@@ -1668,7 +1668,7 @@
             <!-- Settings Page -->
             <div id="settingsPage" class="hidden">
                 <div class="card">
-                    <h3 style="margin-bottom: 1.5rem;">Dashboard</h3>
+                    <h3 style="margin-bottom: 1.5rem;">Panoramica</h3>
                     
                     <div class="form-group">
                         <label class="form-label">Giorni per "Prossimi alla scadenza"</label>
@@ -1809,7 +1809,7 @@
                     <label class="form-label">Altro (minuti)</label>
                     <div style="display: flex; gap: 0.5rem;">
                         <input type="number" class="form-input" id="snoozeCustomMinutes" placeholder="es. 90" min="1" max="43200">
-                        <button class="btn btn-primary" onclick="confirmSnoozeCustom()">OK</button>
+                        <button class="btn btn-primary" onclick="confirmSnoozeCustom()">Conferma</button>
                     </div>
                 </div>
             </div>
@@ -2240,8 +2240,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.40';
-        const BUILD_TIME  = '2026-04-04T11:00:00Z';
+        const APP_VERSION = 'v19.18.41';
+        const BUILD_TIME  = '2026-04-11T00:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2669,7 +2669,7 @@
                 if (error) {
                     console.error('Error loading categories:', error);
                     debugLog('❌ Error loading categories:', error.message || JSON.stringify(error));
-                    alert('Errore nel caricamento delle categorie: ' + (error.message || 'Unknown error'));
+                    alert('Errore nel caricamento delle categorie: ' + (error.message || 'Errore sconosciuto'));
                 } else {
                     if (data) categories = data;
                     console.log('Categories loaded successfully:', categories);
@@ -2901,7 +2901,7 @@
                 if (error) {
                     console.error('Error loading tasks:', error);
                     debugLog('❌ Error loading tasks:', error.message || JSON.stringify(error));
-                    alert('Errore nel caricamento dei task: ' + (error.message || 'Unknown error'));
+                    alert('Errore nel caricamento dei task: ' + (error.message || 'Errore sconosciuto'));
                 } else {
                     if (data) tasks = data;
                     console.log('Tasks loaded successfully:', tasks);
@@ -2922,7 +2922,7 @@
                 if (error) {
                     console.error('Error loading history:', error);
                     debugLog('❌ Error loading history:', error.message || JSON.stringify(error));
-                    alert('Errore nel caricamento dello storico: ' + (error.message || 'Unknown error'));
+                    alert('Errore nel caricamento dello storico: ' + (error.message || 'Errore sconosciuto'));
                 } else {
                     if (data) history = data;
                     console.log('History loaded successfully:', history);
