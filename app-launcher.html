@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.76</title>
+<title>AppSphere v1.5.77</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -47,7 +47,7 @@
     transition: none;
   }
   .circle {
-    border-radius: 50%;
+    border-radius: 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -67,7 +67,7 @@
     hyphens: auto;
     pointer-events: none;
     text-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    max-width: 75%;
+    max-width: 85%;
   }
   .c-score {
     font-family: 'DM Mono', monospace;
@@ -1629,8 +1629,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.76';
-const BUILD_TIME  = '2026-04-11T00:00:00Z';
+const APP_VERSION = 'v1.5.77';
+const BUILD_TIME  = '2026-04-12T00:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1877,8 +1877,8 @@ function applyPositions(draggedId) {
 // ── FIT FONT SIZE ──
 // Binary search: largest font-size where text block fits inside circle's inscribed square
 function fitFontSize(name, circleSize) {
-  const maxW = circleSize * 0.64;
-  const maxH = circleSize * 0.64;
+  const maxW = circleSize * 0.80;
+  const maxH = circleSize * 0.80;
 
   const el = document.createElement('span');
   el.style.cssText = [
@@ -1896,7 +1896,7 @@ function fitFontSize(name, circleSize) {
   el.textContent = name;
   document.body.appendChild(el);
 
-  let lo = 8, hi = circleSize * 0.55;
+  let lo = 8, hi = circleSize * 0.70;
   for (let i = 0; i < 20; i++) {
     const mid = (lo + hi) / 2;
     el.style.fontSize = mid + 'px';
