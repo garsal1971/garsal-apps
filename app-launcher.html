@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.77</title>
+<title>AppSphere v1.5.78</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -52,7 +52,10 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    transition: box-shadow 0.2s, transform 0.2s;
+    transition: box-shadow 0.2s, transform 0.2s, border-radius 0.3s;
+  }
+  body.circles-mode .circle {
+    border-radius: 50%;
   }
   .cw:not(.dragging):hover .circle {
     box-shadow: 0 6px 20px rgba(0,0,0,0.15);
@@ -1379,6 +1382,7 @@
   <button class="hm-item" onclick="closeHamburgerMenu(); openBadgeSettings();">⚙ Badge</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNotifiche();">🔔 Notifiche</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNqv();">⚡ Notifica al Volo</button>
+  <button class="hm-item" id="shape-toggle-btn" onclick="closeHamburgerMenu(); toggleShape();">⬜ Forma: Quadrati</button>
   <button class="hm-item danger" onclick="closeHamburgerMenu(); logout();">↩ Esci</button>
 </div>
 
@@ -1629,8 +1633,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.77';
-const BUILD_TIME  = '2026-04-12T00:00:00Z';
+const APP_VERSION = 'v1.5.78';
+const BUILD_TIME  = '2026-04-12T12:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1877,8 +1881,9 @@ function applyPositions(draggedId) {
 // ── FIT FONT SIZE ──
 // Binary search: largest font-size where text block fits inside circle's inscribed square
 function fitFontSize(name, circleSize) {
-  const maxW = circleSize * 0.80;
-  const maxH = circleSize * 0.80;
+  const fill = document.body.classList.contains('circles-mode') ? 0.64 : 0.80;
+  const maxW = circleSize * fill;
+  const maxH = circleSize * fill;
 
   const el = document.createElement('span');
   el.style.cssText = [
@@ -1896,7 +1901,7 @@ function fitFontSize(name, circleSize) {
   el.textContent = name;
   document.body.appendChild(el);
 
-  let lo = 8, hi = circleSize * 0.70;
+  let lo = 8, hi = circleSize * (document.body.classList.contains('circles-mode') ? 0.55 : 0.70);
   for (let i = 0; i < 20; i++) {
     const mid = (lo + hi) / 2;
     el.style.fontSize = mid + 'px';
@@ -2304,6 +2309,7 @@ function showApp(user) {
     hiddenMode = true;
     updateHiddenIndicator();
   }
+  applyShapePreference();
 
   const ls = document.getElementById('login-screen');
   ls.classList.add('hidden');
@@ -2488,6 +2494,23 @@ document.addEventListener('click', e => {
     menu.classList.remove('open');
   }
 });
+
+// ── FORMA (quadrato / cerchio) ──
+function toggleShape() {
+  const isCircle = document.body.classList.toggle('circles-mode');
+  localStorage.setItem('appsphere_shape', isCircle ? 'circle' : 'square');
+  const btn = document.getElementById('shape-toggle-btn');
+  if (btn) btn.textContent = isCircle ? '◯ Forma: Cerchi' : '⬜ Forma: Quadrati';
+  render();
+}
+function applyShapePreference() {
+  const saved = localStorage.getItem('appsphere_shape') || 'square';
+  if (saved === 'circle') {
+    document.body.classList.add('circles-mode');
+    const btn = document.getElementById('shape-toggle-btn');
+    if (btn) btn.textContent = '◯ Forma: Cerchi';
+  }
+}
 
 // ── PROFILO ──
 async function openProfilo() {
