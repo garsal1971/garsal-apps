@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.79</title>
+<title>AppSphere v1.5.80</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -52,6 +52,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     transition: box-shadow 0.2s, transform 0.2s, border-radius 0.3s;
   }
   body.circles-mode .circle {
@@ -1632,8 +1633,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.79';
-const BUILD_TIME  = '2026-04-12T13:00:00Z';
+const APP_VERSION = 'v1.5.80';
+const BUILD_TIME  = '2026-04-12T14:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1883,35 +1884,45 @@ function fitFontSize(name, circleSize) {
   const fill = document.body.classList.contains('circles-mode') ? 0.64 : 0.80;
   const maxW = circleSize * fill;
   const maxH = circleSize * fill;
+  const words = name.split(/\s+/);
 
+  // Elemento per misurare la larghezza reale di ogni parola (nowrap = nessun word-break)
   const el = document.createElement('span');
   el.style.cssText = [
-    'position:absolute',
-    'visibility:hidden',
-    'pointer-events:none',
-    'white-space:normal',
-    `max-width:${maxW}px`,
-    'word-break:normal',
-    'overflow-wrap:normal',
-    'text-align:center',
-    "font-family:'DM Sans',sans-serif",
-    'font-weight:600',
-    'line-height:1.2',
+    'position:absolute', 'visibility:hidden', 'pointer-events:none',
+    'white-space:nowrap',
+    "font-family:'DM Sans',sans-serif", 'font-weight:600', 'line-height:1.2',
   ].join(';');
-  el.textContent = name;
   document.body.appendChild(el);
+
+  // Elemento per misurare l'altezza con wrapping a maxW
+  const elH = document.createElement('span');
+  elH.style.cssText = [
+    'position:absolute', 'visibility:hidden', 'pointer-events:none',
+    'white-space:normal', 'word-break:normal', 'overflow-wrap:normal',
+    `width:${maxW}px`, 'display:block', 'text-align:center',
+    "font-family:'DM Sans',sans-serif", 'font-weight:600', 'line-height:1.2',
+  ].join(';');
+  elH.textContent = name;
+  document.body.appendChild(elH);
 
   let lo = 8, hi = circleSize * (document.body.classList.contains('circles-mode') ? 0.55 : 0.70);
   for (let i = 0; i < 20; i++) {
     const mid = (lo + hi) / 2;
     el.style.fontSize = mid + 'px';
-    if (el.offsetWidth <= maxW && el.offsetHeight <= maxH) {
-      lo = mid;
-    } else {
-      hi = mid;
-    }
+    elH.style.fontSize = mid + 'px';
+
+    // La parola più larga deve stare dentro maxW
+    let maxWordW = 0;
+    for (const w of words) { el.textContent = w; maxWordW = Math.max(maxWordW, el.offsetWidth); }
+
+    // L'altezza totale (con wrapping alle spazio) deve stare dentro maxH
+    const wrappedH = elH.offsetHeight;
+
+    if (maxWordW <= maxW && wrappedH <= maxH) { lo = mid; } else { hi = mid; }
   }
   document.body.removeChild(el);
+  document.body.removeChild(elH);
   return Math.floor(lo);
 }
 
