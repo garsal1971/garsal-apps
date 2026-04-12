@@ -560,6 +560,31 @@ localStorage.setItem('googleToken', 'token_scaduto_fake');</pre>
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       SEZIONE 4 — SORGENTE TASKS.HTML
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="section-title">📄 Sorgente — tasks.html</div>
+
+  <div class="card info" id="tasks-src-card">
+    <div class="card-header">
+      <div class="badge info">SRC</div>
+      <div class="card-body">
+        <div class="card-title">Sorgente completo di tasks.html</div>
+        <div class="card-desc">Visualizza e copia il codice sorgente integrale di <code>tasks.html</code> (≈ 484 KB · 10 000+ righe). Caricato su richiesta per non appesantire la pagina.</div>
+        <div class="tags">
+          <span class="tag web">tasks.html</span>
+        </div>
+      </div>
+    </div>
+    <div id="tasks-src-loader" style="padding:14px 16px;border-top:1px solid #334155;">
+      <button class="copy-btn" style="position:static;" onclick="loadTasksSrc(this)">⬇ Carica sorgente</button>
+    </div>
+    <div id="tasks-src-block" style="display:none;" class="code-block">
+      <button class="copy-btn" onclick="copyTasksSrc(this)">Copia</button>
+      <pre id="tasks-src-pre" style="max-height:70vh;overflow-y:auto;white-space:pre;"></pre>
+    </div>
+  </div>
+
   <!-- 3.3 Tasks — flatpickr mobile -->
   <div class="card info">
     <div class="card-header">
@@ -607,6 +632,31 @@ function copyCode(blockId, btn) {
       btn.textContent = 'Copia';
       btn.classList.remove('copied');
     }, 2000);
+  });
+}
+
+function loadTasksSrc(btn) {
+  btn.textContent = 'Caricamento…';
+  btn.disabled = true;
+  fetch('tasks.html')
+    .then(function(r) { return r.text(); })
+    .then(function(txt) {
+      document.getElementById('tasks-src-pre').textContent = txt;
+      document.getElementById('tasks-src-block').style.display = 'block';
+      document.getElementById('tasks-src-loader').style.display = 'none';
+    })
+    .catch(function() {
+      btn.textContent = '⚠ Errore — riprova';
+      btn.disabled = false;
+    });
+}
+
+function copyTasksSrc(btn) {
+  var text = document.getElementById('tasks-src-pre').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = '✓ Copiato';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = 'Copia'; btn.classList.remove('copied'); }, 2000);
   });
 }
 </script>
