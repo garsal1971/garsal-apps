@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.80</title>
+<title>AppSphere v1.5.81</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -678,6 +678,25 @@
     flex-direction: column;
     gap: 18px;
   }
+  .bq-shape-section {
+    border-bottom: 1px solid #eee;
+    padding-bottom: 16px;
+  }
+  .bq-shape-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #999; margin-bottom: 10px;
+    font-family: 'DM Mono', monospace;
+  }
+  .bq-shape-btns { display: flex; gap: 8px; }
+  .bq-shape-btn {
+    flex: 1; padding: 9px 14px; border: 1.5px solid #ddd; border-radius: 8px;
+    background: #f9f9f9; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 600; color: #555;
+    cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .bq-shape-btn.active { border-color: #111; background: #111; color: #fff; }
+  .bq-shape-btn:not(.active):hover { border-color: #999; background: #f0f0f0; }
   .bq-row {
     display: flex;
     flex-direction: column;
@@ -1382,7 +1401,6 @@
   <button class="hm-item" onclick="closeHamburgerMenu(); openBadgeSettings();">⚙ Badge</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNotifiche();">🔔 Notifiche</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNqv();">⚡ Notifica al Volo</button>
-  <button class="hm-item" id="shape-toggle-btn" onclick="closeHamburgerMenu(); toggleShape();">⬜ Forma: Quadrati</button>
   <button class="hm-item danger" onclick="closeHamburgerMenu(); logout();">↩ Esci</button>
 </div>
 
@@ -1516,12 +1534,12 @@
   <div id="badge-modal">
     <div id="badge-modal-header">
       <h2>Impostazioni Badge</h2>
-      <span>score_query per cerchio</span>
+      <span>impostazioni visualizzazione e badge</span>
       <button id="badge-modal-close" onclick="closeBadgeSettings()">✕</button>
     </div>
     <div id="badge-modal-body"></div>
     <div id="badge-modal-footer">
-      <button id="badge-reload-btn" onclick="closeBadgeSettings(); loadApps();">Ricarica cerchi</button>
+      <button id="badge-reload-btn" onclick="closeBadgeSettings(); loadApps();">Ricarica</button>
     </div>
   </div>
 </div>
@@ -1633,8 +1651,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.80';
-const BUILD_TIME  = '2026-04-12T14:00:00Z';
+const APP_VERSION = 'v1.5.81';
+const BUILD_TIME  = '2026-04-12T15:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2507,20 +2525,21 @@ document.addEventListener('click', e => {
 });
 
 // ── FORMA (quadrato / cerchio) ──
-function toggleShape() {
-  const isCircle = document.body.classList.toggle('circles-mode');
-  localStorage.setItem('appsphere_shape', isCircle ? 'circle' : 'square');
-  const btn = document.getElementById('shape-toggle-btn');
-  if (btn) btn.textContent = isCircle ? '◯ Forma: Cerchi' : '⬜ Forma: Quadrati';
+function setShape(shape) {
+  const isCircle = shape === 'circle';
+  document.body.classList.toggle('circles-mode', isCircle);
+  localStorage.setItem('appsphere_shape', shape);
+  // aggiorna i pulsanti dentro il badge modal (se aperto)
+  document.querySelectorAll('.bq-shape-btn').forEach(b => {
+    b.classList.toggle('active',
+      (b.dataset.shape === shape)
+    );
+  });
   render();
 }
 function applyShapePreference() {
   const saved = localStorage.getItem('appsphere_shape') || 'square';
-  if (saved === 'circle') {
-    document.body.classList.add('circles-mode');
-    const btn = document.getElementById('shape-toggle-btn');
-    if (btn) btn.textContent = '◯ Forma: Cerchi';
-  }
+  if (saved === 'circle') document.body.classList.add('circles-mode');
 }
 
 // ── PROFILO ──
@@ -3058,7 +3077,16 @@ async function openBadgeSettings() {
     return;
   }
   _badgeRows = await res.json();
-  body.innerHTML = _badgeRows.map((row, i) => {
+  const isCircle = document.body.classList.contains('circles-mode');
+  const shapeHTML = `
+    <div class="bq-shape-section">
+      <div class="bq-shape-label">Visualizzazione</div>
+      <div class="bq-shape-btns">
+        <button class="bq-shape-btn ${!isCircle ? 'active' : ''}" data-shape="square" onclick="setShape('square')">⬜ Quadrati</button>
+        <button class="bq-shape-btn ${isCircle  ? 'active' : ''}" data-shape="circle" onclick="setShape('circle')">◯ Cerchi</button>
+      </div>
+    </div>`;
+  body.innerHTML = shapeHTML + _badgeRows.map((row, i) => {
     const color = (row.color || OLYMPIC[i % OLYMPIC.length]).trim();
     return `
     <div class="bq-row" data-id="${row.id}">
