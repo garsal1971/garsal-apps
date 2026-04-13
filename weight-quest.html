@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Weight Quest v3.5.95</title>
+    <title>Weight Quest v3.5.96</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -725,6 +725,29 @@
             70%  { transform: scale(1)   rotate(-10deg); opacity: 0.9; }
             100% { transform: scale(0)   rotate(45deg);  opacity: 0; }
         }
+
+        /* ── Toast notifiche ─────────────────────────────────────────── */
+        .wq-toast {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1F2937;
+            color: white;
+            padding: 0.75rem 1.4rem;
+            border-radius: 0;
+            z-index: 9999;
+            font-size: 0.92em;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            animation: wqToastIn 0.25s ease;
+            max-width: 90vw;
+            text-align: center;
+            pointer-events: none;
+        }
+        @keyframes wqToastIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
     </style>
 </head>
 <body>
@@ -1202,8 +1225,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.95';
-        var BUILD_TIME  = '2026-04-10T12:00:00Z';
+        var APP_VERSION = 'v3.5.96';
+        var BUILD_TIME  = '2026-04-13T00:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3061,6 +3084,15 @@
             });
         }
 
+        // Mostra un toast non bloccante in basso, scompare dopo duration ms (default 3500)
+        function showToast(msg, duration) {
+            var t = document.createElement('div');
+            t.className = 'wq-toast';
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(function() { if (t.parentNode) t.remove(); }, duration || 3500);
+        }
+
         // Callback salvato per il modal Google auth
         var _googleAuthCallback = null;
 
@@ -3131,15 +3163,22 @@
         }
 
         // ─── HEALTH CONNECT SYNC (solo app Android nativa) ───────────────────────
+        var _hcSyncInProgress = false;
+
         function syncFitNative() {
+            if (_hcSyncInProgress) {
+                showToast('Sync già in corso, attendi...');
+                return;
+            }
             if (typeof window.HealthConnectBridge === 'undefined') {
-                alert('Health Connect bridge non disponibile.');
+                showToast('Health Connect bridge non disponibile.');
                 return;
             }
             if (!window.HealthConnectBridge.isSdkAvailable()) {
-                alert('Health Connect non è installato su questo dispositivo.\nInstallalo dal Play Store e riprova.');
+                showToast('Health Connect non è installato. Installalo dal Play Store e riprova.', 5000);
                 return;
             }
+            _hcSyncInProgress = true;
             log('🏃 Avvio sync Health Connect...');
             var callbackId = Date.now().toString();
             window['__hcCallback_' + callbackId] = function(data) {
@@ -3147,20 +3186,22 @@
                 log('HC callback: ' + JSON.stringify(data).substring(0, 120));
 
                 if (!data.ok) {
+                    _hcSyncInProgress = false;
                     if (data.error === 'PERMISSION_REQUESTED' && data.retry) {
                         // Permessi richiesti all'utente — mostra toast e aspetta che torni
                         log('⏳ Schermata permessi HC aperta — ripremi 💪 dopo aver concesso');
-                        showToast('Concedi i permessi a Health Connect, poi ripremi 💪');
+                        showToast('Concedi i permessi a Health Connect, poi ripremi 💪', 5000);
                         return;
                     }
                     log('❌ Errore HC: ' + data.error);
-                    alert('Errore Health Connect:\n' + data.error);
+                    showToast('Errore Health Connect: ' + data.error, 5000);
                     return;
                 }
 
                 log('✅ HC: ' + data.points.length + ' pesate ricevute');
                 if (data.points.length === 0) {
-                    alert('Nessuna pesata trovata in Health Connect negli ultimi 90 giorni.');
+                    _hcSyncInProgress = false;
+                    showToast('Nessuna pesata trovata in Health Connect (ultimi 90 giorni).');
                     return;
                 }
                 var fitPoints = data.points.map(function(p) {
@@ -3169,7 +3210,8 @@
                         value: [{ fpVal: p.weight }]
                     };
                 });
-                processWeights({ point: fitPoints });
+                processWeights({ point: fitPoints })
+                    .finally(function() { _hcSyncInProgress = false; });
             };
             window.HealthConnectBridge.requestWeightSync(callbackId);
         }
