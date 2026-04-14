@@ -51,23 +51,31 @@ class HealthConnectBridge(
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
         scope.launch(Dispatchers.IO) {
+            notifyJS("requestWeightSync avviato")
             val json = syncWithHardTimeout(25_000L)
             Log.d("HCBridge", "Invio callback: ${json.take(80)}")
+            notifyJS("callback in arrivo: ${json.take(60)}")
             callback(callbackId, json)
         }
     }
 
     private fun syncWithHardTimeout(timeoutMs: Long): String {
+        notifyJS("Future submit...")
         val future = executor.submit<String> { doSync() }
+        notifyJS("Future.get(${timeoutMs / 1000}s) attesa...")
         return try {
-            future.get(timeoutMs, TimeUnit.MILLISECONDS)
+            val result = future.get(timeoutMs, TimeUnit.MILLISECONDS)
+            notifyJS("Future completato OK")
+            result
         } catch (e: java.util.concurrent.TimeoutException) {
             future.cancel(true)
             Log.e("HCBridge", "Timeout hard ${timeoutMs / 1000}s")
+            notifyJS("Future TIMEOUT dopo ${timeoutMs / 1000}s!")
             """{"ok":false,"error":"HC non risponde (${timeoutMs / 1000}s). Riprova tra qualche secondo."}"""
         } catch (e: Exception) {
             val cause = e.cause ?: e
             Log.e("HCBridge", "Errore future: ${cause.javaClass.name}: ${cause.message}")
+            notifyJS("Future eccezione: ${cause.javaClass.simpleName}")
             val cls = cause.javaClass.simpleName
             val msg = (cause.message ?: "Errore sconosciuto").take(150)
                 .replace("\\", "/").replace("\"", "'").replace("\n", " ")
@@ -77,8 +85,10 @@ class HealthConnectBridge(
 
     private fun doSync(): String {
         return try {
+            notifyJS("doSync: getSdkStatus...")
             val sdkStatus = HealthConnectClient.getSdkStatus(activity)
             Log.d("HCBridge", "SDK status: $sdkStatus")
+            notifyJS("doSync: sdkStatus=$sdkStatus")
             if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
                 val msg = when (sdkStatus) {
                     HealthConnectClient.SDK_UNAVAILABLE -> "Health Connect non installato"
@@ -89,7 +99,9 @@ class HealthConnectBridge(
             }
 
             Log.d("HCBridge", "Creazione client HC...")
+            notifyJS("doSync: getOrCreate...")
             val client = HealthConnectClient.getOrCreate(activity.applicationContext)
+            notifyJS("doSync: client OK, avvio readRecords...")
 
             val end   = Instant.now().plus(25, ChronoUnit.HOURS)
             val start = Instant.now().minus(90, ChronoUnit.DAYS)
@@ -105,6 +117,7 @@ class HealthConnectBridge(
             }
 
             Log.d("HCBridge", "readRecords: ${response.records.size} record")
+            notifyJS("doSync: readRecords OK, ${response.records.size} record")
             val points = response.records.joinToString(",") { r ->
                 """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
             }
@@ -113,10 +126,12 @@ class HealthConnectBridge(
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             Log.w("HCBridge", "Thread interrotto (timeout hard)")
+            notifyJS("doSync: InterruptedException")
             """{"ok":false,"error":"HC non ha risposto in tempo. Riprova."}"""
 
         } catch (e: SecurityException) {
             Log.w("HCBridge", "SecurityException: ${e.message}")
+            notifyJS("doSync: SecurityException — richiesta permessi")
             if (!permissionsRequested) {
                 permissionsRequested = true
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -130,10 +145,25 @@ class HealthConnectBridge(
 
         } catch (e: Exception) {
             Log.e("HCBridge", "Errore: ${e.javaClass.name}: ${e.message}", e)
+            notifyJS("doSync: eccezione ${e.javaClass.simpleName}: ${(e.message ?: "").take(80)}")
             val cls = e.javaClass.simpleName
             val msg = (e.message ?: "Errore sconosciuto").take(150)
                 .replace("\\", "/").replace("\"", "'").replace("\n", " ")
             """{"ok":false,"error":"[$cls] $msg"}"""
+        }
+    }
+
+    /**
+     * Invia un messaggio di diagnostica direttamente al log JS dell'app.
+     * Permette di vedere l'esecuzione Kotlin senza accesso a logcat.
+     */
+    private fun notifyJS(msg: String) {
+        val safe = msg.replace("\\", "/").replace("'", " ").replace("\n", " ").take(120)
+        webView.post {
+            webView.evaluateJavascript(
+                "try{if(typeof log==='function')log('[KOTLIN] $safe');}catch(_e){}",
+                null
+            )
         }
     }
 
