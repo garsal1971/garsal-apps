@@ -21,13 +21,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Bridge JS ↔ Health Connect.
  *
- * Il pattern coroutine con withTimeoutOrNull NON funziona quando readRecords()
- * blocca il thread su una chiamata Binder IPC senza mai cedere il controllo
- * (Health Connect cold-start dopo il primo grant dei permessi).
+ * Problema: dopo il primo grant dei permessi, readRecords() blocca il thread
+ * su IBinder.transact() che è una chiamata nativa non interrompibile via
+ * Thread.interrupt(). Il servizio HC non risponde finché non viene aperto
+ * almeno una volta dall'utente.
  *
- * Soluzione: ExecutorService + Future.get(timeout) che usa Thread.interrupt()
- * sotto il cofano — l'unico meccanismo affidabile per interrompere un thread
- * bloccato su IPC.
+ * Soluzione: quando il timeout scatta, apriamo automaticamente l'app
+ * Connessione Salute così HC si inizializza e la prossima sync funziona.
  */
 class HealthConnectBridge(
     private val activity: MainActivity,
@@ -36,8 +36,10 @@ class HealthConnectBridge(
     private val scope    = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val executor = Executors.newCachedThreadPool()
 
-    // Guard anti-loop: apre la schermata permessi solo una volta per sessione
+    // Guard anti-loop permessi
     private var permissionsRequested = false
+    // Flag: true dopo PERMISSION_REQUESTED, usato per aprire HC su timeout
+    private var needsHcWarmup = false
 
     @JavascriptInterface
     fun isSdkAvailable(): Boolean {
@@ -50,8 +52,6 @@ class HealthConnectBridge(
 
     @JavascriptInterface
     fun requestWeightSync(callbackId: String) {
-        // Lancia su un thread separato dal pool principale così il main thread
-        // non viene bloccato; il risultato arriva via callback JS.
         scope.launch(Dispatchers.IO) {
             val json = syncWithHardTimeout(25_000L)
             Log.d("HCBridge", "Invio callback: ${json.take(80)}")
@@ -60,19 +60,25 @@ class HealthConnectBridge(
     }
 
     /**
-     * Esegue la sync HC in un thread del pool con un timeout "duro" via
-     * Future.get(). Se il thread rimane bloccato oltre [timeoutMs] millisecondi,
-     * future.cancel(true) chiama Thread.interrupt() — interrompe anche le
-     * chiamate Binder bloccate su alcune versioni Android.
+     * Timeout "duro" via Future.get() — interrompe il thread con Thread.interrupt()
+     * quando il timeout scatta. Se HC non risponde e sappiamo che le permissions
+     * sono state appena concesse (needsHcWarmup), apriamo HC automaticamente.
      */
     private fun syncWithHardTimeout(timeoutMs: Long): String {
         val future = executor.submit<String> { doSync() }
         return try {
             future.get(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (e: java.util.concurrent.TimeoutException) {
-            future.cancel(true)          // Thread.interrupt() sul thread bloccato
+            future.cancel(true)
             Log.e("HCBridge", "Timeout hard ${timeoutMs / 1000}s: HC non ha risposto")
-            """{"ok":false,"error":"HC non risponde (${timeoutMs / 1000}s). Apri Health Connect manualmente una volta e riprova."}"""
+            // Se è la prima sync dopo il grant, apriamo HC per inizializzare il servizio
+            if (needsHcWarmup) {
+                needsHcWarmup = false
+                openHealthConnectApp()
+                """{"ok":false,"error":"HC_NEEDS_WARMUP"}"""
+            } else {
+                """{"ok":false,"error":"HC non risponde (${timeoutMs / 1000}s). Apri Connessione Salute manualmente e riprova."}"""
+            }
         } catch (e: Exception) {
             val cause = e.cause ?: e
             Log.e("HCBridge", "Errore future: ${cause.javaClass.name}: ${cause.message}")
@@ -83,11 +89,27 @@ class HealthConnectBridge(
         }
     }
 
-    /**
-     * Logica di sincronizzazione effettiva — eseguita su un thread del pool
-     * (contesto non-suspending). Usa runBlocking solo per chiamare readRecords
-     * che è una suspend function.
-     */
+    /** Apre l'app Connessione Salute per inizializzare il servizio HC. */
+    private fun openHealthConnectApp() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                val pkg = listOf(
+                    "com.android.healthconnect.controller",   // Android 14+ integrato
+                    "com.google.android.apps.healthdata"      // Play Store (Android 9-13)
+                ).firstOrNull { activity.packageManager.getLaunchIntentForPackage(it) != null }
+                val intent = pkg?.let { activity.packageManager.getLaunchIntentForPackage(it) }
+                if (intent != null) {
+                    Log.d("HCBridge", "Apro HC per warmup: $pkg")
+                    activity.startActivity(intent)
+                } else {
+                    Log.w("HCBridge", "App HC non trovata per warmup")
+                }
+            } catch (e: Exception) {
+                Log.e("HCBridge", "Errore apertura HC: ${e.message}")
+            }
+        }
+    }
+
     private fun doSync(): String {
         return try {
             val sdkStatus = HealthConnectClient.getSdkStatus(activity)
@@ -101,16 +123,13 @@ class HealthConnectBridge(
                 return """{"ok":false,"error":"$msg"}"""
             }
 
-            // applicationContext: evita memory leak con Activity context
             Log.d("HCBridge", "Creazione client HC...")
             val client = HealthConnectClient.getOrCreate(activity.applicationContext)
 
-            val end   = Instant.now().plus(25, ChronoUnit.HOURS)   // +25h: copre sfasamenti orologio
+            val end   = Instant.now().plus(25, ChronoUnit.HOURS)
             val start = Instant.now().minus(90, ChronoUnit.DAYS)
             Log.d("HCBridge", "readRecords: avvio (90 gg)...")
 
-            // runBlocking qui è intenzionale: stiamo su un thread del pool,
-            // non su un thread coroutine, quindi possiamo bloccare in sicurezza.
             val response = runBlocking {
                 client.readRecords(
                     ReadRecordsRequest(
@@ -121,21 +140,22 @@ class HealthConnectBridge(
             }
 
             Log.d("HCBridge", "readRecords: ${response.records.size} record")
+            needsHcWarmup = false  // sync riuscita: reset flag
             val points = response.records.joinToString(",") { r ->
                 """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
             }
             """{"ok":true,"points":[$points]}"""
 
         } catch (e: InterruptedException) {
-            // Thread.interrupt() ricevuto dal Future.cancel(true) — timeout scattato
             Thread.currentThread().interrupt()
             Log.w("HCBridge", "Thread interrotto (timeout hard)")
-            """{"ok":false,"error":"Timeout: HC non ha risposto. Apri Health Connect una volta e riprova."}"""
+            """{"ok":false,"error":"Timeout: HC non ha risposto in tempo."}"""
 
         } catch (e: SecurityException) {
             Log.w("HCBridge", "SecurityException: ${e.message}")
             if (!permissionsRequested) {
                 permissionsRequested = true
+                needsHcWarmup = true   // la prossima sync potrebbe avere bisogno di warmup
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     activity.requestHealthConnectPermissions()
                 }
@@ -154,10 +174,6 @@ class HealthConnectBridge(
         }
     }
 
-    /**
-     * Callback via Base64 per evitare problemi di escaping JS con caratteri speciali.
-     * atob() in JavaScript decodifica → JSON.parse() crea l'oggetto.
-     */
     private fun callback(callbackId: String, json: String) {
         val b64 = Base64.encodeToString(json.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         webView.post {
