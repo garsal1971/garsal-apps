@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.JsResult
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -206,6 +208,20 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     return false
+                }
+            }
+
+            // Gestisce alert() / confirm() dal JavaScript — senza questo vengono ignorati
+            webChromeClient = object : WebChromeClient() {
+                override fun onJsAlert(
+                    view: WebView?, url: String?, message: String?, result: JsResult?
+                ): Boolean {
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setMessage(message)
+                        .setPositiveButton("OK") { _, _ -> result?.confirm() }
+                        .setOnCancelListener { result?.cancel() }
+                        .show()
+                    return true
                 }
             }
         }
