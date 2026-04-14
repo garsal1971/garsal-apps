@@ -1225,8 +1225,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.103';
-        var BUILD_TIME  = '2026-04-14T20:00:00Z';
+        var APP_VERSION = 'v3.5.104';
+        var BUILD_TIME  = '2026-04-14T20:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3099,6 +3099,7 @@
         }
 
         // Mostra il recap della sincronizzazione (usato da Health Connect e Google Fit)
+        // syncInfo: { count, from, to, lastWeight, warning? }
         function showSyncResult(syncInfo) {
             var overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;';
@@ -3117,6 +3118,9 @@
                     'Dal: ' + syncInfo.from + ' &rarr; ' + syncInfo.to;
                 if (syncInfo.lastWeight !== null) {
                     body.innerHTML += '<br><br>Ultima pesata: <strong>' + syncInfo.lastWeight + ' kg</strong>';
+                }
+                if (syncInfo.warning) {
+                    body.innerHTML += '<br><br><span style="color:#D97706;font-size:0.85rem;">' + syncInfo.warning + '</span>';
                 }
             } else {
                 body.textContent = 'Nessuna nuova pesata trovata negli ultimi 90 giorni.';
@@ -3404,25 +3408,14 @@
             .then(function(syncInfo) {
                 log('Sync completata!');
                 var today = localDateStr();
-                if (syncInfo && syncInfo.count > 0) {
-                    var msg = 'Sincronizzazione completata!\n' +
-                              syncInfo.count + ' pesate salvate\n' +
-                              'Dal: ' + syncInfo.from + '\nAl: ' + syncInfo.to;
-                    if (syncInfo.lastWeight !== null) {
-                        msg += '\n\nUltima pesata: ' + syncInfo.lastWeight + ' kg\n' +
-                               'Ora locale: ' + syncInfo.to + ' ' + syncInfo.lastTime + '\n' +
-                               'UTC raw:     ' + (syncInfo.lastTsUtc || '—');
-                        log('Ultima pesata: ' + syncInfo.lastWeight + ' kg — locale: ' + syncInfo.to + ' ' + syncInfo.lastTime + ' — UTC: ' + syncInfo.lastTsUtc);
-                    }
-                    if (syncInfo.to && syncInfo.to < today) {
-                        msg += '\n\n⚠️ Dati fino al ' + syncInfo.to + ' (oggi: ' + today + ').\n' +
-                               'Apri Google Fit sul telefono per forzare la sync e riprova.';
-                        log('⚠️ Ultimo dato: ' + syncInfo.to + ' — Google Fit non ha ancora sincronizzato oggi');
-                    }
-                    alert(msg);
-                } else {
-                    alert('Sincronizzazione completata!\nNessuna nuova pesata trovata negli ultimi 90 giorni.');
+                if (syncInfo && syncInfo.lastWeight !== null) {
+                    log('Ultima pesata: ' + syncInfo.lastWeight + ' kg — locale: ' + syncInfo.to + ' ' + syncInfo.lastTime + ' — UTC: ' + syncInfo.lastTsUtc);
                 }
+                if (syncInfo && syncInfo.to && syncInfo.to < today) {
+                    syncInfo.warning = '⚠️ Dati fino al ' + syncInfo.to + ' (oggi: ' + today + '). Apri Google Fit sul telefono per forzare la sync e riprova.';
+                    log('⚠️ Ultimo dato: ' + syncInfo.to + ' — Google Fit non ha ancora sincronizzato oggi');
+                }
+                showSyncResult(syncInfo);
                 loadData();
             })
             .catch(function(error) {
