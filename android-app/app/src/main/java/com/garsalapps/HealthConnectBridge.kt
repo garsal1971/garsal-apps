@@ -21,13 +21,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Bridge JS ↔ Health Connect.
  *
- * Problema: dopo il primo grant dei permessi, readRecords() blocca il thread
- * su IBinder.transact() che è una chiamata nativa non interrompibile via
- * Thread.interrupt(). Il servizio HC non risponde finché non viene aperto
- * almeno una volta dall'utente.
+ * I permessi vengono richiesti tramite PermissionController.createRequestPermissionResultContract()
+ * in MainActivity — questo è il SOLO modo per cui HC Service riceva la notifica del grant
+ * e sblocchi le successive chiamate readRecords().
  *
- * Soluzione: quando il timeout scatta, apriamo automaticamente l'app
- * Connessione Salute così HC si inizializza e la prossima sync funziona.
+ * Timeout: ExecutorService + Future.get(25s). IBinder.transact() non è interrompibile
+ * via Thread.interrupt(), quindi il timeout è "best effort" — se HC è completamente
+ * bloccato il thread rimane, ma il callback JS arriva comunque entro 25s.
  */
 class HealthConnectBridge(
     private val activity: MainActivity,
@@ -36,10 +36,8 @@ class HealthConnectBridge(
     private val scope    = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val executor = Executors.newCachedThreadPool()
 
-    // Guard anti-loop permessi
+    // Guard anti-loop: apre la schermata permessi solo una volta per sessione
     private var permissionsRequested = false
-    // Flag: true dopo PERMISSION_REQUESTED, usato per aprire HC su timeout
-    private var needsHcWarmup = false
 
     @JavascriptInterface
     fun isSdkAvailable(): Boolean {
@@ -59,26 +57,14 @@ class HealthConnectBridge(
         }
     }
 
-    /**
-     * Timeout "duro" via Future.get() — interrompe il thread con Thread.interrupt()
-     * quando il timeout scatta. Se HC non risponde e sappiamo che le permissions
-     * sono state appena concesse (needsHcWarmup), apriamo HC automaticamente.
-     */
     private fun syncWithHardTimeout(timeoutMs: Long): String {
         val future = executor.submit<String> { doSync() }
         return try {
             future.get(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (e: java.util.concurrent.TimeoutException) {
             future.cancel(true)
-            Log.e("HCBridge", "Timeout hard ${timeoutMs / 1000}s: HC non ha risposto")
-            // Se è la prima sync dopo il grant, apriamo HC per inizializzare il servizio
-            if (needsHcWarmup) {
-                needsHcWarmup = false
-                openHealthConnectApp()
-                """{"ok":false,"error":"HC_NEEDS_WARMUP"}"""
-            } else {
-                """{"ok":false,"error":"HC non risponde (${timeoutMs / 1000}s). Apri Connessione Salute manualmente e riprova."}"""
-            }
+            Log.e("HCBridge", "Timeout hard ${timeoutMs / 1000}s")
+            """{"ok":false,"error":"HC non risponde (${timeoutMs / 1000}s). Riprova tra qualche secondo."}"""
         } catch (e: Exception) {
             val cause = e.cause ?: e
             Log.e("HCBridge", "Errore future: ${cause.javaClass.name}: ${cause.message}")
@@ -86,27 +72,6 @@ class HealthConnectBridge(
             val msg = (cause.message ?: "Errore sconosciuto").take(150)
                 .replace("\\", "/").replace("\"", "'").replace("\n", " ")
             """{"ok":false,"error":"[$cls] $msg"}"""
-        }
-    }
-
-    /** Apre l'app Connessione Salute per inizializzare il servizio HC. */
-    private fun openHealthConnectApp() {
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            try {
-                val pkg = listOf(
-                    "com.android.healthconnect.controller",   // Android 14+ integrato
-                    "com.google.android.apps.healthdata"      // Play Store (Android 9-13)
-                ).firstOrNull { activity.packageManager.getLaunchIntentForPackage(it) != null }
-                val intent = pkg?.let { activity.packageManager.getLaunchIntentForPackage(it) }
-                if (intent != null) {
-                    Log.d("HCBridge", "Apro HC per warmup: $pkg")
-                    activity.startActivity(intent)
-                } else {
-                    Log.w("HCBridge", "App HC non trovata per warmup")
-                }
-            } catch (e: Exception) {
-                Log.e("HCBridge", "Errore apertura HC: ${e.message}")
-            }
         }
     }
 
@@ -140,7 +105,6 @@ class HealthConnectBridge(
             }
 
             Log.d("HCBridge", "readRecords: ${response.records.size} record")
-            needsHcWarmup = false  // sync riuscita: reset flag
             val points = response.records.joinToString(",") { r ->
                 """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
             }
@@ -149,13 +113,12 @@ class HealthConnectBridge(
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             Log.w("HCBridge", "Thread interrotto (timeout hard)")
-            """{"ok":false,"error":"Timeout: HC non ha risposto in tempo."}"""
+            """{"ok":false,"error":"HC non ha risposto in tempo. Riprova."}"""
 
         } catch (e: SecurityException) {
             Log.w("HCBridge", "SecurityException: ${e.message}")
             if (!permissionsRequested) {
                 permissionsRequested = true
-                needsHcWarmup = true   // la prossima sync potrebbe avere bisogno di warmup
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     activity.requestHealthConnectPermissions()
                 }
