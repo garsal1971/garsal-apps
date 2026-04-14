@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -119,7 +120,7 @@ class HealthConnectBridge(
             Log.d("HCBridge", "readRecords: ${response.records.size} record")
             notifyJS("doSync: readRecords OK, ${response.records.size} record")
             val points = response.records.joinToString(",") { r ->
-                """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format("%.2f", r.weight.inKilograms)}}"""
+                """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format(Locale.US, "%.2f", r.weight.inKilograms)}}"""
             }
             """{"ok":true,"points":[$points]}"""
 
@@ -171,7 +172,7 @@ class HealthConnectBridge(
         val b64 = Base64.encodeToString(json.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         webView.post {
             webView.evaluateJavascript(
-                "try{var _d=JSON.parse(atob('$b64'));if(window.__hcCallback_$callbackId)window.__hcCallback_$callbackId(_d);}catch(_e){console.error('HC callback error',_e);}",
+                "try{var _d=JSON.parse(atob('$b64'));if(window.__hcCallback_$callbackId)window.__hcCallback_$callbackId(_d);}catch(_e){if(typeof log==='function')log('[HC-ERR] '+(_e&&_e.message||_e));}",
                 null
             )
         }
