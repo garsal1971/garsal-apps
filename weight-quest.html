@@ -1225,8 +1225,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.102';
-        var BUILD_TIME  = '2026-04-14T19:30:00Z';
+        var APP_VERSION = 'v3.5.103';
+        var BUILD_TIME  = '2026-04-14T20:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3098,6 +3098,41 @@
             setTimeout(function() { if (t.parentNode) t.remove(); }, duration || 3500);
         }
 
+        // Mostra il recap della sincronizzazione (usato da Health Connect e Google Fit)
+        function showSyncResult(syncInfo) {
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;';
+            var card = document.createElement('div');
+            card.style.cssText = 'background:#fff;border-radius:14px;padding:1.6rem 1.4rem;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.25);';
+            var icon = document.createElement('div');
+            icon.textContent = '✅';
+            icon.style.cssText = 'font-size:2.8rem;margin-bottom:0.4rem;';
+            var title = document.createElement('div');
+            title.textContent = 'Sincronizzazione completata!';
+            title.style.cssText = 'font-size:1.05rem;font-weight:700;color:#1F2937;margin-bottom:0.8rem;';
+            var body = document.createElement('div');
+            body.style.cssText = 'font-size:0.92rem;color:#374151;line-height:1.7;margin-bottom:1.2rem;';
+            if (syncInfo && syncInfo.count > 0) {
+                body.innerHTML = '<strong>' + syncInfo.count + ' pesate salvate</strong><br>' +
+                    'Dal: ' + syncInfo.from + ' &rarr; ' + syncInfo.to;
+                if (syncInfo.lastWeight !== null) {
+                    body.innerHTML += '<br><br>Ultima pesata: <strong>' + syncInfo.lastWeight + ' kg</strong>';
+                }
+            } else {
+                body.textContent = 'Nessuna nuova pesata trovata negli ultimi 90 giorni.';
+            }
+            var btn = document.createElement('button');
+            btn.textContent = 'OK';
+            btn.style.cssText = 'background:#FF3366;color:#fff;border:none;border-radius:8px;padding:0.55rem 2.2rem;font-size:1rem;font-weight:700;cursor:pointer;';
+            btn.onclick = function() { if (overlay.parentNode) overlay.remove(); };
+            card.appendChild(icon);
+            card.appendChild(title);
+            card.appendChild(body);
+            card.appendChild(btn);
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+        }
+
         // Callback salvato per il modal Google auth
         var _googleAuthCallback = null;
 
@@ -3234,17 +3269,7 @@
                 processWeights({ point: fitPoints })
                     .then(function(syncInfo) {
                         log('Sync HC completata!');
-                        if (syncInfo && syncInfo.count > 0) {
-                            var msg = 'Sincronizzazione completata!\n' +
-                                      syncInfo.count + ' pesate salvate\n' +
-                                      'Dal: ' + syncInfo.from + '\nAl: ' + syncInfo.to;
-                            if (syncInfo.lastWeight !== null) {
-                                msg += '\n\nUltima pesata: ' + syncInfo.lastWeight + ' kg';
-                            }
-                            alert(msg);
-                        } else {
-                            alert('Sincronizzazione completata!\nNessuna nuova pesata trovata negli ultimi 90 giorni.');
-                        }
+                        showSyncResult(syncInfo);
                         loadData();
                     })
                     .finally(function() { _hcSyncInProgress = false; });
