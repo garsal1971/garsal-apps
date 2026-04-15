@@ -168,6 +168,15 @@ class MainActivity : AppCompatActivity() {
                  */
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
+                    // Rimuove user-scalable=no dal viewport per abilitare pinch-to-zoom
+                    view?.evaluateJavascript("""
+                        (function(){
+                            var m=document.querySelector('meta[name="viewport"]');
+                            if(m){m.setAttribute('content',m.content
+                                .replace(/user-scalable\s*=\s*(no|0)/gi,'user-scalable=yes')
+                                .replace(/maximum-scale\s*=\s*[0-9.]+/gi,'maximum-scale=5.0'));}
+                        })();
+                    """.trimIndent(), null)
                     if (url?.contains("garsal.netlify.app") != true) return
 
                     val prefs = getSharedPreferences(PREFS_OAUTH, MODE_PRIVATE)
