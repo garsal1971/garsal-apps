@@ -21,6 +21,7 @@ import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
@@ -54,6 +55,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Disabilita edge-to-edge: impedisce al WebView di espandersi sotto la status bar
+        WindowCompat.setDecorFitsSystemWindows(window, true)
 
         // Registra il launcher PRIMA di setContentView (requisito ActivityResult API)
         requestHcPermissions = registerForActivityResult(
@@ -147,6 +151,7 @@ class MainActivity : AppCompatActivity() {
                 setSupportZoom(false)
                 useWideViewPort = true
                 loadWithOverviewMode = true
+                textZoom = 100  // ignora dimensione font di sistema
             }
             // Espone window.AndroidBridge al JavaScript della pagina
             addJavascriptInterface(AndroidBridge(), "AndroidBridge")
