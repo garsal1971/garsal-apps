@@ -2260,8 +2260,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.42';
-        const BUILD_TIME  = '2026-04-15T10:00:00Z';
+        const APP_VERSION = 'v19.18.43';
+        const BUILD_TIME  = '2026-04-15T10:15:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -3983,41 +3983,6 @@
             // Costruisci HTML
             let html = '';
             
-            // FILA DI BADGE IN ALTO
-            const totalScore = history.reduce((sum, h) => sum + (h.points || 0), 0);
-            const completedCount = history.filter(h => h.action === 'completed').length;
-            const failedCount = history.filter(h => h.action === 'failed').length;
-            const skippedCount = history.filter(h => h.action === 'skipped').length;
-            
-            debugLog('📊 DASHBOARD BADGES - Total: ' + totalScore + ' | Completed: ' + completedCount + ' | Failed: ' + failedCount + ' | Skipped: ' + skippedCount + ' | History items: ' + history.length);
-            
-            html += `
-                <div class="dashboard-badges" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
-                    <!-- Badge 1: Punteggio -->
-                    <div class="card" style="background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; text-align: center; padding: 1rem;">
-                        <div style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${totalScore}</div>
-                        <div style="font-size: 0.9rem; font-weight: 600; opacity: 0.9;">PUNTEGGIO</div>
-                    </div>
-                    
-                    <!-- Badge 2: Completati -->
-                    <div class="card" style="background: var(--success)20; color: var(--success); text-align: center; padding: 1rem; border: 2px solid var(--success);">
-                        <div style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${completedCount}</div>
-                        <div style="font-size: 0.9rem; font-weight: 600;">COMPLETATI</div>
-                    </div>
-                    
-                    <!-- Badge 3: Falliti -->
-                    <div class="card" style="background: var(--danger)20; color: var(--danger); text-align: center; padding: 1rem; border: 2px solid var(--danger);">
-                        <div style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${failedCount}</div>
-                        <div style="font-size: 0.9rem; font-weight: 600;">FALLITI</div>
-                    </div>
-                    
-                    <!-- Badge 4: Saltati -->
-                    <div class="card" style="background: var(--warning)20; color: var(--warning); text-align: center; padding: 1rem; border: 2px solid var(--warning);">
-                        <div style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${skippedCount}</div>
-                        <div style="font-size: 0.9rem; font-weight: 600;">SALTATI</div>
-                    </div>
-                </div>
-            `;
             
             // SCADUTI
             if (overdueTasks.length > 0) {
@@ -9511,33 +9476,6 @@ Per attivarle:
             
             let html = '';
             
-            const totalScore = history.reduce((sum, h) => sum + (h.points || 0), 0);
-            const completedCount = history.filter(h => h.action === 'completed').length;
-            const failedCount = history.filter(h => h.action === 'failed').length;
-            const skippedCount = history.filter(h => h.action === 'skipped').length;
-            
-            debugLog('📊 CALENDAR BADGES - Total: ' + totalScore + ' | Completed: ' + completedCount + ' | Failed: ' + failedCount + ' | Skipped: ' + skippedCount + ' | History items: ' + history.length);
-            
-            html += `
-                <div class="dash-badges" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
-                    <div class="card dash-badge" style="background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%); color: white; text-align: center; padding: 1rem;">
-                        <div class="dash-badge-value" style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${totalScore}</div>
-                        <div class="dash-badge-label" style="font-size: 0.9rem; font-weight: 600; opacity: 0.9;">PUNTEGGIO</div>
-                    </div>
-                    <div class="card dash-badge" style="background: var(--success)20; color: var(--success); text-align: center; padding: 1rem; border: 2px solid var(--success);">
-                        <div class="dash-badge-value" style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${completedCount}</div>
-                        <div class="dash-badge-label" style="font-size: 0.9rem; font-weight: 600;">COMPLETATI</div>
-                    </div>
-                    <div class="card dash-badge" style="background: var(--danger)20; color: var(--danger); text-align: center; padding: 1rem; border: 2px solid var(--danger);">
-                        <div class="dash-badge-value" style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${failedCount}</div>
-                        <div class="dash-badge-label" style="font-size: 0.9rem; font-weight: 600;">FALLITI</div>
-                    </div>
-                    <div class="card dash-badge" style="background: var(--warning)20; color: var(--warning); text-align: center; padding: 1rem; border: 2px solid var(--warning);">
-                        <div class="dash-badge-value" style="font-size: 2.5rem; font-weight: 900; margin-bottom: 0.25rem;">${skippedCount}</div>
-                        <div class="dash-badge-label" style="font-size: 0.9rem; font-weight: 600;">SALTATI</div>
-                    </div>
-                </div>
-            `;
             
             html += `<div class="dash-sections-grid">`;
             
