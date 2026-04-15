@@ -148,7 +148,9 @@ class MainActivity : AppCompatActivity() {
                 domStorageEnabled = true
                 databaseEnabled = true
                 cacheMode = WebSettings.LOAD_DEFAULT
-                setSupportZoom(false)
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false  // nasconde pulsanti +/- overlay
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 textZoom = 100  // ignora dimensione font di sistema
