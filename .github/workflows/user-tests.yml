@@ -1,0 +1,36 @@
+name: User Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Installa Playwright
+        run: |
+          npm install playwright@1.56.1
+          npx playwright install chromium --with-deps
+
+      - name: Esegui user test
+        env:
+          SB_TOKEN: ${{ secrets.SB_TOKEN }}
+        run: node tests/run-tests.js
+
+      - name: Upload risultati
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-test-results-${{ github.run_number }}
+          path: |
+            tests/report.txt
+            tests/screenshots/
+          retention-days: 14
