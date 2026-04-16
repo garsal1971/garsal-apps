@@ -2,6 +2,11 @@ name: User Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      sb_session:
+        description: 'Supabase session JSON (da localStorage)'
+        required: true
+        type: string
 
 jobs:
   test:
@@ -22,7 +27,7 @@ jobs:
 
       - name: Esegui user test
         env:
-          SB_TOKEN: ${{ secrets.SB_SESSION }}
+          SB_TOKEN: ${{ inputs.sb_session }}
         run: node tests/run-tests.js
 
       - name: Upload risultati
