@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Test Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .header { background: #1e293b; padding: 16px 20px; border-bottom: 1px solid #334155; }
+  .header h1 { font-size: 18px; font-weight: 700; color: #f1f5f9; }
+  .header p  { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; margin: 16px; padding: 16px; }
+  .card h2 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
+  label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 6px; }
+  textarea { width: 100%; background: #0f172a; border: 1px solid #475569; border-radius: 8px; color: #e2e8f0; font-size: 12px; font-family: monospace; padding: 10px; resize: vertical; min-height: 80px; outline: none; }
+  textarea:focus { border-color: #6366f1; }
+  .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-run  { background: #6366f1; color: #fff; margin-top: 12px; }
+  .btn-clear { background: #334155; color: #94a3b8; margin-top: 8px; font-size: 13px; font-weight: 500; padding: 10px; }
+  .status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+  .status.idle    { background: #1e293b; color: #64748b; }
+  .status.running { background: #1e3a5f; color: #60a5fa; }
+  .status.done-ok { background: #14532d; color: #86efac; }
+  .status.done-ko { background: #450a0a; color: #fca5a5; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .dot.pulse { animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  pre { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 11px; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; color: #94a3b8; }
+  pre .pass { color: #86efac; }
+  pre .fail { color: #fca5a5; }
+  pre .snap { color: #c4b5fd; }
+  pre .head { color: #f1f5f9; font-weight: bold; }
+  .steps { padding-left: 0; list-style: none; }
+  .steps li { display: flex; gap: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
+  .steps li span:first-child { background: #6366f1; color: #fff; border-radius: 50%; width: 20px; height: 20px; min-width: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
+  code { background: #0f172a; border: 1px solid #475569; border-radius: 4px; padding: 2px 6px; font-size: 11px; word-break: break-all; color: #c4b5fd; }
+  .saved-badge { display: inline-block; background: #14532d; color: #86efac; border-radius: 6px; padding: 2px 8px; font-size: 11px; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧪 User Test Dashboard</h1>
+  <p id="baseUrl">garsal-apps.netlify.app</p>
+</div>
+
+<!-- Token -->
+<div class="card" id="tokenCard">
+  <h2>Token Supabase <span id="savedBadge" class="saved-badge" style="display:none">✓ salvato</span></h2>
+  <ul class="steps">
+    <li><span>1</span><span>Apri <strong>garsal-apps.netlify.app</strong> nel browser (già loggato)</span></li>
+    <li><span>2</span><span>Nella barra degli indirizzi incolla e vai:<br><code id="jsUrl"></code></span></li>
+    <li><span>3</span><span>Copia il testo dal popup e incollalo qui sotto</span></li>
+  </ul>
+  <label for="tokenInput">Token:</label>
+  <textarea id="tokenInput" placeholder='{"access_token":"...'></textarea>
+  <button class="btn btn-run" onclick="saveToken()">Salva Token</button>
+</div>
+
+<!-- Run -->
+<div class="card">
+  <h2>Esecuzione</h2>
+  <div class="status idle" id="statusBar">
+    <span class="dot"></span><span id="statusText">In attesa</span>
+  </div>
+  <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ Avvia Test</button>
+  <button class="btn btn-clear" onclick="clearOutput()">Pulisci output</button>
+</div>
+
+<!-- Output -->
+<div class="card">
+  <h2>Output</h2>
+  <pre id="output">Premi "Avvia Test" per iniziare.</pre>
+</div>
+
+<script>
+const SB_KEY = 'sb-jajlmmdsjlvzgcxiiypk-auth-token';
+document.getElementById('jsUrl').textContent =
+  "javascript:prompt('Token:',localStorage.getItem('" + SB_KEY + "'))";
+
+let pollTimer = null;
+
+async function saveToken() {
+  const t = document.getElementById('tokenInput').value.trim();
+  if (!t || t === 'null') { alert('Token non valido'); return; }
+  const r = await fetch('/save-token', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: t }) });
+  if (r.ok) {
+    document.getElementById('savedBadge').style.display = '';
+    document.getElementById('tokenInput').value = '';
+    alert('✓ Token salvato!');
+  }
+}
+
+async function runTests() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  setStatus('running', '⏳ Test in esecuzione...');
+  document.getElementById('output').textContent = 'Avvio...';
+  const r = await fetch('/run', { method: 'POST' });
+  if (!r.ok) {
+    const e = await r.text();
+    setStatus('done-ko', '✗ Errore avvio');
+    document.getElementById('output').textContent = e;
+    btn.disabled = false;
+    return;
+  }
+  pollTimer = setInterval(pollStatus, 2500);
+}
+
+async function pollStatus() {
+  const r = await fetch('/status');
+  const d = await r.json();
+  const pre = document.getElementById('output');
+  pre.textContent = d.output || '';
+  pre.scrollTop = pre.scrollHeight;
+  if (d.done) {
+    clearInterval(pollTimer);
+    const ok = (d.exitCode === 0);
+    setStatus(ok ? 'done-ok' : 'done-ko', ok ? '✓ Test completati' : '✗ Alcuni test falliti');
+    document.getElementById('runBtn').disabled = false;
+  }
+}
+
+function setStatus(cls, text) {
+  const bar = document.getElementById('statusBar');
+  bar.className = 'status ' + cls;
+  bar.querySelector('.dot').className = 'dot' + (cls === 'running' ? ' pulse' : '');
+  document.getElementById('statusText').textContent = text;
+}
+
+function clearOutput() {
+  document.getElementById('output').textContent = '';
+}
+
+// Check if token already saved
+fetch('/has-token').then(r => r.json()).then(d => {
+  if (d.ok) document.getElementById('savedBadge').style.display = '';
+});
+</script>
+
+</body>
+</html>
