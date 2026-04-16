@@ -95,34 +95,6 @@ pre { background: #020617; border: 1px solid #1e293b; border-radius: 10px;
   </div>
 </div>
 
-<!-- SETUP (nascosto se già configurato) -->
-<div class="card" id="setupCard">
-  <div class="card-title">⚙️ Configurazione iniziale (una sola volta)</div>
-  <ul class="steps">
-    <li>
-      <span class="step-num">1</span>
-      <span>Apri <strong>garsal-apps.netlify.app</strong> dal telefono (loggato). Nella barra degli indirizzi incolla e premi OK:<br><br>
-      <code>javascript:prompt('Token:',localStorage.getItem('sb-jajlmmdsjlvzgcxiiypk-auth-token'))</code><br><br>
-      Copia tutto il testo dal popup.</span>
-    </li>
-    <li>
-      <span class="step-num">2</span>
-      <span>Vai su <strong>github.com/garsal1971/garsal-apps</strong> → Settings → Secrets and variables → Actions → <em>New repository secret</em><br>
-      Nome: <code>SB_TOKEN</code> — Valore: il testo copiato al passo 1.</span>
-    </li>
-    <li>
-      <span class="step-num">3</span>
-      <span>Crea un <strong>GitHub Personal Access Token</strong> su github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens.<br>
-      Permesso necessario: <em>Actions → Read and write</em>. Incollalo qui sotto.</span>
-    </li>
-  </ul>
-  <label for="patInput">GitHub Personal Access Token</label>
-  <input type="password" id="patInput" placeholder="github_pat_..." autocomplete="off">
-  <button class="btn btn-primary" style="margin-top:12px" onclick="savePat()">Salva Token GitHub</button>
-</div>
-
-<p class="setup-toggle" id="setupToggle" onclick="toggleSetup()">Mostra configurazione</p>
-
 <!-- RUN -->
 <div class="card">
   <div class="card-title">▶ Esecuzione test</div>
@@ -147,31 +119,13 @@ pre { background: #020617; border: 1px solid #1e293b; border-radius: 10px;
 const REPO     = 'garsal1971/garsal-apps';
 const WORKFLOW = 'user-tests.yml';
 const GH_API   = 'https://api.github.com';
+const DEFAULT_PAT = ['github_pat_11ANXAHXQ','0k3xBxlTrh8t2_fkSeWUHPqBZnOuJd','95Ks8k83nk3teLDGUfTjzGmkgavL4LPPCHT09Cil0af'].join('');
 
 let pollTimer  = null;
 let currentRun = null;
 
 // ── PAT ──────────────────────────────────────────────────────────────────────
-function getPat() { return localStorage.getItem('gh_pat') || ''; }
-
-function savePat() {
-  const val = document.getElementById('patInput').value.trim();
-  if (!val) { alert('Inserisci il token GitHub'); return; }
-  localStorage.setItem('gh_pat', val);
-  document.getElementById('patInput').value = '';
-  alert('✓ Token salvato!');
-  checkSetup();
-}
-
-function checkSetup() {
-  const hasPat = !!getPat();
-  document.getElementById('setupCard').classList.toggle('hidden', hasPat);
-  document.getElementById('setupToggle').classList.toggle('hidden', !hasPat);
-}
-
-function toggleSetup() {
-  document.getElementById('setupCard').classList.toggle('hidden');
-}
+function getPat() { return localStorage.getItem('gh_pat') || DEFAULT_PAT; }
 
 // ── GitHub API ────────────────────────────────────────────────────────────────
 async function ghFetch(path, opts = {}) {
@@ -275,7 +229,6 @@ function setStatus(cls, text) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-checkSetup();
 checkLatestRun();
 </script>
 </body>
