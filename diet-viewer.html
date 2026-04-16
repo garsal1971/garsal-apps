@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diet Viewer v1.0.5</title>
+    <title>Diet Viewer v1.0.6</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -331,7 +331,7 @@
     <aside class="sidebar">
         <div class="sidebar-logo">
             Diet Viewer
-            <span>v1.0.5</span>
+            <span>v1.0.6</span>
         </div>
 
         <div class="nav-item active" data-page="piano" onclick="switchPage('piano')">
@@ -390,10 +390,14 @@
                 <div class="shop-controls">
                     <div>
                         <label>Piano dieta</label>
-                        <select id="shopConsultSel"></select>
+                        <select id="shopConsultSel" onchange="onShopConsultChange()"></select>
                     </div>
                     <div>
-                        <label>Per quanti giorni</label>
+                        <label>Dal giorno</label>
+                        <select id="shopStartDay" onchange="onShopStartDayChange()"></select>
+                    </div>
+                    <div>
+                        <label>Numero giorni</label>
                         <input type="number" id="shopDays" min="1" max="7" value="7">
                     </div>
                     <button class="btn-generate" onclick="generateShopList()">Genera lista</button>
@@ -406,8 +410,8 @@
 </div>
 
 <script>
-    var APP_VERSION = 'v1.0.5';
-    var BUILD_TIME  = '2026-04-16T10:30:00Z';
+    var APP_VERSION = 'v1.0.6';
+    var BUILD_TIME  = '2026-04-16T11:00:00Z';
     console.log('%c DIET VIEWER ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -748,6 +752,7 @@
     var shopConsultCache = []; // [{id, created_at, plan_json}]
     var shopCurrentList  = []; // [{nome, qty_g, checked}]
     var shopConsultId    = null;
+    var shopStartIdx     = 0;
 
     async function initSpesaPage() {
         if (!sb) return;
@@ -763,7 +768,7 @@
             if (!error && data) shopConsultCache = data;
         }
 
-        // Popola select
+        // Popola select consulenze
         sel.innerHTML = '';
         shopConsultCache.forEach(function(row) {
             var dt = new Date(row.created_at);
@@ -780,20 +785,58 @@
             sel.value = currentId;
         }
 
-        // Mostra lista salvata se esiste
-        var saved = loadShopState(sel.value);
+        onShopConsultChange();
+    }
+
+    function onShopConsultChange() {
+        var cid     = document.getElementById('shopConsultSel').value;
+        var consult = shopConsultCache.find(function(c) { return c.id === cid; });
+        var giorni  = (consult && consult.plan_json && consult.plan_json.piano_omad_settimanale) || [];
+
+        // Popola select giorni con i giorni del piano
+        var daySel = document.getElementById('shopStartDay');
+        daySel.innerHTML = '';
+        giorni.forEach(function(g, i) {
+            var opt = document.createElement('option');
+            opt.value = i;
+            var label = 'Giorno ' + (i + 1);
+            if (g.giorno) label += ' — ' + g.giorno;
+            opt.textContent = label;
+            daySel.appendChild(opt);
+        });
+
+        onShopStartDayChange();
+    }
+
+    function onShopStartDayChange() {
+        var cid      = document.getElementById('shopConsultSel').value;
+        var startIdx = parseInt(document.getElementById('shopStartDay').value) || 0;
+        var consult  = shopConsultCache.find(function(c) { return c.id === cid; });
+        var totalDays = ((consult && consult.plan_json && consult.plan_json.piano_omad_settimanale) || []).length;
+        var remaining = totalDays - startIdx;
+
+        var daysInput = document.getElementById('shopDays');
+        daysInput.max   = remaining;
+        daysInput.value = remaining;
+
+        // Ripristina lista salvata per questa combinazione
+        var saved = loadShopState(cid, startIdx);
         if (saved && saved.items && saved.items.length) {
             shopCurrentList = saved.items;
-            shopConsultId   = sel.value;
-            document.getElementById('shopDays').value = saved.days || 7;
+            shopConsultId   = cid;
+            shopStartIdx    = startIdx;
+            daysInput.value = saved.days;
             renderShopList(saved.items);
+        } else {
+            shopCurrentList = [];
+            document.getElementById('shopListContent').innerHTML = '';
         }
     }
 
     function generateShopList() {
-        var sel   = document.getElementById('shopConsultSel');
-        var days  = Math.max(1, Math.min(7, parseInt(document.getElementById('shopDays').value) || 7));
-        var cid   = sel.value;
+        var cid      = document.getElementById('shopConsultSel').value;
+        var startIdx = parseInt(document.getElementById('shopStartDay').value) || 0;
+        var days     = Math.max(1, parseInt(document.getElementById('shopDays').value) || 1);
 
         var consult = shopConsultCache.find(function(c) { return c.id === cid; });
         if (!consult || !consult.plan_json) {
@@ -801,7 +844,8 @@
             return;
         }
 
-        var giorni = (consult.plan_json.piano_omad_settimanale || []).slice(0, days);
+        var allGiorni = consult.plan_json.piano_omad_settimanale || [];
+        var giorni    = allGiorni.slice(startIdx, startIdx + days);
 
         // Aggrega ingredienti per nome
         var map = {};
@@ -813,12 +857,12 @@
             });
         });
 
-        // Recupera stato checked precedente (se stessa consulenza)
+        // Recupera stato checked precedente
         var checkedSet = new Set();
-        if (shopConsultId === cid && shopCurrentList.length) {
+        if (shopConsultId === cid && shopStartIdx === startIdx && shopCurrentList.length) {
             shopCurrentList.forEach(function(i) { if (i.checked) checkedSet.add(i.nome); });
         } else {
-            var saved = loadShopState(cid);
+            var saved = loadShopState(cid, startIdx);
             if (saved) saved.items.forEach(function(i) { if (i.checked) checkedSet.add(i.nome); });
         }
 
@@ -829,7 +873,8 @@
 
         shopCurrentList = items;
         shopConsultId   = cid;
-        saveShopState(cid, days, items);
+        shopStartIdx    = startIdx;
+        saveShopState(cid, startIdx, days, items);
         renderShopList(items);
     }
 
@@ -890,26 +935,28 @@
     function toggleShopItem(idx) {
         if (!shopCurrentList[idx]) return;
         shopCurrentList[idx].checked = !shopCurrentList[idx].checked;
-        var days = parseInt(document.getElementById('shopDays').value) || 7;
-        saveShopState(shopConsultId, days, shopCurrentList);
+        var days = parseInt(document.getElementById('shopDays').value) || 1;
+        saveShopState(shopConsultId, shopStartIdx, days, shopCurrentList);
         renderShopList(shopCurrentList);
     }
 
     function resetShopList() {
         shopCurrentList.forEach(function(i) { i.checked = false; });
-        var days = parseInt(document.getElementById('shopDays').value) || 7;
-        saveShopState(shopConsultId, days, shopCurrentList);
+        var days = parseInt(document.getElementById('shopDays').value) || 1;
+        saveShopState(shopConsultId, shopStartIdx, days, shopCurrentList);
         renderShopList(shopCurrentList);
     }
 
-    function saveShopState(consultId, days, items) {
+    function saveShopState(consultId, startIdx, days, items) {
         if (!consultId) return;
-        localStorage.setItem('diet_shop_' + consultId, JSON.stringify({ days: days, items: items }));
+        var key = 'diet_shop_' + consultId + '_' + startIdx;
+        localStorage.setItem(key, JSON.stringify({ days: days, startIdx: startIdx, items: items }));
     }
 
-    function loadShopState(consultId) {
+    function loadShopState(consultId, startIdx) {
         if (!consultId) return null;
-        var raw = localStorage.getItem('diet_shop_' + consultId);
+        var key = 'diet_shop_' + consultId + '_' + (startIdx || 0);
+        var raw = localStorage.getItem(key);
         if (!raw) return null;
         try { return JSON.parse(raw); } catch(e) { return null; }
     }
