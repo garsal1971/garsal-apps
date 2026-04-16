@@ -22,29 +22,20 @@
     color: #64748B; margin: 32px 0 12px;
   }
 
-  /* CARD */
   .card {
     background: #1E293B; border: 1px solid #334155; border-radius: 10px;
     margin-bottom: 10px; overflow: hidden;
   }
-  .card.todo  { border-color: #92400E88; }
-  .card.done  { border-color: #065F4688; opacity: 0.6; }
-  .card.warn  { border-color: #991B1B88; }
-  .card.info  { border-color: #1E3A5F88; }
+  .card.info { border-color: #1E3A5F88; }
 
-  .card-header {
-    display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px;
-  }
+  .card-header { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; }
   .badge {
     min-width: 46px; height: 22px; border-radius: 5px; flex-shrink: 0; margin-top: 1px;
     display: flex; align-items: center; justify-content: center;
     font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
   }
-  .badge.todo { background: #78350F; color: #FCD34D; border: 1.5px solid #92400E; }
-  .badge.done { background: #064E3B; color: #34D399; border: 1.5px solid #065F46; }
-  .badge.warn { background: #7F1D1D; color: #FCA5A5; border: 1.5px solid #991B1B; }
   .badge.info { background: #1E3A5F; color: #93C5FD; border: 1.5px solid #1D4ED8; }
-  .badge.sql  { background: #312E81; color: #A5B4FC; border: 1.5px solid #4338CA; }
+  .badge.setup { background: #312E81; color: #A5B4FC; border: 1.5px solid #4338CA; }
 
   .card-body { flex: 1; }
   .card-title { font-size: 14px; font-weight: 600; color: #F1F5F9; line-height: 1.4; }
@@ -57,8 +48,7 @@
   .steps { border-top: 1px solid #334155; }
   .step {
     display: flex; gap: 12px; padding: 10px 16px;
-    border-bottom: 1px solid #0F172A; font-size: 12.5px; color: #CBD5E1;
-    line-height: 1.6;
+    border-bottom: 1px solid #0F172A; font-size: 12.5px; color: #CBD5E1; line-height: 1.6;
   }
   .step:last-child { border-bottom: none; }
   .step-num {
@@ -75,7 +65,7 @@
   .code-block { position: relative; padding: 14px 16px; background: #0B1423; border-top: 1px solid #334155; }
   .code-block pre {
     font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.75;
-    color: #BAE6FD; white-space: pre; overflow-x: auto; padding-right: 72px;
+    color: #BAE6FD; white-space: pre-wrap; word-break: break-all; padding-right: 72px;
   }
   .copy-btn {
     position: absolute; top: 10px; right: 12px;
@@ -91,41 +81,38 @@
     font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
     padding: 2px 8px; border-radius: 4px;
   }
-  .tag.android  { background: #14532D44; color: #86EFAC; border: 1px solid #14532D; }
-  .tag.sql-t    { background: #312E8144; color: #A5B4FC; border: 1px solid #312E81; }
-  .tag.prod     { background: #78350F44; color: #FCD34D; border: 1px solid #78350F; }
-  .tag.supabase { background: #064E3B44; color: #34D399; border: 1px solid #064E3B; }
-  .tag.web      { background: #1E3A5F44; color: #93C5FD; border: 1px solid #1E3A5F; }
-
-  footer { margin-top: 48px; text-align: center; font-size: 11px; color: #334155; font-family: monospace; }
+  .tag.web     { background: #1E3A5F44; color: #93C5FD; border: 1px solid #1E3A5F; }
+  .tag.github  { background: #1F2937; color: #D1D5DB; border: 1px solid #374151; }
+  .tag.once    { background: #78350F44; color: #FCD34D; border: 1px solid #78350F; }
 
   /* DOWNLOAD APK */
   .apk-banner {
     background: linear-gradient(135deg, #14532D 0%, #064E3B 100%);
-    border: 1.5px solid #16A34A;
-    border-radius: 12px;
-    padding: 20px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 32px;
-    flex-wrap: wrap;
+    border: 1.5px solid #16A34A; border-radius: 12px;
+    padding: 20px 24px; display: flex; align-items: center;
+    justify-content: space-between; gap: 16px; margin-bottom: 32px; flex-wrap: wrap;
   }
   .apk-info { flex: 1; min-width: 200px; }
-  .apk-info h2 { font-size: 16px; font-weight: 700; color: #D1FAE5; margin-bottom: 4px; }
-  .apk-info p  { font-size: 12px; color: #6EE7B7; line-height: 1.5; }
+  .apk-info h2  { font-size: 16px; font-weight: 700; color: #D1FAE5; margin-bottom: 4px; }
+  .apk-info p   { font-size: 12px; color: #6EE7B7; line-height: 1.5; }
   .apk-info small { font-size: 11px; color: #34D399; font-family: monospace; }
   .apk-btn {
     display: inline-flex; align-items: center; gap: 8px;
-    background: #16A34A; color: #fff;
-    font-size: 14px; font-weight: 700;
-    padding: 12px 24px; border-radius: 8px;
-    text-decoration: none;
-    white-space: nowrap;
+    background: #16A34A; color: #fff; font-size: 14px; font-weight: 700;
+    padding: 12px 24px; border-radius: 8px; text-decoration: none; white-space: nowrap;
     transition: background 0.15s;
   }
   .apk-btn:hover { background: #15803D; }
+
+  .dashboard-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #6366F1; color: #fff; font-size: 14px; font-weight: 700;
+    padding: 12px 20px; border-radius: 8px; text-decoration: none;
+    margin-top: 12px; transition: opacity .15s;
+  }
+  .dashboard-link:hover { opacity: .85; }
+
+  footer { margin-top: 48px; text-align: center; font-size: 11px; color: #334155; font-family: monospace; }
 </style>
 </head>
 <body>
@@ -133,9 +120,8 @@
 
   <header>
     <h1>Guida — garsal-apps</h1>
-    <p>// aggiornato 2026-04-05 · branch: claude/fix-fill-notification-submission-WB5AJ</p>
+    <p>// aggiornato 2026-04-16</p>
   </header>
-
 
   <!-- DOWNLOAD APK -->
   <div class="apk-banner">
@@ -149,511 +135,119 @@
     </a>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       SEZIONE 1 — APP ANDROID
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="section-title">📱 App Android — Health Connect</div>
+  <!-- ═══════════════════════════════════════════════
+       USER TEST DASHBOARD
+  ═══════════════════════════════════════════════ -->
+  <div class="section-title">🧪 User Test — Dashboard</div>
 
-  <!-- 1.1 Build APK -->
-  <div class="card todo">
+  <!-- Setup iniziale -->
+  <div class="card info">
     <div class="card-header">
-      <div class="badge todo">TODO</div>
+      <div class="badge setup">SETUP</div>
       <div class="card-body">
-        <div class="card-title">Compilare e installare il nuovo APK</div>
+        <div class="card-title">Configurazione iniziale (una sola volta)</div>
         <div class="card-desc">
-          Il branch contiene le modifiche a <code>android-app/</code> per il bridge Health Connect.
-          Bisogna aprire il progetto in Android Studio, fare Sync Gradle e compilare l'APK.
+          I test girano su GitHub Actions. Servono due cose: il token Supabase
+          salvato come secret GitHub, e un Personal Access Token per avviare i workflow dal telefono.
         </div>
         <div class="tags">
-          <span class="tag android">Android Studio</span>
-          <span class="tag android">Gradle</span>
+          <span class="tag once">Una sola volta</span>
+          <span class="tag github">GitHub</span>
         </div>
       </div>
     </div>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
-        <div>Aprire <b>Android Studio</b> → File → Open → selezionare la cartella <code>android-app/</code></div>
+        <div>
+          Apri <b>garsal-apps.netlify.app</b> dal telefono (già loggato).
+          Nella barra degli indirizzi incolla e premi OK:
+        </div>
       </div>
+    </div>
+    <div class="code-block" id="cb-token">
+      <button class="copy-btn" onclick="copyCode('cb-token', this)">Copia</button>
+      <pre>javascript:prompt('Token:',localStorage.getItem('sb-jajlmmdsjlvzgcxiiypk-auth-token'))</pre>
+    </div>
+    <div class="steps">
       <div class="step">
         <div class="step-num">2</div>
-        <div>Attendere il <b>Gradle Sync</b> automatico (scarica <code>connect-client:1.1.0-alpha11</code> e le altre dipendenze aggiornate)</div>
+        <div>
+          Copia il testo dal popup. Vai su
+          <b>github.com/garsal1971/garsal-apps</b> →
+          Settings → Secrets and variables → Actions →
+          <b>New repository secret</b><br>
+          Nome: <code>SB_TOKEN</code> — Valore: testo copiato al passo 1.
+        </div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div>Verificare che non ci siano errori nel tab <b>Build</b>. Se appare <i>"compileSdk 35 not installed"</i> → SDK Manager → installa Android 15 (API 35)</div>
+        <div>
+          Crea un <b>GitHub Personal Access Token</b>:<br>
+          github.com → Settings → Developer settings →
+          Personal access tokens → Fine-grained tokens →
+          <b>Generate new token</b><br>
+          Permesso necessario: <em>Actions → Read and write</em>.
+        </div>
       </div>
       <div class="step">
         <div class="step-num">4</div>
-        <div>Menu <b>Build → Generate Signed APK</b> (oppure Build → Build Bundle/APK → Build APK) per produrre l'APK</div>
-      </div>
-      <div class="step">
-        <div class="step-num">5</div>
-        <div>Installare sul dispositivo: <code>adb install -r app-debug.apk</code> oppure copiare l'APK sul telefono e aprirlo</div>
+        <div>
+          Apri il dashboard (link sotto), incolla il PAT nel campo
+          <em>"GitHub Personal Access Token"</em> e premi <b>Salva Token GitHub</b>.
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 1.2 Health Connect installato? -->
-  <div class="card todo">
+  <!-- Uso quotidiano -->
+  <div class="card info">
     <div class="card-header">
-      <div class="badge todo">TODO</div>
+      <div class="badge info">USO</div>
       <div class="card-body">
-        <div class="card-title">Verificare che Health Connect sia installato sul dispositivo</div>
+        <div class="card-title">Avviare i test dal telefono</div>
         <div class="card-desc">
-          Health Connect è un'app separata di Google. Su Android 14+ è integrata nel sistema,
-          su Android 9–13 va installata dal Play Store. Renpho deve essere configurata per
-          sincronizzare i dati in Health Connect (non Google Fit).
+          Dopo il setup iniziale, i test si avviano con un solo bottone.
+          Playwright gira su GitHub Actions (Ubuntu), i risultati e gli screenshot
+          sono disponibili come artifact per 14 giorni.
         </div>
         <div class="tags">
-          <span class="tag android">Android</span>
+          <span class="tag web">Dashboard Netlify</span>
+          <span class="tag github">GitHub Actions</span>
         </div>
       </div>
     </div>
     <div class="steps">
       <div class="step">
         <div class="step-num">1</div>
-        <div>Play Store → cerca <b>"Health Connect"</b> → installa se non presente</div>
+        <div>Apri il <b>Test Dashboard</b> (link sotto)</div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div>App <b>Renpho</b> → Profilo → Impostazioni → Connessioni salute → abilitare <b>Health Connect</b> (o "Connessione Salute")</div>
+        <div>Premi <b>▶ Avvia Test</b></div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div>Pesarsi con la bilancia Renpho → verificare che il peso appaia in Health Connect (app Health Connect → Peso)</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 1.3 Primo avvio / permessi -->
-  <div class="card todo">
-    <div class="card-header">
-      <div class="badge todo">TODO</div>
-      <div class="card-body">
-        <div class="card-title">Primo avvio: concedere i permessi Health Connect</div>
-        <div class="card-desc">
-          Al primo click sull'icona 💪 <b>Salute</b> nell'app, viene chiesto il permesso
-          di lettura peso a Health Connect. Bisogna accettare.
-        </div>
-        <div class="tags">
-          <span class="tag android">Android</span>
-          <span class="tag web">Weight Quest</span>
-        </div>
-      </div>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div>Aprire <b>AppSphere</b> → Weight Quest</div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div>Nella barra in alto appare l'icona 💪 <b>accanto</b> a 🔄 (solo nell'app Android, non nel browser)</div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div>Cliccare 💪 → appare la schermata <b>permessi Health Connect</b> di Android → <b>Consenti</b></div>
+        <div>I test girano su GitHub Actions — lo stato si aggiorna in tempo reale nella pagina</div>
       </div>
       <div class="step">
         <div class="step-num">4</div>
-        <div>Cliccare di nuovo 💪 → la sync parte e le pesate degli ultimi 90 giorni vengono importate</div>
+        <div>A fine test: clicca il link <b>Run #N</b> per scaricare screenshot e report</div>
       </div>
     </div>
-  </div>
-
-
-  <!-- ═══════════════════════════════════════════════════════════
-       SEZIONE 2 — SUPABASE SQL DA ESEGUIRE
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="section-title">🗄️ Supabase — SQL da eseguire in produzione</div>
-
-  <!-- 2.1 Cron fill-notification-queue -->
-  <div class="card warn">
-    <div class="card-header">
-      <div class="badge warn">FIX</div>
-      <div class="card-body">
-        <div class="card-title">FIX — Cron job fill-notification-queue usa Vault invece di current_setting</div>
-        <div class="card-desc">
-          Il cron che chiama la edge function <code>fill-notification-queue</code> fallisce con errore
-          <code>unrecognized configuration parameter "app.service_role_key"</code>
-          perché legge il secret tramite <code>current_setting()</code> invece di <code>vault.decrypted_secrets</code>.
-          Questo SQL corregge lo scheduling.
-        </div>
-        <div class="tags">
-          <span class="tag sql-t">SQL</span>
-          <span class="tag prod">PROD</span>
-          <span class="tag supabase">pg_cron · Vault</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-cron-fix">
-      <button class="copy-btn" onclick="copyCode('cb-cron-fix', this)">Copia</button>
-      <pre>-- 1. Rimuove il job precedente (se esiste)
-SELECT cron.unschedule('fill-notification-queue');
-
--- 2. Ricrea il job usando vault.decrypted_secrets per leggere il secret
-SELECT cron.schedule(
-  'fill-notification-queue',
-  '* * * * *',   -- ogni minuto
-  $$
-  SELECT net.http_post(
-    url  := 'https://jajlmmdsjlvzgcxiiypk.supabase.co/functions/v1/fill-notification-queue',
-    headers := jsonb_build_object(
-      'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || (
-        SELECT decrypted_secret
-        FROM   vault.decrypted_secrets
-        WHERE  name = 'service_role_key'
-        LIMIT  1
-      )
-    ),
-    body := '{}'::jsonb
-  );
-  $$
-);
-
--- 3. Verifica: il job deve apparire con schedule '* * * * *'
-SELECT jobid, jobname, schedule, active
-FROM   cron.job
-WHERE  jobname = 'fill-notification-queue';</pre>
-    </div>
-  </div>
-
-  <!-- 2.2 DecisionKeeper RLS -->
-  <div class="card warn">
-    <div class="card-header">
-      <div class="badge warn">FIX</div>
-      <div class="card-body">
-        <div class="card-title">FIX — DecisionKeeper: RLS su dc_decisions e dc_logs</div>
-        <div class="card-desc">
-          La tabella <code>dc_decisions</code> non filtra per <code>user_id</code> e
-          <code>dc_logs</code> non ha RLS abilitato. Questo SQL aggiunge le policy necessarie
-          per isolare i dati per utente autenticato.
-        </div>
-        <div class="tags">
-          <span class="tag sql-t">SQL</span>
-          <span class="tag prod">PROD</span>
-          <span class="tag supabase">RLS · dc_decisions · dc_logs</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-rls-decisions">
-      <button class="copy-btn" onclick="copyCode('cb-rls-decisions', this)">Copia</button>
-      <pre>-- ── dc_decisions ──────────────────────────────────────────────────────────
-ALTER TABLE dc_decisions ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "dc_decisions_user" ON dc_decisions;
-CREATE POLICY "dc_decisions_user" ON dc_decisions
-  FOR ALL
-  USING  (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
--- ── dc_logs (FK → dc_decisions, nessun user_id diretto) ────────────────
-ALTER TABLE dc_logs ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "dc_logs_via_decisions" ON dc_logs;
-CREATE POLICY "dc_logs_via_decisions" ON dc_logs
-  FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM dc_decisions d
-      WHERE d.id = dc_logs.decision_id
-        AND d.user_id = auth.uid()
-    )
-  );
-
--- Verifica
-SELECT tablename, rowsecurity
-FROM   pg_tables
-WHERE  tablename IN ('dc_decisions', 'dc_logs');</pre>
-    </div>
-  </div>
-
-  <!-- 2.3 Diagnostica cron -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge info">INFO</div>
-      <div class="card-body">
-        <div class="card-title">SELECT diagnostici — stato cron e notifiche</div>
-        <div class="card-desc">
-          Query utili per verificare lo stato dei cron job e della coda notifiche dopo aver applicato il fix.
-        </div>
-        <div class="tags">
-          <span class="tag sql-t">SQL</span>
-          <span class="tag supabase">pg_cron · pg_net</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-diag">
-      <button class="copy-btn" onclick="copyCode('cb-diag', this)">Copia</button>
-      <pre>-- Stato dei job cron
-SELECT jobid, jobname, schedule, active, command
-FROM   cron.job
-ORDER  BY jobname;
-
--- Ultime esecuzioni (successo / errore)
-SELECT runid, jobid, status, start_time, end_time, return_message
-FROM   cron.job_run_details
-ORDER  BY start_time DESC
-LIMIT  20;
-
--- Coda notifiche (ultimi record)
-SELECT *
-FROM   notification_queue
-ORDER  BY created_at DESC
-LIMIT  20;
-
--- Richieste HTTP uscenti (pg_net)
-SELECT id, method, url, status_code, error_msg, created
-FROM   net._http_response
-ORDER  BY created DESC
-LIMIT  10;</pre>
-    </div>
-  </div>
-
-
-  <!-- 2.4 Ripristina attività archiviata — Habit Tracker -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge sql">SQL</div>
-      <div class="card-body">
-        <div class="card-title">Ripristina attività archiviata — Habit Stack Tracker</div>
-        <div class="card-desc">
-          Ricrea un habit attivo a partire da un record in <code>hb_archived_stacks</code>.
-          Utile quando un ciclo è stato archiviato per errore o si vuole riprendere
-          un'abitudine interrotta. I campi di configurazione non salvati nell'archivio
-          (<code>frequency</code>, <code>goal</code>, ecc.) vanno impostati manualmente.
-        </div>
-        <div class="tags">
-          <span class="tag sql-t">SQL</span>
-          <span class="tag prod">PROD</span>
-          <span class="tag supabase">hb_habits · hb_archived_stacks</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-find-archive">
-      <button class="copy-btn" onclick="copyCode('cb-find-archive', this)">Copia</button>
-      <pre>-- 1. Trova l'ID del ciclo archiviato da ripristinare
-SELECT id, habit_name, started_at, ended_at, reason, total_completions
-FROM   hb_archived_stacks
-ORDER  BY ended_at DESC;</pre>
-    </div>
-    <div class="code-block" id="cb-restore-habit">
-      <button class="copy-btn" onclick="copyCode('cb-restore-habit', this)">Copia</button>
-      <pre>-- 2. Ripristina il ciclo archiviato come nuovo habit attivo
---    Sostituisci '<ID_ARCHIVIO>' con il valore trovato sopra.
---    Adatta frequency, goal, max_failures, points_* al caso reale.
-
-INSERT INTO hb_habits (
-    name,
-    category_id,
-    started_at,
-    status,
-    current_failures,
-    frequency,
-    goal,
-    max_failures,
-    points_reward,
-    points_penalty
-)
-SELECT
-    habit_name,
-    category_id,
-    CURRENT_DATE,   -- oppure una data specifica: '2026-04-10'
-    'active',
-    0,
-    'daily',        -- adattare: 'weekly' | 'daily_multiple'
-    30,             -- numero di giorni del ciclo
-    3,              -- jolly disponibili
-    10,             -- punti premio al completamento
-    5               -- punti penalità per game over
-FROM   hb_archived_stacks
-WHERE  id = '&lt;ID_ARCHIVIO&gt;';
-
--- 3. Verifica: il nuovo habit deve comparire con status = 'active'
-SELECT id, name, started_at, status, current_failures
-FROM   hb_habits
-ORDER  BY created_at DESC
-LIMIT  5;</pre>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       SEZIONE 3 — TEST E VERIFICA
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="section-title">✅ Test e verifica</div>
-
-  <!-- 3.1 Weight Quest — Health Connect -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge info">TEST</div>
-      <div class="card-body">
-        <div class="card-title">Weight Quest — verifica sync Health Connect</div>
-        <div class="card-desc">
-          Checklist per verificare che il nuovo bridge funzioni correttamente.
-        </div>
-        <div class="tags">
-          <span class="tag android">Android</span>
-          <span class="tag web">Weight Quest v3.5.88</span>
-        </div>
-      </div>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Nell'app Android → Weight Quest: appare icona 💪 <b>Salute</b> accanto a 🔄 Sincronizza</div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Nel browser (non app): icona 💪 <b>NON</b> appare</div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Click 💪 → prima volta: schermata permessi HC → concedi → re-click → dati importati</div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Re-import: nessun duplicato (upsert su <code>timestamp</code>)</div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Click 🔄 → sync Google Fit funziona ancora normalmente (token scaduto → modal "Connetti Google Fit")</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 3.2 Weight Quest — Token Google -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge info">TEST</div>
-      <div class="card-body">
-        <div class="card-title">Weight Quest — verifica rinnovo token Google (modal)</div>
-        <div class="card-desc">
-          Per simulare un token scaduto senza aspettare 60 minuti.
-        </div>
-        <div class="tags">
-          <span class="tag web">Weight Quest</span>
-          <span class="tag web">Google Fit</span>
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-token-test">
-      <button class="copy-btn" onclick="copyCode('cb-token-test', this)">Copia</button>
-      <pre>// Incollare nella console del browser per simulare token scaduto
-localStorage.setItem('google_token', 'token_scaduto_fake');
-localStorage.setItem('googleToken', 'token_scaduto_fake');</pre>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Dopo aver eseguito il codice sopra → cliccare 🔄 Sincronizza → appare modal "Connessione Google Fit" con bottone blu</div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Click "Connetti Google Fit" → si apre <b>direttamente</b> la schermata consenso Google (non il launcher)</div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Dopo autorizzazione: il popup si chiude automaticamente e la sync riparte</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       SEZIONE 4 — SORGENTE TASKS.HTML
-  ═══════════════════════════════════════════════════════════ -->
-  <div class="section-title">📄 Sorgente — tasks.html</div>
-
-  <div class="card info" id="tasks-src-card">
-    <div class="card-header">
-      <div class="badge info">SRC</div>
-      <div class="card-body">
-        <div class="card-title">Sorgente completo di tasks.html</div>
-        <div class="card-desc">Visualizza e copia il codice sorgente integrale di <code>tasks.html</code> (≈ 484 KB · 10 000+ righe). Caricato su richiesta per non appesantire la pagina.</div>
-        <div class="tags">
-          <span class="tag web">tasks.html</span>
-        </div>
-      </div>
-    </div>
-    <div id="tasks-src-loader" style="padding:14px 16px;border-top:1px solid #334155;">
-      <button class="copy-btn" style="position:static;" onclick="loadTasksSrc(this)">⬇ Carica sorgente</button>
-    </div>
-    <div id="tasks-src-block" style="display:none;" class="code-block">
-      <button class="copy-btn" onclick="copyTasksSrc(this)">Copia</button>
-      <pre id="tasks-src-pre" style="max-height:70vh;overflow-y:auto;white-space:pre;"></pre>
-    </div>
-  </div>
-
-  <!-- 3.3 Tasks — flatpickr mobile -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge info">TEST</div>
-      <div class="card-body">
-        <div class="card-title">Tasks — verifica salvataggio ricorrenza semplice su mobile</div>
-        <div class="card-desc">
-          Verificare che l'errore "inserisci un valore valido" del picker data non appaia più
-          su dispositivi mobili (fix <code>disableMobile: true</code> in flatpickr).
-        </div>
-        <div class="tags">
-          <span class="tag web">Tasks v19.18.40</span>
-          <span class="tag android">Mobile</span>
-        </div>
-      </div>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Aprire Tasks su mobile → <b>+</b> nuovo task → tipo: <b>Ricorrenza semplice</b></div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Compilare titolo e data (picker flatpickr custom, non nativo) → <b>Salva Task</b></div>
-      </div>
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Il task viene salvato senza errori di validazione del browser</div>
-      </div>
+    <div style="padding: 14px 16px; border-top: 1px solid #334155;">
+      <a class="dashboard-link" href="/tests/dashboard.html">🧪 Apri Test Dashboard</a>
     </div>
   </div>
 
 </div><!-- /container -->
 
-<footer>garsal-apps · branch claude/fix-fill-notification-submission-WB5AJ · 2026-04-05</footer>
+<footer>garsal-apps · 2026-04-16</footer>
 
 <script>
 function copyCode(blockId, btn) {
   var pre = document.getElementById(blockId).querySelector('pre');
-  var text = pre ? pre.innerText : '';
-  navigator.clipboard.writeText(text).then(function() {
-    btn.textContent = '✓ Copiato';
-    btn.classList.add('copied');
-    setTimeout(function() {
-      btn.textContent = 'Copia';
-      btn.classList.remove('copied');
-    }, 2000);
-  });
-}
-
-function loadTasksSrc(btn) {
-  btn.textContent = 'Caricamento…';
-  btn.disabled = true;
-  fetch('tasks.html')
-    .then(function(r) { return r.text(); })
-    .then(function(txt) {
-      document.getElementById('tasks-src-pre').textContent = txt;
-      document.getElementById('tasks-src-block').style.display = 'block';
-      document.getElementById('tasks-src-loader').style.display = 'none';
-    })
-    .catch(function() {
-      btn.textContent = '⚠ Errore — riprova';
-      btn.disabled = false;
-    });
-}
-
-function copyTasksSrc(btn) {
-  var text = document.getElementById('tasks-src-pre').textContent;
-  navigator.clipboard.writeText(text).then(function() {
+  navigator.clipboard.writeText(pre ? pre.innerText : '').then(function() {
     btn.textContent = '✓ Copiato';
     btn.classList.add('copied');
     setTimeout(function() { btn.textContent = 'Copia'; btn.classList.remove('copied'); }, 2000);
