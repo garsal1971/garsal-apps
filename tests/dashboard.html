@@ -3,142 +3,273 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Test Dashboard</title>
+<title>Test Dashboard — garsal-apps</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-  .header { background: #1e293b; padding: 16px 20px; border-bottom: 1px solid #334155; }
-  .header h1 { font-size: 18px; font-weight: 700; color: #f1f5f9; }
-  .header p  { font-size: 12px; color: #94a3b8; margin-top: 2px; }
-  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; margin: 16px; padding: 16px; }
-  .card h2 { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
-  label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 6px; }
-  textarea { width: 100%; background: #0f172a; border: 1px solid #475569; border-radius: 8px; color: #e2e8f0; font-size: 12px; font-family: monospace; padding: 10px; resize: vertical; min-height: 80px; outline: none; }
-  textarea:focus { border-color: #6366f1; }
-  .btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn-run  { background: #6366f1; color: #fff; margin-top: 12px; }
-  .btn-clear { background: #334155; color: #94a3b8; margin-top: 8px; font-size: 13px; font-weight: 500; padding: 10px; }
-  .status { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
-  .status.idle    { background: #1e293b; color: #64748b; }
-  .status.running { background: #1e3a5f; color: #60a5fa; }
-  .status.done-ok { background: #14532d; color: #86efac; }
-  .status.done-ko { background: #450a0a; color: #fca5a5; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-  .dot.pulse { animation: pulse 1s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-  pre { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-size: 11px; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto; color: #94a3b8; }
-  pre .pass { color: #86efac; }
-  pre .fail { color: #fca5a5; }
-  pre .snap { color: #c4b5fd; }
-  pre .head { color: #f1f5f9; font-weight: bold; }
-  .steps { padding-left: 0; list-style: none; }
-  .steps li { display: flex; gap: 10px; margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
-  .steps li span:first-child { background: #6366f1; color: #fff; border-radius: 50%; width: 20px; height: 20px; min-width: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
-  code { background: #0f172a; border: 1px solid #475569; border-radius: 4px; padding: 2px 6px; font-size: 11px; word-break: break-all; color: #c4b5fd; }
-  .saved-badge { display: inline-block; background: #14532d; color: #86efac; border-radius: 6px; padding: 2px 8px; font-size: 11px; margin-left: 8px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: #0f172a; color: #e2e8f0; min-height: 100vh; padding-bottom: 32px; }
+
+.header { background: #1e293b; padding: 18px 20px 14px;
+          border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 12px; }
+.header-icon { font-size: 24px; }
+.header h1 { font-size: 17px; font-weight: 700; color: #f1f5f9; }
+.header p  { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 14px;
+        margin: 14px 14px 0; padding: 16px; }
+.card-title { font-size: 11px; font-weight: 700; color: #64748b;
+              text-transform: uppercase; letter-spacing: .07em; margin-bottom: 14px; }
+
+/* Status bar */
+.status { display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+          border-radius: 10px; font-size: 14px; font-weight: 500; margin-bottom: 12px; }
+.status.idle    { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+.status.running { background: #172554; color: #93c5fd; border: 1px solid #1e40af; }
+.status.done-ok { background: #052e16; color: #86efac; border: 1px solid #166534; }
+.status.done-ko { background: #2d0707; color: #fca5a5; border: 1px solid #991b1b; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.dot.pulse { animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* Buttons */
+.btn { display: block; width: 100%; padding: 15px; border: none; border-radius: 12px;
+       font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .15s; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: #6366f1; color: #fff; }
+.btn-primary:active:not(:disabled) { opacity: .8; }
+.btn-sm { font-size: 13px; font-weight: 500; padding: 10px; margin-top: 8px;
+          background: #334155; color: #94a3b8; }
+
+/* Inputs */
+input, textarea {
+  width: 100%; background: #0f172a; border: 1px solid #475569; border-radius: 9px;
+  color: #e2e8f0; font-size: 13px; padding: 11px 13px; outline: none;
+  font-family: inherit; transition: border-color .15s;
+}
+input:focus, textarea:focus { border-color: #6366f1; }
+label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px; margin-top: 12px; }
+label:first-child { margin-top: 0; }
+
+/* Steps */
+.steps { list-style: none; }
+.steps li { display: flex; gap: 10px; margin-bottom: 10px; font-size: 13px; line-height: 1.55; color: #cbd5e1; }
+.step-num { background: #334155; color: #94a3b8; border-radius: 50%;
+            width: 22px; height: 22px; min-width: 22px; display: flex;
+            align-items: center; justify-content: center; font-size: 11px;
+            font-weight: 700; margin-top: 1px; }
+code { background: #0f172a; border: 1px solid #334155; border-radius: 5px;
+       padding: 3px 7px; font-size: 11px; color: #a5b4fc; word-break: break-all; display: inline-block; }
+
+/* Output */
+pre { background: #020617; border: 1px solid #1e293b; border-radius: 10px;
+      padding: 12px; font-size: 11px; font-family: 'Menlo','Courier New',monospace;
+      white-space: pre-wrap; word-break: break-all; max-height: 380px;
+      overflow-y: auto; color: #64748b; line-height: 1.6; }
+
+/* Run link */
+.run-link { display: flex; align-items: center; gap: 8px; background: #172554;
+            border: 1px solid #1e40af; border-radius: 10px; padding: 12px 14px;
+            color: #93c5fd; font-size: 13px; text-decoration: none; margin-bottom: 12px; }
+.run-link:hover { opacity: .85; }
+
+/* Setup toggle */
+.setup-toggle { font-size: 12px; color: #475569; text-align: center;
+                padding: 12px; cursor: pointer; text-decoration: underline; }
+
+.hidden { display: none !important; }
+
+/* Badge */
+.badge { display: inline-flex; align-items: center; gap: 4px;
+         border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.badge-ok { background: #052e16; color: #86efac; }
+.badge-ko { background: #2d0707; color: #fca5a5; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>🧪 User Test Dashboard</h1>
-  <p id="baseUrl">garsal-apps.netlify.app</p>
-</div>
-
-<!-- Token -->
-<div class="card" id="tokenCard">
-  <h2>Token Supabase <span id="savedBadge" class="saved-badge" style="display:none">✓ salvato</span></h2>
-  <ul class="steps">
-    <li><span>1</span><span>Apri <strong>garsal-apps.netlify.app</strong> nel browser (già loggato)</span></li>
-    <li><span>2</span><span>Nella barra degli indirizzi incolla e vai:<br><code id="jsUrl"></code></span></li>
-    <li><span>3</span><span>Copia il testo dal popup e incollalo qui sotto</span></li>
-  </ul>
-  <label for="tokenInput">Token:</label>
-  <textarea id="tokenInput" placeholder='{"access_token":"...'></textarea>
-  <button class="btn btn-run" onclick="saveToken()">Salva Token</button>
-</div>
-
-<!-- Run -->
-<div class="card">
-  <h2>Esecuzione</h2>
-  <div class="status idle" id="statusBar">
-    <span class="dot"></span><span id="statusText">In attesa</span>
+  <div class="header-icon">🧪</div>
+  <div>
+    <h1>Test Dashboard</h1>
+    <p>garsal-apps.netlify.app</p>
   </div>
-  <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ Avvia Test</button>
-  <button class="btn btn-clear" onclick="clearOutput()">Pulisci output</button>
 </div>
 
-<!-- Output -->
+<!-- SETUP (nascosto se già configurato) -->
+<div class="card" id="setupCard">
+  <div class="card-title">⚙️ Configurazione iniziale (una sola volta)</div>
+  <ul class="steps">
+    <li>
+      <span class="step-num">1</span>
+      <span>Apri <strong>garsal-apps.netlify.app</strong> dal telefono (loggato). Nella barra degli indirizzi incolla e premi OK:<br><br>
+      <code>javascript:prompt('Token:',localStorage.getItem('sb-jajlmmdsjlvzgcxiiypk-auth-token'))</code><br><br>
+      Copia tutto il testo dal popup.</span>
+    </li>
+    <li>
+      <span class="step-num">2</span>
+      <span>Vai su <strong>github.com/garsal1971/garsal-apps</strong> → Settings → Secrets and variables → Actions → <em>New repository secret</em><br>
+      Nome: <code>SB_TOKEN</code> — Valore: il testo copiato al passo 1.</span>
+    </li>
+    <li>
+      <span class="step-num">3</span>
+      <span>Crea un <strong>GitHub Personal Access Token</strong> su github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens.<br>
+      Permesso necessario: <em>Actions → Read and write</em>. Incollalo qui sotto.</span>
+    </li>
+  </ul>
+  <label for="patInput">GitHub Personal Access Token</label>
+  <input type="password" id="patInput" placeholder="github_pat_..." autocomplete="off">
+  <button class="btn btn-primary" style="margin-top:12px" onclick="savePat()">Salva Token GitHub</button>
+</div>
+
+<p class="setup-toggle" id="setupToggle" onclick="toggleSetup()">Mostra configurazione</p>
+
+<!-- RUN -->
 <div class="card">
-  <h2>Output</h2>
-  <pre id="output">Premi "Avvia Test" per iniziare.</pre>
+  <div class="card-title">▶ Esecuzione test</div>
+  <div class="status idle" id="statusBar">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">In attesa</span>
+  </div>
+  <a id="runLink" class="run-link hidden" href="#" target="_blank">
+    🔗 <span id="runLinkText">Apri su GitHub Actions</span>
+  </a>
+  <button class="btn btn-primary" id="runBtn" onclick="runTests()">▶ Avvia Test</button>
+  <button class="btn btn-sm" onclick="checkLatestRun()">↻ Aggiorna stato</button>
+</div>
+
+<!-- OUTPUT -->
+<div class="card" id="outputCard">
+  <div class="card-title">📋 Ultimo report</div>
+  <pre id="output">Nessun test eseguito ancora.</pre>
 </div>
 
 <script>
-const SB_KEY = 'sb-jajlmmdsjlvzgcxiiypk-auth-token';
-document.getElementById('jsUrl').textContent =
-  "javascript:prompt('Token:',localStorage.getItem('" + SB_KEY + "'))";
+const REPO     = 'garsal1971/garsal-apps';
+const WORKFLOW = 'user-tests.yml';
+const GH_API   = 'https://api.github.com';
 
-let pollTimer = null;
+let pollTimer  = null;
+let currentRun = null;
 
-async function saveToken() {
-  const t = document.getElementById('tokenInput').value.trim();
-  if (!t || t === 'null') { alert('Token non valido'); return; }
-  const r = await fetch('/save-token', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: t }) });
-  if (r.ok) {
-    document.getElementById('savedBadge').style.display = '';
-    document.getElementById('tokenInput').value = '';
-    alert('✓ Token salvato!');
+// ── PAT ──────────────────────────────────────────────────────────────────────
+function getPat() { return localStorage.getItem('gh_pat') || ''; }
+
+function savePat() {
+  const val = document.getElementById('patInput').value.trim();
+  if (!val) { alert('Inserisci il token GitHub'); return; }
+  localStorage.setItem('gh_pat', val);
+  document.getElementById('patInput').value = '';
+  alert('✓ Token salvato!');
+  checkSetup();
+}
+
+function checkSetup() {
+  const hasPat = !!getPat();
+  document.getElementById('setupCard').classList.toggle('hidden', hasPat);
+  document.getElementById('setupToggle').classList.toggle('hidden', !hasPat);
+}
+
+function toggleSetup() {
+  document.getElementById('setupCard').classList.toggle('hidden');
+}
+
+// ── GitHub API ────────────────────────────────────────────────────────────────
+async function ghFetch(path, opts = {}) {
+  const pat = getPat();
+  if (!pat) { alert('Configura prima il GitHub Token (setup qui sopra)'); return null; }
+  const res = await fetch(GH_API + path, {
+    ...opts,
+    headers: { 'Authorization': 'Bearer ' + pat, 'Accept': 'application/vnd.github+json',
+               'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'HTTP ' + res.status);
   }
+  return res.status === 204 ? null : res.json();
 }
 
 async function runTests() {
   const btn = document.getElementById('runBtn');
   btn.disabled = true;
-  setStatus('running', '⏳ Test in esecuzione...');
-  document.getElementById('output').textContent = 'Avvio...';
-  const r = await fetch('/run', { method: 'POST' });
-  if (!r.ok) {
-    const e = await r.text();
-    setStatus('done-ko', '✗ Errore avvio');
-    document.getElementById('output').textContent = e;
+  setStatus('running', 'Avvio workflow...');
+  document.getElementById('output').textContent = 'Workflow avviato — in attesa che parta...';
+
+  try {
+    await ghFetch(`/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'master' }),
+    });
+  } catch(e) {
+    setStatus('done-ko', '✗ Errore: ' + e.message);
     btn.disabled = false;
     return;
   }
-  pollTimer = setInterval(pollStatus, 2500);
+
+  // Aspetta 4s poi inizia a cercare il run
+  await sleep(4000);
+  setStatus('running', 'Test in esecuzione...');
+  pollTimer = setInterval(checkLatestRun, 6000);
+  checkLatestRun();
 }
 
-async function pollStatus() {
-  const r = await fetch('/status');
-  const d = await r.json();
-  const pre = document.getElementById('output');
-  pre.textContent = d.output || '';
-  pre.scrollTop = pre.scrollHeight;
-  if (d.done) {
-    clearInterval(pollTimer);
-    const ok = (d.exitCode === 0);
-    setStatus(ok ? 'done-ok' : 'done-ko', ok ? '✓ Test completati' : '✗ Alcuni test falliti');
-    document.getElementById('runBtn').disabled = false;
+async function checkLatestRun() {
+  try {
+    const data = await ghFetch(`/repos/${REPO}/actions/workflows/${WORKFLOW}/runs?per_page=1`);
+    if (!data || !data.workflow_runs.length) return;
+    const run = data.workflow_runs[0];
+    currentRun = run;
+
+    const link = document.getElementById('runLink');
+    link.href = run.html_url;
+    document.getElementById('runLinkText').textContent =
+      'Run #' + run.run_number + ' — ' + (run.status === 'completed' ? run.conclusion : run.status);
+    link.classList.remove('hidden');
+
+    if (run.status === 'completed') {
+      clearInterval(pollTimer);
+      const ok = run.conclusion === 'success';
+      setStatus(ok ? 'done-ok' : 'done-ko',
+                ok ? '✓ Test completati con successo' : '✗ Alcuni test falliti');
+      document.getElementById('runBtn').disabled = false;
+      loadReport(run);
+    } else {
+      setStatus('running', 'In esecuzione (run #' + run.run_number + ')...');
+    }
+  } catch(e) {
+    console.error('Poll error:', e);
   }
 }
 
+async function loadReport(run) {
+  try {
+    // Cerca l'artifact con il report
+    const arts = await ghFetch(`/repos/${REPO}/actions/runs/${run.id}/artifacts`);
+    if (!arts || !arts.artifacts.length) return;
+    const art = arts.artifacts[0];
+    document.getElementById('output').textContent =
+      '📦 Artifact disponibile: "' + art.name + '"\n' +
+      '   Scaricalo da: ' + run.html_url + '\n\n' +
+      '   (GitHub non permette di leggere artifact direttamente da browser\n' +
+      '    per motivi di sicurezza — clicca sul link sopra per vederli)';
+  } catch(e) { /* ignora */ }
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
 function setStatus(cls, text) {
   const bar = document.getElementById('statusBar');
   bar.className = 'status ' + cls;
-  bar.querySelector('.dot').className = 'dot' + (cls === 'running' ? ' pulse' : '');
+  const dot = document.getElementById('dot');
+  dot.className = 'dot' + (cls === 'running' ? ' pulse' : '');
   document.getElementById('statusText').textContent = text;
 }
 
-function clearOutput() {
-  document.getElementById('output').textContent = '';
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// Check if token already saved
-fetch('/has-token').then(r => r.json()).then(d => {
-  if (d.ok) document.getElementById('savedBadge').style.display = '';
-});
+// ── Init ──────────────────────────────────────────────────────────────────────
+checkSetup();
+checkLatestRun();
 </script>
-
 </body>
 </html>

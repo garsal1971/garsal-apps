@@ -6,9 +6,20 @@
  * Le esecuzioni successive usano la sessione salvata automaticamente.
  * SOLO READ-ONLY — nessuna scrittura o cancellazione dati.
  */
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const fs   = require('fs');
 const path = require('path');
+
+function loadPlaywright() {
+  for (const p of [
+    '/opt/node22/lib/node_modules/playwright',
+    path.join(process.cwd(), 'node_modules', 'playwright'),
+    'playwright',
+  ]) {
+    try { return require(p); } catch {}
+  }
+  throw new Error('Playwright non trovato. Installa con: npm install playwright');
+}
+const { chromium } = loadPlaywright();
 
 const SESSION = path.join(__dirname, 'session.json');
 const SHOTS   = path.join(__dirname, 'screenshots');
@@ -20,6 +31,18 @@ const SB_KEY  = 'sb-jajlmmdsjlvzgcxiiypk-auth-token';
 async function ensureSession() {
   if (fs.existsSync(SESSION)) return;
 
+  // GitHub Actions: legge il token dalla variabile d'ambiente SB_TOKEN
+  if (process.env.SB_TOKEN) {
+    const session = {
+      cookies: [],
+      origins: [{ origin: BASE, localStorage: [{ name: SB_KEY, value: process.env.SB_TOKEN }] }],
+    };
+    fs.writeFileSync(SESSION, JSON.stringify(session, null, 2));
+    console.log('✓ Sessione creata da SB_TOKEN env var');
+    return;
+  }
+
+  // Interattivo: chiede il token da stdin
   console.log('\nNessuna sessione trovata.');
   console.log('─'.repeat(55));
   console.log('1. Apri ' + BASE + ' nel browser (già loggato)');
@@ -43,10 +66,7 @@ async function ensureSession() {
 
   const session = {
     cookies: [],
-    origins: [{
-      origin: BASE,
-      localStorage: [{ name: SB_KEY, value: token }],
-    }],
+    origins: [{ origin: BASE, localStorage: [{ name: SB_KEY, value: token }] }],
   };
   fs.writeFileSync(SESSION, JSON.stringify(session, null, 2));
   console.log('\n✓ Sessione salvata. Avvio test...\n');
