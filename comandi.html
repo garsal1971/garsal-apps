@@ -147,12 +147,9 @@
       <div class="card-body">
         <div class="card-title">Configurazione iniziale (una sola volta)</div>
         <div class="card-desc">
-          I test girano su GitHub Actions. Servono due secret GitHub:
-          <code>SB_SESSION</code> (sessione browser — va aggiornata se scade) e
-          un Personal Access Token per avviare i workflow dal telefono.
-          <br><br>
-          Nota: <code>SUPABASE_ACCESS_TOKEN</code> è il token della CLI Supabase
-          (per deploy), non la sessione utente — non va usato qui.
+          I test girano su GitHub Actions. Il dashboard legge la sessione
+          Supabase direttamente dal browser (stesso dominio) — nessun copia-incolla.
+          Serve solo un GitHub Personal Access Token per avviare i workflow.
         </div>
         <div class="tags">
           <span class="tag once">Una sola volta</span>
@@ -164,30 +161,6 @@
       <div class="step">
         <div class="step-num">1</div>
         <div>
-          Apri <b>garsal-apps.netlify.app</b> dal telefono (già loggato).
-          Nella barra degli indirizzi incolla e premi OK:
-        </div>
-      </div>
-    </div>
-    <div class="code-block" id="cb-session">
-      <button class="copy-btn" onclick="copyCode('cb-session', this)">Copia</button>
-      <pre>javascript:prompt('Session:',localStorage.getItem('sb-jajlmmdsjlvzgcxiiypk-auth-token'))</pre>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">2</div>
-        <div>
-          Copia il testo dal popup (inizia con <code>{"access_token"...</code>).<br>
-          Vai su <b>github.com/garsal1971/garsal-apps</b> →
-          Settings → Secrets and variables → Actions →
-          <b>New repository secret</b><br>
-          Nome: <code>SB_SESSION</code> — Valore: testo copiato.
-          <br><small style="color:#64748b">Va aggiornato se i test tornano a fallire il login (sessione scaduta).</small>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div>
           Crea un <b>GitHub Personal Access Token</b>:<br>
           github.com → Settings → Developer settings →
           Personal access tokens → Fine-grained tokens →
@@ -196,9 +169,9 @@
         </div>
       </div>
       <div class="step">
-        <div class="step-num">4</div>
+        <div class="step-num">2</div>
         <div>
-          Apri il dashboard (link sotto), incolla il PAT nel campo
+          Apri il <b>Test Dashboard</b> (link sotto), incolla il PAT nel campo
           <em>"GitHub Personal Access Token"</em> e premi <b>Salva Token GitHub</b>.
         </div>
       </div>

@@ -191,6 +191,13 @@ async function ghFetch(path, opts = {}) {
 
 async function runTests() {
   const btn = document.getElementById('runBtn');
+
+  const sbSession = localStorage.getItem('sb-jajlmmdsjlvzgcxiiypk-auth-token');
+  if (!sbSession || sbSession === 'null') {
+    alert('Sessione Supabase non trovata.\nAssicurati di essere loggato su garsal-apps.netlify.app.');
+    return;
+  }
+
   btn.disabled = true;
   setStatus('running', 'Avvio workflow...');
   document.getElementById('output').textContent = 'Workflow avviato — in attesa che parta...';
@@ -199,7 +206,7 @@ async function runTests() {
     await ghFetch(`/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'master' }),
+      body: JSON.stringify({ ref: 'master', inputs: { sb_session: sbSession } }),
     });
   } catch(e) {
     setStatus('done-ko', '✗ Errore: ' + e.message);
