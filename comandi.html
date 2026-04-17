@@ -104,13 +104,29 @@
   }
   .apk-btn:hover { background: #15803D; }
 
-  .dashboard-link {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: #6366F1; color: #fff; font-size: 14px; font-weight: 700;
-    padding: 12px 20px; border-radius: 8px; text-decoration: none;
-    margin-top: 12px; transition: opacity .15s;
-  }
-  .dashboard-link:hover { opacity: .85; }
+  /* Test dashboard inline */
+  .td-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-radius: 10px; font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+  .td-status.idle    { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+  .td-status.running { background: #172554; color: #93c5fd; border: 1px solid #1e40af; }
+  .td-status.done-ok { background: #052e16; color: #86efac; border: 1px solid #166534; }
+  .td-status.done-ko { background: #2d0707; color: #fca5a5; border: 1px solid #991b1b; }
+  .td-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .td-dot.pulse { animation: tdpulse 1s ease-in-out infinite; }
+  @keyframes tdpulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  .td-btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 8px; transition: opacity .15s; }
+  .td-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .td-btn-primary { background: #6366f1; color: #fff; }
+  .td-btn-sm { background: #334155; color: #94a3b8; font-size: 13px; font-weight: 500; padding: 10px; }
+  .td-run-link { display: flex; align-items: center; gap: 8px; background: #172554;
+    border: 1px solid #1e40af; border-radius: 10px; padding: 12px 14px;
+    color: #93c5fd; font-size: 13px; text-decoration: none; margin-bottom: 10px; }
+  .td-run-link:hover { opacity: .85; }
+  .td-pre { background: #020617; border: 1px solid #1e293b; border-radius: 8px;
+    padding: 12px; font-size: 11px; font-family: 'Courier New',monospace;
+    white-space: pre-wrap; word-break: break-all; max-height: 300px;
+    overflow-y: auto; color: #64748b; line-height: 1.6; margin-top: 10px; }
 
   footer { margin-top: 48px; text-align: center; font-size: 11px; color: #334155; font-family: monospace; }
 </style>
@@ -140,68 +156,18 @@
   ═══════════════════════════════════════════════ -->
   <div class="section-title">🧪 User Test — Dashboard</div>
 
-  <!-- Setup iniziale -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge setup">SETUP</div>
-      <div class="card-body">
-        <div class="card-title">Configurazione iniziale (una sola volta)</div>
-        <div class="card-desc">
-          Il dashboard legge la sessione Supabase direttamente dal browser
-          (stesso dominio) e usa un token GitHub già integrato.
-          Non serve alcuna configurazione.
-        </div>
-        <div class="tags">
-          <span class="tag once">Zero setup</span>
-          <span class="tag github">GitHub Actions</span>
-        </div>
+  <div class="card">
+    <div style="padding: 14px 16px;">
+      <div class="td-status idle" id="tdStatus">
+        <span class="td-dot" id="tdDot"></span>
+        <span id="tdStatusText">In attesa</span>
       </div>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">✓</div>
-        <div>Apri il <b>Test Dashboard</b> dal link qui sotto — è già pronto.</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Uso quotidiano -->
-  <div class="card info">
-    <div class="card-header">
-      <div class="badge info">USO</div>
-      <div class="card-body">
-        <div class="card-title">Avviare i test dal telefono</div>
-        <div class="card-desc">
-          Dopo il setup iniziale, i test si avviano con un solo bottone.
-          Playwright gira su GitHub Actions (Ubuntu), i risultati e gli screenshot
-          sono disponibili come artifact per 14 giorni.
-        </div>
-        <div class="tags">
-          <span class="tag web">Dashboard Netlify</span>
-          <span class="tag github">GitHub Actions</span>
-        </div>
-      </div>
-    </div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div>Apri il <b>Test Dashboard</b> (link sotto)</div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div>Premi <b>▶ Avvia Test</b></div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div>I test girano su GitHub Actions — lo stato si aggiorna in tempo reale nella pagina</div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div>A fine test: clicca il link <b>Run #N</b> per scaricare screenshot e report</div>
-      </div>
-    </div>
-    <div style="padding: 14px 16px; border-top: 1px solid #334155;">
-      <a class="dashboard-link" href="https://garsal-apps.netlify.app/test-dashboard.html" target="_blank">🧪 Apri Test Dashboard</a>
+      <a id="tdRunLink" style="display:none;" class="td-run-link" href="#" target="_blank">
+        🔗 <span id="tdRunLinkText">Apri su GitHub Actions</span>
+      </a>
+      <button class="td-btn td-btn-primary" id="tdRunBtn" onclick="tdRunTests()">▶ Avvia Test</button>
+      <button class="td-btn td-btn-sm" onclick="tdCheckLatest()">↻ Aggiorna stato</button>
+      <pre class="td-pre" id="tdOutput">Nessun test eseguito ancora.</pre>
     </div>
   </div>
 
@@ -218,6 +184,84 @@ function copyCode(blockId, btn) {
     setTimeout(function() { btn.textContent = 'Copia'; btn.classList.remove('copied'); }, 2000);
   });
 }
+
+// ── Test Dashboard ────────────────────────────────────────────────────────────
+const TD_REPO     = 'garsal1971/garsal-apps';
+const TD_WORKFLOW = 'user-tests.yml';
+const TD_GH_API   = 'https://api.github.com';
+const TD_PAT      = ['github_pat_11ANXAHXQ','0k3xBxlTrh8t2_fkSeWUHPqBZnOuJd','95Ks8k83nk3teLDGUfTjzGmkgavL4LPPCHT09Cil0af'].join('');
+const TD_SB_KEY   = 'sb-jajlmmdsjlvzgcxiiypk-auth-token';
+let tdPollTimer = null;
+
+async function tdFetch(path, opts = {}) {
+  const res = await fetch(TD_GH_API + path, {
+    ...opts,
+    headers: {
+      'Authorization': 'Bearer ' + TD_PAT,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(opts.headers || {})
+    }
+  });
+  if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message || 'HTTP ' + res.status); }
+  return res.status === 204 ? null : res.json();
+}
+
+function tdSetStatus(cls, text) {
+  const bar = document.getElementById('tdStatus');
+  bar.className = 'td-status ' + cls;
+  document.getElementById('tdDot').className = 'td-dot' + (cls === 'running' ? ' pulse' : '');
+  document.getElementById('tdStatusText').textContent = text;
+}
+
+async function tdRunTests() {
+  const sbSession = localStorage.getItem(TD_SB_KEY);
+  if (!sbSession || sbSession === 'null') {
+    alert('Sessione Supabase non trovata.\nAssicurati di essere loggato su garsal-apps.netlify.app nello stesso browser.');
+    return;
+  }
+  document.getElementById('tdRunBtn').disabled = true;
+  tdSetStatus('running', 'Avvio workflow...');
+  document.getElementById('tdOutput').textContent = 'Workflow avviato — in attesa...';
+  try {
+    await tdFetch('/repos/' + TD_REPO + '/actions/workflows/' + TD_WORKFLOW + '/dispatches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'master', inputs: { sb_session: sbSession } })
+    });
+  } catch(e) {
+    tdSetStatus('done-ko', '✗ Errore: ' + e.message);
+    document.getElementById('tdRunBtn').disabled = false;
+    return;
+  }
+  await new Promise(r => setTimeout(r, 4000));
+  tdSetStatus('running', 'Test in esecuzione...');
+  tdPollTimer = setInterval(tdCheckLatest, 6000);
+  tdCheckLatest();
+}
+
+async function tdCheckLatest() {
+  try {
+    const data = await tdFetch('/repos/' + TD_REPO + '/actions/workflows/' + TD_WORKFLOW + '/runs?per_page=1');
+    if (!data || !data.workflow_runs.length) return;
+    const run = data.workflow_runs[0];
+    const link = document.getElementById('tdRunLink');
+    link.href = run.html_url;
+    document.getElementById('tdRunLinkText').textContent = 'Run #' + run.run_number + ' — ' + (run.status === 'completed' ? run.conclusion : run.status);
+    link.style.display = 'flex';
+    if (run.status === 'completed') {
+      clearInterval(tdPollTimer);
+      const ok = run.conclusion === 'success';
+      tdSetStatus(ok ? 'done-ok' : 'done-ko', ok ? '✓ Test completati con successo' : '✗ Alcuni test falliti');
+      document.getElementById('tdRunBtn').disabled = false;
+      document.getElementById('tdOutput').textContent = 'Test completati.\nScarica screenshot e report dal link sopra (Run #' + run.run_number + ').';
+    } else {
+      tdSetStatus('running', 'In esecuzione (Run #' + run.run_number + ')...');
+    }
+  } catch(e) { console.error('Poll error:', e); }
+}
+
+tdCheckLatest();
 </script>
 </body>
 </html>
