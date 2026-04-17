@@ -1,5 +1,5 @@
 /**
- * User test live — https://garsal-apps.netlify.app
+ * User test live — https://garsal.netlify.app
  * Esecuzione: node tests/run-tests.js
  *
  * Al primo avvio chiede il token Supabase (copia da DevTools), poi salva la sessione.
