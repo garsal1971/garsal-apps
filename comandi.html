@@ -5,192 +5,212 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Guida — garsal-apps</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    background: #0F172A; color: #E2E8F0;
-    min-height: 100vh; padding: 32px 16px;
-  }
-  .container { max-width: 860px; margin: 0 auto; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0F172A; color: #E2E8F0;
+  min-height: 100vh;
+  padding-top: 130px;
+}
 
-  header { margin-bottom: 32px; border-bottom: 1px solid #1E293B; padding-bottom: 18px; }
-  header h1 { font-size: 22px; font-weight: 700; color: #F1F5F9; }
-  header p  { font-size: 12px; color: #475569; margin-top: 5px; font-family: monospace; }
+/* ── BARRA FISSA ─────────────────────────────────────────────────────────── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; padding: 10px 14px;
+  background: #0F172A; border-bottom: 1px solid #1E293B;
+}
 
-  .section-title {
-    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
-    color: #64748B; margin: 32px 0 12px;
-  }
+/* ── PANNELLO TEST ───────────────────────────────────────────────────────── */
+.panel {
+  background: #1E293B; border: 1px solid #334155; border-radius: 10px;
+  padding: 10px 12px;
+}
+.panel-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: #475569; margin-bottom: 8px;
+}
 
-  .card {
-    background: #1E293B; border: 1px solid #334155; border-radius: 10px;
-    margin-bottom: 10px; overflow: hidden;
-  }
-  .card.info { border-color: #1E3A5F88; }
+.td-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 7px;
+  font-size: 12px; font-weight: 500; margin-bottom: 7px;
+}
+.td-status.idle    { background: #0F172A; color: #64748b; border: 1px solid #334155; }
+.td-status.running { background: #172554; color: #93c5fd; border: 1px solid #1e40af; }
+.td-status.done-ok { background: #052e16; color: #86efac; border: 1px solid #166534; }
+.td-status.done-ko { background: #2d0707; color: #fca5a5; border: 1px solid #991b1b; }
+.td-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.td-dot.pulse { animation: tdp 1s ease-in-out infinite; }
+@keyframes tdp { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-  .card-header { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; }
-  .badge {
-    min-width: 46px; height: 22px; border-radius: 5px; flex-shrink: 0; margin-top: 1px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
-  }
-  .badge.info { background: #1E3A5F; color: #93C5FD; border: 1.5px solid #1D4ED8; }
-  .badge.setup { background: #312E81; color: #A5B4FC; border: 1.5px solid #4338CA; }
+.td-run-link {
+  display: flex; align-items: center; gap: 6px;
+  background: #172554; border: 1px solid #1e40af; border-radius: 7px;
+  padding: 6px 10px; color: #93c5fd; font-size: 11px;
+  text-decoration: none; margin-bottom: 7px;
+}
+.td-run-link:hover { opacity: .85; }
 
-  .card-body { flex: 1; }
-  .card-title { font-size: 14px; font-weight: 600; color: #F1F5F9; line-height: 1.4; }
-  .card-desc  { font-size: 12px; color: #64748B; margin-top: 6px; line-height: 1.65; }
-  .card-desc code {
-    font-family: monospace; background: #0B1423; color: #BAE6FD;
-    padding: 1px 5px; border-radius: 3px; font-size: 11.5px;
-  }
+.td-btns { display: flex; gap: 6px; }
+.td-btn {
+  flex: 1; padding: 8px 6px; border: none; border-radius: 7px;
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: opacity .15s;
+}
+.td-btn:disabled { opacity: .4; cursor: not-allowed; }
+.td-btn-primary { background: #6366f1; color: #fff; }
+.td-btn-sm { background: #334155; color: #94a3b8; font-size: 11px; font-weight: 500; }
 
-  .steps { border-top: 1px solid #334155; }
-  .step {
-    display: flex; gap: 12px; padding: 10px 16px;
-    border-bottom: 1px solid #0F172A; font-size: 12.5px; color: #CBD5E1; line-height: 1.6;
-  }
-  .step:last-child { border-bottom: none; }
-  .step-num {
-    min-width: 22px; height: 22px; border-radius: 50%; background: #334155;
-    color: #94A3B8; font-size: 10px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
-  }
-  .step code {
-    font-family: 'Courier New', monospace; background: #0B1423; color: #BAE6FD;
-    padding: 1px 6px; border-radius: 3px; font-size: 11.5px;
-  }
-  .step b { color: #F1F5F9; }
+.td-token-box {
+  margin-bottom: 7px; padding: 8px; background: #0F172A;
+  border: 1px solid #475569; border-radius: 7px; font-size: 11px; color: #94a3b8;
+}
+.td-token-box code {
+  background: #1e293b; color: #a5b4fc; padding: 2px 5px;
+  border-radius: 3px; font-size: 10px;
+}
+.td-token-box textarea {
+  width: 100%; margin-top: 5px; background: #1e293b;
+  border: 1px solid #475569; border-radius: 5px;
+  color: #e2e8f0; font-size: 10px; padding: 5px; resize: none;
+  font-family: monospace;
+}
 
-  .code-block { position: relative; padding: 14px 16px; background: #0B1423; border-top: 1px solid #334155; }
-  .code-block pre {
-    font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.75;
-    color: #BAE6FD; white-space: pre-wrap; word-break: break-all; padding-right: 72px;
-  }
-  .copy-btn {
-    position: absolute; top: 10px; right: 12px;
-    background: #334155; border: 1px solid #475569; color: #CBD5E1;
-    font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 5px;
-    cursor: pointer; transition: background 0.15s, color 0.15s;
-  }
-  .copy-btn:hover  { background: #475569; color: #fff; }
-  .copy-btn.copied { background: #064E3B; color: #34D399; border-color: #065F46; }
+/* ── PANNELLO APK ────────────────────────────────────────────────────────── */
+.apk-panel {
+  background: linear-gradient(135deg, #14532D 0%, #064E3B 100%);
+  border: 1px solid #16A34A; border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.apk-panel-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: #34D399; margin-bottom: 6px;
+}
+.apk-title { font-size: 13px; font-weight: 700; color: #D1FAE5; margin-bottom: 2px; }
+.apk-sub   { font-size: 10px; color: #6EE7B7; margin-bottom: 8px; line-height: 1.4; }
+.apk-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #16A34A; color: #fff; font-size: 13px; font-weight: 700;
+  padding: 9px 16px; border-radius: 7px; text-decoration: none;
+  transition: background .15s; white-space: nowrap;
+}
+.apk-btn:hover { background: #15803D; }
 
-  .tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .tag {
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 2px 8px; border-radius: 4px;
-  }
-  .tag.web     { background: #1E3A5F44; color: #93C5FD; border: 1px solid #1E3A5F; }
-  .tag.github  { background: #1F2937; color: #D1D5DB; border: 1px solid #374151; }
-  .tag.once    { background: #78350F44; color: #FCD34D; border: 1px solid #78350F; }
+/* ── AREA ISTRUZIONI ─────────────────────────────────────────────────────── */
+.instructions {
+  max-width: 860px; margin: 0 auto; padding: 20px 14px 40px;
+}
 
-  /* DOWNLOAD APK */
-  .apk-banner {
-    background: linear-gradient(135deg, #14532D 0%, #064E3B 100%);
-    border: 1.5px solid #16A34A; border-radius: 12px;
-    padding: 20px 24px; display: flex; align-items: center;
-    justify-content: space-between; gap: 16px; margin-bottom: 32px; flex-wrap: wrap;
-  }
-  .apk-info { flex: 1; min-width: 200px; }
-  .apk-info h2  { font-size: 16px; font-weight: 700; color: #D1FAE5; margin-bottom: 4px; }
-  .apk-info p   { font-size: 12px; color: #6EE7B7; line-height: 1.5; }
-  .apk-info small { font-size: 11px; color: #34D399; font-family: monospace; }
-  .apk-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: #16A34A; color: #fff; font-size: 14px; font-weight: 700;
-    padding: 12px 24px; border-radius: 8px; text-decoration: none; white-space: nowrap;
-    transition: background 0.15s;
-  }
-  .apk-btn:hover { background: #15803D; }
-
-  /* Test dashboard inline */
-  .td-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-    border-radius: 10px; font-size: 14px; font-weight: 500; margin-bottom: 10px; }
-  .td-status.idle    { background: #1e293b; color: #64748b; border: 1px solid #334155; }
-  .td-status.running { background: #172554; color: #93c5fd; border: 1px solid #1e40af; }
-  .td-status.done-ok { background: #052e16; color: #86efac; border: 1px solid #166534; }
-  .td-status.done-ko { background: #2d0707; color: #fca5a5; border: 1px solid #991b1b; }
-  .td-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-  .td-dot.pulse { animation: tdpulse 1s ease-in-out infinite; }
-  @keyframes tdpulse { 0%,100%{opacity:1} 50%{opacity:.25} }
-  .td-btn { display: block; width: 100%; padding: 14px; border: none; border-radius: 10px;
-    font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 8px; transition: opacity .15s; }
-  .td-btn:disabled { opacity: .45; cursor: not-allowed; }
-  .td-btn-primary { background: #6366f1; color: #fff; }
-  .td-btn-sm { background: #334155; color: #94a3b8; font-size: 13px; font-weight: 500; padding: 10px; }
-  .td-run-link { display: flex; align-items: center; gap: 8px; background: #172554;
-    border: 1px solid #1e40af; border-radius: 10px; padding: 12px 14px;
-    color: #93c5fd; font-size: 13px; text-decoration: none; margin-bottom: 10px; }
-  .td-run-link:hover { opacity: .85; }
-  .td-pre { background: #020617; border: 1px solid #1e293b; border-radius: 8px;
-    padding: 12px; font-size: 11px; font-family: 'Courier New',monospace;
-    white-space: pre-wrap; word-break: break-all; max-height: 300px;
-    overflow-y: auto; color: #64748b; line-height: 1.6; margin-top: 10px; }
-
-  footer { margin-top: 48px; text-align: center; font-size: 11px; color: #334155; font-family: monospace; }
+/* stili per il contenuto istruzioni */
+.section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: #64748B; margin: 24px 0 10px;
+}
+.card {
+  background: #1E293B; border: 1px solid #334155; border-radius: 10px;
+  margin-bottom: 10px; overflow: hidden;
+}
+.card-header { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; }
+.badge {
+  min-width: 46px; height: 22px; border-radius: 5px; flex-shrink: 0; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; letter-spacing: .05em;
+}
+.badge.info  { background: #1E3A5F; color: #93C5FD; border: 1.5px solid #1D4ED8; }
+.badge.setup { background: #312E81; color: #A5B4FC; border: 1.5px solid #4338CA; }
+.card-body { flex: 1; }
+.card-title { font-size: 14px; font-weight: 600; color: #F1F5F9; line-height: 1.4; }
+.card-desc  { font-size: 12px; color: #64748B; margin-top: 6px; line-height: 1.65; }
+.card-desc code { font-family: monospace; background: #0B1423; color: #BAE6FD; padding: 1px 5px; border-radius: 3px; font-size: 11.5px; }
+.steps { border-top: 1px solid #334155; }
+.step {
+  display: flex; gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid #0F172A; font-size: 12.5px; color: #CBD5E1; line-height: 1.6;
+}
+.step:last-child { border-bottom: none; }
+.step-num {
+  min-width: 22px; height: 22px; border-radius: 50%; background: #334155;
+  color: #94A3B8; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+}
+.step code { font-family: 'Courier New',monospace; background: #0B1423; color: #BAE6FD; padding: 1px 6px; border-radius: 3px; font-size: 11.5px; }
+.step b { color: #F1F5F9; }
+.code-block { position: relative; padding: 14px 16px; background: #0B1423; border-top: 1px solid #334155; }
+.code-block pre { font-family: 'Courier New',monospace; font-size: 12px; line-height: 1.75; color: #BAE6FD; white-space: pre-wrap; word-break: break-all; padding-right: 72px; }
+.copy-btn {
+  position: absolute; top: 10px; right: 12px;
+  background: #334155; border: 1px solid #475569; color: #CBD5E1;
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 5px;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.copy-btn:hover  { background: #475569; color: #fff; }
+.copy-btn.copied { background: #064E3B; color: #34D399; border-color: #065F46; }
+.tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 4px; }
+.tag.web    { background: #1E3A5F44; color: #93C5FD; border: 1px solid #1E3A5F; }
+.tag.github { background: #1F2937; color: #D1D5DB; border: 1px solid #374151; }
+.tag.once   { background: #78350F44; color: #FCD34D; border: 1px solid #78350F; }
 </style>
 </head>
 <body>
-<div class="container">
 
-  <header>
-    <h1>Guida — garsal-apps</h1>
-    <p>// aggiornato 2026-04-16</p>
-  </header>
+<!-- ══════════════════════════════════════════════════════
+     BARRA FISSA — non modificare
+════════════════════════════════════════════════════════ -->
+<div class="topbar">
 
-  <!-- DOWNLOAD APK -->
-  <div class="apk-banner">
-    <div class="apk-info">
-      <h2>📱 GarsalApps — APK Android</h2>
-      <p>Build debug aggiornata automaticamente ad ogni modifica al codice Android.</p>
-      <small>garsal.netlify.app/releases/GarsalApps-latest.apk</small>
+  <!-- Sinistra: User Test -->
+  <div class="panel">
+    <div class="panel-label">🧪 User Test</div>
+    <div class="td-status idle" id="tdStatus">
+      <span class="td-dot" id="tdDot"></span>
+      <span id="tdStatusText">In attesa</span>
+    </div>
+    <a id="tdRunLink" style="display:none;" class="td-run-link" href="#" target="_blank">
+      🔗 <span id="tdRunLinkText">Apri GitHub Actions</span>
+    </a>
+    <div id="tdTokenBox" class="td-token-box" style="display:none;">
+      Sessione non trovata — apri Console (F12) su <a href="https://garsal.netlify.app" target="_blank" style="color:#93c5fd;">garsal.netlify.app</a> ed esegui:
+      <code>localStorage.getItem('sb_token')</code>, poi incolla qui:<br>
+      <textarea id="tdTokenInput" rows="2" placeholder="eyJ..."></textarea>
+      <button class="td-btn td-btn-primary" onclick="tdUseToken()" style="width:100%;margin-top:5px;padding:7px;">▶ Avvia con token</button>
+    </div>
+    <div class="td-btns">
+      <button class="td-btn td-btn-primary" id="tdRunBtn" onclick="tdRunTests()">▶ Avvia Test</button>
+      <button class="td-btn td-btn-sm" onclick="tdCheckLatest()">↻ Stato</button>
+    </div>
+  </div>
+
+  <!-- Destra: APK -->
+  <div class="apk-panel">
+    <div>
+      <div class="apk-panel-label">📱 Android APK</div>
+      <div class="apk-title">GarsalApps</div>
+      <div class="apk-sub">Build aggiornata automaticamente</div>
     </div>
     <a class="apk-btn" href="/releases/GarsalApps-latest.apk" download="GarsalApps.apk">
       ⬇ Scarica APK
     </a>
   </div>
 
-  <!-- ═══════════════════════════════════════════════
-       USER TEST DASHBOARD
-  ═══════════════════════════════════════════════ -->
-  <div class="section-title">🧪 User Test — Dashboard</div>
+</div>
+<!-- fine barra fissa -->
 
-  <div class="card">
-    <div style="padding: 14px 16px;">
-      <div class="td-status idle" id="tdStatus">
-        <span class="td-dot" id="tdDot"></span>
-        <span id="tdStatusText">In attesa</span>
-      </div>
-      <a id="tdRunLink" style="display:none;" class="td-run-link" href="#" target="_blank">
-        🔗 <span id="tdRunLinkText">Apri su GitHub Actions</span>
-      </a>
-      <div id="tdTokenBox" style="display:none; margin-bottom:10px;">
-        <div style="font-size:12px; color:#94a3b8; margin-bottom:6px;">
-          Sessione non trovata. Apri <a href="https://garsal.netlify.app" target="_blank" style="color:#93c5fd;">garsal.netlify.app</a>,
-          poi Console DevTools (F12) ed esegui:<br>
-          <code style="background:#0f172a;color:#a5b4fc;padding:3px 7px;border-radius:4px;font-size:11px;display:inline-block;margin:4px 0;">localStorage.getItem('sb_token')</code><br>
-          Copia il risultato e incollalo qui:
-        </div>
-        <textarea id="tdTokenInput" rows="3" placeholder='{"access_token":"..."}' style="width:100%;background:#0f172a;border:1px solid #475569;border-radius:8px;color:#e2e8f0;font-size:11px;padding:8px;font-family:monospace;margin-bottom:6px;"></textarea>
-        <button class="td-btn td-btn-primary" onclick="tdUseToken()" style="margin-bottom:0;">▶ Avvia con questo token</button>
-      </div>
-      <button class="td-btn td-btn-primary" id="tdRunBtn" onclick="tdRunTests()">▶ Avvia Test</button>
-      <button class="td-btn td-btn-sm" onclick="tdCheckLatest()">↻ Aggiorna stato</button>
-      <pre class="td-pre" id="tdOutput">Nessun test eseguito ancora.</pre>
-    </div>
-  </div>
 
-</div><!-- /container -->
+<!-- ══════════════════════════════════════════════════════
+     AREA ISTRUZIONI — sostituire il contenuto ad ogni modifica
+════════════════════════════════════════════════════════ -->
+<div class="instructions">
+</div>
+<!-- fine istruzioni -->
 
-<footer>garsal-apps · 2026-04-16</footer>
 
 <script>
 function copyCode(blockId, btn) {
   var pre = document.getElementById(blockId).querySelector('pre');
   navigator.clipboard.writeText(pre ? pre.innerText : '').then(function() {
-    btn.textContent = '✓ Copiato';
-    btn.classList.add('copied');
+    btn.textContent = '✓ Copiato'; btn.classList.add('copied');
     setTimeout(function() { btn.textContent = 'Copia'; btn.classList.remove('copied'); }, 2000);
   });
 }
@@ -201,25 +221,20 @@ const TD_WORKFLOW = 'user-tests.yml';
 const TD_GH_API   = 'https://api.github.com';
 const TD_PAT      = ['github_pat_11ANXAHXQ','0k3xBxlTrh8t2_fkSeWUHPqBZnOuJd','95Ks8k83nk3teLDGUfTjzGmkgavL4LPPCHT09Cil0af'].join('');
 const TD_SB_KEY   = 'sb_token';
-let tdPollTimer = null;
+let tdPollTimer   = null;
 
 async function tdFetch(path, opts = {}) {
   const res = await fetch(TD_GH_API + path, {
     ...opts,
-    headers: {
-      'Authorization': 'Bearer ' + TD_PAT,
-      'Accept': 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(opts.headers || {})
-    }
+    headers: { 'Authorization': 'Bearer ' + TD_PAT, 'Accept': 'application/vnd.github+json',
+               'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) }
   });
   if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message || 'HTTP ' + res.status); }
   return res.status === 204 ? null : res.json();
 }
 
 function tdSetStatus(cls, text) {
-  const bar = document.getElementById('tdStatus');
-  bar.className = 'td-status ' + cls;
+  document.getElementById('tdStatus').className = 'td-status ' + cls;
   document.getElementById('tdDot').className = 'td-dot' + (cls === 'running' ? ' pulse' : '');
   document.getElementById('tdStatusText').textContent = text;
 }
@@ -229,13 +244,13 @@ function tdGetSession() {
 }
 
 async function tdRunTests() {
-  const sbSession = tdGetSession();
-  if (!sbSession || sbSession === 'null') {
+  const s = tdGetSession();
+  if (!s || s === 'null') {
     document.getElementById('tdTokenBox').style.display = 'block';
     document.getElementById('tdRunBtn').style.display = 'none';
     return;
   }
-  await tdDispatch(sbSession);
+  await tdDispatch(s);
 }
 
 async function tdUseToken() {
@@ -250,20 +265,18 @@ async function tdUseToken() {
 async function tdDispatch(sbSession) {
   document.getElementById('tdRunBtn').disabled = true;
   tdSetStatus('running', 'Avvio workflow...');
-  document.getElementById('tdOutput').textContent = 'Workflow avviato — in attesa...';
   try {
     await tdFetch('/repos/' + TD_REPO + '/actions/workflows/' + TD_WORKFLOW + '/dispatches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref: 'master', inputs: { sb_session: sbSession } })
     });
   } catch(e) {
-    tdSetStatus('done-ko', '✗ Errore: ' + e.message);
+    tdSetStatus('done-ko', '✗ ' + e.message);
     document.getElementById('tdRunBtn').disabled = false;
     return;
   }
   await new Promise(r => setTimeout(r, 4000));
-  tdSetStatus('running', 'Test in esecuzione...');
+  tdSetStatus('running', 'In esecuzione...');
   tdPollTimer = setInterval(tdCheckLatest, 6000);
   tdCheckLatest();
 }
@@ -280,13 +293,12 @@ async function tdCheckLatest() {
     if (run.status === 'completed') {
       clearInterval(tdPollTimer);
       const ok = run.conclusion === 'success';
-      tdSetStatus(ok ? 'done-ok' : 'done-ko', ok ? '✓ Test completati con successo' : '✗ Alcuni test falliti');
+      tdSetStatus(ok ? 'done-ok' : 'done-ko', ok ? '✓ Completati' : '✗ Falliti');
       document.getElementById('tdRunBtn').disabled = false;
-      document.getElementById('tdOutput').textContent = 'Test completati.\nScarica screenshot e report dal link sopra (Run #' + run.run_number + ').';
     } else {
-      tdSetStatus('running', 'In esecuzione (Run #' + run.run_number + ')...');
+      tdSetStatus('running', 'Run #' + run.run_number + '...');
     }
-  } catch(e) { console.error('Poll error:', e); }
+  } catch(e) { console.error(e); }
 }
 
 tdCheckLatest();
