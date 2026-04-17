@@ -24,8 +24,8 @@ const { chromium } = loadPlaywright();
 const SESSION = path.join(__dirname, 'session.json');
 const SHOTS   = path.join(__dirname, 'screenshots');
 const REPORT  = path.join(__dirname, 'report.txt');
-const BASE    = 'https://garsal-apps.netlify.app';
-const SB_KEY  = 'sb-jajlmmdsjlvzgcxiiypk-auth-token';
+const BASE    = 'https://garsal.netlify.app';
+const SB_KEY  = 'sb_token';
 
 // ── Crea sessione se non esiste ───────────────────────────────────────────────
 async function ensureSession() {
