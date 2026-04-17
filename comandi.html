@@ -165,6 +165,16 @@
       <a id="tdRunLink" style="display:none;" class="td-run-link" href="#" target="_blank">
         🔗 <span id="tdRunLinkText">Apri su GitHub Actions</span>
       </a>
+      <div id="tdTokenBox" style="display:none; margin-bottom:10px;">
+        <div style="font-size:12px; color:#94a3b8; margin-bottom:6px;">
+          Sessione non trovata. Apri <a href="https://garsal-apps.netlify.app" target="_blank" style="color:#93c5fd;">garsal-apps.netlify.app</a>,
+          poi Console DevTools (F12) ed esegui:<br>
+          <code style="background:#0f172a;color:#a5b4fc;padding:3px 7px;border-radius:4px;font-size:11px;display:inline-block;margin:4px 0;">localStorage.getItem('sb-jajlmmdsjlvzgcxiiypk-auth-token')</code><br>
+          Copia il risultato e incollalo qui:
+        </div>
+        <textarea id="tdTokenInput" rows="3" placeholder='{"access_token":"..."}' style="width:100%;background:#0f172a;border:1px solid #475569;border-radius:8px;color:#e2e8f0;font-size:11px;padding:8px;font-family:monospace;margin-bottom:6px;"></textarea>
+        <button class="td-btn td-btn-primary" onclick="tdUseToken()" style="margin-bottom:0;">▶ Avvia con questo token</button>
+      </div>
       <button class="td-btn td-btn-primary" id="tdRunBtn" onclick="tdRunTests()">▶ Avvia Test</button>
       <button class="td-btn td-btn-sm" onclick="tdCheckLatest()">↻ Aggiorna stato</button>
       <pre class="td-pre" id="tdOutput">Nessun test eseguito ancora.</pre>
@@ -214,12 +224,30 @@ function tdSetStatus(cls, text) {
   document.getElementById('tdStatusText').textContent = text;
 }
 
+function tdGetSession() {
+  return localStorage.getItem(TD_SB_KEY) || localStorage.getItem('td_saved_session');
+}
+
 async function tdRunTests() {
-  const sbSession = localStorage.getItem(TD_SB_KEY);
+  const sbSession = tdGetSession();
   if (!sbSession || sbSession === 'null') {
-    alert('Sessione Supabase non trovata.\nAssicurati di essere loggato su garsal-apps.netlify.app nello stesso browser.');
+    document.getElementById('tdTokenBox').style.display = 'block';
+    document.getElementById('tdRunBtn').style.display = 'none';
     return;
   }
+  await tdDispatch(sbSession);
+}
+
+async function tdUseToken() {
+  const val = document.getElementById('tdTokenInput').value.trim();
+  if (!val) { alert('Incolla prima il token.'); return; }
+  localStorage.setItem('td_saved_session', val);
+  document.getElementById('tdTokenBox').style.display = 'none';
+  document.getElementById('tdRunBtn').style.display = 'block';
+  await tdDispatch(val);
+}
+
+async function tdDispatch(sbSession) {
   document.getElementById('tdRunBtn').disabled = true;
   tdSetStatus('running', 'Avvio workflow...');
   document.getElementById('tdOutput').textContent = 'Workflow avviato — in attesa...';
