@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.44</title>
+    <title>Tasks v19.18.45</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2146,7 +2146,7 @@
                 <span class="modal-close" onclick="closeViewTaskModal()">✕</span>
             </div>
             <div id="viewTaskContent"></div>
-            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <div id="viewTaskActions" style="display: flex; gap: 1rem; margin-top: 2rem;">
                 <button class="btn btn-secondary" onclick="cloneTaskFromView()">📋 Clona</button>
                 <button class="btn btn-primary" onclick="editTaskFromView()">✏️ Modifica</button>
                 <button class="btn btn-secondary" onclick="archiveTaskFromView()">📦 Archivia</button>
@@ -2255,7 +2255,7 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.44';
+        const APP_VERSION = 'v19.18.45';
         const BUILD_TIME  = '2026-04-16T10:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
@@ -7782,10 +7782,12 @@
             // Riuso viewTaskModal per mostrare la nota
             document.querySelector('#viewTaskModal .modal-title').textContent = 'Dettaglio Appunto';
             document.getElementById('viewTaskContent').innerHTML = content;
+            document.getElementById('viewTaskActions').style.display = 'none';
             document.getElementById('viewTaskModal').classList.add('active');
         }
         
         function closeViewNoteModal() {
+            document.getElementById('viewTaskActions').style.display = 'flex';
             document.getElementById('viewTaskModal').classList.remove('active');
         }
         
