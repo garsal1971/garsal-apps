@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.45</title>
+    <title>Tasks v19.18.46</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2255,7 +2255,7 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.45';
+        const APP_VERSION = 'v19.18.46';
         const BUILD_TIME  = '2026-04-16T10:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
@@ -7656,7 +7656,7 @@
                 return `
                     <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                         <!-- Note Content -->
-                        <div onclick="viewNote('${note.id}')" style="cursor: pointer; margin-bottom: 1.5rem;">
+                        <div style="margin-bottom: 1.5rem;">
                             <div style="display: flex; align-items: flex-start; gap: 0.8rem;">
                                 <span style="font-size: 1.3rem; color: #666; min-width: 30px;">📝</span>
                                 <div style="flex: 1;">
@@ -7669,20 +7669,6 @@
                         
                         <!-- Action Buttons -->
                         <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
-                            <button onclick="viewNote('${note.id}')" style="
-                                background: var(--accent);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                Vedi
-                            </button>
                             <button onclick="editNote('${note.id}')" style="
                                 background: var(--primary);
                                 color: white;
@@ -7757,38 +7743,6 @@
             document.getElementById('noteContent').value = note.content || '';
             
             document.getElementById('noteModal').classList.add('active');
-        }
-        
-        function viewNote(id) {
-            const note = notes.find(n => n.id === id);
-            if (!note) return;
-            
-            const date = note.date ? new Date(note.date) : null;
-            const dateStr = date ? formatDateTime(date) : 'Nessuna data';
-            
-            const content = `
-                <div class="card">
-                    <h2 style="margin-bottom: 1rem;">${note.title}</h2>
-                    <p style="opacity: 0.7; font-size: 0.9rem; margin-bottom: 1.5rem;">📅 ${dateStr}</p>
-                    ${note.content ? `<div style="white-space: pre-wrap; line-height: 1.6;">${note.content}</div>` : '<p style="opacity: 0.5;">Nessun contenuto</p>'}
-                </div>
-                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                    <button class="btn btn-primary" onclick="editNote('${note.id}'); closeViewNoteModal();">Modifica</button>
-                    <button class="btn btn-danger" onclick="deleteNote('${note.id}'); closeViewNoteModal();">Elimina</button>
-                    <button class="btn btn-secondary" onclick="closeViewNoteModal()">Chiudi</button>
-                </div>
-            `;
-            
-            // Riuso viewTaskModal per mostrare la nota
-            document.querySelector('#viewTaskModal .modal-title').textContent = 'Dettaglio Appunto';
-            document.getElementById('viewTaskContent').innerHTML = content;
-            document.getElementById('viewTaskActions').style.display = 'none';
-            document.getElementById('viewTaskModal').classList.add('active');
-        }
-        
-        function closeViewNoteModal() {
-            document.getElementById('viewTaskActions').style.display = 'flex';
-            document.getElementById('viewTaskModal').classList.remove('active');
         }
         
         async function saveNote(e) {
