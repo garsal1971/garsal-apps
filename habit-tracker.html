@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.72</title>
+    <title>Habit Stack Tracker v9.3.73</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1678,8 +1678,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.72';
-        const BUILD_TIME  = '2026-04-12T10:00:00Z';
+        const APP_VERSION = 'v9.3.73';
+        const BUILD_TIME  = '2026-04-18T09:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3082,6 +3082,7 @@
                         .limit(1);
                     if (existing && existing.length > 0) {
                         console.log(`⚠️ Stack "${habit.name}" già archiviato — salto duplicato`);
+                        await deleteHabitNotificationRule(habit.id);
                         await supabaseClient.from('hb_habits').delete().eq('id', habit.id);
                         continue;
                     }
@@ -4356,7 +4357,8 @@
                             await supabaseClient.from('hb_archived_stacks').update({ points_earned: penalty }).eq('id', archivedData[0].id);
                         }
 
-                        // STEP 2: Elimina da hb_habits
+                        // STEP 2: Elimina regola promemoria ed elimina da hb_habits
+                        await deleteHabitNotificationRule(habitId);
                         await supabaseClient.from('hb_habits').delete().eq('id', habitId);
                         console.log(`✅ Stack "${habit.name}" interrotto e archiviato`);
                     }
@@ -5647,6 +5649,7 @@
                 const { error } = await supabaseClient.from('hb_habits').update({ status: 'stopped' }).eq('id', habitId);
                 if (error) throw error;
 
+                await deleteHabitNotificationRule(habitId);
                 habits = habits.filter(h => h.id !== habitId);
                 renderHabits();
                 showToast('Abitudine interrotta');
