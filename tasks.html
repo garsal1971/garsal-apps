@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.46</title>
+    <title>Tasks v19.18.47</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2255,8 +2255,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.46';
-        const BUILD_TIME  = '2026-04-16T10:00:00Z';
+        const APP_VERSION = 'v19.18.47';
+        const BUILD_TIME  = '2026-04-18T14:30:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -6878,7 +6878,7 @@
             `;
             
             // Grafo SVG
-            const nodeW = 140, nodeH = 48, activeNodeH = 74, gapX = 20, gapY = 55;
+            const nodeW = 200, nodeH = 60, activeNodeH = 88, gapX = 20, gapY = 55;
             const padX = 20, padY = 20;
             
             const levelGroups = {};
@@ -6961,29 +6961,45 @@
                 const h = pos.h;
                 const x = pos.x - nodeW / 2, y = pos.y - h / 2;
                 const icon = statusIcon[step.status] || '?';
-                const maxChars = 12;
-                const label = step.title.length > maxChars ? step.title.substring(0, maxChars) + '…' : step.title;
-                
+                // Wrap titolo su max 2 righe da 26 caratteri
+                const maxChars = 26;
+                let titleLine1 = step.title, titleLine2 = '';
+                if (step.title.length > maxChars) {
+                    const breakAt = step.title.lastIndexOf(' ', maxChars);
+                    if (breakAt > 0) {
+                        titleLine1 = step.title.substring(0, breakAt);
+                        const rest = step.title.substring(breakAt + 1);
+                        titleLine2 = rest.length > maxChars ? rest.substring(0, maxChars - 1) + '…' : rest;
+                    } else {
+                        titleLine1 = step.title.substring(0, maxChars);
+                        const rest = step.title.substring(maxChars);
+                        titleLine2 = rest.length > maxChars ? rest.substring(0, maxChars - 1) + '…' : rest;
+                    }
+                }
+
                 // Glow per step attivi
                 if (step.status === 'active') {
-                    svg += `<rect x="${x - 3}" y="${y - 3}" width="${nodeW + 6}" height="${h + 6}" rx="11" ry="11" 
+                    svg += `<rect x="${x - 3}" y="${y - 3}" width="${nodeW + 6}" height="${h + 6}" rx="11" ry="11"
                         fill="none" stroke="#2563EB" stroke-width="1" opacity="0.3" stroke-dasharray="4,3">
                         <animate attributeName="opacity" values="0.3;0.7;0.3" dur="2s" repeatCount="indefinite"/>
                     </rect>`;
                 }
-                
+
                 svg += `<g filter="url(#wfPopShadow)">
                     <rect x="${x}" y="${y}" width="${nodeW}" height="${h}" rx="8" ry="8" fill="${c.fill}" stroke="${c.stroke}" stroke-width="2"/>
                 </g>`;
-                
+
                 // Icona stato
-                svg += `<circle cx="${x + 16}" cy="${y + 20}" r="11" fill="${c.stroke}"/>
-                    <text x="${x + 16}" y="${y + 21}" text-anchor="middle" dominant-baseline="central" fill="white" font-size="11" font-weight="800">${icon}</text>`;
-                
-                // Titolo
+                svg += `<circle cx="${x + 16}" cy="${y + 22}" r="11" fill="${c.stroke}"/>
+                    <text x="${x + 16}" y="${y + 22}" text-anchor="middle" dominant-baseline="central" fill="white" font-size="11" font-weight="800">${icon}</text>`;
+
+                // Titolo (2 righe se necessario)
                 svg += `<text x="${x + 34}" y="${y + 16}" dominant-baseline="central" fill="${c.text}" font-size="11" font-weight="700">
-                    <title>${step.title}</title>${label}</text>`;
-                
+                    <title>${step.title}</title>${titleLine1}</text>`;
+                if (titleLine2) {
+                    svg += `<text x="${x + 34}" y="${y + 29}" dominant-baseline="central" fill="${c.text}" font-size="11" font-weight="700">${titleLine2}</text>`;
+                }
+
                 // Data
                 let dateText = '';
                 if (step.completed_at) {
@@ -6992,22 +7008,22 @@
                     dateText = '📅 ' + fmtDate(step.start_date);
                 }
                 if (dateText) {
-                    svg += `<text x="${x + 34}" y="${y + 30}" fill="${c.text}" font-size="8" opacity="0.7">${dateText}</text>`;
+                    svg += `<text x="${x + 34}" y="${y + 43}" fill="${c.text}" font-size="8" opacity="0.7">${dateText}</text>`;
                 }
-                
-                // Bottoni ✓ / ✗ dentro il nodo per step attivi
+
+                // Bottoni ✓ / ✗ dentro il nodo per step attivi (ridotti)
                 if (step.status === 'active') {
-                    const bY = y + h - 26;
+                    const bY = y + h - 22;
                     const bW = (nodeW - 16) / 2 - 2;
                     // Bottone OK
                     svg += `<g style="cursor:pointer" onclick="wfPopupCompleteStep('${task.id}', ${step.id})">
-                        <rect x="${x + 6}" y="${bY}" width="${bW}" height="20" rx="4" fill="#4CAF50"/>
-                        <text x="${x + 6 + bW/2}" y="${bY + 14}" text-anchor="middle" fill="white" font-size="10" font-weight="800">✓ OK</text>
+                        <rect x="${x + 6}" y="${bY}" width="${bW}" height="15" rx="4" fill="#4CAF50"/>
+                        <text x="${x + 6 + bW/2}" y="${bY + 10}" text-anchor="middle" fill="white" font-size="9" font-weight="800">✓ OK</text>
                     </g>`;
                     // Bottone Fail
                     svg += `<g style="cursor:pointer" onclick="wfPopupFailStep('${task.id}', ${step.id})">
-                        <rect x="${x + 6 + bW + 4}" y="${bY}" width="${bW}" height="20" rx="4" fill="#E74C3C"/>
-                        <text x="${x + 6 + bW + 4 + bW/2}" y="${bY + 14}" text-anchor="middle" fill="white" font-size="10" font-weight="800">✗ Fail</text>
+                        <rect x="${x + 6 + bW + 4}" y="${bY}" width="${bW}" height="15" rx="4" fill="#E74C3C"/>
+                        <text x="${x + 6 + bW + 4 + bW/2}" y="${bY + 10}" text-anchor="middle" fill="white" font-size="9" font-weight="800">✗ Fail</text>
                     </g>`;
                 }
             });
