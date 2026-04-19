@@ -16,6 +16,8 @@ public class MockLocationReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        Log.d(TAG, "onReceive called, action=" + intent.getAction());
+
         if (!ACTION.equals(intent.getAction())) return;
 
         String latStr = intent.getStringExtra("lat");
@@ -23,6 +25,7 @@ public class MockLocationReceiver extends BroadcastReceiver {
 
         if (latStr == null || lonStr == null) {
             Log.e(TAG, "Missing lat/lon extras");
+            setResult(0, "MISSING_EXTRAS", null);
             return;
         }
 
@@ -32,9 +35,11 @@ public class MockLocationReceiver extends BroadcastReceiver {
             LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
             pushMock(lm, LocationManager.GPS_PROVIDER, lat, lon);
             pushMock(lm, LocationManager.NETWORK_PROVIDER, lat, lon);
-            Log.i(TAG, "Location set: " + lat + ", " + lon);
+            Log.d(TAG, "Location set: " + lat + ", " + lon);
+            setResult(1, "OK", null);
         } catch (Exception e) {
             Log.e(TAG, "Error: " + e.getMessage());
+            setResult(0, e.getMessage(), null);
         }
     }
 
