@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v${Config::class.java.`package`?.let { "1.0.0" } ?: "1.0.0"} · PIN: ${Config.PIN} · Schedule: 08:00 e 22:00"
+            text = "v1.0.0 · PIN: ${Config.PIN} · Schedule: 08:00 e 22:00"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
