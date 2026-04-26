@@ -7,8 +7,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
-import java.text.SimpleDateFormat
-import java.util.*
 
 class BlockerService : Service() {
 
@@ -18,7 +16,7 @@ class BlockerService : Service() {
 
     private val checker = object : Runnable {
         override fun run() {
-            checkScheduleAndSnooze()
+            checkSnooze()
             checkSupabaseQueueIfDue()
             handler.postDelayed(this, Config.CHECK_INTERVAL_MS)
         }
@@ -54,7 +52,7 @@ class BlockerService : Service() {
 
     // ── Logica principale ────────────────────────────────────────────────────
 
-    private fun checkScheduleAndSnooze() {
+    private fun checkSnooze() {
         val now = System.currentTimeMillis()
         val state = Prefs.getState(this)
 
@@ -63,7 +61,7 @@ class BlockerService : Service() {
             wakeLock?.acquire(10 * 60 * 1000L)
         }
 
-        // Snooze scaduto?
+        // Snooze scaduto → ripristina blocco
         val snoozeUntil = Prefs.getSnoozeUntil(this)
         if (state == Prefs.STATE_NONE && snoozeUntil > 0 && now >= snoozeUntil) {
             Prefs.setSnoozeUntil(this, 0)
@@ -71,30 +69,6 @@ class BlockerService : Service() {
             val nextState = if (count >= Config.MAX_SNOOZES) Prefs.STATE_LOCKED else Prefs.STATE_TRIGGERED
             Prefs.setState(this, nextState)
             showOverlay()
-            return
-        }
-
-        // Non controllare gli schedule se già bloccato
-        if (state != Prefs.STATE_NONE) return
-
-        // Controlla schedule configurati
-        val cal = Calendar.getInstance()
-        val hour   = cal.get(Calendar.HOUR_OF_DAY)
-        val minute = cal.get(Calendar.MINUTE)
-        val today  = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
-
-        for (s in Config.SCHEDULES) {
-            if (s.hour == hour && s.minute == minute) {
-                val key = "${today}_${s.hour}"
-                if (Prefs.getLastTrigger(this) != key) {
-                    Prefs.setLastTrigger(this, key)
-                    Prefs.setState(this, Prefs.STATE_TRIGGERED)
-                    Prefs.setSnoozeCount(this, 0)
-                    Prefs.setSnoozeUntil(this, 0)
-                    showOverlay()
-                    return
-                }
-            }
         }
     }
 
