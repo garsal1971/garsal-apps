@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.51</title>
+    <title>Tasks v19.18.52</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2064,6 +2064,13 @@
                     <input type="hidden" id="multipleDatesData" value="">
                 </div>
 
+                <!-- ORARIO (multipli e libera ripetizione) -->
+                <div class="form-group hidden" id="taskTimeGroup">
+                    <label class="form-label">Orario</label>
+                    <input type="time" class="form-input" id="taskTime"
+                           oninput="if(notificationChannel==='smart_block') renderReminders()">
+                </div>
+
                 <!-- POPUP CALENDARIO MULTI-SELEZIONE -->
                 <div id="multiCalendarOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; justify-content:center; align-items:center;">
                     <div id="multiCalendarPopup" style="background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 1.25rem; width: 340px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.25);">
@@ -2281,8 +2288,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.51';
-        const BUILD_TIME  = '2026-04-26T18:15:00Z';
+        const APP_VERSION = 'v19.18.52';
+        const BUILD_TIME  = '2026-04-26T18:45:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -5670,6 +5677,23 @@
                     multipleDates = [...task.multiple_dates];
                     renderMultipleDates();
                 }
+                // Ripristina orario da next_occurrence_date
+                if (task.next_occurrence_date) {
+                    const nd = new Date(task.next_occurrence_date);
+                    if (!isNaN(nd.getTime()) && (nd.getHours() || nd.getMinutes())) {
+                        document.getElementById('taskTime').value =
+                            String(nd.getHours()).padStart(2,'0') + ':' + String(nd.getMinutes()).padStart(2,'0');
+                    }
+                }
+            } else if (task.type === 'free_repeat') {
+                // Ripristina orario da start_date
+                if (task.start_date) {
+                    const fd = new Date(task.start_date);
+                    if (!isNaN(fd.getTime()) && (fd.getHours() || fd.getMinutes())) {
+                        document.getElementById('taskTime').value =
+                            String(fd.getHours()).padStart(2,'0') + ':' + String(fd.getMinutes()).padStart(2,'0');
+                    }
+                }
             } else if (task.type === 'workflow') {
                 // Carica workflow steps
                 workflowSteps = task.workflow_steps ? JSON.parse(JSON.stringify(task.workflow_steps)) : [];
@@ -5788,6 +5812,7 @@
             document.getElementById('simpleRecurringGroup').classList.add('hidden');
             document.getElementById('multipleDatesGroup').classList.add('hidden');
             document.getElementById('workflowGroup').classList.add('hidden');
+            document.getElementById('taskTimeGroup').classList.add('hidden');
             
             // Gestisci punti fallimento/skip/ritardo per tipo
             document.getElementById('workflowPointsGroup').style.display = 'none';
@@ -5830,6 +5855,7 @@
                 document.getElementById('startDateGroup').classList.add('hidden');
                 startDateInput.required = false;
                 document.getElementById('multipleDatesGroup').classList.remove('hidden');
+                document.getElementById('taskTimeGroup').classList.remove('hidden');
                 // Inizializza con la data di oggi se non ci sono date
                 if (multipleDates.length === 0) {
                     const today = new Date();
@@ -5838,9 +5864,10 @@
                     updateMultipleDatesTextbox();
                 }
             } else if (type === 'free_repeat') {
-                // A libera ripetizione: nessuna data richiesta
+                // A libera ripetizione: solo orario
                 document.getElementById('startDateGroup').classList.add('hidden');
                 startDateInput.required = false;
+                document.getElementById('taskTimeGroup').classList.remove('hidden');
             } else if (type === 'workflow') {
                 // Workflow: data inizio + step builder
                 document.getElementById('startDateGroup').classList.remove('hidden');
@@ -6467,11 +6494,21 @@
         }
 
         function smartBlockFireHour() {
-            const dueRaw = document.getElementById('taskStartDate')?.value || '';
-            const iso = euToIso(dueRaw);
-            if (!iso) return null;
-            const d = new Date(iso);
-            if (isNaN(d.getTime())) return null;
+            const type = document.getElementById('taskType')?.value || '';
+            let d;
+            if (type === 'multiple' || type === 'free_repeat') {
+                const timeVal = document.getElementById('taskTime')?.value || '';
+                if (!timeVal) return null;
+                const [hh, mm] = timeVal.split(':').map(Number);
+                d = new Date();
+                d.setHours(hh, mm, 0, 0);
+            } else {
+                const dueRaw = document.getElementById('taskStartDate')?.value || '';
+                const iso = euToIso(dueRaw);
+                if (!iso) return null;
+                d = new Date(iso);
+                if (isNaN(d.getTime())) return null;
+            }
             d.setMinutes(Math.floor(d.getMinutes() / 10) * 10, 0, 0);
             const hh = String(d.getHours()).padStart(2, '0');
             const mm = String(d.getMinutes()).padStart(2, '0');
@@ -6640,12 +6677,22 @@
                 // Task multiplo: salva le date come array in un campo JSON
                 const datesInput = document.getElementById('multipleDatesData').value;
                 taskData.multiple_dates = datesInput ? JSON.parse(datesInput) : [];
-                
-                // La prossima occorrenza è la PRIMA data della lista (ordinata)
+                const multiTimeVal = document.getElementById('taskTime')?.value || '00:00';
+                taskData.start_date = multiTimeVal ? (new Date().toISOString().slice(0, 10) + 'T' + multiTimeVal + ':00') : taskData.start_date;
+
+                // La prossima occorrenza è la PRIMA data della lista (ordinata) con orario
                 if (taskData.multiple_dates && taskData.multiple_dates.length > 0) {
-                    // Ordina le date
                     const sortedDates = [...taskData.multiple_dates].sort();
-                    taskData.next_occurrence_date = sortedDates[0] + 'T00:00:00';
+                    taskData.next_occurrence_date = sortedDates[0] + 'T' + multiTimeVal + ':00';
+                }
+            } else if (taskType === 'free_repeat') {
+                const frTimeVal = document.getElementById('taskTime')?.value || '';
+                if (frTimeVal) {
+                    const today = new Date();
+                    const yy = today.getFullYear();
+                    const mo = String(today.getMonth() + 1).padStart(2, '0');
+                    const dd = String(today.getDate()).padStart(2, '0');
+                    taskData.start_date = `${yy}-${mo}-${dd}T${frTimeVal}:00`;
                 }
             } else if (taskType === 'workflow') {
                 // Workflow: salva gli step
