@@ -14,10 +14,12 @@ class BlockerService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
+    private var lastSupabaseCheckMs = 0L
 
     private val checker = object : Runnable {
         override fun run() {
             checkScheduleAndSnooze()
+            checkSupabaseQueueIfDue()
             handler.postDelayed(this, Config.CHECK_INTERVAL_MS)
         }
     }
@@ -109,6 +111,25 @@ class BlockerService : Service() {
         Prefs.setState(this, Prefs.STATE_NONE)
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
+    }
+
+    private fun checkSupabaseQueueIfDue() {
+        val now = System.currentTimeMillis()
+        if (now - lastSupabaseCheckMs < 30 * 60 * 1000L) return   // ogni 30 minuti
+        lastSupabaseCheckMs = now
+        if (Prefs.getState(this) != Prefs.STATE_NONE) return       // già bloccato
+        Thread {
+            val ids = SupabaseApi(this).getPendingSmartBlockIds()
+            if (ids.isNotEmpty()) {
+                ids.forEach { SupabaseApi(this).markSent(it) }
+                handler.post {
+                    Prefs.setState(this, Prefs.STATE_TRIGGERED)
+                    Prefs.setSnoozeCount(this, 0)
+                    Prefs.setSnoozeUntil(this, 0)
+                    showOverlay()
+                }
+            }
+        }.start()
     }
 
     private fun showOverlay() {
