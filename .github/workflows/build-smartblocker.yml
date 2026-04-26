@@ -1,0 +1,75 @@
+name: Build SmartBlocker APK
+
+on:
+  push:
+    branches:
+      - master
+      - 'claude/**'
+    paths:
+      - 'android-app/smartblocker/**'
+      - 'android-app/settings.gradle'
+      - 'android-app/build.gradle'
+      - '.github/workflows/build-smartblocker.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        run: |
+          SDKMANAGER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools" \
+            -name "sdkmanager" -type f 2>/dev/null | sort | tail -1)
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" 2>&1 || true
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x android-app/gradlew
+
+      - name: Build SmartBlocker debug APK
+        working-directory: android-app
+        run: ./gradlew :smartblocker:assembleDebug --no-daemon
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartBlocker-debug
+          path: android-app/smartblocker/build/outputs/apk/debug/smartblocker-debug.apk
+          retention-days: 30
+
+      - name: Pubblica APK su master (scaricabile via Netlify)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          VERSION=$(grep versionName android-app/smartblocker/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          cp android-app/smartblocker/build/outputs/apk/debug/smartblocker-debug.apk /tmp/SmartBlocker-latest.apk
+
+          git fetch origin master
+          git checkout master
+          git reset --hard origin/master
+
+          mkdir -p releases
+          cp /tmp/SmartBlocker-latest.apk releases/SmartBlocker-latest.apk
+
+          git add releases/SmartBlocker-latest.apk
+          git diff --staged --quiet && echo "APK non cambiato, skip commit" && exit 0
+
+          git commit -m "chore: aggiorna APK SmartBlocker v${VERSION} [skip actions]"
+          git push origin master
