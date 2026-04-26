@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvBlockState: TextView
     private lateinit var etDeviceToken: EditText
     private lateinit var tvCurrentToken: TextView
+    private lateinit var tvQueueStatus: TextView
 
     private fun buildLayout(): ScrollView {
         val scroll = ScrollView(this)
@@ -158,6 +159,28 @@ class MainActivity : AppCompatActivity() {
             }
         }, lp(8))
 
+        // Sezione Queue Supabase
+        root.addView(TextView(this).apply {
+            text = "Coda Supabase"
+            textSize = 18f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }, lp(32))
+
+        tvQueueStatus = TextView(this).apply {
+            text = "—"
+            textSize = 13f
+            setTextColor(0xFF374151.toInt())
+            setPadding(0, 4, 0, 4)
+        }
+        root.addView(tvQueueStatus, lp(8))
+
+        root.addView(Button(this).apply {
+            text = "🔄 Controlla ora"
+            setBackgroundColor(0xFF374151.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
+            setOnClickListener { checkQueueNow() }
+        }, lp(8))
+
         // Pulsante test blocco
         root.addView(Button(this).apply {
             text = "🧪 Testa blocco ora"
@@ -173,6 +196,36 @@ class MainActivity : AppCompatActivity() {
         }, lp(32))
 
         return scroll
+    }
+
+    private fun checkQueueNow() {
+        val token = Prefs.getDeviceToken(this)
+        if (token.isEmpty()) {
+            tvQueueStatus.text = "⚠️ Nessun token configurato"
+            tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
+            return
+        }
+        tvQueueStatus.text = "⏳ Interrogo Supabase…"
+        tvQueueStatus.setTextColor(0xFF6B7280.toInt())
+        Thread {
+            try {
+                val ids = SupabaseApi(this).getPendingSmartBlockIds()
+                runOnUiThread {
+                    if (ids.isEmpty()) {
+                        tvQueueStatus.text = "✅ Nessun blocco in coda"
+                        tvQueueStatus.setTextColor(0xFF00B894.toInt())
+                    } else {
+                        tvQueueStatus.text = "🔔 ${ids.size} blocco/i in coda:\n${ids.joinToString("\n") { "• $it" }}"
+                        tvQueueStatus.setTextColor(0xFFF39C12.toInt())
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    tvQueueStatus.text = "❌ Errore: ${e.message}"
+                    tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
+                }
+            }
+        }.start()
     }
 
     private fun updateTokenDisplay() {
