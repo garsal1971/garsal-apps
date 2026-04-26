@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.50</title>
+    <title>Tasks v19.18.51</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2281,8 +2281,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.50';
-        const BUILD_TIME  = '2026-04-26T18:00:00Z';
+        const APP_VERSION = 'v19.18.51';
+        const BUILD_TIME  = '2026-04-26T18:15:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2580,7 +2580,7 @@
                         if (!dueDate) return null;
                         const d = new Date(dueDate);
                         if (isNaN(d.getTime())) return null;
-                        d.setMinutes(0, 0, 0);
+                        d.setMinutes(Math.floor(d.getMinutes() / 10) * 10, 0, 0);
                         return d.toISOString();
                     })();
                     if (!fireAt) {
@@ -6472,8 +6472,10 @@
             if (!iso) return null;
             const d = new Date(iso);
             if (isNaN(d.getTime())) return null;
-            d.setMinutes(0, 0, 0);
-            return { label: String(d.getHours()).padStart(2, '0') + ':00', iso: d.toISOString() };
+            d.setMinutes(Math.floor(d.getMinutes() / 10) * 10, 0, 0);
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            return { label: `${hh}:${mm}`, iso: d.toISOString() };
         }
 
         function renderReminders() {
