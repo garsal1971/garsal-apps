@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.53</title>
+    <title>Tasks v19.18.54</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1727,15 +1727,17 @@
                 <div class="card">
                     <h3 style="margin-bottom: 1rem;">🔐 Smart Block</h3>
                     <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1rem;">
-                        Incolla il <strong>Device Token</strong> mostrato nell'app Android Smart Blocker.<br>
-                        Serve per collegare i promemoria al blocco del telefono.
+                        Il <strong>Device Token</strong> collega questo account al tuo telefono Android.<br>
+                        Viene generato automaticamente — copialo e incollalo nell'app Smart Blocker.
                     </p>
-                    <div class="form-group" style="display:flex;gap:8px;align-items:center;">
-                        <input type="text" class="form-input" id="smartblockDeviceToken"
-                               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                               style="font-family:monospace;font-size:0.85rem;flex:1;">
-                        <button class="btn btn-primary" onclick="saveSmartBlockToken()" style="white-space:nowrap;">💾 Salva</button>
+                    <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
+                        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Device Token</div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <code id="smartblockTokenDisplay" style="flex:1;font-size:0.82rem;color:var(--secondary);word-break:break-all;line-height:1.5;">—</code>
+                            <button class="btn btn-primary" onclick="copySmartBlockToken(this)" style="white-space:nowrap;flex-shrink:0;">📋 Copia</button>
+                        </div>
                     </div>
+                    <button onclick="regenerateSmartBlockToken()" style="background:none;border:none;color:var(--muted);font-size:0.8rem;cursor:pointer;padding:0;text-decoration:underline;">↺ Rigenera token</button>
                     <div id="smartblockTokenStatus" style="font-size:0.82rem;color:var(--muted);margin-top:4px;"></div>
                 </div>
                 
@@ -2288,8 +2290,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.53';
-        const BUILD_TIME  = '2026-04-26T19:15:00Z';
+        const APP_VERSION = 'v19.18.54';
+        const BUILD_TIME  = '2026-04-26T19:45:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -7745,12 +7747,31 @@
             if (previewMeta) previewMeta.style.fontSize = metaSize;
         }
         
-        function saveSmartBlockToken() {
-            const val = document.getElementById('smartblockDeviceToken').value.trim();
-            if (!val) { showToast('⚠️ Inserisci un token valido'); return; }
-            localStorage.setItem('sb_smartblock_device_token', val);
-            document.getElementById('smartblockTokenStatus').textContent = '✅ Token salvato';
-            showToast('✅ Device token Smart Block salvato');
+        function getOrCreateSmartBlockToken() {
+            let token = localStorage.getItem('sb_smartblock_device_token');
+            if (!token) {
+                token = crypto.randomUUID();
+                localStorage.setItem('sb_smartblock_device_token', token);
+            }
+            return token;
+        }
+
+        function regenerateSmartBlockToken() {
+            if (!confirm('Rigenerare il token? Dovrai aggiornarlo anche nell\'app Android.')) return;
+            const token = crypto.randomUUID();
+            localStorage.setItem('sb_smartblock_device_token', token);
+            document.getElementById('smartblockTokenDisplay').textContent = token;
+            document.getElementById('smartblockTokenStatus').textContent = '🔄 Token rigenerato — copialo nell\'app Android';
+        }
+
+        function copySmartBlockToken(btn) {
+            const token = localStorage.getItem('sb_smartblock_device_token') || '';
+            if (!token) return;
+            navigator.clipboard.writeText(token).then(() => {
+                const orig = btn.textContent;
+                btn.textContent = '✅ Copiato';
+                setTimeout(() => { btn.textContent = orig; }, 2000);
+            });
         }
 
         async function renderSettings() {
@@ -7763,13 +7784,12 @@
             document.getElementById('fontScaleLabel').textContent = fontScale + '%';
             applyFontScalePreview(fontScale);
             
-            // Carica device token Smart Block
-            const savedToken = localStorage.getItem('sb_smartblock_device_token') || '';
-            const tokenInput = document.getElementById('smartblockDeviceToken');
-            if (tokenInput) {
-                tokenInput.value = savedToken;
-                document.getElementById('smartblockTokenStatus').textContent =
-                    savedToken ? '✅ Token configurato' : '';
+            // Genera (se non esiste) e mostra il device token Smart Block
+            const tokenDisplay = document.getElementById('smartblockTokenDisplay');
+            if (tokenDisplay) {
+                const token = getOrCreateSmartBlockToken();
+                tokenDisplay.textContent = token;
+                document.getElementById('smartblockTokenStatus').textContent = '';
             }
 
             // Renderizza lista priorità
