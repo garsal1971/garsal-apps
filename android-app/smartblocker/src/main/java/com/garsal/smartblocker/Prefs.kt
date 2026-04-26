@@ -24,4 +24,7 @@ object Prefs {
 
     fun getLastTrigger(ctx: Context): String = sp(ctx).getString("last_trigger", "") ?: ""
     fun setLastTrigger(ctx: Context, k: String) { sp(ctx).edit().putString("last_trigger", k).apply() }
+
+    fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
+    fun setDeviceToken(ctx: Context, t: String) { sp(ctx).edit().putString("device_token", t).apply() }
 }

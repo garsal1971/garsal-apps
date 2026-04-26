@@ -1490,6 +1490,17 @@
         }
 
 
+        /* ── Selettore canale notifica (Promemoria) ─────────────────────────── */
+        .notif-channel-pill {
+            padding: 3px 14px; border-radius: 20px;
+            border: 2px solid var(--border); background: #fff;
+            cursor: pointer; font-size: 0.85rem; font-weight: 600;
+            transition: all .18s; user-select: none;
+        }
+        .notif-channel-pill.active {
+            background: var(--secondary); color: #fff; border-color: var(--secondary);
+        }
+        .notif-channel-pill:not(.active):hover { border-color: var(--secondary); color: var(--secondary); }
 </style>
 </head>
 <body>
@@ -1711,6 +1722,21 @@
                     </div>
                     
                     <button class="btn btn-primary" onclick="saveSettings()">💾 Salva Impostazioni</button>
+                </div>
+
+                <div class="card">
+                    <h3 style="margin-bottom: 1rem;">🔐 Smart Block</h3>
+                    <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1rem;">
+                        Incolla il <strong>Device Token</strong> mostrato nell'app Android Smart Blocker.<br>
+                        Serve per collegare i promemoria al blocco del telefono.
+                    </p>
+                    <div class="form-group" style="display:flex;gap:8px;align-items:center;">
+                        <input type="text" class="form-input" id="smartblockDeviceToken"
+                               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                               style="font-family:monospace;font-size:0.85rem;flex:1;">
+                        <button class="btn btn-primary" onclick="saveSmartBlockToken()" style="white-space:nowrap;">💾 Salva</button>
+                    </div>
+                    <div id="smartblockTokenStatus" style="font-size:0.82rem;color:var(--muted);margin-top:4px;"></div>
                 </div>
                 
                 <div class="card">
@@ -2255,8 +2281,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.47';
-        const BUILD_TIME  = '2026-04-18T14:30:00Z';
+        const APP_VERSION = 'v19.18.48';
+        const BUILD_TIME  = '2026-04-26T16:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2401,6 +2427,7 @@
         let settings = {};
         let reminders = [];
         let telegramCompleteButton = true; // Toggle bottone "Fatto" Telegram per il task corrente
+        let notificationChannel = 'telegram'; // 'telegram' | 'smart_block'
         let selectedCategories = [];
         let currentViewTaskId = null;
         let notes = []; // Appunti
@@ -2598,7 +2625,12 @@
                     .maybeSingle();
 
                 const rulePresets = { reminders: presetIds, due_at: dueDate || null };
-                if (taskType !== 'workflow' && telegramCompleteButton) rulePresets.telegram_complete_button = true;
+                if (notificationChannel === 'telegram' && taskType !== 'workflow' && telegramCompleteButton)
+                    rulePresets.telegram_complete_button = true;
+                if (notificationChannel === 'smart_block') {
+                    const devToken = localStorage.getItem('sb_smartblock_device_token');
+                    if (devToken) rulePresets.device_token = devToken;
+                }
 
                 const rule = {
                     user_id:          userId,
@@ -2607,7 +2639,7 @@
                     entity_type:      taskType,
                     entity_title:     entityTitle || null,
                     reminder_presets: rulePresets,
-                    channel:          'telegram',
+                    channel:          notificationChannel,
                     enabled:          true
                 };
 
@@ -5521,6 +5553,7 @@
             selectedCategories = [];
             reminders = [];
             telegramCompleteButton = true;
+            notificationChannel = 'telegram';
             console.log('🟢 reminders reset to:', reminders);
             yearlyDates = []; // Reset date annuali
             multipleDates = []; // Reset date multiple
@@ -5624,6 +5657,7 @@
             // Promemoria
             reminders = task.reminders || [];
             telegramCompleteButton = true; // default true; l'utente può cambiarlo nel form
+            notificationChannel = task.notification_channel || 'telegram';
             
             // Nascosto: visibile solo in modalità nascosta
             updateRiservatoVisibility();
@@ -6417,6 +6451,13 @@
             const showTelegramToggle = currentType !== 'workflow';
 
             listEl.innerHTML = `
+                <!-- Selettore canale: Telegram | Smart Block -->
+                <div style="display:flex;gap:6px;margin-bottom:10px;">
+                    <button class="notif-channel-pill ${notificationChannel === 'telegram' ? 'active' : ''}"
+                            onclick="selectNotifChannel('telegram')">📱 Telegram</button>
+                    <button class="notif-channel-pill ${notificationChannel === 'smart_block' ? 'active' : ''}"
+                            onclick="selectNotifChannel('smart_block')">🔐 Smart Block</button>
+                </div>
                 <!-- Disponibili: chip cliccabili a tutta larghezza -->
                 <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; min-height: 36px; margin-bottom: 0.5rem;">
                     ${availableReminders.map(r => {
@@ -6434,7 +6475,7 @@
                         </div>`;
                     }).join('')}
                 </div>
-                ${showTelegramToggle ? `
+                ${showTelegramToggle && notificationChannel === 'telegram' ? `
                 <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0.1rem;
                               cursor: ${reminders.length > 0 ? 'pointer' : 'not-allowed'};
                               opacity: ${reminders.length > 0 ? '1' : '0.4'};">
@@ -6448,6 +6489,10 @@
                         Bottone "Fatto" su Telegram
                     </span>
                 </label>` : ''}
+                ${notificationChannel === 'smart_block' ? `
+                <div style="font-size:0.82rem;color:var(--secondary);padding:0.15rem 0.1rem;display:flex;align-items:center;gap:6px;">
+                    🔐 Il telefono verrà bloccato all'orario del promemoria
+                </div>` : ''}
             `;
 
             console.log('🔵 Chip+textbox rendered');
@@ -6470,6 +6515,11 @@
                 if (reminders.length === 0) telegramCompleteButton = false;
                 renderReminders();
             }
+        }
+
+        function selectNotifChannel(ch) {
+            notificationChannel = ch;
+            renderReminders();
         }
 
         function removeReminder(i) {
@@ -7600,6 +7650,14 @@
             if (previewMeta) previewMeta.style.fontSize = metaSize;
         }
         
+        function saveSmartBlockToken() {
+            const val = document.getElementById('smartblockDeviceToken').value.trim();
+            if (!val) { showToast('⚠️ Inserisci un token valido'); return; }
+            localStorage.setItem('sb_smartblock_device_token', val);
+            document.getElementById('smartblockTokenStatus').textContent = '✅ Token salvato';
+            showToast('✅ Device token Smart Block salvato');
+        }
+
         async function renderSettings() {
             // Carica i valori correnti
             const upcomingDays = parseInt(settings['dashboard_upcoming_days'] || '10');
@@ -7610,6 +7668,15 @@
             document.getElementById('fontScaleLabel').textContent = fontScale + '%';
             applyFontScalePreview(fontScale);
             
+            // Carica device token Smart Block
+            const savedToken = localStorage.getItem('sb_smartblock_device_token') || '';
+            const tokenInput = document.getElementById('smartblockDeviceToken');
+            if (tokenInput) {
+                tokenInput.value = savedToken;
+                document.getElementById('smartblockTokenStatus').textContent =
+                    savedToken ? '✅ Token configurato' : '';
+            }
+
             // Renderizza lista priorità
             renderPrioritiesList();
             
