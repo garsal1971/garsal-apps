@@ -78,7 +78,13 @@ interface HabitReminderPresets {
   }
 }
 
-type ReminderPresetsJson = TaskReminderPresets | HabitReminderPresets | QuickReminderPresets
+interface SmartBlockReminderPresets {
+  smart_block_fire_at: string   // ISO datetime — orario arrotondato ai 10 min
+  device_token?:       string
+  due_at?:             string
+}
+
+type ReminderPresetsJson = TaskReminderPresets | HabitReminderPresets | QuickReminderPresets | SmartBlockReminderPresets
 
 interface Rule {
   id:               string
@@ -173,13 +179,22 @@ Deno.serve(async (_req) => {
     for (const rule of (rules as Rule[]) ?? []) {
       const rp = rule.reminder_presets
 
-      // Detect struttura: quick (app='quick') | habit (times[]) | task (due_at)
-      const isQuick = rule.app === 'quick'
-      const isHabit = !isQuick && Array.isArray((rp as HabitReminderPresets).times)
+      // Detect struttura: smart_block | quick (app='quick') | habit (times[]) | task (due_at)
+      const isSmartBlock = rule.channel === 'smart_block'
+      const isQuick      = !isSmartBlock && rule.app === 'quick'
+      const isHabit      = !isSmartBlock && !isQuick && Array.isArray((rp as HabitReminderPresets).times)
 
       let entries: QueueEntry[]
 
-      if (isQuick) {
+      if (isSmartBlock) {
+        const sbrp = rp as SmartBlockReminderPresets
+        if (!sbrp.smart_block_fire_at) {
+          console.warn(`[fill-queue] regola smart_block ${rule.id} senza smart_block_fire_at, skip`)
+          skipped++
+          continue
+        }
+        entries = generateSmartBlockEntry(sbrp, now, horizon, rule.id)
+      } else if (isQuick) {
         const qrp = rp as QuickReminderPresets
         if (!qrp.fire_at) {
           console.warn(`[fill-queue] regola quick ${rule.id} senza fire_at, skip`)
@@ -235,7 +250,10 @@ Deno.serve(async (_req) => {
         // Metadata per-entry: include slot_time per filtrare la cancellazione per slot
         // Le notifiche quick non hanno completion_update — snooze/cancel sempre visibili
         let entryMetadata: Record<string, unknown> | null = null
-        if (isQuick) {
+        if (isSmartBlock) {
+          const sbrp = rp as SmartBlockReminderPresets
+          if (sbrp.device_token) entryMetadata = { device_token: sbrp.device_token }
+        } else if (isQuick) {
           const qrp = rp as QuickReminderPresets
           entryMetadata = {
             telegram_snooze_button: qrp.telegram_snooze_button ?? true,
@@ -432,6 +450,29 @@ function generateHabitEntries(
   }
 
   return results
+}
+
+// ---------------------------------------------------------------------------
+// Genera entry per Smart Block (fire_at diretto da smart_block_fire_at)
+// Una regola smart_block → 1 entry nella queue, letta dall'app Android
+// ---------------------------------------------------------------------------
+function generateSmartBlockEntry(
+  rp:      SmartBlockReminderPresets,
+  now:     Date,
+  horizon: Date,
+  ruleId:  string,
+): QueueEntry[] {
+  const fireAt = new Date(rp.smart_block_fire_at)
+  if (fireAt <= now || fireAt > horizon) return []
+  const dateStr = rp.smart_block_fire_at.slice(0, 10)
+  const timeStr = rp.smart_block_fire_at.slice(11, 16)
+  return [{
+    fire_at:         fireAt.toISOString(),
+    label:           '',
+    time:            timeStr,
+    occurrence_id:   `${ruleId}:${dateStr}:${timeStr}`,
+    occurrence_date: dateStr,
+  }]
 }
 
 // ---------------------------------------------------------------------------
