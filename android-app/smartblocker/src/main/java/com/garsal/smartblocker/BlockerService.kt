@@ -1,0 +1,152 @@
+package com.garsal.smartblocker
+
+import android.app.*
+import android.content.Intent
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
+import androidx.core.app.NotificationCompat
+import java.text.SimpleDateFormat
+import java.util.*
+
+class BlockerService : Service() {
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    private val checker = object : Runnable {
+        override fun run() {
+            checkScheduleAndSnooze()
+            handler.postDelayed(this, Config.CHECK_INTERVAL_MS)
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel()
+        startForeground(NOTIF_ID, buildNotification())
+
+        val pm = getSystemService(PowerManager::class.java)
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SmartBlocker::WakeLock")
+        wakeLock?.acquire(10 * 60 * 1000L) // max 10 min, si rinnova al prossimo check
+
+        handler.post(checker)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_SNOOZE  -> handleSnooze()
+            ACTION_UNBLOCK -> handleUnblock()
+        }
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacks(checker)
+        wakeLock?.release()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    // ── Logica principale ────────────────────────────────────────────────────
+
+    private fun checkScheduleAndSnooze() {
+        val now = System.currentTimeMillis()
+        val state = Prefs.getState(this)
+
+        // Rinnova wake lock
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire(10 * 60 * 1000L)
+        }
+
+        // Snooze scaduto?
+        val snoozeUntil = Prefs.getSnoozeUntil(this)
+        if (state == Prefs.STATE_NONE && snoozeUntil > 0 && now >= snoozeUntil) {
+            Prefs.setSnoozeUntil(this, 0)
+            val count = Prefs.getSnoozeCount(this)
+            val nextState = if (count >= Config.MAX_SNOOZES) Prefs.STATE_LOCKED else Prefs.STATE_TRIGGERED
+            Prefs.setState(this, nextState)
+            showOverlay()
+            return
+        }
+
+        // Non controllare gli schedule se già bloccato
+        if (state != Prefs.STATE_NONE) return
+
+        // Controlla schedule configurati
+        val cal = Calendar.getInstance()
+        val hour   = cal.get(Calendar.HOUR_OF_DAY)
+        val minute = cal.get(Calendar.MINUTE)
+        val today  = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
+        for (s in Config.SCHEDULES) {
+            if (s.hour == hour && s.minute == minute) {
+                val key = "${today}_${s.hour}"
+                if (Prefs.getLastTrigger(this) != key) {
+                    Prefs.setLastTrigger(this, key)
+                    Prefs.setState(this, Prefs.STATE_TRIGGERED)
+                    Prefs.setSnoozeCount(this, 0)
+                    Prefs.setSnoozeUntil(this, 0)
+                    showOverlay()
+                    return
+                }
+            }
+        }
+    }
+
+    private fun handleSnooze() {
+        val count = Prefs.getSnoozeCount(this)
+        if (count < Config.MAX_SNOOZES) {
+            Prefs.setSnoozeCount(this, count + 1)
+            Prefs.setSnoozeUntil(this, System.currentTimeMillis() + Config.SNOOZE_DURATION_MS)
+            Prefs.setState(this, Prefs.STATE_NONE)
+        }
+    }
+
+    private fun handleUnblock() {
+        Prefs.setState(this, Prefs.STATE_NONE)
+        Prefs.setSnoozeCount(this, 0)
+        Prefs.setSnoozeUntil(this, 0)
+    }
+
+    private fun showOverlay() {
+        startActivity(
+            Intent(this, BlockOverlayActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+        )
+    }
+
+    // ── Notifica foreground ──────────────────────────────────────────────────
+
+    private fun createNotificationChannel() {
+        val ch = NotificationChannel(
+            CH_ID, "Smart Blocker", NotificationManager.IMPORTANCE_LOW
+        ).apply { description = "Servizio di blocco schedulato attivo" }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+    }
+
+    private fun buildNotification(): Notification {
+        val pi = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, CH_ID)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentTitle("Smart Blocker attivo")
+            .setContentText("Monitoraggio orari in corso")
+            .setContentIntent(pi)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    companion object {
+        const val ACTION_SNOOZE  = "com.garsal.smartblocker.SNOOZE"
+        const val ACTION_UNBLOCK = "com.garsal.smartblocker.UNBLOCK"
+        private const val CH_ID    = "blocker_service"
+        private const val NOTIF_ID = 1
+    }
+}
