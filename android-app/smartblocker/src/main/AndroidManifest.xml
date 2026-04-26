@@ -17,6 +17,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SmartBlocker">
 
+        <!-- Richiesto per foregroundServiceType="specialUse" su Android 14+ -->
+        <property
+            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+            android:value="Blocco schedulato del telefono per controllo utilizzo" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -38,11 +43,7 @@
         <service
             android:name=".BlockerService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="screen_time_control" />
-        </service>
+            android:foregroundServiceType="specialUse" />
 
         <service
             android:name=".BlockerAccessibilityService"
