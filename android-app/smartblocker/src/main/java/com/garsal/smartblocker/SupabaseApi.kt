@@ -33,7 +33,7 @@ class SupabaseApi(private val ctx: Context) {
                 "?channel=eq.smart_block" +
                 "&status=eq.pending" +
                 "&fire_at=lte.$nowIso" +
-                "&select=id,fire_at,payload"
+                "&select=id,fire_at,metadata"
 
             val conn = openConn(urlStr, "GET")
             val code = conn.responseCode
@@ -50,9 +50,9 @@ class SupabaseApi(private val ctx: Context) {
             val ids = mutableListOf<String>()
             for (i in 0 until arr.length()) {
                 val item = arr.getJSONObject(i)
-                // Controlla device_token nel campo payload (JSONB)
-                val payload = item.optJSONObject("payload")
-                val token = payload?.optString("device_token") ?: ""
+                // Controlla device_token nel campo metadata (JSONB)
+                val metadata = item.optJSONObject("metadata")
+                val token = metadata?.optString("device_token") ?: ""
                 if (token == deviceToken) {
                     ids.add(item.getString("id"))
                 }
