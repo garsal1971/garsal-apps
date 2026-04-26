@@ -100,16 +100,15 @@ class MainActivity : AppCompatActivity() {
             }
         }, lp(4))
 
-        // Info schedule
+        // Info blocco
         root.addView(TextView(this).apply {
-            text = "Schedule attivi"
+            text = "Configurazione blocco"
             textSize = 18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }, lp(32))
 
-        val schedInfo = Config.SCHEDULES.joinToString("\n") { "• Ogni giorno alle %02d:%02d".format(it.hour, it.minute) }
         root.addView(TextView(this).apply {
-            text = "$schedInfo\n\nRinvii: ${Config.MAX_SNOOZES}  ·  Durata rinvio: ${Config.SNOOZE_DURATION_MS / 60000} min"
+            text = "Rinvii: ${Config.MAX_SNOOZES}  ·  Durata rinvio: ${Config.SNOOZE_DURATION_MS / 60000} min\nI blocchi arrivano da tasks.html via Supabase"
             textSize = 15f
             setTextColor(0xFF374151.toInt())
         }, lp(8))
