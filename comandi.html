@@ -232,6 +232,61 @@ body {
      AREA ISTRUZIONI — sostituire il contenuto ad ogni modifica
 ════════════════════════════════════════════════════════ -->
 <div class="instructions">
+
+  <div class="section-title">🔐 Smart Block — DDL Migration</div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="badge setup">SQL</div>
+      <div class="card-body">
+        <div class="card-title">20260426120000_smart_block_channel</div>
+        <div class="card-desc">
+          Eseguire nel <b>SQL Editor di Supabase (prod)</b> prima di usare il canale Smart Block.<br>
+          Aggiunge <code>'smart_block'</code> al CHECK di <code>cm_notification_rules.channel</code>,
+          la colonna <code>notification_channel</code> su <code>ts_tasks</code>,
+          e le RLS per il client Android (anon key) sulla queue.
+        </div>
+        <div class="tags">
+          <span class="tag once">una tantum</span>
+          <span class="tag web">supabase prod</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="sb-smart-block-ddl">
+      <button class="copy-btn" onclick="copyCode('sb-smart-block-ddl', this)">Copia</button>
+      <pre>-- 1. cm_notification_rules.channel: aggiunge 'smart_block'
+ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS cm_notification_rules_channel_check;
+
+ALTER TABLE cm_notification_rules
+    ADD CONSTRAINT cm_notification_rules_channel_check
+        CHECK (channel IN ('telegram', 'browser', 'push', 'smart_block'));
+
+-- 2. ts_tasks: colonna notification_channel
+ALTER TABLE ts_tasks
+    ADD COLUMN IF NOT EXISTS notification_channel text
+        NOT NULL DEFAULT 'telegram'
+        CHECK (notification_channel IN ('telegram', 'smart_block'));
+
+-- 3. cm_notification_queue: RLS per client Android (anon key)
+CREATE POLICY "smart_block_anon_select"
+    ON cm_notification_queue
+    FOR SELECT
+    TO anon
+    USING (channel = 'smart_block');
+
+CREATE POLICY "smart_block_anon_update"
+    ON cm_notification_queue
+    FOR UPDATE
+    TO anon
+    USING  (channel = 'smart_block')
+    WITH CHECK (
+        channel = 'smart_block'
+        AND status IN ('sent', 'failed')
+    );</pre>
+    </div>
+  </div>
+
 </div>
 <!-- fine istruzioni -->
 
