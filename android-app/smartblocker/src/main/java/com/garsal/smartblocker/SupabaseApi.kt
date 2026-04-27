@@ -14,21 +14,27 @@ class SupabaseApi(private val ctx: Context) {
     private val base    = "https://jajlmmdsjlvzgcxiiypk.supabase.co"
     private val anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU"
 
+    data class QueueResult(
+        val matchingIds: List<String>,
+        val totalRows: Int,      // righe restituite da Supabase (visibili all'anon key)
+        val httpCode: Int,
+        val errorMsg: String? = null
+    )
+
     /**
      * Legge cm_notification_queue: cerca item con channel='smart_block', status='pending',
-     * fire_at <= now, e device_token corrispondente nel JSON reminder_presets.
-     * Ritorna la lista di ID degli item da triggerare.
+     * fire_at <= now, e device_token corrispondente nel campo metadata.
+     * Ritorna QueueResult con matchingIds, totalRows (per debug RLS) e httpCode.
      */
-    fun getPendingSmartBlockIds(): List<String> {
+    fun queryQueue(): QueueResult {
         val deviceToken = Prefs.getDeviceToken(ctx)
         if (deviceToken.isEmpty()) {
             Log.d("SupabaseApi", "Nessun device_token configurato, skip polling")
-            return emptyList()
+            return QueueResult(emptyList(), 0, 0, "Nessun device_token configurato")
         }
 
         return try {
             val nowIso = isoNow()
-            // Filtra per canale e stato; il filtro device_token è lato client (JSON JSONB)
             val urlStr = "$base/rest/v1/cm_notification_queue" +
                 "?channel=eq.smart_block" +
                 "&status=eq.pending" +
@@ -38,32 +44,33 @@ class SupabaseApi(private val ctx: Context) {
             val conn = openConn(urlStr, "GET")
             val code = conn.responseCode
             if (code != 200) {
-                Log.w("SupabaseApi", "getPendingSmartBlockIds HTTP $code")
+                val errBody = conn.errorStream?.bufferedReader()?.readText() ?: ""
                 conn.disconnect()
-                return emptyList()
+                Log.w("SupabaseApi", "queryQueue HTTP $code — $errBody")
+                return QueueResult(emptyList(), 0, code, "HTTP $code: $errBody")
             }
 
             val body = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
 
             val arr = JSONArray(body)
+            val totalRows = arr.length()
             val ids = mutableListOf<String>()
-            for (i in 0 until arr.length()) {
+            for (i in 0 until totalRows) {
                 val item = arr.getJSONObject(i)
-                // Controlla device_token nel campo metadata (JSONB)
                 val metadata = item.optJSONObject("metadata")
                 val token = metadata?.optString("device_token") ?: ""
-                if (token == deviceToken) {
-                    ids.add(item.getString("id"))
-                }
+                if (token == deviceToken) ids.add(item.getString("id"))
             }
-            Log.d("SupabaseApi", "Trovati ${ids.size} item Smart Block pending")
-            ids
+            Log.d("SupabaseApi", "queryQueue: HTTP $code, righe=$totalRows, match token=${ids.size}")
+            QueueResult(ids, totalRows, code)
         } catch (e: Exception) {
-            Log.e("SupabaseApi", "getPendingSmartBlockIds errore: ${e.message}")
-            emptyList()
+            Log.e("SupabaseApi", "queryQueue errore: ${e.message}")
+            QueueResult(emptyList(), 0, 0, e.message)
         }
     }
+
+    fun getPendingSmartBlockIds(): List<String> = queryQueue().matchingIds
 
     /**
      * Marca un item della coda come 'sent'.

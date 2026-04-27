@@ -207,21 +207,34 @@ class MainActivity : AppCompatActivity() {
         tvQueueStatus.text = "⏳ Interrogo Supabase…"
         tvQueueStatus.setTextColor(0xFF6B7280.toInt())
         Thread {
-            try {
-                val ids = SupabaseApi(this).getPendingSmartBlockIds()
-                runOnUiThread {
-                    if (ids.isEmpty()) {
-                        tvQueueStatus.text = "✅ Nessun blocco in coda"
-                        tvQueueStatus.setTextColor(0xFF00B894.toInt())
-                    } else {
-                        tvQueueStatus.text = "🔔 ${ids.size} blocco/i in coda:\n${ids.joinToString("\n") { "• $it" }}"
+            val result = SupabaseApi(this).queryQueue()
+            runOnUiThread {
+                when {
+                    result.errorMsg != null -> {
+                        tvQueueStatus.text = "❌ ${result.errorMsg}"
+                        tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
+                    }
+                    result.httpCode != 200 -> {
+                        tvQueueStatus.text = "❌ HTTP ${result.httpCode} — controlla RLS Supabase"
+                        tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
+                    }
+                    result.totalRows == 0 && result.matchingIds.isEmpty() -> {
+                        // Supabase ha risposto 200 ma zero righe: RLS potrebbe bloccare
+                        tvQueueStatus.text = "⚠️ Supabase: 0 righe visibili (HTTP 200)\n" +
+                            "Verifica policy RLS su cm_notification_queue per ruolo anon"
                         tvQueueStatus.setTextColor(0xFFF39C12.toInt())
                     }
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    tvQueueStatus.text = "❌ Errore: ${e.message}"
-                    tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
+                    result.totalRows > 0 && result.matchingIds.isEmpty() -> {
+                        tvQueueStatus.text = "⚠️ ${result.totalRows} righe in coda ma nessuna\n" +
+                            "corrisponde al token ${token.take(8)}…\n" +
+                            "Controlla device_token in tasks.html"
+                        tvQueueStatus.setTextColor(0xFFF39C12.toInt())
+                    }
+                    else -> {
+                        tvQueueStatus.text = "🔔 ${result.matchingIds.size}/${result.totalRows} blocco/i da eseguire:\n" +
+                            result.matchingIds.joinToString("\n") { "• ${it.take(8)}…" }
+                        tvQueueStatus.setTextColor(0xFFF39C12.toInt())
+                    }
                 }
             }
         }.start()
