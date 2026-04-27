@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.55</title>
+    <title>Tasks v19.18.56</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2290,8 +2290,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.55';
-        const BUILD_TIME  = '2026-04-27T07:00:00Z';
+        const APP_VERSION = 'v19.18.56';
+        const BUILD_TIME  = '2026-04-27T07:30:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2612,7 +2612,11 @@
                         ? await authSb.from('cm_notification_rules').update(ruleSB).eq('id', existingSB.id)
                         : await authSb.from('cm_notification_rules').insert(ruleSB);
                     if (sbErr) { console.error('❌ syncNotificationRules smart_block error:', sbErr); showToast(`❌ Errore: ${sbErr.message}`); }
-                    else { showToast('🔐 Smart Block salvato'); triggerFillQueue(); }
+                    else {
+                        if (!devToken) showToast('⚠️ Smart Block salvato ma Device Token mancante — vai in Impostazioni → Smart Block e risalva il task');
+                        else showToast('🔐 Smart Block salvato');
+                        triggerFillQueue();
+                    }
                     return;
                 }
 
