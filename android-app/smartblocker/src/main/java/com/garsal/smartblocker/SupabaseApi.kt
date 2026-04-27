@@ -16,57 +16,60 @@ class SupabaseApi(private val ctx: Context) {
 
     data class QueueResult(
         val matchingIds: List<String>,
-        val totalRows: Int,      // righe restituite da Supabase (visibili all'anon key)
+        val totalRows: Int,      // pending+scaduti visibili all'anon key
+        val totalAny: Int,       // qualsiasi stato/fire_at — per verificare RLS
         val httpCode: Int,
         val errorMsg: String? = null
     )
 
     /**
-     * Legge cm_notification_queue: cerca item con channel='smart_block', status='pending',
-     * fire_at <= now, e device_token corrispondente nel campo metadata.
-     * Ritorna QueueResult con matchingIds, totalRows (per debug RLS) e httpCode.
+     * Legge cm_notification_queue con due query:
+     * 1. Filtro completo (pending, fire_at<=now) + match device_token
+     * 2. Solo channel=smart_block senza altri filtri → conta righe visibili all'anon (test RLS)
      */
     fun queryQueue(): QueueResult {
         val deviceToken = Prefs.getDeviceToken(ctx)
-        if (deviceToken.isEmpty()) {
-            Log.d("SupabaseApi", "Nessun device_token configurato, skip polling")
-            return QueueResult(emptyList(), 0, 0, "Nessun device_token configurato")
-        }
 
         return try {
+            // Query 1 — righe pronte per il blocco
             val nowIso = isoNow()
-            val urlStr = "$base/rest/v1/cm_notification_queue" +
-                "?channel=eq.smart_block" +
-                "&status=eq.pending" +
-                "&fire_at=lte.$nowIso" +
+            val urlFull = "$base/rest/v1/cm_notification_queue" +
+                "?channel=eq.smart_block&status=eq.pending&fire_at=lte.$nowIso" +
                 "&select=id,fire_at,metadata"
-
-            val conn = openConn(urlStr, "GET")
-            val code = conn.responseCode
-            if (code != 200) {
-                val errBody = conn.errorStream?.bufferedReader()?.readText() ?: ""
-                conn.disconnect()
-                Log.w("SupabaseApi", "queryQueue HTTP $code — $errBody")
-                return QueueResult(emptyList(), 0, code, "HTTP $code: $errBody")
+            val conn1 = openConn(urlFull, "GET")
+            val code1 = conn1.responseCode
+            if (code1 != 200) {
+                val err = conn1.errorStream?.bufferedReader()?.readText() ?: ""
+                conn1.disconnect()
+                return QueueResult(emptyList(), 0, 0, code1, "HTTP $code1: $err")
             }
+            val body1 = conn1.inputStream.bufferedReader().readText()
+            conn1.disconnect()
 
-            val body = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
-
-            val arr = JSONArray(body)
+            val arr = JSONArray(body1)
             val totalRows = arr.length()
             val ids = mutableListOf<String>()
             for (i in 0 until totalRows) {
                 val item = arr.getJSONObject(i)
-                val metadata = item.optJSONObject("metadata")
-                val token = metadata?.optString("device_token") ?: ""
+                val token = item.optJSONObject("metadata")?.optString("device_token") ?: ""
                 if (token == deviceToken) ids.add(item.getString("id"))
             }
-            Log.d("SupabaseApi", "queryQueue: HTTP $code, righe=$totalRows, match token=${ids.size}")
-            QueueResult(ids, totalRows, code)
+
+            // Query 2 — test RLS: tutte le righe smart_block visibili all'anon (limit 50)
+            val urlAny = "$base/rest/v1/cm_notification_queue" +
+                "?channel=eq.smart_block&select=id&limit=50"
+            val conn2 = openConn(urlAny, "GET")
+            val totalAny = if (conn2.responseCode == 200) {
+                val b = conn2.inputStream.bufferedReader().readText()
+                conn2.disconnect()
+                JSONArray(b).length()
+            } else { conn2.disconnect(); -1 }
+
+            Log.d("SupabaseApi", "queryQueue: pending=$totalRows match=${ids.size} totalAny=$totalAny")
+            QueueResult(ids, totalRows, totalAny, code1)
         } catch (e: Exception) {
             Log.e("SupabaseApi", "queryQueue errore: ${e.message}")
-            QueueResult(emptyList(), 0, 0, e.message)
+            QueueResult(emptyList(), 0, 0, 0, e.message)
         }
     }
 

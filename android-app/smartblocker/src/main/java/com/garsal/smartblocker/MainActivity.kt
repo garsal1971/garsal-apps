@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.1.2 · PIN: ${Config.PIN}"
+            text = "v1.1.3 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -217,16 +217,27 @@ class MainActivity : AppCompatActivity() {
                         tvQueueStatus.text = "❌ HTTP ${result.httpCode} — controlla RLS Supabase"
                         tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
                     }
-                    result.totalRows == 0 -> {
-                        tvQueueStatus.text = "⚠️ Supabase: 0 righe visibili (HTTP 200)\nVerifica policy RLS su cm_notification_queue per ruolo anon"
-                        tvQueueStatus.setTextColor(0xFFF39C12.toInt())
+                    result.totalAny == 0 -> {
+                        // Nessuna riga smart_block visibile all'anon key in nessun stato
+                        tvQueueStatus.text = "❌ RLS blocca ancora: 0 righe visibili (qualsiasi stato)\n" +
+                            "Esegui il DDL in Supabase SQL Editor e riprova"
+                        tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
+                    }
+                    result.totalRows == 0 && result.matchingIds.isEmpty() -> {
+                        // RLS ok (vede righe) ma nessuna è pending+scaduta
+                        tvQueueStatus.text = "✅ RLS ok — ${result.totalAny} righe visibili\n" +
+                            "⏳ Nessun blocco pending/scaduto ora\n" +
+                            "Salva un task con Smart Block e riprova"
+                        tvQueueStatus.setTextColor(0xFF00B894.toInt())
                     }
                     result.totalRows > 0 && result.matchingIds.isEmpty() -> {
-                        tvQueueStatus.text = "⚠️ ${result.totalRows} righe in coda ma nessuna\ncorrisponde al token ${token.take(8)}…\nIncolla questo token in tasks.html"
+                        tvQueueStatus.text = "⚠️ ${result.totalRows} righe pending ma nessuna\n" +
+                            "corrisponde al token ${token.take(8)}…\n" +
+                            "Incolla questo token in tasks.html"
                         tvQueueStatus.setTextColor(0xFFF39C12.toInt())
                     }
                     else -> {
-                        tvQueueStatus.text = "🔔 ${result.matchingIds.size}/${result.totalRows} blocco/i da eseguire:\n" +
+                        tvQueueStatus.text = "🔔 ${result.matchingIds.size} blocco/i pronti:\n" +
                             result.matchingIds.joinToString("\n") { "• ${it.take(8)}…" }
                         tvQueueStatus.setTextColor(0xFFF39C12.toInt())
                     }
