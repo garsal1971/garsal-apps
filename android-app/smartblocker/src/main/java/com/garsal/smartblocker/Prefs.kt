@@ -2,6 +2,7 @@ package com.garsal.smartblocker
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.util.UUID
 
 object Prefs {
     private const val NAME = "smartblocker_prefs"
@@ -25,6 +26,14 @@ object Prefs {
     fun getLastTrigger(ctx: Context): String = sp(ctx).getString("last_trigger", "") ?: ""
     fun setLastTrigger(ctx: Context, k: String) { sp(ctx).edit().putString("last_trigger", k).apply() }
 
-    fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
-    fun setDeviceToken(ctx: Context, t: String) { sp(ctx).edit().putString("device_token", t).apply() }
+    /** Restituisce il device token, generandolo al primo accesso. */
+    fun getDeviceToken(ctx: Context): String {
+        val prefs = sp(ctx)
+        var token = prefs.getString("device_token", null)
+        if (token.isNullOrEmpty()) {
+            token = UUID.randomUUID().toString()
+            prefs.edit().putString("device_token", token).apply()
+        }
+        return token
+    }
 }

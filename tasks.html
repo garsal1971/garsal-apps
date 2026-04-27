@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.56</title>
+    <title>Tasks v19.18.57</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1727,17 +1727,18 @@
                 <div class="card">
                     <h3 style="margin-bottom: 1rem;">🔐 Smart Block</h3>
                     <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1rem;">
-                        Il <strong>Device Token</strong> collega questo account al tuo telefono Android.<br>
-                        Viene generato automaticamente — copialo e incollalo nell'app Smart Blocker.
+                        Il <strong>Device Token</strong> è generato dall'app <strong>Smart Blocker</strong> sul telefono.<br>
+                        Aprila, tocca <em>📋 Copia token</em> e incollalo qui sotto.
                     </p>
-                    <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;">
-                        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Device Token</div>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label class="form-label" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">Device Token</label>
                         <div style="display:flex;gap:8px;align-items:center;">
-                            <code id="smartblockTokenDisplay" style="flex:1;font-size:0.82rem;color:var(--secondary);word-break:break-all;line-height:1.5;">—</code>
-                            <button class="btn btn-primary" onclick="copySmartBlockToken(this)" style="white-space:nowrap;flex-shrink:0;">📋 Copia</button>
+                            <input id="smartblockTokenInput" type="text"
+                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                style="flex:1;font-family:monospace;font-size:0.82rem;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);">
+                            <button class="btn btn-primary" onclick="saveSmartBlockToken()" style="white-space:nowrap;flex-shrink:0;">💾 Salva</button>
                         </div>
                     </div>
-                    <button onclick="regenerateSmartBlockToken()" style="background:none;border:none;color:var(--muted);font-size:0.8rem;cursor:pointer;padding:0;text-decoration:underline;">↺ Rigenera token</button>
                     <div id="smartblockTokenStatus" style="font-size:0.82rem;color:var(--muted);margin-top:4px;"></div>
                 </div>
                 
@@ -2290,8 +2291,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.56';
-        const BUILD_TIME  = '2026-04-27T07:30:00Z';
+        const APP_VERSION = 'v19.18.57';
+        const BUILD_TIME  = '2026-04-27T08:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -7751,31 +7752,19 @@
             if (previewMeta) previewMeta.style.fontSize = metaSize;
         }
         
-        function getOrCreateSmartBlockToken() {
-            let token = localStorage.getItem('sb_smartblock_device_token');
-            if (!token) {
-                token = crypto.randomUUID();
-                localStorage.setItem('sb_smartblock_device_token', token);
+        function saveSmartBlockToken() {
+            const input = document.getElementById('smartblockTokenInput');
+            const token = (input?.value || '').trim();
+            const statusEl = document.getElementById('smartblockTokenStatus');
+            if (!token) { if (statusEl) statusEl.textContent = '⚠️ Incolla prima il token dall\'app Android'; return; }
+            // Validazione UUID base
+            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+                if (statusEl) statusEl.textContent = '❌ Formato non valido — deve essere un UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)';
+                return;
             }
-            return token;
-        }
-
-        function regenerateSmartBlockToken() {
-            if (!confirm('Rigenerare il token? Dovrai aggiornarlo anche nell\'app Android.')) return;
-            const token = crypto.randomUUID();
             localStorage.setItem('sb_smartblock_device_token', token);
-            document.getElementById('smartblockTokenDisplay').textContent = token;
-            document.getElementById('smartblockTokenStatus').textContent = '🔄 Token rigenerato — copialo nell\'app Android';
-        }
-
-        function copySmartBlockToken(btn) {
-            const token = localStorage.getItem('sb_smartblock_device_token') || '';
-            if (!token) return;
-            navigator.clipboard.writeText(token).then(() => {
-                const orig = btn.textContent;
-                btn.textContent = '✅ Copiato';
-                setTimeout(() => { btn.textContent = orig; }, 2000);
-            });
+            if (input) input.value = '';
+            if (statusEl) statusEl.textContent = `✅ Token salvato: ${token.slice(0, 8)}…`;
         }
 
         async function renderSettings() {
@@ -7789,11 +7778,11 @@
             applyFontScalePreview(fontScale);
             
             // Genera (se non esiste) e mostra il device token Smart Block
-            const tokenDisplay = document.getElementById('smartblockTokenDisplay');
-            if (tokenDisplay) {
-                const token = getOrCreateSmartBlockToken();
-                tokenDisplay.textContent = token;
-                document.getElementById('smartblockTokenStatus').textContent = '';
+            const tokenStatus = document.getElementById('smartblockTokenStatus');
+            if (tokenStatus) {
+                const saved = localStorage.getItem('sb_smartblock_device_token');
+                tokenStatus.textContent = saved ? `✅ Token attivo: ${saved.slice(0, 8)}…` : '— nessun token configurato';
+                tokenStatus.style.color = saved ? 'var(--success)' : 'var(--muted)';
             }
 
             // Renderizza lista priorità

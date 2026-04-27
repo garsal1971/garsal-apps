@@ -1,11 +1,12 @@
 package com.garsal.smartblocker
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.InputType
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -32,8 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatusOverlay: TextView
     private lateinit var tvStatusAccessibility: TextView
     private lateinit var tvBlockState: TextView
-    private lateinit var etDeviceToken: EditText
-    private lateinit var tvCurrentToken: TextView
+    private lateinit var tvDeviceToken: TextView
     private lateinit var tvQueueStatus: TextView
 
     private fun buildLayout(): ScrollView {
@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.0.0 · PIN: ${Config.PIN} · Schedule: 08:00 e 22:00"
+            text = "v1.0.0 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -100,7 +100,7 @@ class MainActivity : AppCompatActivity() {
             }
         }, lp(4))
 
-        // Info blocco
+        // Configurazione blocco
         root.addView(TextView(this).apply {
             text = "Configurazione blocco"
             textSize = 18f
@@ -113,48 +113,38 @@ class MainActivity : AppCompatActivity() {
             setTextColor(0xFF374151.toInt())
         }, lp(8))
 
-        // Sezione Integrazione Tasks
+        // Sezione Device Token
         root.addView(TextView(this).apply {
-            text = "Integrazione Tasks"
+            text = "Device Token"
             textSize = 18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }, lp(32))
 
         root.addView(TextView(this).apply {
-            text = "Incolla il Device Token da tasks.html → Impostazioni → Smart Block"
+            text = "Copia questo token e incollalo in tasks.html → Impostazioni → 🔐 Smart Block"
             textSize = 13f
             setTextColor(0xFF6B7280.toInt())
         }, lp(8))
 
-        tvCurrentToken = TextView(this).apply {
+        // Box token
+        tvDeviceToken = TextView(this).apply {
             textSize = 12f
-            setTextColor(0xFF888888.toInt())
+            setTextColor(0xFF6C5CE7.toInt())
+            setPadding(20, 20, 20, 20)
+            setBackgroundColor(0xFFF3F0FF.toInt())
+            typeface = android.graphics.Typeface.MONOSPACE
         }
-        root.addView(tvCurrentToken, lp(8))
-
-        etDeviceToken = EditText(this).apply {
-            hint = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            inputType = InputType.TYPE_CLASS_TEXT
-            textSize = 13f
-            setPadding(16, 12, 16, 12)
-            setBackgroundColor(0xFFF9FAFB.toInt())
-        }
-        root.addView(etDeviceToken, lp(8))
+        root.addView(tvDeviceToken, lp(8))
 
         root.addView(Button(this).apply {
-            text = "💾 Salva token"
+            text = "📋 Copia token"
             setBackgroundColor(0xFF6C5CE7.toInt())
             setTextColor(0xFFFFFFFF.toInt())
             setOnClickListener {
-                val token = etDeviceToken.text.toString().trim()
-                if (token.isNotEmpty()) {
-                    Prefs.setDeviceToken(this@MainActivity, token)
-                    etDeviceToken.setText("")
-                    updateTokenDisplay()
-                    Toast.makeText(this@MainActivity, "Token salvato", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@MainActivity, "Inserisci un token valido", Toast.LENGTH_SHORT).show()
-                }
+                val token = Prefs.getDeviceToken(this@MainActivity)
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("device_token", token))
+                Toast.makeText(this@MainActivity, "✅ Token copiato negli appunti", Toast.LENGTH_SHORT).show()
             }
         }, lp(8))
 
@@ -199,11 +189,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkQueueNow() {
         val token = Prefs.getDeviceToken(this)
-        if (token.isEmpty()) {
-            tvQueueStatus.text = "⚠️ Nessun token configurato"
-            tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
-            return
-        }
         tvQueueStatus.text = "⏳ Interrogo Supabase…"
         tvQueueStatus.setTextColor(0xFF6B7280.toInt())
         Thread {
@@ -218,16 +203,12 @@ class MainActivity : AppCompatActivity() {
                         tvQueueStatus.text = "❌ HTTP ${result.httpCode} — controlla RLS Supabase"
                         tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
                     }
-                    result.totalRows == 0 && result.matchingIds.isEmpty() -> {
-                        // Supabase ha risposto 200 ma zero righe: RLS potrebbe bloccare
-                        tvQueueStatus.text = "⚠️ Supabase: 0 righe visibili (HTTP 200)\n" +
-                            "Verifica policy RLS su cm_notification_queue per ruolo anon"
+                    result.totalRows == 0 -> {
+                        tvQueueStatus.text = "⚠️ Supabase: 0 righe visibili (HTTP 200)\nVerifica policy RLS su cm_notification_queue per ruolo anon"
                         tvQueueStatus.setTextColor(0xFFF39C12.toInt())
                     }
                     result.totalRows > 0 && result.matchingIds.isEmpty() -> {
-                        tvQueueStatus.text = "⚠️ ${result.totalRows} righe in coda ma nessuna\n" +
-                            "corrisponde al token ${token.take(8)}…\n" +
-                            "Controlla device_token in tasks.html"
+                        tvQueueStatus.text = "⚠️ ${result.totalRows} righe in coda ma nessuna\ncorrisponde al token ${token.take(8)}…\nIncolla questo token in tasks.html"
                         tvQueueStatus.setTextColor(0xFFF39C12.toInt())
                     }
                     else -> {
@@ -240,11 +221,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun updateTokenDisplay() {
-        val token = Prefs.getDeviceToken(this)
-        tvCurrentToken.text = if (token.isEmpty()) "Nessun token configurato" else "Token attivo: ${token.take(8)}…"
-    }
-
     private fun updateStatus() {
         val hasOverlay = Settings.canDrawOverlays(this)
         tvStatusOverlay.text = if (hasOverlay) "✅ Overlay: concesso" else "❌ Overlay: mancante"
@@ -254,7 +230,9 @@ class MainActivity : AppCompatActivity() {
         tvStatusAccessibility.text = if (accEnabled) "✅ Accessibilità: attiva" else "❌ Accessibilità: disabilitata"
         tvStatusAccessibility.setTextColor(if (accEnabled) 0xFF00B894.toInt() else 0xFFE74C3C.toInt())
 
-        updateTokenDisplay()
+        // Mostra il token (generato automaticamente da Prefs se non esiste)
+        tvDeviceToken.text = Prefs.getDeviceToken(this)
+
         val state = Prefs.getState(this)
         val count = Prefs.getSnoozeCount(this)
         tvBlockState.text = when (state) {
