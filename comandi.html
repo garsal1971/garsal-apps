@@ -270,6 +270,10 @@ ALTER TABLE ts_tasks
         CHECK (notification_channel IN ('telegram', 'smart_block'));
 
 -- 3. cm_notification_queue: RLS per client Android (anon key)
+--    DROP IF EXISTS per idempotenza (eseguibile più volte senza errori)
+DROP POLICY IF EXISTS "smart_block_anon_select" ON cm_notification_queue;
+DROP POLICY IF EXISTS "smart_block_anon_update" ON cm_notification_queue;
+
 CREATE POLICY "smart_block_anon_select"
     ON cm_notification_queue
     FOR SELECT
@@ -285,6 +289,29 @@ CREATE POLICY "smart_block_anon_update"
         channel = 'smart_block'
         AND status IN ('sent', 'failed')
     );</pre>
+    </div>
+
+  <div class="section" style="margin-top:24px;">
+    <div class="section-title">🔍 Verifica RLS Smart Block</div>
+    <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">Esegui in Supabase SQL Editor per verificare lo stato delle policy:</p>
+    <div class="code-block" id="sb-smart-block-verify">
+      <button class="copy-btn" onclick="copyCode('sb-smart-block-verify', this)">Copia</button>
+      <pre>-- Controlla se le policy esistono
+SELECT policyname, roles, cmd, qual
+FROM pg_policies
+WHERE tablename = 'cm_notification_queue'
+ORDER BY policyname;
+
+-- Controlla se RLS è abilitato sulla tabella
+SELECT relname, relrowsecurity AS rls_enabled
+FROM pg_class
+WHERE relname = 'cm_notification_queue';
+
+-- Conta righe smart_block nella queue per stato
+SELECT status, count(*)
+FROM cm_notification_queue
+WHERE channel = 'smart_block'
+GROUP BY status;</pre>
     </div>
   </div>
 
