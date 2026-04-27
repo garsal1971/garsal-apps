@@ -193,7 +193,9 @@ Deno.serve(async (_req) => {
           skipped++
           continue
         }
+        console.log(`[fill-queue] smart_block rule=${rule.id} fire_at=${sbrp.smart_block_fire_at} token=${sbrp.device_token ? sbrp.device_token.slice(0,8)+'…' : 'none'}`)
         entries = generateSmartBlockEntry(sbrp, now, horizon, rule.id)
+        console.log(`[fill-queue] smart_block entries generati: ${entries.length}`)
       } else if (isQuick) {
         const qrp = rp as QuickReminderPresets
         if (!qrp.fire_at) {
@@ -463,7 +465,11 @@ function generateSmartBlockEntry(
   ruleId:  string,
 ): QueueEntry[] {
   const fireAt = new Date(rp.smart_block_fire_at)
-  if (fireAt <= now || fireAt > horizon) return []
+  // Grace window di 30 minuti nel passato: se l'utente salva il task alle 21:55
+  // e il fire_at arrotondato è 21:50, l'entry viene comunque creata così l'app
+  // Android la raccoglie immediatamente al prossimo check.
+  const grace = new Date(now.getTime() - 30 * 60 * 1000)
+  if (fireAt < grace || fireAt > horizon) return []
   const dateStr = rp.smart_block_fire_at.slice(0, 10)
   const timeStr = rp.smart_block_fire_at.slice(11, 16)
   return [{
