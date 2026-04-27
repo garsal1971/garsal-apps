@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.1.1 · PIN: ${Config.PIN}"
+            text = "v1.1.2 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -97,6 +97,20 @@ class MainActivity : AppCompatActivity() {
             text = "Abilita Accessibilità"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }, lp(4))
+
+        // Impostazioni limitate (Android 13+ sideload)
+        root.addView(TextView(this).apply {
+            text = "⚠️ Se l'accessibilità è bloccata, abilita prima le impostazioni limitate per questa app:"
+            textSize = 12f
+            setTextColor(0xFF6B7280.toInt())
+        }, lp(6))
+        root.addView(Button(this).apply {
+            text = "🔓 Impostazioni limitate"
+            setOnClickListener {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")))
             }
         }, lp(4))
 
