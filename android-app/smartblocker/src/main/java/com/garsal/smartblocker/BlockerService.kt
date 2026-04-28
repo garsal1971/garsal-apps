@@ -36,8 +36,9 @@ class BlockerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_SNOOZE  -> handleSnooze()
-            ACTION_UNBLOCK -> handleUnblock()
+            ACTION_SNOOZE     -> handleSnooze()
+            ACTION_UNBLOCK    -> handleUnblock()
+            ACTION_CHECK_NOW  -> { lastSupabaseCheckMs = 0L; triggerSupabaseCheck() }
         }
         return START_STICKY
     }
@@ -89,8 +90,12 @@ class BlockerService : Service() {
 
     private fun checkSupabaseQueueIfDue() {
         val now = System.currentTimeMillis()
-        if (now - lastSupabaseCheckMs < 30 * 60 * 1000L) return   // ogni 30 minuti
+        if (now - lastSupabaseCheckMs < 5 * 60 * 1000L) return   // ogni 5 minuti
         lastSupabaseCheckMs = now
+        triggerSupabaseCheck()
+    }
+
+    fun triggerSupabaseCheck() {
         if (Prefs.getState(this) != Prefs.STATE_NONE) return       // già bloccato
         Thread {
             val ids = SupabaseApi(this).getPendingSmartBlockIds()
@@ -139,8 +144,9 @@ class BlockerService : Service() {
     }
 
     companion object {
-        const val ACTION_SNOOZE  = "com.garsal.smartblocker.SNOOZE"
-        const val ACTION_UNBLOCK = "com.garsal.smartblocker.UNBLOCK"
+        const val ACTION_SNOOZE    = "com.garsal.smartblocker.SNOOZE"
+        const val ACTION_UNBLOCK   = "com.garsal.smartblocker.UNBLOCK"
+        const val ACTION_CHECK_NOW = "com.garsal.smartblocker.CHECK_NOW"
         private const val CH_ID    = "blocker_service"
         private const val NOTIF_ID = 1
     }
