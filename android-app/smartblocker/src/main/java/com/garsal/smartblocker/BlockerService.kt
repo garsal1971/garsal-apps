@@ -32,6 +32,10 @@ class BlockerService : Service() {
         wakeLock?.acquire(10 * 60 * 1000L) // max 10 min, si rinnova al prossimo check
 
         handler.post(checker)
+
+        // Registra il dispositivo in Supabase (idempotente) così tasks.html
+        // mostra il dispositivo nella lista senza richiedere copia manuale del token.
+        Thread { SupabaseApi(this).registerDevice() }.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.58</title>
+    <title>Tasks v19.18.59</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1740,6 +1740,10 @@
                         </div>
                     </div>
                     <div id="smartblockTokenStatus" style="font-size:0.82rem;color:var(--muted);margin-top:4px;"></div>
+                    <div style="margin-top:12px;">
+                        <label class="form-label" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">Dispositivi registrati</label>
+                        <div id="smartblockDeviceList" style="margin-top:6px;"></div>
+                    </div>
                 </div>
                 
                 <div class="card">
@@ -2291,8 +2295,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.58';
-        const BUILD_TIME  = '2026-04-28T12:00:00Z';
+        const APP_VERSION = 'v19.18.59';
+        const BUILD_TIME  = '2026-04-28T14:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2438,6 +2442,7 @@
         let reminders = [];
         let telegramCompleteButton = true; // Toggle bottone "Fatto" Telegram per il task corrente
         let notificationChannel = 'telegram'; // 'telegram' | 'smart_block'
+        let sbDeviceToken = null; // Token dispositivo Android (caricato da cm_user_notification_settings)
         let selectedCategories = [];
         let currentViewTaskId = null;
         let notes = []; // Appunti
@@ -2517,6 +2522,7 @@
             
             // Inizializza sistema notifiche
             await initNotificationSystem();
+            await loadNotifSettings();
 
             // Carica preset promemoria da DB
             await loadReminderPresets();
@@ -2558,6 +2564,27 @@
             try {
                 return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
             } catch(e) { return null; }
+        }
+
+        // Carica le impostazioni notifiche utente da DB (incluso smart_block_device_token)
+        async function loadNotifSettings() {
+            try {
+                const { data } = await sb
+                    .from('cm_user_notification_settings')
+                    .select('smart_block_device_token')
+                    .maybeSingle();
+                if (data?.smart_block_device_token) {
+                    sbDeviceToken = data.smart_block_device_token;
+                    localStorage.setItem('sb_smartblock_device_token', sbDeviceToken);
+                } else {
+                    // Fallback: usa localStorage se il record DB non esiste ancora
+                    sbDeviceToken = localStorage.getItem('sb_smartblock_device_token') || null;
+                }
+                console.log('🔐 loadNotifSettings: token=', sbDeviceToken ? sbDeviceToken.slice(0,8)+'…' : 'none');
+            } catch (e) {
+                console.warn('⚠️ loadNotifSettings errore:', e);
+                sbDeviceToken = localStorage.getItem('sb_smartblock_device_token') || null;
+            }
         }
 
         async function syncNotificationRules(taskId, taskType, reminderLabels, dueDate, entityTitle) {
@@ -2611,7 +2638,7 @@
                     dFire.setMinutes(Math.floor(dFire.getMinutes() / 10) * 10, 0, 0);
                     const fireAt = dFire.toISOString(); // UTC corretto
                     const rulePresetsSB = { reminders: [], due_at: dueDate || null, smart_block_fire_at: fireAt };
-                    const devToken = localStorage.getItem('sb_smartblock_device_token');
+                    const devToken = sbDeviceToken || localStorage.getItem('sb_smartblock_device_token');
                     if (devToken) rulePresetsSB.device_token = devToken;
 
                     const { data: existingSB } = await authSb.from('cm_notification_rules')
@@ -7767,19 +7794,48 @@
             if (previewMeta) previewMeta.style.fontSize = metaSize;
         }
         
-        function saveSmartBlockToken() {
+        async function saveSmartBlockToken() {
             const input = document.getElementById('smartblockTokenInput');
             const token = (input?.value || '').trim();
             const statusEl = document.getElementById('smartblockTokenStatus');
             if (!token) { if (statusEl) statusEl.textContent = '⚠️ Incolla prima il token dall\'app Android'; return; }
-            // Validazione UUID base
             if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
                 if (statusEl) statusEl.textContent = '❌ Formato non valido — deve essere un UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)';
                 return;
             }
+            if (statusEl) statusEl.textContent = '⏳ Salvo…';
+            const userId = decodeJWT(sbAccessToken)?.sub;
+            const { error } = await sb.from('cm_user_notification_settings').upsert(
+                { user_id: userId, smart_block_device_token: token },
+                { onConflict: 'user_id' }
+            );
+            if (error) {
+                if (statusEl) statusEl.textContent = `❌ Errore DB: ${error.message}`;
+                return;
+            }
+            sbDeviceToken = token;
             localStorage.setItem('sb_smartblock_device_token', token);
             if (input) input.value = '';
-            if (statusEl) statusEl.textContent = `✅ Token salvato: ${token.slice(0, 8)}…`;
+            if (statusEl) {
+                statusEl.textContent = `✅ Token salvato nel cloud: ${token.slice(0, 8)}…`;
+                statusEl.style.color = 'var(--success)';
+            }
+        }
+
+        async function selectSmartBlockDevice(token) {
+            const userId = decodeJWT(sbAccessToken)?.sub;
+            const { error } = await sb.from('cm_user_notification_settings').upsert(
+                { user_id: userId, smart_block_device_token: token },
+                { onConflict: 'user_id' }
+            );
+            if (!error) {
+                sbDeviceToken = token;
+                localStorage.setItem('sb_smartblock_device_token', token);
+                showToast(`✅ Dispositivo selezionato: ${token.slice(0,8)}…`);
+                renderSettings();
+            } else {
+                showToast(`❌ Errore: ${error.message}`);
+            }
         }
 
         async function renderSettings() {
@@ -7792,12 +7848,40 @@
             document.getElementById('fontScaleLabel').textContent = fontScale + '%';
             applyFontScalePreview(fontScale);
             
-            // Genera (se non esiste) e mostra il device token Smart Block
+            // Mostra il device token Smart Block (da DB, con fallback localStorage)
             const tokenStatus = document.getElementById('smartblockTokenStatus');
+            const deviceListEl = document.getElementById('smartblockDeviceList');
             if (tokenStatus) {
-                const saved = localStorage.getItem('sb_smartblock_device_token');
-                tokenStatus.textContent = saved ? `✅ Token attivo: ${saved.slice(0, 8)}…` : '— nessun token configurato';
-                tokenStatus.style.color = saved ? 'var(--success)' : 'var(--muted)';
+                const token = sbDeviceToken || localStorage.getItem('sb_smartblock_device_token');
+                tokenStatus.textContent = token
+                    ? `✅ Token attivo: ${token.slice(0, 8)}… (cloud)`
+                    : '— nessun token configurato';
+                tokenStatus.style.color = token ? 'var(--success)' : 'var(--muted)';
+            }
+            // Carica lista dispositivi registrati (app Android che hanno chiamato registerDevice)
+            if (deviceListEl) {
+                deviceListEl.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">⏳ Carico dispositivi…</span>';
+                try {
+                    const { data: devices } = await sb
+                        .from('cm_smart_block_devices')
+                        .select('device_token, label, registered_at')
+                        .order('registered_at', { ascending: false })
+                        .limit(5);
+                    if (!devices?.length) {
+                        deviceListEl.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">Nessun dispositivo registrato</span>';
+                    } else {
+                        deviceListEl.innerHTML = devices.map(d => {
+                            const active = d.device_token === (sbDeviceToken || localStorage.getItem('sb_smartblock_device_token'));
+                            const date = new Date(d.registered_at).toLocaleDateString('it-IT');
+                            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+                                <span style="font-family:monospace;font-size:0.8rem;flex:1;color:var(--dark);">${d.device_token.slice(0,8)}…</span>
+                                <span style="font-size:0.75rem;color:var(--muted);">${d.label || date}</span>
+                                ${active ? '<span style="color:var(--success);font-size:0.75rem;">✅ attivo</span>'
+                                         : `<button class="btn btn-sm" style="padding:2px 8px;font-size:0.75rem;" onclick="selectSmartBlockDevice('${d.device_token}')">Usa</button>`}
+                            </div>`;
+                        }).join('');
+                    }
+                } catch(e) { deviceListEl.innerHTML = ''; }
             }
 
             // Renderizza lista priorità
