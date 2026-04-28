@@ -234,18 +234,17 @@ body {
 ════════════════════════════════════════════════════════ -->
 <div class="instructions">
 
-  <div class="section-title">🔐 Smart Block — DDL Migration</div>
+  <div class="section-title">🔐 Smart Block — Setup completo (una-tantum)</div>
 
   <div class="card">
     <div class="card-header">
       <div class="badge setup">SQL</div>
       <div class="card-body">
-        <div class="card-title">20260426120000_smart_block_channel</div>
+        <div class="card-title">Smart Block — DDL + Device Token</div>
         <div class="card-desc">
-          Eseguire nel <b>SQL Editor di Supabase (prod)</b> prima di usare il canale Smart Block.<br>
+          Eseguire <strong>una sola volta</strong> nel <b>SQL Editor di Supabase (prod)</b>.<br>
           Aggiunge <code>'smart_block'</code> al CHECK di <code>cm_notification_rules.channel</code>,
-          la colonna <code>notification_channel</code> su <code>ts_tasks</code>,
-          e le RLS per il client Android (anon key) sulla queue.
+          le RLS per il client Android, il device token e la funzione di lettura per l'app.
         </div>
         <div class="tags">
           <span class="tag once">una tantum</span>
@@ -255,7 +254,7 @@ body {
     </div>
     <div class="code-block" id="sb-smart-block-ddl">
       <button class="copy-btn" onclick="copyCode('sb-smart-block-ddl', this)">Copia</button>
-      <pre>-- 1. cm_notification_rules.channel: aggiunge 'smart_block'
+      <pre>-- ── 1. cm_notification_rules.channel: aggiunge 'smart_block' ──────
 ALTER TABLE cm_notification_rules
     DROP CONSTRAINT IF EXISTS cm_notification_rules_channel_check;
 
@@ -263,47 +262,23 @@ ALTER TABLE cm_notification_rules
     ADD CONSTRAINT cm_notification_rules_channel_check
         CHECK (channel IN ('telegram', 'browser', 'push', 'smart_block'));
 
--- 2. ts_tasks: colonna notification_channel
-ALTER TABLE ts_tasks
-    ADD COLUMN IF NOT EXISTS notification_channel text
-        NOT NULL DEFAULT 'telegram'
-        CHECK (notification_channel IN ('telegram', 'smart_block'));
-
--- 3. cm_notification_queue: RLS per client Android (anon key)
---    DROP IF EXISTS per idempotenza (eseguibile più volte senza errori)
+-- ── 2. cm_notification_queue: RLS per client Android (anon key) ────
 DROP POLICY IF EXISTS "smart_block_anon_select" ON cm_notification_queue;
 DROP POLICY IF EXISTS "smart_block_anon_update" ON cm_notification_queue;
 
 CREATE POLICY "smart_block_anon_select"
-    ON cm_notification_queue
-    FOR SELECT
-    TO anon
+    ON cm_notification_queue FOR SELECT TO anon
     USING (channel = 'smart_block');
 
 CREATE POLICY "smart_block_anon_update"
-    ON cm_notification_queue
-    FOR UPDATE
-    TO anon
+    ON cm_notification_queue FOR UPDATE TO anon
     USING  (channel = 'smart_block')
-    WITH CHECK (
-        channel = 'smart_block'
-        AND status IN ('sent', 'failed')
-    );</pre>
-    </div>
+    WITH CHECK (channel = 'smart_block' AND status IN ('sent', 'failed'));
 
-  <div class="section" style="margin-top:24px;">
-    <div class="section-title">🔑 Setup Device Token Smart Block (una-tantum)</div>
-    <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">
-      Esegui <strong>una sola volta</strong> in Supabase SQL Editor.<br>
-      Genera il token, aggiorna le regole esistenti, crea la funzione che l'app Android usa per leggerlo (anon key, read-only).
-    </p>
-    <div class="code-block" id="sb-smart-block-token-setup">
-      <button class="copy-btn" onclick="copyCode('sb-smart-block-token-setup', this)">Copia</button>
-      <pre>-- ── A) Aggiungi colonna e genera il token ─────────────────────────
+-- ── 3. Device token in cm_user_notification_settings ───────────────
 ALTER TABLE cm_user_notification_settings
-ADD COLUMN IF NOT EXISTS smart_block_device_token text;
+    ADD COLUMN IF NOT EXISTS smart_block_device_token text;
 
--- Inserisce il token solo se non esiste già (idempotente)
 INSERT INTO cm_user_notification_settings (user_id, smart_block_device_token)
 SELECT id, gen_random_uuid()
 FROM   auth.users
@@ -314,29 +289,17 @@ SET smart_block_device_token = COALESCE(
     EXCLUDED.smart_block_device_token
 );
 
--- Mostra il token generato
-SELECT smart_block_device_token FROM cm_user_notification_settings;
-
--- ── B) Aggiorna le regole smart_block esistenti con il token ───────
-UPDATE cm_notification_rules
-SET    reminder_presets = jsonb_set(
-           reminder_presets::jsonb,
-           '{device_token}',
-           to_jsonb((SELECT smart_block_device_token
-                     FROM   cm_user_notification_settings LIMIT 1))
-       )
-WHERE  channel = 'smart_block';
-
--- ── C) Funzione read-only per app Android (anon key) ───────────────
+-- ── 4. Funzione read-only per app Android (anon key) ───────────────
 CREATE OR REPLACE FUNCTION public.get_smart_block_token()
 RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-    SELECT smart_block_device_token
-    FROM   cm_user_notification_settings
-    LIMIT  1;
+    SELECT smart_block_device_token FROM cm_user_notification_settings LIMIT 1;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.get_smart_block_token()          TO anon;
-GRANT EXECUTE ON FUNCTION public.task_complete(uuid, date)        TO anon;</pre>
+GRANT EXECUTE ON FUNCTION public.get_smart_block_token()    TO anon;
+GRANT EXECUTE ON FUNCTION public.task_complete(uuid, date)  TO anon;
+
+-- Mostra il token generato
+SELECT smart_block_device_token FROM cm_user_notification_settings;</pre>
     </div>
   </div>
 
@@ -360,7 +323,7 @@ FROM   cm_notification_queue
 WHERE  channel = 'smart_block'
 GROUP  BY status;
 
--- Funzione anon accessibile
+-- Funzioni anon accessibili
 SELECT routine_name FROM information_schema.routines
 WHERE  routine_name IN ('get_smart_block_token', 'task_complete')
 AND    routine_schema = 'public';</pre>
