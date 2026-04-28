@@ -58,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.1.4 · PIN: ${Config.PIN}"
+            text = "v1.1.5 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -217,29 +217,54 @@ class MainActivity : AppCompatActivity() {
                         tvQueueStatus.text = "❌ HTTP ${result.httpCode} — controlla RLS Supabase"
                         tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
                     }
-                    result.totalAny == 0 -> {
-                        tvQueueStatus.text = "❌ RLS blocca ancora: 0 righe visibili\nEsegui il DDL in Supabase SQL Editor e riprova"
+                    result.entries.isEmpty() -> {
+                        tvQueueStatus.text = "❌ 0 righe visibili — esegui il DDL RLS in Supabase"
                         tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
                     }
-                    result.totalRows == 0 && result.matchingIds.isEmpty() -> {
-                        tvQueueStatus.text = "✅ RLS ok — ${result.totalAny} righe visibili\n⏳ Nessun blocco pending/scaduto ora\nSalva un task con Smart Block e riprova"
-                        tvQueueStatus.setTextColor(0xFF00B894.toInt())
-                    }
-                    result.totalRows > 0 && result.matchingIds.isEmpty() -> {
-                        tvQueueStatus.text = "⚠️ ${result.totalRows} righe pending ma nessuna\ncorrisponde al token ${token.take(8)}…\nIncolla questo token in tasks.html"
-                        tvQueueStatus.setTextColor(0xFFF39C12.toInt())
-                    }
                     else -> {
-                        // Trovati blocchi — invia comando al servizio per triggerarli
-                        tvQueueStatus.text = "🔔 ${result.matchingIds.size} blocco/i trovati — avvio blocco…"
-                        tvQueueStatus.setTextColor(0xFFF39C12.toInt())
-                        startService(Intent(this@MainActivity, BlockerService::class.java).apply {
-                            action = BlockerService.ACTION_CHECK_NOW
-                        })
+                        // Mostra lista blocchi
+                        val sb = StringBuilder()
+                        for (e in result.entries) {
+                            val time = formatFireAt(e.fireAt)
+                            val stato = when {
+                                !e.myToken          -> "⚪ altro dispositivo"
+                                e.status == "sent"  -> "✅ inviato"
+                                e.status == "pending" && e.fireAt <= isoNow() -> "🔔 PRONTO"
+                                e.status == "pending" -> "⏳ in attesa"
+                                else                -> e.status
+                            }
+                            sb.append("$time — ${e.title.take(30)}\n$stato\n\n")
+                        }
+                        tvQueueStatus.text = sb.toString().trimEnd()
+                        tvQueueStatus.setTextColor(0xFF374151.toInt())
+
+                        // Se ci sono blocchi pronti → triggera il servizio
+                        if (result.dueIds.isNotEmpty()) {
+                            startService(Intent(this@MainActivity, BlockerService::class.java).apply {
+                                action = BlockerService.ACTION_CHECK_NOW
+                            })
+                        }
                     }
                 }
             }
         }.start()
+    }
+
+    private fun isoNow(): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
+        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return sdf.format(java.util.Date())
+    }
+
+    private fun formatFireAt(iso: String): String {
+        return try {
+            val sdfIn = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
+            sdfIn.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            val d = sdfIn.parse(iso.take(19)) ?: return iso
+            val sdfOut = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.getDefault())
+            sdfOut.timeZone = java.util.TimeZone.getDefault()
+            sdfOut.format(d)
+        } catch (e: Exception) { iso.take(16) }
     }
 
     private fun updateStatus() {
