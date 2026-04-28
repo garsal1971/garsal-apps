@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.57</title>
+    <title>Tasks v19.18.58</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2291,8 +2291,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.57';
-        const BUILD_TIME  = '2026-04-27T08:00:00Z';
+        const APP_VERSION = 'v19.18.58';
+        const BUILD_TIME  = '2026-04-28T12:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -2584,19 +2584,32 @@
 
                 console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, channel=${notificationChannel}, labels=${JSON.stringify(reminderLabels)}`);
 
-                // ── Smart Block: nessun preset, fire_at = floor(dueDate all'ora) ──
+                // ── Smart Block: fire_at = data locale del task + ora locale ──
                 if (notificationChannel === 'smart_block') {
-                    const fireAt = (() => {
-                        if (!dueDate) return null;
-                        const d = new Date(dueDate);
-                        if (isNaN(d.getTime())) return null;
-                        d.setMinutes(Math.floor(d.getMinutes() / 10) * 10, 0, 0);
-                        return d.toISOString();
-                    })();
-                    if (!fireAt) {
-                        console.warn('⚠️ syncNotificationRules smart_block: nessuna data, skip');
+                    // Legge la data direttamente dal form (euToIso converte ora locale→UTC)
+                    // evitando il bug delle stringhe date-only ("2026-04-28") che JavaScript
+                    // interpreta come midnight UTC invece di midnight locale.
+                    const startDateRaw = document.getElementById('taskStartDate')?.value || '';
+                    const baseIso = euToIso(startDateRaw);
+                    if (!baseIso) {
+                        console.warn('⚠️ syncNotificationRules smart_block: data non valida, skip');
                         return;
                     }
+                    const dFire = new Date(baseIso);
+                    // Per task ripetuti (multiple/free_repeat): l'ora del blocco è in taskTime,
+                    // non in taskStartDate (che può avere un orario diverso).
+                    const taskTypeEl = document.getElementById('taskType')?.value || '';
+                    if (taskTypeEl === 'multiple' || taskTypeEl === 'free_repeat') {
+                        const timeVal = document.getElementById('taskTime')?.value || '';
+                        if (!timeVal) {
+                            console.warn('⚠️ syncNotificationRules smart_block: ora task mancante, skip');
+                            return;
+                        }
+                        const [hh, mm] = timeVal.split(':').map(Number);
+                        dFire.setHours(hh, mm, 0, 0); // imposta ora locale
+                    }
+                    dFire.setMinutes(Math.floor(dFire.getMinutes() / 10) * 10, 0, 0);
+                    const fireAt = dFire.toISOString(); // UTC corretto
                     const rulePresetsSB = { reminders: [], due_at: dueDate || null, smart_block_fire_at: fireAt };
                     const devToken = localStorage.getItem('sb_smartblock_device_token');
                     if (devToken) rulePresetsSB.device_token = devToken;
@@ -6818,7 +6831,9 @@
                     console.log('✅ Task inserted:', data[0]);
                     debugLog('✅ Task inserted successfully');
                     tasks.push(data[0]);
-                    const insertDueDate = data[0].next_occurrence_date || data[0].start_date || null;
+                    // Usa taskData (valori dal form, con ora locale corretta) invece di data[0]
+                    // (risposta DB che può restituire date-only senza ora).
+                    const insertDueDate = taskData.next_occurrence_date || taskData.start_date || null;
                     await syncNotificationRules(data[0].id, taskType, reminders, insertDueDate, taskData.title);
                 } else {
                     console.warn('⚠️ No data returned from insert');
