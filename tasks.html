@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.59</title>
+    <title>Tasks v19.18.60</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1726,24 +1726,10 @@
 
                 <div class="card">
                     <h3 style="margin-bottom: 1rem;">🔐 Smart Block</h3>
-                    <p style="font-size:0.88rem;color:var(--muted);margin-bottom:1rem;">
-                        Il <strong>Device Token</strong> è generato dall'app <strong>Smart Blocker</strong> sul telefono.<br>
-                        Aprila, tocca <em>📋 Copia token</em> e incollalo qui sotto.
+                    <p style="font-size:0.88rem;color:var(--muted);margin-bottom:0.75rem;">
+                        Token dispositivo Android — impostato da Supabase (solo lettura).
                     </p>
-                    <div class="form-group" style="margin-bottom:8px;">
-                        <label class="form-label" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">Device Token</label>
-                        <div style="display:flex;gap:8px;align-items:center;">
-                            <input id="smartblockTokenInput" type="text"
-                                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                                style="flex:1;font-family:monospace;font-size:0.82rem;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);">
-                            <button class="btn btn-primary" onclick="saveSmartBlockToken()" style="white-space:nowrap;flex-shrink:0;">💾 Salva</button>
-                        </div>
-                    </div>
-                    <div id="smartblockTokenStatus" style="font-size:0.82rem;color:var(--muted);margin-top:4px;"></div>
-                    <div style="margin-top:12px;">
-                        <label class="form-label" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:.05em;">Dispositivi registrati</label>
-                        <div id="smartblockDeviceList" style="margin-top:6px;"></div>
-                    </div>
+                    <div id="smartblockTokenStatus" style="font-size:0.82rem;color:var(--muted);font-family:monospace;"></div>
                 </div>
                 
                 <div class="card">
@@ -2295,8 +2281,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.59';
-        const BUILD_TIME  = '2026-04-28T14:00:00Z';
+        const APP_VERSION = 'v19.18.60';
+        const BUILD_TIME  = '2026-04-28T15:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -7794,50 +7780,6 @@
             if (previewMeta) previewMeta.style.fontSize = metaSize;
         }
         
-        async function saveSmartBlockToken() {
-            const input = document.getElementById('smartblockTokenInput');
-            const token = (input?.value || '').trim();
-            const statusEl = document.getElementById('smartblockTokenStatus');
-            if (!token) { if (statusEl) statusEl.textContent = '⚠️ Incolla prima il token dall\'app Android'; return; }
-            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
-                if (statusEl) statusEl.textContent = '❌ Formato non valido — deve essere un UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)';
-                return;
-            }
-            if (statusEl) statusEl.textContent = '⏳ Salvo…';
-            const userId = decodeJWT(sbAccessToken)?.sub;
-            const { error } = await sb.from('cm_user_notification_settings').upsert(
-                { user_id: userId, smart_block_device_token: token },
-                { onConflict: 'user_id' }
-            );
-            if (error) {
-                if (statusEl) statusEl.textContent = `❌ Errore DB: ${error.message}`;
-                return;
-            }
-            sbDeviceToken = token;
-            localStorage.setItem('sb_smartblock_device_token', token);
-            if (input) input.value = '';
-            if (statusEl) {
-                statusEl.textContent = `✅ Token salvato nel cloud: ${token.slice(0, 8)}…`;
-                statusEl.style.color = 'var(--success)';
-            }
-        }
-
-        async function selectSmartBlockDevice(token) {
-            const userId = decodeJWT(sbAccessToken)?.sub;
-            const { error } = await sb.from('cm_user_notification_settings').upsert(
-                { user_id: userId, smart_block_device_token: token },
-                { onConflict: 'user_id' }
-            );
-            if (!error) {
-                sbDeviceToken = token;
-                localStorage.setItem('sb_smartblock_device_token', token);
-                showToast(`✅ Dispositivo selezionato: ${token.slice(0,8)}…`);
-                renderSettings();
-            } else {
-                showToast(`❌ Errore: ${error.message}`);
-            }
-        }
-
         async function renderSettings() {
             // Carica i valori correnti
             const upcomingDays = parseInt(settings['dashboard_upcoming_days'] || '10');
@@ -7848,40 +7790,12 @@
             document.getElementById('fontScaleLabel').textContent = fontScale + '%';
             applyFontScalePreview(fontScale);
             
-            // Mostra il device token Smart Block (da DB, con fallback localStorage)
+            // Mostra il device token Smart Block (sola lettura, dal DB)
             const tokenStatus = document.getElementById('smartblockTokenStatus');
-            const deviceListEl = document.getElementById('smartblockDeviceList');
             if (tokenStatus) {
-                const token = sbDeviceToken || localStorage.getItem('sb_smartblock_device_token');
-                tokenStatus.textContent = token
-                    ? `✅ Token attivo: ${token.slice(0, 8)}… (cloud)`
-                    : '— nessun token configurato';
-                tokenStatus.style.color = token ? 'var(--success)' : 'var(--muted)';
-            }
-            // Carica lista dispositivi registrati (app Android che hanno chiamato registerDevice)
-            if (deviceListEl) {
-                deviceListEl.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">⏳ Carico dispositivi…</span>';
-                try {
-                    const { data: devices } = await sb
-                        .from('cm_smart_block_devices')
-                        .select('device_token, label, registered_at')
-                        .order('registered_at', { ascending: false })
-                        .limit(5);
-                    if (!devices?.length) {
-                        deviceListEl.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">Nessun dispositivo registrato</span>';
-                    } else {
-                        deviceListEl.innerHTML = devices.map(d => {
-                            const active = d.device_token === (sbDeviceToken || localStorage.getItem('sb_smartblock_device_token'));
-                            const date = new Date(d.registered_at).toLocaleDateString('it-IT');
-                            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-                                <span style="font-family:monospace;font-size:0.8rem;flex:1;color:var(--dark);">${d.device_token.slice(0,8)}…</span>
-                                <span style="font-size:0.75rem;color:var(--muted);">${d.label || date}</span>
-                                ${active ? '<span style="color:var(--success);font-size:0.75rem;">✅ attivo</span>'
-                                         : `<button class="btn btn-sm" style="padding:2px 8px;font-size:0.75rem;" onclick="selectSmartBlockDevice('${d.device_token}')">Usa</button>`}
-                            </div>`;
-                        }).join('');
-                    }
-                } catch(e) { deviceListEl.innerHTML = ''; }
+                const token = sbDeviceToken;
+                tokenStatus.textContent = token ? token : '— nessun token (esegui setup in comandi.html)';
+                tokenStatus.style.color = token ? 'var(--secondary)' : 'var(--muted)';
             }
 
             // Renderizza lista priorità

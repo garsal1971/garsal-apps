@@ -33,9 +33,10 @@ class BlockerService : Service() {
 
         handler.post(checker)
 
-        // Registra il dispositivo in Supabase (idempotente) così tasks.html
-        // mostra il dispositivo nella lista senza richiedere copia manuale del token.
-        Thread { SupabaseApi(this).registerDevice() }.start()
+        // Se il token non è ancora in Prefs, scaricalo da Supabase (una sola volta).
+        if (Prefs.getDeviceToken(this).isEmpty()) {
+            Thread { SupabaseApi(this).fetchAndCacheDeviceToken() }.start()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

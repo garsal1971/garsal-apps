@@ -1,7 +1,5 @@
 package com.garsal.smartblocker
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -58,7 +56,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.1.7 · PIN: ${Config.PIN}"
+            text = "v1.1.8 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -127,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(0xFF374151.toInt())
         }, lp(8))
 
-        // Sezione Device Token
+        // Sezione Device Token (sola lettura — impostato da Supabase)
         root.addView(TextView(this).apply {
             text = "Device Token"
             textSize = 18f
@@ -135,12 +133,11 @@ class MainActivity : AppCompatActivity() {
         }, lp(32))
 
         root.addView(TextView(this).apply {
-            text = "Copia questo token e incollalo in tasks.html → Impostazioni → 🔐 Smart Block"
+            text = "Token impostato da Supabase — nessuna configurazione richiesta"
             textSize = 13f
             setTextColor(0xFF6B7280.toInt())
         }, lp(8))
 
-        // Box token
         tvDeviceToken = TextView(this).apply {
             textSize = 12f
             setTextColor(0xFF6C5CE7.toInt())
@@ -149,18 +146,6 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.MONOSPACE
         }
         root.addView(tvDeviceToken, lp(8))
-
-        root.addView(Button(this).apply {
-            text = "📋 Copia token"
-            setBackgroundColor(0xFF6C5CE7.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener {
-                val token = Prefs.getDeviceToken(this@MainActivity)
-                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("device_token", token))
-                Toast.makeText(this@MainActivity, "✅ Token copiato negli appunti", Toast.LENGTH_SHORT).show()
-            }
-        }, lp(8))
 
         // Sezione Queue Supabase
         root.addView(TextView(this).apply {
