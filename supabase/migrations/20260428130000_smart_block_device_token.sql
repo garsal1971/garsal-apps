@@ -1,14 +1,17 @@
 -- ============================================================
--- Migration: smart_block_device_token
+-- Smart Block: device token e pulizia schema
+-- Migration: 20260428130000_smart_block_setup
 -- Data: 2026-04-28
 --
 -- 1. Aggiunge smart_block_device_token a cm_user_notification_settings
---    → tasks.html salva/legge il token del dispositivo Android
---      con piena persistenza cross-browser (niente più localStorage)
+--    → tasks.html legge il token tramite RPC get_smart_block_token (anon)
 --
--- 2. Crea cm_smart_block_devices — registro pubblico dei dispositivi
---    → L'app Android scrive il proprio UUID al primo avvio (anon INSERT)
---    → tasks.html mostra la lista e l'utente seleziona il proprio dispositivo
+-- 2. Crea cm_smart_block_devices — registro opzionale dei dispositivi
+--    → L'app Android può registrare il proprio UUID (anon INSERT)
+--
+-- 3. Rimuove ts_tasks.notification_channel (ridondante)
+--    → Il canale è già memorizzato in cm_notification_rules.channel
+--    → tasks.html legge il canale dalla regola al momento della modifica
 -- ============================================================
 
 -- 1. Colonna nel profilo notifiche utente
@@ -45,3 +48,10 @@ CREATE POLICY "anon_update_own_device"
     TO anon
     USING (true)
     WITH CHECK (true);
+
+-- 3. Rimuove colonna ridondante da ts_tasks
+ALTER TABLE ts_tasks DROP COLUMN IF EXISTS notification_channel;
+
+-- ============================================================
+-- Fine migration
+-- ============================================================
