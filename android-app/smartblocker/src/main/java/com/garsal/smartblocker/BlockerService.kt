@@ -86,6 +86,7 @@ class BlockerService : Service() {
         Prefs.setState(this, Prefs.STATE_NONE)
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
+        Prefs.clearBlockEntityIds(this)
     }
 
     private fun checkSupabaseQueueIfDue() {
@@ -98,10 +99,15 @@ class BlockerService : Service() {
     fun triggerSupabaseCheck() {
         if (Prefs.getState(this) != Prefs.STATE_NONE) return       // già bloccato
         Thread {
-            val ids = SupabaseApi(this).getPendingSmartBlockIds()
-            if (ids.isNotEmpty()) {
-                ids.forEach { SupabaseApi(this).markSent(it) }
+            val result = SupabaseApi(this).queryQueue()
+            val dueIds = result.dueIds
+            if (dueIds.isNotEmpty()) {
+                dueIds.forEach { SupabaseApi(this).markSent(it) }
+                val entityIds = result.entries
+                    .filter { it.id in dueIds && it.entityId.isNotBlank() }
+                    .map { it.entityId }
                 handler.post {
+                    Prefs.setBlockEntityIds(this, entityIds)
                     Prefs.setState(this, Prefs.STATE_TRIGGERED)
                     Prefs.setSnoozeCount(this, 0)
                     Prefs.setSnoozeUntil(this, 0)

@@ -105,9 +105,16 @@ class BlockOverlayActivity : Activity() {
 
     private fun checkPin() {
         if (pinBuffer == Config.PIN) {
+            val entityIds = Prefs.getBlockEntityIds(this)
             startService(Intent(this, BlockerService::class.java).apply {
                 action = BlockerService.ACTION_UNBLOCK
             })
+            if (entityIds.isNotEmpty()) {
+                Thread {
+                    val api = SupabaseApi(this)
+                    entityIds.forEach { api.completeTask(it) }
+                }.start()
+            }
             finish()
         } else {
             tvPinError.text = "PIN errato, riprova"
