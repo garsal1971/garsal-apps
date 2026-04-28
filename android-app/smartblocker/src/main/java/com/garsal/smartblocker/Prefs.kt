@@ -26,6 +26,16 @@ object Prefs {
     fun getLastTrigger(ctx: Context): String = sp(ctx).getString("last_trigger", "") ?: ""
     fun setLastTrigger(ctx: Context, k: String) { sp(ctx).edit().putString("last_trigger", k).apply() }
 
+    /** Entity IDs dei task da completare quando l'utente sblocca con PIN (separati da virgola). */
+    fun getBlockEntityIds(ctx: Context): List<String> {
+        val raw = sp(ctx).getString("block_entity_ids", "") ?: ""
+        return raw.split(",").filter { it.isNotBlank() }
+    }
+    fun setBlockEntityIds(ctx: Context, ids: List<String>) {
+        sp(ctx).edit().putString("block_entity_ids", ids.joinToString(",")).apply()
+    }
+    fun clearBlockEntityIds(ctx: Context) { sp(ctx).edit().remove("block_entity_ids").apply() }
+
     /** Restituisce il device token, generandolo al primo accesso. */
     fun getDeviceToken(ctx: Context): String {
         val prefs = sp(ctx)

@@ -16,6 +16,7 @@ class SupabaseApi(private val ctx: Context) {
 
     data class BlockEntry(
         val id:       String,
+        val entityId: String,   // task UUID (per completamento)
         val title:    String,
         val fireAt:   String,   // ISO UTC
         val status:   String,
@@ -38,7 +39,7 @@ class SupabaseApi(private val ctx: Context) {
         return try {
             val nowIso = isoNow()
             val url = "$base/rest/v1/cm_notification_queue" +
-                "?channel=eq.smart_block&select=id,title,body,fire_at,status,metadata&limit=50"
+                "?channel=eq.smart_block&select=id,entity_id,title,body,fire_at,status,metadata&limit=50"
             val conn = openConn(url, "GET")
             val code = conn.responseCode
             if (code != 200) {
@@ -55,15 +56,16 @@ class SupabaseApi(private val ctx: Context) {
 
             for (i in 0 until arr.length()) {
                 val item    = arr.getJSONObject(i)
-                val id      = item.getString("id")
-                val title   = item.optString("title", "").ifEmpty {
-                                  item.optString("body", "Blocco") }
-                val fireAt  = item.optString("fire_at", "")
-                val status  = item.optString("status", "")
-                val token   = item.optJSONObject("metadata")?.optString("device_token") ?: ""
-                val myToken = token == deviceToken
+                val id       = item.getString("id")
+                val entityId = item.optString("entity_id", "")
+                val title    = item.optString("title", "").ifEmpty {
+                                   item.optString("body", "Blocco") }
+                val fireAt   = item.optString("fire_at", "")
+                val status   = item.optString("status", "")
+                val token    = item.optJSONObject("metadata")?.optString("device_token") ?: ""
+                val myToken  = token == deviceToken
 
-                entries.add(BlockEntry(id, title, fireAt, status, myToken))
+                entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken))
 
                 if (myToken && status == "pending" && fireAt <= nowIso) {
                     dueIds.add(id)
@@ -95,6 +97,34 @@ class SupabaseApi(private val ctx: Context) {
         } catch (e: Exception) {
             Log.e("SupabaseApi", "markSent errore: ${e.message}")
         }
+    }
+
+    /**
+     * Chiama la RPC task_complete per marcare il task come completato.
+     * Da chiamare su un thread in background dopo che l'utente sblocca con PIN.
+     */
+    fun completeTask(entityId: String) {
+        if (entityId.isBlank()) return
+        try {
+            val today = romeDateStr()
+            val urlStr = "$base/rest/v1/rpc/task_complete"
+            val conn = openConn(urlStr, "POST")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = "{\"p_task_id\":\"$entityId\",\"p_today\":\"$today\"}"
+            conn.outputStream.write(body.toByteArray())
+            val code = conn.responseCode
+            conn.disconnect()
+            Log.d("SupabaseApi", "completeTask $entityId → HTTP $code")
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "completeTask errore: ${e.message}")
+        }
+    }
+
+    private fun romeDateStr(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        sdf.timeZone = TimeZone.getTimeZone("Europe/Rome")
+        return sdf.format(Date())
     }
 
     private fun openConn(urlStr: String, method: String): HttpURLConnection {
