@@ -292,35 +292,78 @@ CREATE POLICY "smart_block_anon_update"
     </div>
 
   <div class="section" style="margin-top:24px;">
-    <div class="section-title">🔓 GRANT task_complete a anon (una-tantum)</div>
-    <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">Esegui una sola volta per permettere all'app Android di completare i task via PIN:</p>
-    <div class="code-block" id="sb-grant-task-complete">
-      <button class="copy-btn" onclick="copyCode('sb-grant-task-complete', this)">Copia</button>
-      <pre>GRANT EXECUTE ON FUNCTION task_complete(uuid, date) TO anon;</pre>
+    <div class="section-title">🔑 Setup Device Token Smart Block (una-tantum)</div>
+    <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">
+      Esegui <strong>una sola volta</strong> in Supabase SQL Editor.<br>
+      Genera il token, aggiorna le regole esistenti, crea la funzione che l'app Android usa per leggerlo (anon key, read-only).
+    </p>
+    <div class="code-block" id="sb-smart-block-token-setup">
+      <button class="copy-btn" onclick="copyCode('sb-smart-block-token-setup', this)">Copia</button>
+      <pre>-- ── A) Aggiungi colonna e genera il token ─────────────────────────
+ALTER TABLE cm_user_notification_settings
+ADD COLUMN IF NOT EXISTS smart_block_device_token text;
+
+-- Inserisce il token solo se non esiste già (idempotente)
+INSERT INTO cm_user_notification_settings (user_id, smart_block_device_token)
+SELECT id, gen_random_uuid()
+FROM   auth.users
+LIMIT  1
+ON CONFLICT (user_id) DO UPDATE
+SET smart_block_device_token = COALESCE(
+    cm_user_notification_settings.smart_block_device_token,
+    EXCLUDED.smart_block_device_token
+);
+
+-- Mostra il token generato
+SELECT smart_block_device_token FROM cm_user_notification_settings;
+
+-- ── B) Aggiorna le regole smart_block esistenti con il token ───────
+UPDATE cm_notification_rules
+SET    reminder_presets = jsonb_set(
+           reminder_presets::jsonb,
+           '{device_token}',
+           to_jsonb((SELECT smart_block_device_token
+                     FROM   cm_user_notification_settings LIMIT 1))
+       )
+WHERE  channel = 'smart_block';
+
+-- ── C) Funzione read-only per app Android (anon key) ───────────────
+CREATE OR REPLACE FUNCTION public.get_smart_block_token()
+RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+    SELECT smart_block_device_token
+    FROM   cm_user_notification_settings
+    LIMIT  1;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_smart_block_token()          TO anon;
+GRANT EXECUTE ON FUNCTION public.task_complete(uuid, date)        TO anon;</pre>
     </div>
   </div>
 
   <div class="section" style="margin-top:24px;">
-    <div class="section-title">🔍 Verifica RLS Smart Block</div>
-    <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">Esegui in Supabase SQL Editor per verificare lo stato delle policy:</p>
+    <div class="section-title">🔍 Verifica Smart Block</div>
+    <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">Controlla token, regole e coda:</p>
     <div class="code-block" id="sb-smart-block-verify">
       <button class="copy-btn" onclick="copyCode('sb-smart-block-verify', this)">Copia</button>
-      <pre>-- Controlla se le policy esistono
-SELECT policyname, roles, cmd, qual
-FROM pg_policies
-WHERE tablename = 'cm_notification_queue'
-ORDER BY policyname;
+      <pre>-- Token impostato
+SELECT user_id, smart_block_device_token FROM cm_user_notification_settings;
 
--- Controlla se RLS è abilitato sulla tabella
-SELECT relname, relrowsecurity AS rls_enabled
-FROM pg_class
-WHERE relname = 'cm_notification_queue';
+-- Regole smart_block (device_token nel JSON)
+SELECT id, entity_title, reminder_presets->>'device_token' AS token,
+       reminder_presets->>'smart_block_fire_at' AS fire_at
+FROM   cm_notification_rules
+WHERE  channel = 'smart_block';
 
--- Conta righe smart_block nella queue per stato
+-- Coda smart_block per stato
 SELECT status, count(*)
-FROM cm_notification_queue
-WHERE channel = 'smart_block'
-GROUP BY status;</pre>
+FROM   cm_notification_queue
+WHERE  channel = 'smart_block'
+GROUP  BY status;
+
+-- Funzione anon accessibile
+SELECT routine_name FROM information_schema.routines
+WHERE  routine_name IN ('get_smart_block_token', 'task_complete')
+AND    routine_schema = 'public';</pre>
     </div>
   </div>
 

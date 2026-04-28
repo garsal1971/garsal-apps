@@ -2,7 +2,6 @@ package com.garsal.smartblocker
 
 import android.content.Context
 import android.content.SharedPreferences
-import java.util.UUID
 
 object Prefs {
     private const val NAME = "smartblocker_prefs"
@@ -36,14 +35,7 @@ object Prefs {
     }
     fun clearBlockEntityIds(ctx: Context) { sp(ctx).edit().remove("block_entity_ids").apply() }
 
-    /** Restituisce il device token, generandolo al primo accesso. */
-    fun getDeviceToken(ctx: Context): String {
-        val prefs = sp(ctx)
-        var token = prefs.getString("device_token", null)
-        if (token.isNullOrEmpty()) {
-            token = UUID.randomUUID().toString()
-            prefs.edit().putString("device_token", token).apply()
-        }
-        return token
-    }
+    /** Token dispositivo — impostato da Supabase via get_smart_block_token() RPC. */
+    fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
+    fun setDeviceToken(ctx: Context, token: String) { sp(ctx).edit().putString("device_token", token).apply() }
 }
