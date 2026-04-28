@@ -2281,8 +2281,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.60';
-        const BUILD_TIME  = '2026-04-28T15:00:00Z';
+        const APP_VERSION = 'v19.18.61';
+        const BUILD_TIME  = '2026-04-28T16:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -5652,7 +5652,7 @@
             updateTaskFields();
         }
 
-        function editTask(id) {
+        async function editTask(id) {
             const task = tasks.find(t => t.id === id);
             if (!task) return;
             
@@ -5746,7 +5746,12 @@
             // Promemoria
             reminders = task.reminders || [];
             telegramCompleteButton = true; // default true; l'utente può cambiarlo nel form
-            notificationChannel = task.notification_channel || 'telegram';
+            notificationChannel = 'telegram'; // default; sovrascritta dalla regola se presente
+            try {
+                const { data: rule } = await authSb.from('cm_notification_rules')
+                    .select('channel').eq('app', 'tasks').eq('entity_id', String(id)).maybeSingle();
+                if (rule?.channel) notificationChannel = rule.channel;
+            } catch (e) { console.warn('editTask: impossibile leggere canale notifica', e); }
             
             // Nascosto: visibile solo in modalità nascosta
             updateRiservatoVisibility();
@@ -6661,7 +6666,6 @@
                 priority_id: document.getElementById('taskPriority').value || null,
                 start_date: startDateValue || localDateTimeStr(),
                 reminders: reminders,
-                notification_channel: notificationChannel,
                 success_points: parseInt(document.getElementById('successPoints').value),
                 failure_points: parseInt(document.getElementById('failurePoints').value),
                 skip_points: parseInt(document.getElementById('skipPoints').value),
