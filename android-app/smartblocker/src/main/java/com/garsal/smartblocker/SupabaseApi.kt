@@ -82,6 +82,28 @@ class SupabaseApi(private val ctx: Context) {
     fun getPendingSmartBlockIds(): List<String> = queryQueue().dueIds
 
     /**
+     * Registra il dispositivo in cm_smart_block_devices (anon INSERT, idempotente).
+     * Chiamato all'avvio: tasks.html mostra la lista dei dispositivi registrati
+     * così l'utente può selezionare il proprio senza copiare il token manualmente.
+     */
+    fun registerDevice() {
+        val token = Prefs.getDeviceToken(ctx)
+        try {
+            val urlStr = "$base/rest/v1/cm_smart_block_devices"
+            val conn = openConn(urlStr, "POST")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Prefer", "resolution=ignore-duplicates,return=minimal")
+            conn.doOutput = true
+            conn.outputStream.write("{\"device_token\":\"$token\"}".toByteArray())
+            val code = conn.responseCode
+            conn.disconnect()
+            Log.d("SupabaseApi", "registerDevice → HTTP $code")
+        } catch (e: Exception) {
+            Log.e("SupabaseApi", "registerDevice errore: ${e.message}")
+        }
+    }
+
+    /**
      * Marca un item della coda come 'sent'.
      */
     fun markSent(id: String) {
