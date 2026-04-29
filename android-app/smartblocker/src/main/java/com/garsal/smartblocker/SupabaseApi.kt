@@ -25,10 +25,11 @@ class SupabaseApi(private val ctx: Context) {
     )
 
     data class QueueResult(
-        val entries:  List<BlockEntry>,   // tutte le righe smart_block visibili
-        val dueIds:   List<String>,       // id con status=pending e fire_at<=now e myToken
-        val httpCode: Int,
-        val errorMsg: String? = null
+        val entries:      List<BlockEntry>,
+        val dueIds:       List<String>,
+        val nextFireAtMs: Long?,          // epoch ms del prossimo blocco futuro (myToken, pending)
+        val httpCode:     Int,
+        val errorMsg:     String? = null
     )
 
     /**
@@ -46,21 +47,21 @@ class SupabaseApi(private val ctx: Context) {
             if (code != 200) {
                 val err = conn.errorStream?.bufferedReader()?.readText() ?: ""
                 conn.disconnect()
-                return QueueResult(emptyList(), emptyList(), code, "HTTP $code: $err")
+                return QueueResult(emptyList(), emptyList(), null, code, "HTTP $code: $err")
             }
             val body = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
 
             val arr = JSONArray(body)
-            val entries = mutableListOf<BlockEntry>()
-            val dueIds  = mutableListOf<String>()
+            val entries     = mutableListOf<BlockEntry>()
+            val dueIds      = mutableListOf<String>()
+            var nextFireAtMs: Long? = null
 
             for (i in 0 until arr.length()) {
-                val item    = arr.getJSONObject(i)
+                val item     = arr.getJSONObject(i)
                 val id       = item.getString("id")
                 val entityId = item.optString("entity_id", "")
-                val title    = item.optString("title", "").ifEmpty {
-                                   item.optString("body", "Blocco") }
+                val title    = item.optString("title", "").ifEmpty { item.optString("body", "Blocco") }
                 val fireAt   = item.optString("fire_at", "")
                 val status   = item.optString("status", "")
                 val token    = item.optJSONObject("metadata")?.optString("device_token") ?: ""
@@ -69,15 +70,19 @@ class SupabaseApi(private val ctx: Context) {
                 entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken))
 
                 val fireAtMs = parseIsoMs(fireAt)
-                if (myToken && status == "pending" && fireAtMs > 0L && fireAtMs <= nowMs) {
-                    dueIds.add(id)
+                if (myToken && status == "pending" && fireAtMs > 0L) {
+                    if (fireAtMs <= nowMs) {
+                        dueIds.add(id)
+                    } else if (nextFireAtMs == null || fireAtMs < nextFireAtMs!!) {
+                        nextFireAtMs = fireAtMs   // traccia il prossimo blocco futuro
+                    }
                 }
             }
-            Log.d("SupabaseApi", "queryQueue: totale=${entries.size} due=${dueIds.size}")
-            QueueResult(entries, dueIds, code)
+            Log.d("SupabaseApi", "queryQueue: totale=${entries.size} due=${dueIds.size} nextFireAt=${nextFireAtMs?.let { java.util.Date(it) } ?: "none"}")
+            QueueResult(entries, dueIds, nextFireAtMs, code)
         } catch (e: Exception) {
             Log.e("SupabaseApi", "queryQueue errore: ${e.message}")
-            QueueResult(emptyList(), emptyList(), 0, e.message)
+            QueueResult(emptyList(), emptyList(), null, 0, e.message)
         }
     }
 
@@ -92,6 +97,10 @@ class SupabaseApi(private val ctx: Context) {
     }
 
     fun getPendingSmartBlockIds(): List<String> = queryQueue().dueIds
+
+    companion object {
+        const val ALARM_REQUEST_CODE = 42
+    }
 
     /**
      * Legge il device token da Supabase (RPC get_smart_block_token, anon key)

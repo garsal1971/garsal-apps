@@ -2,10 +2,12 @@ package com.garsal.smartblocker
 
 import android.app.*
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 class BlockerService : Service() {
@@ -29,11 +31,10 @@ class BlockerService : Service() {
 
         val pm = getSystemService(PowerManager::class.java)
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SmartBlocker::WakeLock")
-        wakeLock?.acquire(10 * 60 * 1000L) // max 10 min, si rinnova al prossimo check
+        wakeLock?.acquire(10 * 60 * 1000L)
 
         handler.post(checker)
 
-        // Se il token non è ancora in Prefs, scaricalo da Supabase (una sola volta).
         if (Prefs.getDeviceToken(this).isEmpty()) {
             Thread { SupabaseApi(this).fetchAndCacheDeviceToken() }.start()
         }
@@ -62,12 +63,8 @@ class BlockerService : Service() {
         val now = System.currentTimeMillis()
         val state = Prefs.getState(this)
 
-        // Rinnova wake lock
-        if (wakeLock?.isHeld == false) {
-            wakeLock?.acquire(10 * 60 * 1000L)
-        }
+        if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
 
-        // Snooze scaduto → ripristina blocco
         val snoozeUntil = Prefs.getSnoozeUntil(this)
         if (state == Prefs.STATE_NONE && snoozeUntil > 0 && now >= snoozeUntil) {
             Prefs.setSnoozeUntil(this, 0)
@@ -96,13 +93,13 @@ class BlockerService : Service() {
 
     private fun checkSupabaseQueueIfDue() {
         val now = System.currentTimeMillis()
-        if (now - lastSupabaseCheckMs < 5 * 60 * 1000L) return   // ogni 5 minuti
+        if (now - lastSupabaseCheckMs < 5 * 60 * 1000L) return
         lastSupabaseCheckMs = now
         triggerSupabaseCheck()
     }
 
     fun triggerSupabaseCheck() {
-        if (Prefs.getState(this) != Prefs.STATE_NONE) return       // già bloccato
+        if (Prefs.getState(this) != Prefs.STATE_NONE) return
         Thread {
             val result = SupabaseApi(this).queryQueue()
             val dueIds = result.dueIds
@@ -118,8 +115,32 @@ class BlockerService : Service() {
                     Prefs.setSnoozeUntil(this, 0)
                     showOverlay()
                 }
+            } else if (result.nextFireAtMs != null) {
+                // Nessun blocco ora, ma ce n'è uno futuro: schedula alarm esatto
+                scheduleExactAlarm(result.nextFireAtMs)
             }
         }.start()
+    }
+
+    /**
+     * Schedula un alarm che sveglia il dispositivo all'orario esatto, anche in Doze mode.
+     * Su API 31+ usa setExactAndAllowWhileIdle se il permesso è concesso,
+     * altrimenti fallback a setAndAllowWhileIdle (può avere ritardo fino a ~15 min).
+     */
+    private fun scheduleExactAlarm(fireAtMs: Long) {
+        val am = getSystemService(AlarmManager::class.java) ?: return
+        val intent = Intent(this, BlockAlarmReceiver::class.java)
+        val pi = PendingIntent.getBroadcast(
+            this, SupabaseApi.ALARM_REQUEST_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
+            Log.w(TAG, "Permesso alarm esatto non concesso — uso alarm impreciso (ritardo possibile)")
+        } else {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
+            Log.d(TAG, "Alarm esatto schedulato per ${java.util.Date(fireAtMs)}")
+        }
     }
 
     private fun showOverlay() {
@@ -160,5 +181,6 @@ class BlockerService : Service() {
         const val ACTION_CHECK_NOW = "com.garsal.smartblocker.CHECK_NOW"
         private const val CH_ID    = "blocker_service"
         private const val NOTIF_ID = 1
+        private const val TAG      = "BlockerService"
     }
 }
