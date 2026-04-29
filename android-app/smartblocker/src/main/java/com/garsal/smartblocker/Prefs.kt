@@ -38,4 +38,8 @@ object Prefs {
     /** Token dispositivo — impostato da Supabase via get_smart_block_token() RPC. */
     fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
     fun setDeviceToken(ctx: Context, token: String) { sp(ctx).edit().putString("device_token", token).apply() }
+
+    /** Avvia il servizio automaticamente al boot del dispositivo. Default: true. */
+    fun getAutoStart(ctx: Context): Boolean = sp(ctx).getBoolean("auto_start", true)
+    fun setAutoStart(ctx: Context, v: Boolean) { sp(ctx).edit().putBoolean("auto_start", v).apply() }
 }

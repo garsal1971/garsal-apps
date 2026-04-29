@@ -144,6 +144,26 @@ class MainActivity : AppCompatActivity() {
             setTextColor(0xFF374151.toInt())
         }, lp(8))
 
+        // Toggle avvio automatico al boot
+        val rowBoot = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val switchBoot = Switch(this).apply {
+            isChecked = Prefs.getAutoStart(this@MainActivity)
+            setOnCheckedChangeListener { _, checked ->
+                Prefs.setAutoStart(this@MainActivity, checked)
+            }
+        }
+        rowBoot.addView(TextView(this).apply {
+            text = "Avvia in background all'accensione"
+            textSize = 15f
+            setTextColor(0xFF374151.toInt())
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        rowBoot.addView(switchBoot)
+        root.addView(rowBoot, lp(12))
+
         // Sezione Device Token (sola lettura — impostato da Supabase)
         root.addView(TextView(this).apply {
             text = "Device Token"

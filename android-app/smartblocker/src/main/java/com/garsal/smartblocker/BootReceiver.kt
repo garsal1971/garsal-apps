@@ -9,10 +9,12 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
         if (action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_MY_PACKAGE_REPLACED) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, BlockerService::class.java)
-            )
+            if (Prefs.getAutoStart(context)) {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, BlockerService::class.java)
+                )
+            }
         }
     }
 }
