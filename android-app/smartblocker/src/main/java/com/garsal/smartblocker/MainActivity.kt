@@ -1,8 +1,10 @@
 package com.garsal.smartblocker
 
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.*
@@ -33,6 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvStatusOverlay: TextView
     private lateinit var tvStatusAccessibility: TextView
+    private lateinit var tvStatusAlarm: TextView
     private lateinit var tvBlockState: TextView
     private lateinit var tvDeviceToken: TextView
     private lateinit var tvQueueStatus: TextView
@@ -98,6 +101,19 @@ class MainActivity : AppCompatActivity() {
             text = "Abilita Accessibilità"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }, lp(4))
+
+        // Alarm esatto (necessario per blocco in background)
+        tvStatusAlarm = TextView(this).apply { textSize = 14f }
+        root.addView(tvStatusAlarm, lp(16))
+        root.addView(Button(this).apply {
+            text = "Concedi Alarm Esatto"
+            setOnClickListener {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:$packageName")))
+                }
             }
         }, lp(4))
 
@@ -262,6 +278,12 @@ class MainActivity : AppCompatActivity() {
         val accEnabled = isAccessibilityEnabled()
         tvStatusAccessibility.text = if (accEnabled) "✅ Accessibilità: attiva" else "❌ Accessibilità: disabilitata"
         tvStatusAccessibility.setTextColor(if (accEnabled) 0xFF00B894.toInt() else 0xFFE74C3C.toInt())
+
+        val alarmOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == true
+        else true
+        tvStatusAlarm.text = if (alarmOk) "✅ Alarm esatto: concesso" else "❌ Alarm esatto: mancante (blocco in background impreciso)"
+        tvStatusAlarm.setTextColor(if (alarmOk) 0xFF00B894.toInt() else 0xFFE74C3C.toInt())
 
         // Mostra il token (generato automaticamente da Prefs se non esiste)
         tvDeviceToken.text = Prefs.getDeviceToken(this)
