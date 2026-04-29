@@ -111,6 +111,7 @@ Deno.serve(async (_req) => {
       .from('cm_notification_queue')
       .select('*')
       .eq('status', 'pending')
+      .eq('channel', 'telegram')
       .gte('fire_at', windowMin)
       .lte('fire_at', windowMax)
       .order('fire_at', { ascending: true })
