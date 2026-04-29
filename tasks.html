@@ -2281,8 +2281,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.64';
-        const BUILD_TIME  = '2026-04-28T19:30:00Z';
+        const APP_VERSION = 'v19.18.65';
+        const BUILD_TIME  = '2026-04-29T08:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -3475,25 +3475,29 @@
         // Converte "DD-MM-YYYY HH:MM" nell'ora di Roma (Europe/Rome) → UTC ISO
         // Indipendente dal timezone del browser: calcola l'offset confrontando ore UTC vs Rome
         // Usare per smart_block dove l'app Android interpreta sempre in Europe/Rome
+        // Converte un orario italiano (Europe/Rome) in UTC ISO string.
+        // NON usa Intl né il timezone del browser: calcola il DST italiano
+        // direttamente dalle regole EU (ultimo dom. di marzo → ottobre = UTC+2, resto = UTC+1).
         function euToRomeUTC(euStr, overrideTime) {
             const m = euStr.trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
             if (!m) return null;
             const day = parseInt(m[1]), mon = parseInt(m[2]) - 1, year = parseInt(m[3]);
             let h = m[4] ? parseInt(m[4]) : 0, mn = m[5] ? parseInt(m[5]) : 0;
             if (overrideTime) { const t = overrideTime.split(':'); h = parseInt(t[0]); mn = parseInt(t[1]); }
-            // Calcola offset Italy via confronto numerico: ore UTC vs ore Rome
-            // Evita parsing di stringhe timezone ("CEST"/"CET"/"GMT+2") che variano per browser
-            const approx = new Date(Date.UTC(year, mon, day, h - 2, mn));
-            const utcH = approx.getUTCHours();
-            const romeH = parseInt(new Intl.DateTimeFormat('en', {
-                timeZone: 'Europe/Rome', hour: '2-digit', hour12: false
-            }).format(approx));
-            let offsetH = romeH - utcH;
-            if (offsetH < 0) offsetH += 24;   // crossing midnight
-            if (offsetH > 12) offsetH -= 24;  // normalizza a [-12, +12]
-            // offsetH = 1 (CET, inverno) o 2 (CEST, estate)
+            // Calcola ultimo domenica del mese (UTC): ritorna il giorno del mese (1-31)
+            function lastSunday(y, mo) { // mo: 0-indexed (0=gen, 2=mar, 9=ott)
+                const lastDay = new Date(Date.UTC(y, mo + 1, 0));      // ultimo giorno del mese
+                return lastDay.getUTCDate() - lastDay.getUTCDay();      // torna indietro al domenica
+            }
+            const dstStart = lastSunday(year, 2);  // ultimo dom. di marzo (inizio CEST)
+            const dstEnd   = lastSunday(year, 9);  // ultimo dom. di ottobre (fine CEST)
+            // Dentro CEST (UTC+2) se: dopo l'ultimo dom. di marzo E prima dell'ultimo dom. di ottobre
+            const inCEST = (mon > 2 || (mon === 2 && day >= dstStart))
+                        && (mon < 9 || (mon === 9 && day < dstEnd));
+            const offsetH = inCEST ? 2 : 1;
             const dFire = new Date(Date.UTC(year, mon, day, h - offsetH, mn));
             dFire.setUTCMinutes(Math.floor(dFire.getUTCMinutes() / 10) * 10, 0, 0);
+            console.log(`🕐 euToRomeUTC: ${euStr} → ${dFire.toISOString()} (offset=-${offsetH}h, CEST=${inCEST})`);
             return dFire.toISOString();
         }
 
