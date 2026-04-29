@@ -38,7 +38,7 @@ class SupabaseApi(private val ctx: Context) {
     fun queryQueue(): QueueResult {
         val deviceToken = Prefs.getDeviceToken(ctx)
         return try {
-            val nowIso = isoNow()
+            val nowMs = System.currentTimeMillis()
             val url = "$base/rest/v1/cm_notification_queue" +
                 "?channel=eq.smart_block&select=id,entity_id,title,body,fire_at,status,metadata&limit=50"
             val conn = openConn(url, "GET")
@@ -68,7 +68,8 @@ class SupabaseApi(private val ctx: Context) {
 
                 entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken))
 
-                if (myToken && status == "pending" && fireAt <= nowIso) {
+                val fireAtMs = parseIsoMs(fireAt)
+                if (myToken && status == "pending" && fireAtMs > 0L && fireAtMs <= nowMs) {
                     dueIds.add(id)
                 }
             }
@@ -77,6 +78,16 @@ class SupabaseApi(private val ctx: Context) {
         } catch (e: Exception) {
             Log.e("SupabaseApi", "queryQueue errore: ${e.message}")
             QueueResult(emptyList(), emptyList(), 0, e.message)
+        }
+    }
+
+    /** Parsifica un ISO 8601 con qualsiasi offset ("+02:00", "Z", "+00:00") → epoch ms UTC. */
+    private fun parseIsoMs(iso: String): Long {
+        return try {
+            OffsetDateTime.parse(iso.replace(Regex("\\.\\d+"), "")).toInstant().toEpochMilli()
+        } catch (e: Exception) {
+            Log.w("SupabaseApi", "parseIsoMs fallback per: $iso")
+            -1L
         }
     }
 

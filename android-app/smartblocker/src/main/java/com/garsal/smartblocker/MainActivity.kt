@@ -8,6 +8,9 @@ import android.provider.Settings
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class MainActivity : AppCompatActivity() {
 
@@ -214,7 +217,7 @@ class MainActivity : AppCompatActivity() {
                             val stato = when {
                                 !e.myToken          -> "⚪ altro dispositivo"
                                 e.status == "sent"  -> "✅ inviato"
-                                e.status == "pending" && e.fireAt <= isoNow() -> "🔔 PRONTO"
+                                e.status == "pending" && parseIsoMs(e.fireAt) <= System.currentTimeMillis() -> "🔔 PRONTO"
                                 e.status == "pending" -> "⏳ in attesa"
                                 else                -> e.status
                             }
@@ -235,20 +238,19 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun isoNow(): String {
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.getDefault())
-        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
-        return sdf.format(java.util.Date())
+    /** Parsifica ISO 8601 con offset ("+02:00", "Z", "+00:00") → epoch ms UTC. */
+    private fun parseIsoMs(iso: String): Long {
+        return try {
+            OffsetDateTime.parse(iso.replace(Regex("\\.\\d+"), "")).toInstant().toEpochMilli()
+        } catch (e: Exception) { Long.MAX_VALUE }
     }
 
+    /** Converte ISO 8601 (con qualsiasi offset) in "dd/MM HH:mm" ora locale del dispositivo. */
     private fun formatFireAt(iso: String): String {
         return try {
-            val sdfIn = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
-            sdfIn.timeZone = java.util.TimeZone.getTimeZone("UTC")
-            val d = sdfIn.parse(iso.take(19)) ?: return iso
-            val sdfOut = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.getDefault())
-            sdfOut.timeZone = java.util.TimeZone.getDefault()
-            sdfOut.format(d)
+            val odt = OffsetDateTime.parse(iso.replace(Regex("\\.\\d+"), ""))
+            val local = odt.atZoneSameInstant(ZoneId.systemDefault())
+            DateTimeFormatter.ofPattern("dd/MM HH:mm").format(local)
         } catch (e: Exception) { iso.take(16) }
     }
 
