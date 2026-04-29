@@ -226,13 +226,18 @@ Deno.serve(async (_req) => {
         entries = generateTaskEntries(trp, presetsMap, now, horizon, rule.id)
       }
 
-      // 3. Elimina entry pending stale per questa regola
-      const { error: delErr, count: delCount } = await sb
+      // 3. Elimina entry pending stale per questa regola.
+      // Per smart_block: cancella TUTTE le pending (incluse passate) così le entry
+      // con fire_at sbagliato non restano in coda a confondere l'app Android.
+      // Per altri canali: cancella solo quelle future (safe window di 2 min).
+      const delQuery = sb
         .from('cm_notification_queue')
         .delete({ count: 'exact' })
         .eq('rule_id', rule.id)
         .eq('status', 'pending')
-        .gt('fire_at', safeDelete.toISOString())
+      const { error: delErr, count: delCount } = isSmartBlock
+        ? await delQuery
+        : await delQuery.gt('fire_at', safeDelete.toISOString())
 
       if (delErr) {
         console.error(`[fill-queue] delete error rule=${rule.id}:`, delErr)
@@ -465,10 +470,10 @@ function generateSmartBlockEntry(
   ruleId:  string,
 ): QueueEntry[] {
   const fireAt = new Date(rp.smart_block_fire_at)
-  // Grace window di 30 minuti nel passato: se l'utente salva il task alle 21:55
-  // e il fire_at arrotondato è 21:50, l'entry viene comunque creata così l'app
-  // Android la raccoglie immediatamente al prossimo check.
-  const grace = new Date(now.getTime() - 30 * 60 * 1000)
+  // Grace window di 2 ore nel passato: consente all'app Android di raccogliere
+  // blocchi recenti anche se la edge function gira con ritardo.
+  // Nessun limite minimo: le entry passate più vecchie di 2h vengono saltate.
+  const grace = new Date(now.getTime() - 2 * 60 * 60 * 1000)
   if (fireAt < grace || fireAt > horizon) return []
   const dateStr = rp.smart_block_fire_at.slice(0, 10)
   const timeStr = rp.smart_block_fire_at.slice(11, 16)
