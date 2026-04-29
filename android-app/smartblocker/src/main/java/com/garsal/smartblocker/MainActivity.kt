@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.1.8 · PIN: ${Config.PIN}"
+            text = "v1.2.0 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
