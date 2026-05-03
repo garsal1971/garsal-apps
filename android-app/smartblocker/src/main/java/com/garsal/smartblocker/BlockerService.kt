@@ -15,6 +15,7 @@ class BlockerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastSupabaseCheckMs = 0L
+    private var blockWm: BlockWindowManager? = null
 
     private val checker = object : Runnable {
         override fun run() {
@@ -42,9 +43,10 @@ class BlockerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_SNOOZE     -> handleSnooze()
-            ACTION_UNBLOCK    -> handleUnblock()
-            ACTION_CHECK_NOW  -> { lastSupabaseCheckMs = 0L; triggerSupabaseCheck() }
+            ACTION_SNOOZE        -> handleSnooze()
+            ACTION_UNBLOCK       -> handleUnblock()
+            ACTION_CHECK_NOW     -> { lastSupabaseCheckMs = 0L; triggerSupabaseCheck() }
+            ACTION_SHOW_OVERLAY  -> showOverlay()
         }
         return START_STICKY
     }
@@ -52,6 +54,8 @@ class BlockerService : Service() {
     override fun onDestroy() {
         handler.removeCallbacks(checker)
         wakeLock?.release()
+        blockWm?.dismiss()
+        blockWm = null
         super.onDestroy()
     }
 
@@ -82,6 +86,8 @@ class BlockerService : Service() {
             Prefs.setSnoozeUntil(this, System.currentTimeMillis() + Config.SNOOZE_DURATION_MS)
             Prefs.setState(this, Prefs.STATE_NONE)
         }
+        blockWm?.dismiss()
+        blockWm = null
     }
 
     private fun handleUnblock() {
@@ -89,6 +95,8 @@ class BlockerService : Service() {
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
         Prefs.clearBlockEntityIds(this)
+        blockWm?.dismiss()
+        blockWm = null
         cancelBlockNotification()
     }
 
@@ -145,34 +153,14 @@ class BlockerService : Service() {
     }
 
     /**
-     * Mostra la schermata di blocco tramite full-screen notification.
-     * Su Android 10+ startActivity() da background viene bloccato dal sistema;
-     * setFullScreenIntent() è il metodo ufficiale (come le sveglie) e funziona:
-     *  - schermo acceso / app in foreground → activity si apre direttamente
-     *  - schermo spento / Doze → accende lo schermo e apre l'activity
+     * Mostra la schermata di blocco tramite WindowManager (TYPE_APPLICATION_OVERLAY).
+     * Richiede solo SYSTEM_ALERT_WINDOW — nessuna notifica, nessun permesso extra.
+     * L'overlay appare sopra qualsiasi app e sopra la lock screen.
      */
     private fun showOverlay() {
-        val overlayIntent = Intent(this, BlockOverlayActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val pi = PendingIntent.getActivity(
-            this, BLOCK_NOTIF_ID, overlayIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = NotificationCompat.Builder(this, CH_ALARM)
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setContentTitle("🔐 Blocco attivato")
-            .setContentText("È ora di smettere di usare il telefono")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(pi, true)   // apre l'activity anche da background/sleep
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .build()
-        getSystemService(NotificationManager::class.java).notify(BLOCK_NOTIF_ID, notification)
+        if (blockWm?.isShowing() == true) return
+        blockWm = BlockWindowManager(this)
+        blockWm!!.show()
     }
 
     fun cancelBlockNotification() {
@@ -216,9 +204,10 @@ class BlockerService : Service() {
     }
 
     companion object {
-        const val ACTION_SNOOZE    = "com.garsal.smartblocker.SNOOZE"
-        const val ACTION_UNBLOCK   = "com.garsal.smartblocker.UNBLOCK"
-        const val ACTION_CHECK_NOW = "com.garsal.smartblocker.CHECK_NOW"
+        const val ACTION_SNOOZE       = "com.garsal.smartblocker.SNOOZE"
+        const val ACTION_UNBLOCK      = "com.garsal.smartblocker.UNBLOCK"
+        const val ACTION_CHECK_NOW    = "com.garsal.smartblocker.CHECK_NOW"
+        const val ACTION_SHOW_OVERLAY = "com.garsal.smartblocker.SHOW_OVERLAY"
         private const val CH_ID       = "blocker_service"
         private const val CH_ALARM    = "blocker_alarm"
         private const val NOTIF_ID    = 1

@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.2.1 · PIN: ${Config.PIN}"
+            text = "v1.2.2 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -247,8 +247,8 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 Prefs.setState(this@MainActivity, Prefs.STATE_TRIGGERED)
                 Prefs.setSnoozeCount(this@MainActivity, 0)
-                startActivity(Intent(this@MainActivity, BlockOverlayActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                startService(Intent(this@MainActivity, BlockerService::class.java).apply {
+                    action = BlockerService.ACTION_SHOW_OVERLAY
                 })
             }
         }, lp(32))
