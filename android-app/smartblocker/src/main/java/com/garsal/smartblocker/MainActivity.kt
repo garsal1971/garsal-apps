@@ -1,14 +1,18 @@
 package com.garsal.smartblocker
 
+import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -20,6 +24,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(buildLayout())
         startBlockerService()
+        requestNotificationPermissionIfNeeded()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
+            }
+        }
     }
 
     override fun onResume() {
@@ -36,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatusOverlay: TextView
     private lateinit var tvStatusAccessibility: TextView
     private lateinit var tvStatusAlarm: TextView
+    private lateinit var tvStatusFullScreen: TextView
     private lateinit var tvBlockState: TextView
     private lateinit var tvDeviceToken: TextView
     private lateinit var tvQueueStatus: TextView
@@ -62,7 +78,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(0))
 
         root.addView(TextView(this).apply {
-            text = "v1.2.0 · PIN: ${Config.PIN}"
+            text = "v1.2.1 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, lp(4))
@@ -104,16 +120,31 @@ class MainActivity : AppCompatActivity() {
             }
         }, lp(4))
 
-        // Alarm esatto (necessario per blocco in background)
+        // Alarm esatto
         tvStatusAlarm = TextView(this).apply { textSize = 14f }
         root.addView(tvStatusAlarm, lp(16))
         root.addView(Button(this).apply {
             text = "Concedi Alarm Esatto"
             setOnClickListener {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
                     startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                         Uri.parse("package:$packageName")))
-                }
+            }
+        }, lp(4))
+
+        // Full-screen intent (necessario per aprire blocco da background/sleep)
+        tvStatusFullScreen = TextView(this).apply { textSize = 14f }
+        root.addView(tvStatusFullScreen, lp(16))
+        root.addView(Button(this).apply {
+            text = "Concedi Notifiche Full-Screen"
+            setOnClickListener {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                    startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENTS,
+                        Uri.parse("package:$packageName")))
+                else
+                    startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    })
             }
         }, lp(4))
 
@@ -302,8 +333,15 @@ class MainActivity : AppCompatActivity() {
         val alarmOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
             getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() == true
         else true
-        tvStatusAlarm.text = if (alarmOk) "✅ Alarm esatto: concesso" else "❌ Alarm esatto: mancante (blocco in background impreciso)"
+        tvStatusAlarm.text = if (alarmOk) "✅ Alarm esatto: concesso" else "❌ Alarm esatto: mancante"
         tvStatusAlarm.setTextColor(if (alarmOk) 0xFF00B894.toInt() else 0xFFE74C3C.toInt())
+
+        val nm = getSystemService(NotificationManager::class.java)
+        val fsOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            nm.canUseFullScreenIntent()
+        else nm.areNotificationsEnabled()
+        tvStatusFullScreen.text = if (fsOk) "✅ Full-screen intent: concesso" else "❌ Full-screen intent: mancante (blocco non visibile da background)"
+        tvStatusFullScreen.setTextColor(if (fsOk) 0xFF00B894.toInt() else 0xFFE74C3C.toInt())
 
         // Mostra il token (generato automaticamente da Prefs se non esiste)
         tvDeviceToken.text = Prefs.getDeviceToken(this)
