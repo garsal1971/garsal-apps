@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.70</title>
+    <title>Tasks v19.18.71</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2399,8 +2399,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.70';
-        const BUILD_TIME  = '2026-05-03T14:00:00Z';
+        const APP_VERSION = 'v19.18.71';
+        const BUILD_TIME  = '2026-05-03T15:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -10698,12 +10698,15 @@ Per attivarle:
             const insertedTasks = [];
             let errMsg = null;
 
-            // inserisce un task alla volta (stesso pattern di saveTask)
+            // step 1: inserisce senza priority_id (evita il vincolo FK in insert)
             for (let i = 0; i < batch.length; i++) {
                 statusEl.style.color = 'var(--muted)';
                 statusEl.textContent = 'Caricamento ' + (i + 1) + ' / ' + batch.length + '…';
 
-                const { data, error } = await sb.from('ts_tasks').insert([batch[i]]).select();
+                const taskObj = Object.assign({}, batch[i]);
+                delete taskObj.priority_id;
+
+                const { data, error } = await sb.from('ts_tasks').insert([taskObj]).select();
                 if (error) {
                     console.error('❌ Import error task ' + (i + 1) + ':', error);
                     errMsg = error.message || JSON.stringify(error);
@@ -10717,6 +10720,14 @@ Per attivarle:
                 statusEl.textContent = 'Errore al task ' + (insertedTasks.length + 1) + ': ' + errMsg;
                 saveBtn.disabled = false;
                 return;
+            }
+
+            // step 2: aggiorna la priority_id su ogni task appena creato
+            if (commonPriorityId && insertedTasks.length > 0) {
+                statusEl.textContent = 'Impostazione priorità…';
+                for (const t of insertedTasks) {
+                    await sb.from('ts_tasks').update({ priority_id: commonPriorityId }).eq('id', t.id);
+                }
             }
 
             insertedTasks.forEach(function(t) { tasks.push(t); });
