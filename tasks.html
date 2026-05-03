@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.71</title>
+    <title>Tasks v19.18.72</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1557,8 +1557,10 @@
             <!-- Tasks -->
             <div id="tasksPage" class="hidden">
                 <div class="page-header">
-                    <button class="btn btn-primary" onclick="showCreateTaskModal()">Nuovo Task</button>
-                    <button class="btn btn-secondary" onclick="openImportModal()" style="margin-left:0.5rem;">⬆ Importa</button>
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="showCreateTaskModal()">Nuovo Task</button>
+                        <button class="btn btn-secondary" onclick="openImportModal()">⬆ Importa</button>
+                    </div>
                 </div>
                 
                 <!-- Visualizzazione + Filtri (due card affiancate su desktop) -->
@@ -1896,13 +1898,6 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Priorità</label>
-                        <select id="importPriority" class="form-select">
-                            <option value="">Nessuna</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
                         <label class="form-label">Categorie</label>
                         <div id="importCategoriesSelect" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:6px;min-height:36px;"></div>
                     </div>
@@ -1922,7 +1917,7 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top:0.75rem;margin-bottom:0;">
+                    <div id="importRiservatoGroup" class="form-group" style="margin-top:0.75rem;margin-bottom:0;display:none;">
                         <label style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;user-select:none;">
                             <input type="checkbox" id="importRiservato" style="width:18px;height:18px;accent-color:var(--secondary);cursor:pointer;">
                             <span class="form-label" style="margin:0;">Task nascosto (riservato)</span>
@@ -2399,8 +2394,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.71';
-        const BUILD_TIME  = '2026-05-03T15:00:00Z';
+        const APP_VERSION = 'v19.18.72';
+        const BUILD_TIME  = '2026-05-03T16:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -10450,11 +10445,8 @@ Per attivarle:
             document.getElementById('importFailurePoints').value = '-5';
             document.getElementById('importSkipPoints').value = '0';
             document.getElementById('importRiservato').checked = false;
+            document.getElementById('importRiservatoGroup').style.display = hiddenMode ? 'block' : 'none';
             importSelectedCategories = [];
-            // popola select priorità
-            const prioSel = document.getElementById('importPriority');
-            prioSel.innerHTML = '<option value="">Nessuna</option>' +
-                priorities.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
             renderImportCategoriesSelect();
             document.getElementById('importModal').classList.add('active');
         }
@@ -10649,15 +10641,12 @@ Per attivarle:
             if (nomeInputs.length === 0) { statusEl.textContent = 'Nessun task da importare.'; return; }
 
             // leggi i campi comuni una sola volta, prima del loop
-            const commonDesc        = document.getElementById('importDescription').value.trim() || null;
-            const rawPrioVal        = document.getElementById('importPriority').value;
-            const foundPrio         = priorities.find(p => String(p.id) === rawPrioVal);
-            const commonPriorityId  = foundPrio ? foundPrio.id : null;
-            const commonCategories  = importSelectedCategories.slice();
-            const commonSuccess     = parseInt(document.getElementById('importSuccessPoints').value) || 0;
-            const commonFailure     = parseInt(document.getElementById('importFailurePoints').value) || 0;
-            const commonSkip        = parseInt(document.getElementById('importSkipPoints').value) || 0;
-            const commonRiservato   = document.getElementById('importRiservato').checked;
+            const commonDesc       = document.getElementById('importDescription').value.trim() || null;
+            const commonCategories = importSelectedCategories.slice();
+            const commonSuccess    = parseInt(document.getElementById('importSuccessPoints').value) || 0;
+            const commonFailure    = parseInt(document.getElementById('importFailurePoints').value) || 0;
+            const commonSkip       = parseInt(document.getElementById('importSkipPoints').value) || 0;
+            const commonRiservato  = hiddenMode && document.getElementById('importRiservato').checked;
 
             const batch = [];
             nomeInputs.forEach(function(nomeEl, idx) {
@@ -10665,7 +10654,6 @@ Per attivarle:
                 if (!nome) return;
                 const dataVal = dataInputs[idx] ? dataInputs[idx].value.trim() : '';
                 const oraVal  = oraInputs[idx]  ? oraInputs[idx].value.trim()  : '00:00';
-                // ricostruisce ISO: accetta dd/mm/yyyy o yyyy-mm-dd
                 let isoDate = nomeEl.dataset.iso || '';
                 const itMatch = dataVal.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
                 const isoMatch = dataVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -10682,7 +10670,6 @@ Per attivarle:
                     start_date: isoDate || new Date().toISOString().substring(0, 19),
                     status: 'started',
                     description: commonDesc,
-                    priority_id: commonPriorityId,
                     categories: commonCategories,
                     success_points: commonSuccess,
                     failure_points: commonFailure,
@@ -10698,15 +10685,10 @@ Per attivarle:
             const insertedTasks = [];
             let errMsg = null;
 
-            // step 1: inserisce senza priority_id (evita il vincolo FK in insert)
             for (let i = 0; i < batch.length; i++) {
                 statusEl.style.color = 'var(--muted)';
                 statusEl.textContent = 'Caricamento ' + (i + 1) + ' / ' + batch.length + '…';
-
-                const taskObj = Object.assign({}, batch[i]);
-                delete taskObj.priority_id;
-
-                const { data, error } = await sb.from('ts_tasks').insert([taskObj]).select();
+                const { data, error } = await sb.from('ts_tasks').insert([batch[i]]).select();
                 if (error) {
                     console.error('❌ Import error task ' + (i + 1) + ':', error);
                     errMsg = error.message || JSON.stringify(error);
@@ -10720,14 +10702,6 @@ Per attivarle:
                 statusEl.textContent = 'Errore al task ' + (insertedTasks.length + 1) + ': ' + errMsg;
                 saveBtn.disabled = false;
                 return;
-            }
-
-            // step 2: aggiorna la priority_id su ogni task appena creato
-            if (commonPriorityId && insertedTasks.length > 0) {
-                statusEl.textContent = 'Impostazione priorità…';
-                for (const t of insertedTasks) {
-                    await sb.from('ts_tasks').update({ priority_id: commonPriorityId }).eq('id', t.id);
-                }
             }
 
             insertedTasks.forEach(function(t) { tasks.push(t); });
