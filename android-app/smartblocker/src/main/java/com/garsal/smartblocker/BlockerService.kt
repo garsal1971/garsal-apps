@@ -32,9 +32,10 @@ class BlockerService : Service() {
 
         val pm = getSystemService(PowerManager::class.java)
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SmartBlocker::WakeLock")
-        wakeLock?.acquire(10 * 60 * 1000L)
+        wakeLock?.acquire()
 
         handler.post(checker)
+        scheduleNextFallback()
 
         if (Prefs.getDeviceToken(this).isEmpty()) {
             Thread { SupabaseApi(this).fetchAndCacheDeviceToken() }.start()
@@ -45,7 +46,15 @@ class BlockerService : Service() {
         when (intent?.action) {
             ACTION_SNOOZE        -> handleSnooze()
             ACTION_UNBLOCK       -> handleUnblock()
-            ACTION_CHECK_NOW     -> { lastSupabaseCheckMs = 0L; triggerSupabaseCheck() }
+            ACTION_CHECK_NOW     -> {
+                checkSnooze()
+                if (Prefs.getState(this) == Prefs.STATE_NONE) {
+                    lastSupabaseCheckMs = 0L
+                    triggerSupabaseCheck()
+                } else {
+                    BlockAlarmReceiver.releaseWakeLock()
+                }
+            }
             ACTION_SHOW_OVERLAY  -> showOverlay()
         }
         return START_STICKY
@@ -67,8 +76,6 @@ class BlockerService : Service() {
         val now = System.currentTimeMillis()
         val state = Prefs.getState(this)
 
-        if (wakeLock?.isHeld == false) wakeLock?.acquire(10 * 60 * 1000L)
-
         val snoozeUntil = Prefs.getSnoozeUntil(this)
         if (state == Prefs.STATE_NONE && snoozeUntil > 0 && now >= snoozeUntil) {
             Prefs.setSnoozeUntil(this, 0)
@@ -82,9 +89,12 @@ class BlockerService : Service() {
     private fun handleSnooze() {
         val count = Prefs.getSnoozeCount(this)
         if (count < Config.MAX_SNOOZES) {
+            val snoozeUntil = System.currentTimeMillis() + Config.SNOOZE_DURATION_MS
             Prefs.setSnoozeCount(this, count + 1)
-            Prefs.setSnoozeUntil(this, System.currentTimeMillis() + Config.SNOOZE_DURATION_MS)
+            Prefs.setSnoozeUntil(this, snoozeUntil)
             Prefs.setState(this, Prefs.STATE_NONE)
+            // Alarm esatto per la scadenza dello snooze: funziona anche in Doze/background
+            scheduleSnoozeAlarm(snoozeUntil)
         }
         blockWm?.dismiss()
         blockWm = null
@@ -108,7 +118,10 @@ class BlockerService : Service() {
     }
 
     fun triggerSupabaseCheck() {
-        if (Prefs.getState(this) != Prefs.STATE_NONE) return
+        if (Prefs.getState(this) != Prefs.STATE_NONE) {
+            BlockAlarmReceiver.releaseWakeLock()
+            return
+        }
         Thread {
             val result = SupabaseApi(this).queryQueue()
             val dueIds = result.dueIds
@@ -123,10 +136,14 @@ class BlockerService : Service() {
                     Prefs.setSnoozeCount(this, 0)
                     Prefs.setSnoozeUntil(this, 0)
                     showOverlay()
+                    BlockAlarmReceiver.releaseWakeLock()
                 }
-            } else if (result.nextFireAtMs != null) {
-                // Nessun blocco ora, ma ce n'è uno futuro: schedula alarm esatto
-                scheduleExactAlarm(result.nextFireAtMs)
+            } else {
+                if (result.nextFireAtMs != null) {
+                    scheduleExactAlarm(result.nextFireAtMs)
+                }
+                scheduleNextFallback()
+                BlockAlarmReceiver.releaseWakeLock()
             }
         }.start()
     }
@@ -150,6 +167,43 @@ class BlockerService : Service() {
             am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
             Log.d(TAG, "Alarm esatto schedulato per ${java.util.Date(fireAtMs)}")
         }
+    }
+
+    /**
+     * Alarm periodico di fallback ogni FALLBACK_INTERVAL_MS (10 min).
+     * Sopravvive al kill del servizio (gestito dall'OS) e funziona in Doze mode.
+     * Garantisce che il servizio si risvegli anche se non era riuscito a schedulare
+     * l'alarm esatto per il blocco.
+     */
+    private fun scheduleNextFallback() {
+        val am = getSystemService(AlarmManager::class.java) ?: return
+        val pi = PendingIntent.getBroadcast(
+            this, FALLBACK_ALARM_CODE,
+            Intent(this, BlockAlarmReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + FALLBACK_INTERVAL_MS, pi)
+        Log.d(TAG, "Fallback alarm schedulato tra ${FALLBACK_INTERVAL_MS / 60000} min")
+    }
+
+    /**
+     * Alarm esatto per la scadenza dello snooze (request code separato da ALARM_REQUEST_CODE
+     * per non sovrascrivere l'alarm del blocco originale).
+     */
+    private fun scheduleSnoozeAlarm(fireAtMs: Long) {
+        val am = getSystemService(AlarmManager::class.java) ?: return
+        val pi = PendingIntent.getBroadcast(
+            this, SNOOZE_ALARM_CODE,
+            Intent(this, BlockAlarmReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
+        } else {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAtMs, pi)
+        }
+        Log.d(TAG, "Snooze alarm schedulato per ${java.util.Date(fireAtMs)}")
     }
 
     /**
@@ -208,10 +262,13 @@ class BlockerService : Service() {
         const val ACTION_UNBLOCK      = "com.garsal.smartblocker.UNBLOCK"
         const val ACTION_CHECK_NOW    = "com.garsal.smartblocker.CHECK_NOW"
         const val ACTION_SHOW_OVERLAY = "com.garsal.smartblocker.SHOW_OVERLAY"
-        private const val CH_ID       = "blocker_service"
-        private const val CH_ALARM    = "blocker_alarm"
-        private const val NOTIF_ID    = 1
-        const val BLOCK_NOTIF_ID      = 2
-        private const val TAG         = "BlockerService"
+        private const val CH_ID              = "blocker_service"
+        private const val CH_ALARM           = "blocker_alarm"
+        private const val NOTIF_ID           = 1
+        const val BLOCK_NOTIF_ID             = 2
+        private const val FALLBACK_ALARM_CODE = 43
+        private const val SNOOZE_ALARM_CODE   = 44
+        private const val FALLBACK_INTERVAL_MS = 10 * 60 * 1000L
+        private const val TAG                = "BlockerService"
     }
 }
