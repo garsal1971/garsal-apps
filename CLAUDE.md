@@ -256,8 +256,9 @@ Pushing to a `dev/**` branch triggers `.github/workflows/deploy-dev.yml` which:
 The only path to production is: push to `claude/**` → GitHub Actions merges → Netlify deploys.
 
 ### Versioning — regola obbligatoria
-**Ad ogni modifica a qualsiasi file HTML**, Claude deve:
+**Ad ogni modifica a qualsiasi file** (HTML o Android), Claude deve aggiornare la versione **nello stesso commit** delle modifiche, non dopo.
 
+#### File HTML
 1. **Incrementare il patch version** (`APP_VERSION`) — es. `v3.1.1` → `v3.1.2`
 2. **Aggiornare `BUILD_TIME`** con il timestamp UTC corrente — es. `'2026-02-24T20:00:00Z'`
 3. **Verificare che la versione compaia in**:
@@ -266,6 +267,11 @@ The only path to production is: push to `claude/**` → GitHub Actions merges �
    - `var BUILD_TIME` nello script
    - `console.log` stilizzato visibile nei DevTools del browser
    - Log dell'app (funzione `log()`)
+
+#### App Android (`android-app/smartblocker/`)
+1. **Incrementare `versionName`** in `build.gradle` — es. `"1.2.3"` → `"1.2.4"`
+2. **Incrementare `versionCode`** di 1 — es. `14` → `15`
+3. **Aggiornare la stringa versione in `MainActivity.kt`** — es. `"v1.2.3 · PIN: …"` → `"v1.2.4 · PIN: …"`
 
 Struttura versioning in `weight-quest.html` (righe ~782–787):
 ```js
