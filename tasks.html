@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.69</title>
+    <title>Tasks v19.18.70</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2399,8 +2399,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.69';
-        const BUILD_TIME  = '2026-05-03T13:00:00Z';
+        const APP_VERSION = 'v19.18.70';
+        const BUILD_TIME  = '2026-05-03T14:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -10695,39 +10695,33 @@ Per attivarle:
             if (batch.length === 0) { statusEl.textContent = 'Nessun task valido trovato.'; return; }
 
             saveBtn.disabled = true;
-            statusEl.style.color = 'var(--muted)';
-            statusEl.textContent = 'Caricamento in corso…';
+            const insertedTasks = [];
+            let errMsg = null;
 
-            console.log('📥 Import batch:', JSON.stringify(batch.map(t => ({ title: t.title, priority_id: t.priority_id }))));
+            // inserisce un task alla volta (stesso pattern di saveTask)
+            for (let i = 0; i < batch.length; i++) {
+                statusEl.style.color = 'var(--muted)';
+                statusEl.textContent = 'Caricamento ' + (i + 1) + ' / ' + batch.length + '…';
 
-            let { data, error } = await sb.from('ts_tasks').insert(batch).select();
-
-            // fallback: se FK su priority_id, riprova senza
-            if (error && error.message && error.message.includes('priority_id')) {
-                console.warn('⚠️ FK priority_id fallito, riprovo senza priority_id:', error.message);
-                const batchNoPrio = batch.map(t => ({ ...t, priority_id: null }));
-                const res2 = await sb.from('ts_tasks').insert(batchNoPrio).select();
-                data  = res2.data;
-                error = res2.error;
-                if (!res2.error) {
-                    statusEl.style.color = 'var(--warning)';
-                    statusEl.textContent = '⚠️ Task importati ma senza priorità (ID non valido nel DB)';
+                const { data, error } = await sb.from('ts_tasks').insert([batch[i]]).select();
+                if (error) {
+                    console.error('❌ Import error task ' + (i + 1) + ':', error);
+                    errMsg = error.message || JSON.stringify(error);
+                    break;
                 }
+                if (data && data[0]) insertedTasks.push(data[0]);
             }
 
-            if (error) {
-                console.error('❌ Import error:', error);
+            if (errMsg) {
                 statusEl.style.color = 'var(--danger)';
-                statusEl.textContent = 'Errore: ' + (error.message || JSON.stringify(error));
+                statusEl.textContent = 'Errore al task ' + (insertedTasks.length + 1) + ': ' + errMsg;
                 saveBtn.disabled = false;
                 return;
             }
 
+            insertedTasks.forEach(function(t) { tasks.push(t); });
             statusEl.style.color = 'var(--success)';
-            statusEl.textContent = '✅ Importati ' + batch.length + ' task nel database!';
-            if (data) {
-                data.forEach(function(t) { tasks.push(t); });
-            }
+            statusEl.textContent = '✅ Importati ' + insertedTasks.length + ' task nel database!';
             setTimeout(function() {
                 closeImportModal();
                 renderManagement();
