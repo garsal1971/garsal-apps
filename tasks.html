@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.72</title>
+    <title>Tasks v19.18.73</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2394,8 +2394,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.72';
-        const BUILD_TIME  = '2026-05-03T16:00:00Z';
+        const APP_VERSION = 'v19.18.73';
+        const BUILD_TIME  = '2026-05-03T17:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -5892,9 +5892,13 @@
             telegramCompleteButton = true; // default true; l'utente può cambiarlo nel form
             notificationChannel = 'telegram'; // default; sovrascritta dalla regola se presente
             try {
-                const { data: rule } = await authSb.from('cm_notification_rules')
-                    .select('channel').eq('app', 'tasks').eq('entity_id', String(id)).maybeSingle();
-                if (rule?.channel) notificationChannel = rule.channel;
+                const editUserId = decodeJWT(sbAccessToken)?.sub;
+                const q = authSb.from('cm_notification_rules')
+                    .select('channel').eq('app', 'tasks').eq('entity_id', String(id));
+                if (editUserId) q.eq('user_id', editUserId);
+                const { data: rules } = await q.limit(1);
+                const ch = rules?.[0]?.channel;
+                if (ch) notificationChannel = ch;
             } catch (e) { console.warn('editTask: impossibile leggere canale notifica', e); }
             
             // Nascosto: visibile solo in modalità nascosta
