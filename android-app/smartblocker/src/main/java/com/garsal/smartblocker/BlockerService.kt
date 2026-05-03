@@ -3,6 +3,7 @@ package com.garsal.smartblocker
 import android.app.*
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -36,9 +37,15 @@ class BlockerService : Service() {
 
         handler.post(checker)
         scheduleNextFallback()
+        AppLogger.log(this, "SERVICE", "onCreate — servizio avviato, fallback alarm schedulato")
 
         if (Prefs.getDeviceToken(this).isEmpty()) {
-            Thread { SupabaseApi(this).fetchAndCacheDeviceToken() }.start()
+            Thread {
+                SupabaseApi(this).fetchAndCacheDeviceToken()
+                AppLogger.log(this, "SERVICE", "device token recuperato: ${Prefs.getDeviceToken(this).take(8)}…")
+            }.start()
+        } else {
+            AppLogger.log(this, "SERVICE", "device token presente: ${Prefs.getDeviceToken(this).take(8)}…")
         }
     }
 
@@ -47,11 +54,13 @@ class BlockerService : Service() {
             ACTION_SNOOZE        -> handleSnooze()
             ACTION_UNBLOCK       -> handleUnblock()
             ACTION_CHECK_NOW     -> {
+                AppLogger.log(this, "SERVICE", "ACTION_CHECK_NOW ricevuto (stato=${Prefs.getState(this)})")
                 checkSnooze()
                 if (Prefs.getState(this) == Prefs.STATE_NONE) {
                     lastSupabaseCheckMs = 0L
                     triggerSupabaseCheck()
                 } else {
+                    AppLogger.log(this, "SERVICE", "snooze scaduto → overlay mostrato, skip query Supabase")
                     BlockAlarmReceiver.releaseWakeLock()
                 }
             }
@@ -61,6 +70,7 @@ class BlockerService : Service() {
     }
 
     override fun onDestroy() {
+        AppLogger.log(this, "SERVICE", "onDestroy — servizio distrutto (verrà riavviato da START_STICKY)")
         handler.removeCallbacks(checker)
         wakeLock?.release()
         blockWm?.dismiss()
@@ -75,9 +85,9 @@ class BlockerService : Service() {
     private fun checkSnooze() {
         val now = System.currentTimeMillis()
         val state = Prefs.getState(this)
-
         val snoozeUntil = Prefs.getSnoozeUntil(this)
         if (state == Prefs.STATE_NONE && snoozeUntil > 0 && now >= snoozeUntil) {
+            AppLogger.log(this, "SNOOZE", "snooze scaduto → mostro overlay")
             Prefs.setSnoozeUntil(this, 0)
             val count = Prefs.getSnoozeCount(this)
             val nextState = if (count >= Config.MAX_SNOOZES) Prefs.STATE_LOCKED else Prefs.STATE_TRIGGERED
@@ -93,8 +103,10 @@ class BlockerService : Service() {
             Prefs.setSnoozeCount(this, count + 1)
             Prefs.setSnoozeUntil(this, snoozeUntil)
             Prefs.setState(this, Prefs.STATE_NONE)
-            // Alarm esatto per la scadenza dello snooze: funziona anche in Doze/background
             scheduleSnoozeAlarm(snoozeUntil)
+            AppLogger.log(this, "SNOOZE", "rinviato (${count + 1}/${Config.MAX_SNOOZES}) — alarm snooze schedulato")
+        } else {
+            AppLogger.log(this, "SNOOZE", "rinvii esauriti, nessun alarm schedulato")
         }
         blockWm?.dismiss()
         blockWm = null
@@ -122,10 +134,19 @@ class BlockerService : Service() {
             BlockAlarmReceiver.releaseWakeLock()
             return
         }
+        AppLogger.log(this, "SUPABASE", "inizio query coda…")
         Thread {
             val result = SupabaseApi(this).queryQueue()
+            if (result.errorMsg != null) {
+                AppLogger.log(this, "SUPABASE", "ERRORE: ${result.errorMsg} (HTTP ${result.httpCode})")
+                scheduleNextFallback()
+                BlockAlarmReceiver.releaseWakeLock()
+                return@Thread
+            }
+            AppLogger.log(this, "SUPABASE", "HTTP ${result.httpCode} — righe=${result.entries.size} due=${result.dueIds.size} nextFireAt=${result.nextFireAtMs?.let { java.util.Date(it) } ?: "nessuno"}")
             val dueIds = result.dueIds
             if (dueIds.isNotEmpty()) {
+                AppLogger.log(this, "SUPABASE", "blocchi pronti: ${dueIds.joinToString()} — mostro overlay")
                 dueIds.forEach { SupabaseApi(this).markSent(it) }
                 val entityIds = result.entries
                     .filter { it.id in dueIds && it.entityId.isNotBlank() }
@@ -140,7 +161,10 @@ class BlockerService : Service() {
                 }
             } else {
                 if (result.nextFireAtMs != null) {
+                    AppLogger.log(this, "SUPABASE", "nessun blocco ora — alarm esatto per ${java.util.Date(result.nextFireAtMs)}")
                     scheduleExactAlarm(result.nextFireAtMs)
+                } else {
+                    AppLogger.log(this, "SUPABASE", "nessun blocco in coda")
                 }
                 scheduleNextFallback()
                 BlockAlarmReceiver.releaseWakeLock()
@@ -212,7 +236,11 @@ class BlockerService : Service() {
      * L'overlay appare sopra qualsiasi app e sopra la lock screen.
      */
     private fun showOverlay() {
-        if (blockWm?.isShowing() == true) return
+        if (blockWm?.isShowing() == true) {
+            AppLogger.log(this, "OVERLAY", "già visibile, skip")
+            return
+        }
+        AppLogger.log(this, "OVERLAY", "show() — overlay=${Settings.canDrawOverlays(this)}")
         blockWm = BlockWindowManager(this)
         blockWm!!.show()
     }

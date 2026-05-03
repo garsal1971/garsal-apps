@@ -9,8 +9,7 @@ import androidx.core.content.ContextCompat
 class BlockAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        // Acquisisce WakeLock statico prima che onReceive() ritorni: senza questo
-        // il CPU può riaddormentarsi prima che il servizio finisca la query Supabase.
+        AppLogger.log(context, "ALARM", "onReceive — acquisto WakeLock e avvio servizio")
         acquireWakeLock(context)
         ContextCompat.startForegroundService(context,
             Intent(context, BlockerService::class.java).apply {

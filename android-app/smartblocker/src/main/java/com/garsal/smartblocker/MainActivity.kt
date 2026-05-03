@@ -3,6 +3,8 @@ package com.garsal.smartblocker
 import android.Manifest
 import android.app.AlarmManager
 import android.app.NotificationManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -40,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateStatus()
+        refreshLog()
     }
 
     private fun startBlockerService() {
@@ -48,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     // ── Layout ───────────────────────────────────────────────────────────────
 
+    private lateinit var tvLogView: TextView
     private lateinit var tvStatusOverlay: TextView
     private lateinit var tvStatusAccessibility: TextView
     private lateinit var tvStatusAlarm: TextView
@@ -253,6 +257,53 @@ class MainActivity : AppCompatActivity() {
             }
         }, lp(32))
 
+        // ── Sezione Log ──────────────────────────────────────────────────────
+        root.addView(TextView(this).apply {
+            text = "Log app"
+            textSize = 18f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }, lp(40))
+
+        val rowLog = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        rowLog.addView(Button(this).apply {
+            text = "🔄 Aggiorna"
+            textSize = 13f
+            setOnClickListener { refreshLog() }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        rowLog.addView(Button(this).apply {
+            text = "📋 Copia"
+            textSize = 13f
+            setOnClickListener {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("SmartBlocker Log", AppLogger.read(this@MainActivity)))
+                Toast.makeText(this@MainActivity, "Log copiato negli appunti", Toast.LENGTH_SHORT).show()
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        rowLog.addView(Button(this).apply {
+            text = "🗑 Cancella"
+            textSize = 13f
+            setOnClickListener {
+                AppLogger.clear(this@MainActivity)
+                refreshLog()
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        root.addView(rowLog, lp(8))
+
+        tvLogView = TextView(this).apply {
+            textSize = 11f
+            setTextColor(0xFFCCCCCC.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(20, 20, 20, 20)
+            typeface = android.graphics.Typeface.MONOSPACE
+        }
+        root.addView(tvLogView, lp(8))
+
         return scroll
     }
 
@@ -354,6 +405,13 @@ class MainActivity : AppCompatActivity() {
             Prefs.STATE_LOCKED    -> "🔴 BLOCCATO — solo PIN"
             else -> "?"
         }
+    }
+
+    private fun refreshLog() {
+        val text = AppLogger.read(this)
+        // Mostra solo le ultime 80 righe per non appesantire l'UI
+        val lines = text.lines()
+        tvLogView.text = if (lines.size > 80) lines.takeLast(80).joinToString("\n") else text
     }
 
     private fun isAccessibilityEnabled(): Boolean {
