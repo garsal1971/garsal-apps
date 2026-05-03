@@ -275,6 +275,21 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
         rowLog.addView(Button(this).apply {
+            text = "📤 Condividi"
+            textSize = 13f
+            setOnClickListener {
+                val log = AppLogger.read(this@MainActivity)
+                startActivity(Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "SmartBlocker Log")
+                        putExtra(Intent.EXTRA_TEXT, log)
+                    }, "Condividi log"
+                ))
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        rowLog.addView(Button(this).apply {
             text = "📋 Copia"
             textSize = 13f
             setOnClickListener {
