@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.60</title>
+    <title>Tasks v19.18.66</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1558,6 +1558,7 @@
             <div id="tasksPage" class="hidden">
                 <div class="page-header">
                     <button class="btn btn-primary" onclick="showCreateTaskModal()">Nuovo Task</button>
+                    <button class="btn btn-secondary" onclick="openImportModal()" style="margin-left:0.5rem;">⬆ Importa</button>
                 </div>
                 
                 <!-- Visualizzazione + Filtri (due card affiancate su desktop) -->
@@ -1821,6 +1822,78 @@
         </main>
     </div>
 
+
+    <!-- Import Modal -->
+    <div id="importModal" class="modal" onclick="if(event.target===this)closeImportModal()">
+        <div class="modal-content" style="max-width:720px;width:95%;">
+            <div class="modal-header">
+                <h3 class="modal-title">⬆ Importa Task</h3>
+                <span class="modal-close" onclick="closeImportModal()">✕</span>
+            </div>
+            <div style="padding:1.5rem;">
+
+                <!-- Step 1: formato -->
+                <div style="margin-bottom:1.25rem;">
+                    <label class="form-label" style="display:block;margin-bottom:0.5rem;">1. Scegli formato</label>
+                    <div style="display:flex;gap:1.5rem;">
+                        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.95rem;">
+                            <input type="radio" name="importFormat" value="ics" id="importFmtIcs" checked onchange="handleImportFormatChange()"> ICS (calendario)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.95rem;">
+                            <input type="radio" name="importFormat" value="csv" id="importFmtCsv" onchange="handleImportFormatChange()"> CSV
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Step 2: carica file -->
+                <div style="margin-bottom:1.25rem;">
+                    <label class="form-label" style="display:block;margin-bottom:0.5rem;">2. Seleziona file</label>
+                    <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+                        <input type="file" id="importFileInput" accept=".ics" style="flex:1;min-width:0;font-size:0.9rem;" onchange="handleImportFileRead()">
+                    </div>
+                </div>
+
+                <!-- Step 3: contenuto raw -->
+                <div style="margin-bottom:1.25rem;">
+                    <label class="form-label" style="display:block;margin-bottom:0.5rem;">3. Contenuto file</label>
+                    <textarea id="importRawContent" readonly placeholder="Il contenuto del file apparirà qui dopo il caricamento…"
+                        style="width:100%;height:120px;resize:vertical;font-family:monospace;font-size:0.78rem;
+                               background:var(--input-bg);border:1px solid var(--border);border-radius:8px;
+                               padding:0.6rem;box-sizing:border-box;color:var(--dark);"></textarea>
+                </div>
+
+                <!-- Step 4: tabella preview -->
+                <div style="margin-bottom:1.25rem;">
+                    <label class="form-label" style="display:block;margin-bottom:0.5rem;">
+                        4. Anteprima
+                        <span id="importRowCount" style="font-weight:normal;color:var(--muted);font-size:0.85rem;margin-left:0.5rem;"></span>
+                    </label>
+                    <div style="overflow-x:auto;max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+                        <table id="importPreviewTable" style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+                            <thead>
+                                <tr style="background:var(--input-bg);position:sticky;top:0;">
+                                    <th style="padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid var(--border);font-weight:600;">#</th>
+                                    <th style="padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid var(--border);font-weight:600;">Nome</th>
+                                    <th style="padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid var(--border);font-weight:600;">Data</th>
+                                    <th style="padding:0.5rem 0.75rem;text-align:left;border-bottom:1px solid var(--border);font-weight:600;">Ora</th>
+                                </tr>
+                            </thead>
+                            <tbody id="importPreviewBody">
+                                <tr><td colspan="4" style="padding:1rem;text-align:center;color:var(--muted);">Nessun dato da visualizzare</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div id="importStatusMsg" style="color:var(--success);font-size:0.88rem;margin-bottom:0.75rem;min-height:1.2em;"></div>
+                <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+                    <button class="btn btn-secondary" onclick="closeImportModal()">Annulla</button>
+                    <button class="btn btn-primary" id="importSaveBtn" onclick="importTasksToDatabase()" disabled>Carica nel Database</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Snooze Modal -->
     <div id="snoozeModal" class="modal" onclick="if(event.target===this)closeSnoozeModal()">
@@ -2281,8 +2354,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.65';
-        const BUILD_TIME  = '2026-04-29T08:00:00Z';
+        const APP_VERSION = 'v19.18.66';
+        const BUILD_TIME  = '2026-05-03T10:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -10310,6 +10383,243 @@ Per attivarle:
                 console.warn('⚠️ Nessun SB_TOKEN — attendo dal launcher (AppSphere)');
             }
         });
+
+        // ========================================
+        // IMPORT TASKS
+        // ========================================
+
+        function openImportModal() {
+            document.getElementById('importRawContent').value = '';
+            document.getElementById('importPreviewBody').innerHTML =
+                '<tr><td colspan="4" style="padding:1rem;text-align:center;color:var(--muted);">Nessun dato da visualizzare</td></tr>';
+            document.getElementById('importRowCount').textContent = '';
+            document.getElementById('importStatusMsg').textContent = '';
+            document.getElementById('importSaveBtn').disabled = true;
+            document.getElementById('importFileInput').value = '';
+            document.getElementById('importFmtIcs').checked = true;
+            document.getElementById('importFileInput').accept = '.ics';
+            document.getElementById('importModal').classList.add('active');
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.remove('active');
+        }
+
+        function handleImportFormatChange() {
+            const fmt = document.querySelector('input[name="importFormat"]:checked').value;
+            document.getElementById('importFileInput').accept = fmt === 'ics' ? '.ics' : '.csv';
+            document.getElementById('importFileInput').value = '';
+            document.getElementById('importRawContent').value = '';
+            document.getElementById('importPreviewBody').innerHTML =
+                '<tr><td colspan="4" style="padding:1rem;text-align:center;color:var(--muted);">Nessun dato da visualizzare</td></tr>';
+            document.getElementById('importRowCount').textContent = '';
+            document.getElementById('importSaveBtn').disabled = true;
+            document.getElementById('importStatusMsg').textContent = '';
+        }
+
+        function handleImportFileRead() {
+            const file = document.getElementById('importFileInput').files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                document.getElementById('importRawContent').value = text;
+                parseImportContent(text);
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function parseImportContent(text) {
+            const fmt = document.querySelector('input[name="importFormat"]:checked').value;
+            let rows = [];
+            if (fmt === 'ics') {
+                rows = parseIcsContent(text);
+            } else {
+                rows = parseCsvContent(text);
+            }
+            renderImportPreview(rows);
+        }
+
+        function parseIcsContent(text) {
+            const rows = [];
+            const events = text.split('BEGIN:VEVENT');
+            for (let i = 1; i < events.length; i++) {
+                const block = events[i];
+                const summaryMatch = block.match(/\r?\nSUMMARY(?:;[^\r\n]*)?:([^\r\n]*)/);
+                const dtStartMatch = block.match(/\r?\nDTSTART(?:;[^\r\n]*)?:([^\r\n]*)/);
+                const nome = summaryMatch ? summaryMatch[1].trim() : '(senza titolo)';
+                let data = '', ora = '', isoDateTime = '';
+                if (dtStartMatch) {
+                    const raw = dtStartMatch[1].trim().replace(/[^0-9T]/g, '');
+                    // formato YYYYMMDDTHHMMSS o YYYYMMDD
+                    if (raw.length >= 8) {
+                        const y = raw.substring(0, 4);
+                        const mo = raw.substring(4, 6);
+                        const d = raw.substring(6, 8);
+                        data = d + '/' + mo + '/' + y;
+                        if (raw.length >= 15 && raw.charAt(8) === 'T') {
+                            const hh = raw.substring(9, 11);
+                            const mm = raw.substring(11, 13);
+                            ora = hh + ':' + mm;
+                            isoDateTime = y + '-' + mo + '-' + d + 'T' + hh + ':' + mm + ':00';
+                        } else {
+                            ora = '00:00';
+                            isoDateTime = y + '-' + mo + '-' + d + 'T00:00:00';
+                        }
+                    }
+                }
+                rows.push({ nome, data, ora, isoDateTime });
+            }
+            return rows;
+        }
+
+        function parseCsvContent(text) {
+            const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+            if (lines.length === 0) return [];
+            const rows = [];
+            // detect header
+            const firstLine = lines[0].toLowerCase();
+            const hasHeader = /nome|titolo|title|summary|data|date/.test(firstLine);
+            const headerCols = hasHeader ? lines[0].split(',').map(c => c.trim().toLowerCase()) : [];
+            let idxNome = 0, idxData = 1, idxOra = 2;
+            if (hasHeader) {
+                const nameAliases = ['nome', 'titolo', 'title', 'summary', 'name'];
+                const dateAliases = ['data', 'date', 'start_date', 'startdate'];
+                const timeAliases = ['ora', 'time', 'orario', 'start_time', 'starttime'];
+                idxNome = headerCols.findIndex(c => nameAliases.includes(c));
+                idxData = headerCols.findIndex(c => dateAliases.includes(c));
+                idxOra  = headerCols.findIndex(c => timeAliases.includes(c));
+                if (idxNome < 0) idxNome = 0;
+                if (idxData < 0) idxData = 1;
+                if (idxOra  < 0) idxOra  = 2;
+            }
+            const startLine = hasHeader ? 1 : 0;
+            for (let i = startLine; i < lines.length; i++) {
+                const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+                const nome = cols[idxNome] || '';
+                const rawData = cols[idxData] || '';
+                const rawOra  = cols[idxOra]  || '00:00';
+                if (!nome) continue;
+                // tenta parsing data: dd/mm/yyyy o yyyy-mm-dd
+                let data = rawData, isoDate = '', isoDateTime = '';
+                const isoMatch = rawData.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                const itMatch  = rawData.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                if (isoMatch) {
+                    isoDate = rawData;
+                    data = isoMatch[3] + '/' + isoMatch[2] + '/' + isoMatch[1];
+                } else if (itMatch) {
+                    isoDate = itMatch[3] + '-' + itMatch[2] + '-' + itMatch[1];
+                } else {
+                    isoDate = rawData;
+                }
+                const ora = rawOra.substring(0, 5) || '00:00';
+                isoDateTime = isoDate ? isoDate + 'T' + ora + ':00' : '';
+                rows.push({ nome, data, ora, isoDateTime });
+            }
+            return rows;
+        }
+
+        function renderImportPreview(rows) {
+            const tbody = document.getElementById('importPreviewBody');
+            const countEl = document.getElementById('importRowCount');
+            const saveBtn = document.getElementById('importSaveBtn');
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="padding:1rem;text-align:center;color:var(--muted);">Nessun evento trovato nel file</td></tr>';
+                countEl.textContent = '';
+                saveBtn.disabled = true;
+                return;
+            }
+            countEl.textContent = '(' + rows.length + ' eventi)';
+            let html = '';
+            rows.forEach(function(row, idx) {
+                html += '<tr style="border-bottom:1px solid var(--border);">' +
+                    '<td style="padding:0.4rem 0.75rem;color:var(--muted);font-size:0.8rem;">' + (idx + 1) + '</td>' +
+                    '<td style="padding:0.4rem 0.75rem;"><input type="text" value="' + escHtml(row.nome) + '" ' +
+                        'data-iso="' + escHtml(row.isoDateTime) + '" ' +
+                        'class="import-row-nome" ' +
+                        'style="width:100%;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;background:var(--input-bg);"></td>' +
+                    '<td style="padding:0.4rem 0.75rem;"><input type="text" value="' + escHtml(row.data) + '" ' +
+                        'class="import-row-data" ' +
+                        'style="width:90px;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;background:var(--input-bg);"></td>' +
+                    '<td style="padding:0.4rem 0.75rem;"><input type="text" value="' + escHtml(row.ora) + '" ' +
+                        'class="import-row-ora" ' +
+                        'style="width:60px;border:1px solid var(--border);border-radius:4px;padding:0.25rem 0.4rem;font-size:0.85rem;background:var(--input-bg);"></td>' +
+                    '</tr>';
+            });
+            tbody.innerHTML = html;
+            saveBtn.disabled = false;
+        }
+
+        function escHtml(str) {
+            return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        async function importTasksToDatabase() {
+            const saveBtn = document.getElementById('importSaveBtn');
+            const statusEl = document.getElementById('importStatusMsg');
+            const nomeInputs = document.querySelectorAll('#importPreviewBody .import-row-nome');
+            const dataInputs = document.querySelectorAll('#importPreviewBody .import-row-data');
+            const oraInputs  = document.querySelectorAll('#importPreviewBody .import-row-ora');
+
+            if (nomeInputs.length === 0) { statusEl.textContent = 'Nessun task da importare.'; return; }
+
+            const batch = [];
+            nomeInputs.forEach(function(nomeEl, idx) {
+                const nome = nomeEl.value.trim();
+                if (!nome) return;
+                const dataVal = dataInputs[idx] ? dataInputs[idx].value.trim() : '';
+                const oraVal  = oraInputs[idx]  ? oraInputs[idx].value.trim()  : '00:00';
+                // ricostruisce ISO: accetta dd/mm/yyyy o yyyy-mm-dd
+                let isoDate = nomeEl.dataset.iso || '';
+                const itMatch = dataVal.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                const isoMatch = dataVal.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (itMatch) {
+                    isoDate = itMatch[3] + '-' + itMatch[2] + '-' + itMatch[1] + 'T' + (oraVal || '00:00') + ':00';
+                } else if (isoMatch) {
+                    isoDate = dataVal + 'T' + (oraVal || '00:00') + ':00';
+                } else if (isoDate && oraVal) {
+                    // aggiorna solo l'ora nel campo iso originale
+                    isoDate = isoDate.substring(0, 11) + (oraVal || '00:00') + ':00';
+                }
+                batch.push({
+                    title: nome,
+                    type: 'single',
+                    start_date: isoDate || new Date().toISOString().substring(0, 19),
+                    status: 'started',
+                    success_points: 0,
+                    failure_points: 0,
+                    skip_points: 0,
+                    late_points: 0,
+                    categories: [],
+                    riservato: false
+                });
+            });
+
+            if (batch.length === 0) { statusEl.textContent = 'Nessun task valido trovato.'; return; }
+
+            saveBtn.disabled = true;
+            statusEl.style.color = 'var(--muted)';
+            statusEl.textContent = 'Caricamento in corso…';
+
+            const { data, error } = await sb.from('ts_tasks').insert(batch).select();
+            if (error) {
+                console.error('❌ Import error:', error);
+                statusEl.style.color = 'var(--danger)';
+                statusEl.textContent = 'Errore: ' + (error.message || JSON.stringify(error));
+                saveBtn.disabled = false;
+                return;
+            }
+
+            statusEl.style.color = 'var(--success)';
+            statusEl.textContent = '✅ Importati ' + batch.length + ' task nel database!';
+            if (data) {
+                data.forEach(function(t) { tasks.push(t); });
+            }
+            setTimeout(function() {
+                closeImportModal();
+                renderManagement();
+            }, 1200);
+        }
     </script>
 </body>
 </html>
