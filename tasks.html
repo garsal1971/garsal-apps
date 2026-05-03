@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.67</title>
+    <title>Tasks v19.18.68</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2399,8 +2399,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.67';
-        const BUILD_TIME  = '2026-05-03T11:00:00Z';
+        const APP_VERSION = 'v19.18.68';
+        const BUILD_TIME  = '2026-05-03T12:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -10648,6 +10648,17 @@ Per attivarle:
 
             if (nomeInputs.length === 0) { statusEl.textContent = 'Nessun task da importare.'; return; }
 
+            // leggi i campi comuni una sola volta, prima del loop
+            const commonDesc        = document.getElementById('importDescription').value.trim() || null;
+            const rawPrioVal        = document.getElementById('importPriority').value;
+            const foundPrio         = priorities.find(p => String(p.id) === rawPrioVal);
+            const commonPriorityId  = foundPrio ? foundPrio.id : null;
+            const commonCategories  = importSelectedCategories.slice();
+            const commonSuccess     = parseInt(document.getElementById('importSuccessPoints').value) || 0;
+            const commonFailure     = parseInt(document.getElementById('importFailurePoints').value) || 0;
+            const commonSkip        = parseInt(document.getElementById('importSkipPoints').value) || 0;
+            const commonRiservato   = document.getElementById('importRiservato').checked;
+
             const batch = [];
             nomeInputs.forEach(function(nomeEl, idx) {
                 const nome = nomeEl.value.trim();
@@ -10663,7 +10674,6 @@ Per attivarle:
                 } else if (isoMatch) {
                     isoDate = dataVal + 'T' + (oraVal || '00:00') + ':00';
                 } else if (isoDate && oraVal) {
-                    // aggiorna solo l'ora nel campo iso originale
                     isoDate = isoDate.substring(0, 11) + (oraVal || '00:00') + ':00';
                 }
                 batch.push({
@@ -10671,14 +10681,14 @@ Per attivarle:
                     type: 'single',
                     start_date: isoDate || new Date().toISOString().substring(0, 19),
                     status: 'started',
-                    description: document.getElementById('importDescription').value.trim() || null,
-                    priority_id: document.getElementById('importPriority').value || null,
-                    categories: importSelectedCategories.slice(),
-                    success_points: parseInt(document.getElementById('importSuccessPoints').value) || 0,
-                    failure_points: parseInt(document.getElementById('importFailurePoints').value) || 0,
-                    skip_points: parseInt(document.getElementById('importSkipPoints').value) || 0,
+                    description: commonDesc,
+                    priority_id: commonPriorityId,
+                    categories: commonCategories,
+                    success_points: commonSuccess,
+                    failure_points: commonFailure,
+                    skip_points: commonSkip,
                     late_points: 0,
-                    riservato: document.getElementById('importRiservato').checked
+                    riservato: commonRiservato
                 });
             });
 
