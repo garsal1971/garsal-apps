@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.66</title>
+    <title>Tasks v19.18.67</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1886,6 +1886,50 @@
                     </div>
                 </div>
 
+                <!-- Campi comuni per tutte le righe -->
+                <div style="margin-bottom:1.25rem;">
+                    <label class="form-label" style="display:block;margin-bottom:0.75rem;font-weight:700;">5. Opzioni comuni (applicate a tutti i task)</label>
+
+                    <div class="form-group">
+                        <label class="form-label">Descrizione (opzionale)</label>
+                        <textarea id="importDescription" rows="2" class="form-textarea" placeholder="Descrizione comune per tutti i task importati…"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Priorità</label>
+                        <select id="importPriority" class="form-select">
+                            <option value="">Nessuna</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Categorie</label>
+                        <div id="importCategoriesSelect" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:6px;min-height:36px;"></div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:0.25rem;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Punti Successo</label>
+                            <input type="number" id="importSuccessPoints" class="form-input" value="10">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Punti Fallimento</label>
+                            <input type="number" id="importFailurePoints" class="form-input" value="-5">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Punti Skip</label>
+                            <input type="number" id="importSkipPoints" class="form-input" value="0">
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top:0.75rem;margin-bottom:0;">
+                        <label style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;user-select:none;">
+                            <input type="checkbox" id="importRiservato" style="width:18px;height:18px;accent-color:var(--secondary);cursor:pointer;">
+                            <span class="form-label" style="margin:0;">Task nascosto (riservato)</span>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Footer -->
                 <div id="importStatusMsg" style="color:var(--success);font-size:0.88rem;margin-bottom:0.75rem;min-height:1.2em;"></div>
                 <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
@@ -2355,8 +2399,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.66';
-        const BUILD_TIME  = '2026-05-03T10:00:00Z';
+        const APP_VERSION = 'v19.18.67';
+        const BUILD_TIME  = '2026-05-03T11:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -10389,6 +10433,8 @@ Per attivarle:
         // IMPORT TASKS
         // ========================================
 
+        let importSelectedCategories = [];
+
         function openImportModal() {
             document.getElementById('importRawContent').value = '';
             document.getElementById('importPreviewBody').innerHTML =
@@ -10399,7 +10445,45 @@ Per attivarle:
             document.getElementById('importFileInput').value = '';
             document.getElementById('importFmtIcs').checked = true;
             document.getElementById('importFileInput').accept = '.ics';
+            document.getElementById('importDescription').value = '';
+            document.getElementById('importSuccessPoints').value = '10';
+            document.getElementById('importFailurePoints').value = '-5';
+            document.getElementById('importSkipPoints').value = '0';
+            document.getElementById('importRiservato').checked = false;
+            importSelectedCategories = [];
+            // popola select priorità
+            const prioSel = document.getElementById('importPriority');
+            prioSel.innerHTML = '<option value="">Nessuna</option>' +
+                priorities.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            renderImportCategoriesSelect();
             document.getElementById('importModal').classList.add('active');
+        }
+
+        function renderImportCategoriesSelect() {
+            const el = document.getElementById('importCategoriesSelect');
+            if (!el) return;
+            if (categories.length === 0) {
+                el.innerHTML = '<span style="color:var(--muted);font-size:0.85rem;">Nessuna categoria disponibile</span>';
+                return;
+            }
+            el.innerHTML = categories.map(function(cat) {
+                const sel = importSelectedCategories.includes(cat.id);
+                return '<div onclick="toggleImportCategory(\'' + cat.id + '\')" style="' +
+                    'display:inline-flex;align-items:center;gap:0.3rem;padding:0.25rem 0.6rem;border-radius:20px;cursor:pointer;' +
+                    'font-size:0.85rem;transition:all 0.15s;user-select:none;' +
+                    (sel ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);'
+                         : 'background:#fff;color:#333;border:1px solid #ddd;') + '">' +
+                    cat.icon + ' ' + cat.name +
+                    (sel ? ' <span style="margin-left:0.2rem;font-size:0.9rem;">✕</span>' : '') +
+                    '</div>';
+            }).join('');
+        }
+
+        function toggleImportCategory(id) {
+            const idx = importSelectedCategories.indexOf(id);
+            if (idx >= 0) importSelectedCategories.splice(idx, 1);
+            else importSelectedCategories.push(id);
+            renderImportCategoriesSelect();
         }
 
         function closeImportModal() {
@@ -10587,12 +10671,14 @@ Per attivarle:
                     type: 'single',
                     start_date: isoDate || new Date().toISOString().substring(0, 19),
                     status: 'started',
-                    success_points: 0,
-                    failure_points: 0,
-                    skip_points: 0,
+                    description: document.getElementById('importDescription').value.trim() || null,
+                    priority_id: document.getElementById('importPriority').value || null,
+                    categories: importSelectedCategories.slice(),
+                    success_points: parseInt(document.getElementById('importSuccessPoints').value) || 0,
+                    failure_points: parseInt(document.getElementById('importFailurePoints').value) || 0,
+                    skip_points: parseInt(document.getElementById('importSkipPoints').value) || 0,
                     late_points: 0,
-                    categories: [],
-                    riservato: false
+                    riservato: document.getElementById('importRiservato').checked
                 });
             });
 
