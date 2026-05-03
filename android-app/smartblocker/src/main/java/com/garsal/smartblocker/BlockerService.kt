@@ -89,6 +89,7 @@ class BlockerService : Service() {
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
         Prefs.clearBlockEntityIds(this)
+        cancelBlockNotification()
     }
 
     private fun checkSupabaseQueueIfDue() {
@@ -143,21 +144,60 @@ class BlockerService : Service() {
         }
     }
 
+    /**
+     * Mostra la schermata di blocco tramite full-screen notification.
+     * Su Android 10+ startActivity() da background viene bloccato dal sistema;
+     * setFullScreenIntent() è il metodo ufficiale (come le sveglie) e funziona:
+     *  - schermo acceso / app in foreground → activity si apre direttamente
+     *  - schermo spento / Doze → accende lo schermo e apre l'activity
+     */
     private fun showOverlay() {
-        startActivity(
-            Intent(this, BlockOverlayActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
+        val overlayIntent = Intent(this, BlockOverlayActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pi = PendingIntent.getActivity(
+            this, BLOCK_NOTIF_ID, overlayIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val notification = NotificationCompat.Builder(this, CH_ALARM)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentTitle("🔐 Blocco attivato")
+            .setContentText("È ora di smettere di usare il telefono")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(pi, true)   // apre l'activity anche da background/sleep
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(BLOCK_NOTIF_ID, notification)
     }
 
-    // ── Notifica foreground ──────────────────────────────────────────────────
+    fun cancelBlockNotification() {
+        getSystemService(NotificationManager::class.java).cancel(BLOCK_NOTIF_ID)
+    }
+
+    // ── Canali notifica ──────────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
-        val ch = NotificationChannel(
-            CH_ID, "Smart Blocker", NotificationManager.IMPORTANCE_LOW
-        ).apply { description = "Servizio di blocco schedulato attivo" }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+        val nm = getSystemService(NotificationManager::class.java)
+
+        // Canale servizio (persistente, bassa priorità)
+        nm.createNotificationChannel(
+            NotificationChannel(CH_ID, "Smart Blocker — Servizio", NotificationManager.IMPORTANCE_LOW)
+                .apply { description = "Servizio di monitoraggio attivo" }
+        )
+
+        // Canale blocco (alta priorità — necessario per full-screen intent)
+        nm.createNotificationChannel(
+            NotificationChannel(CH_ALARM, "Smart Blocker — Blocco", NotificationManager.IMPORTANCE_HIGH)
+                .apply {
+                    description = "Notifica di blocco immediato"
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                }
+        )
     }
 
     private fun buildNotification(): Notification {
@@ -179,8 +219,10 @@ class BlockerService : Service() {
         const val ACTION_SNOOZE    = "com.garsal.smartblocker.SNOOZE"
         const val ACTION_UNBLOCK   = "com.garsal.smartblocker.UNBLOCK"
         const val ACTION_CHECK_NOW = "com.garsal.smartblocker.CHECK_NOW"
-        private const val CH_ID    = "blocker_service"
-        private const val NOTIF_ID = 1
-        private const val TAG      = "BlockerService"
+        private const val CH_ID       = "blocker_service"
+        private const val CH_ALARM    = "blocker_alarm"
+        private const val NOTIF_ID    = 1
+        const val BLOCK_NOTIF_ID      = 2
+        private const val TAG         = "BlockerService"
     }
 }
