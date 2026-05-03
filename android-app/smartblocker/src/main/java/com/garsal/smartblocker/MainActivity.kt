@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
             text = "Concedi Notifiche Full-Screen"
             setOnClickListener {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-                    startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENTS,
+                    startActivity(Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENTS",
                         Uri.parse("package:$packageName")))
                 else
                     startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
