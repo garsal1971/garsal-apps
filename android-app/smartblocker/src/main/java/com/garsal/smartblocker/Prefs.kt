@@ -40,6 +40,11 @@ object Prefs {
     fun setBlockTitle(ctx: Context, title: String) { sp(ctx).edit().putString("block_title", title).apply() }
     fun clearBlockTitle(ctx: Context) { sp(ctx).edit().remove("block_title").apply() }
 
+    /** Data del blocco (fireAt ISO, es. "2026-05-04") — usata come p_today in task_complete. */
+    fun getBlockDate(ctx: Context): String = sp(ctx).getString("block_date", "") ?: ""
+    fun setBlockDate(ctx: Context, date: String) { sp(ctx).edit().putString("block_date", date).apply() }
+    fun clearBlockDate(ctx: Context) { sp(ctx).edit().remove("block_date").apply() }
+
     /** Token dispositivo — impostato da Supabase via get_smart_block_token() RPC. */
     fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
     fun setDeviceToken(ctx: Context, token: String) { sp(ctx).edit().putString("device_token", token).apply() }
