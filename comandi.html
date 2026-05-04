@@ -303,6 +303,52 @@ SELECT smart_block_device_token FROM cm_user_notification_settings;</pre>
     </div>
   </div>
 
+  <div class="card" style="margin-top:10px;">
+    <div class="card-header">
+      <div class="badge setup">SQL</div>
+      <div class="card-body">
+        <div class="card-title">Smart Block — RPC completamento task (anon)</div>
+        <div class="card-desc">
+          Crea la funzione <code>smart_block_complete_task</code> che permette all'app Android
+          (anon key) di completare un task dopo lo sblocco PIN, verificando il device token.
+          Eseguire <strong>una sola volta</strong> nel <b>SQL Editor di Supabase (prod)</b>.
+        </div>
+        <div class="tags">
+          <span class="tag once">una tantum</span>
+          <span class="tag web">supabase prod</span>
+        </div>
+      </div>
+    </div>
+    <div class="code-block" id="sb-smart-block-complete">
+      <button class="copy-btn" onclick="copyCode('sb-smart-block-complete', this)">Copia</button>
+      <pre>CREATE OR REPLACE FUNCTION public.smart_block_complete_task(
+    p_device_token text,
+    p_task_id      uuid,
+    p_today        date
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_token_ok boolean;
+BEGIN
+    SELECT EXISTS(
+        SELECT 1 FROM cm_smart_block_devices
+         WHERE device_token = p_device_token
+        UNION ALL
+        SELECT 1 FROM cm_user_notification_settings
+         WHERE smart_block_device_token = p_device_token
+    ) INTO v_token_ok;
+
+    IF NOT v_token_ok THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'device token non riconosciuto');
+    END IF;
+
+    RETURN task_complete(p_task_id, p_today);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.smart_block_complete_task(text, uuid, date) TO anon;</pre>
+    </div>
+  </div>
+
   <div class="section" style="margin-top:24px;">
     <div class="section-title">🔍 Verifica Smart Block</div>
     <p style="font-size:0.85rem;color:#666;margin-bottom:8px;">Controlla token, regole e coda:</p>
