@@ -159,7 +159,7 @@ class SupabaseApi(private val ctx: Context) {
     fun completeTask(entityId: String) {
         if (entityId.isBlank()) return
         try {
-            val today = romeDateStr()
+            val today = Prefs.getBlockDate(ctx).ifBlank { romeDateStr() }
             val urlStr = "$base/rest/v1/rpc/task_complete"
             val conn = openConn(urlStr, "POST")
             conn.setRequestProperty("Content-Type", "application/json")
@@ -169,7 +169,7 @@ class SupabaseApi(private val ctx: Context) {
             val code = conn.responseCode
             val resp = conn.inputStream?.bufferedReader()?.readText() ?: ""
             conn.disconnect()
-            AppLogger.log(ctx, "SUPABASE", "completeTask $entityId → HTTP $code $resp")
+            AppLogger.log(ctx, "SUPABASE", "completeTask $entityId p_today=$today → HTTP $code $resp")
         } catch (e: Exception) {
             AppLogger.log(ctx, "SUPABASE", "completeTask errore: ${e.message}")
         }
