@@ -117,6 +117,7 @@ class BlockerService : Service() {
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
         Prefs.clearBlockEntityIds(this)
+        Prefs.clearBlockTitle(this)
         blockWm?.dismiss()
         blockWm = null
         cancelBlockNotification()
@@ -151,8 +152,12 @@ class BlockerService : Service() {
                 val entityIds = result.entries
                     .filter { it.id in dueIds && it.entityId.isNotBlank() }
                     .map { it.entityId }
+                val blockTitle = result.entries
+                    .filter { it.id in dueIds }
+                    .joinToString(" · ") { it.title.take(40) }
                 handler.post {
                     Prefs.setBlockEntityIds(this, entityIds)
+                    Prefs.setBlockTitle(this, blockTitle)
                     Prefs.setState(this, Prefs.STATE_TRIGGERED)
                     Prefs.setSnoozeCount(this, 0)
                     Prefs.setSnoozeUntil(this, 0)

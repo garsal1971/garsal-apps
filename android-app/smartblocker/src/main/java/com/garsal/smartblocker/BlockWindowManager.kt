@@ -169,6 +169,17 @@ class BlockWindowManager(private val ctx: Context) {
             gravity = Gravity.CENTER; letterSpacing = 0.05f
         }, lp(MP, top = 8))
 
+        val blockTitle = Prefs.getBlockTitle(ctx)
+        if (blockTitle.isNotBlank()) {
+            root.addView(TextView(ctx).apply {
+                text = blockTitle
+                textSize = 15f
+                setTextColor(Color.parseColor("#CBD5E1"))
+                gravity = Gravity.CENTER
+                setPadding(24, 0, 24, 0)
+            }, lp(MP, top = 6))
+        }
+
         tvSnoozeInfo = TextView(ctx).apply {
             textSize = 14f; setTextColor(Color.parseColor("#94A3B8"))
             gravity = Gravity.CENTER
