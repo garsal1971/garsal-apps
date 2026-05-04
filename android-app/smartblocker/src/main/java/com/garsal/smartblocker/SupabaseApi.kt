@@ -160,12 +160,11 @@ class SupabaseApi(private val ctx: Context) {
         if (entityId.isBlank()) return
         try {
             val today = romeDateStr()
-            val deviceToken = Prefs.getDeviceToken(ctx)
-            val urlStr = "$base/rest/v1/rpc/smart_block_complete_task"
+            val urlStr = "$base/rest/v1/rpc/task_complete"
             val conn = openConn(urlStr, "POST")
             conn.setRequestProperty("Content-Type", "application/json")
             conn.doOutput = true
-            val body = "{\"p_device_token\":\"$deviceToken\",\"p_task_id\":\"$entityId\",\"p_today\":\"$today\"}"
+            val body = "{\"p_task_id\":\"$entityId\",\"p_today\":\"$today\"}"
             conn.outputStream.write(body.toByteArray())
             val code = conn.responseCode
             val resp = conn.inputStream?.bufferedReader()?.readText() ?: ""
