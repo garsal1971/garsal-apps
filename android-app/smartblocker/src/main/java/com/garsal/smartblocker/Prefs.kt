@@ -35,6 +35,11 @@ object Prefs {
     }
     fun clearBlockEntityIds(ctx: Context) { sp(ctx).edit().remove("block_entity_ids").apply() }
 
+    /** Titolo del blocco attivo (join dei titoli dei task pendenti). */
+    fun getBlockTitle(ctx: Context): String = sp(ctx).getString("block_title", "") ?: ""
+    fun setBlockTitle(ctx: Context, title: String) { sp(ctx).edit().putString("block_title", title).apply() }
+    fun clearBlockTitle(ctx: Context) { sp(ctx).edit().remove("block_title").apply() }
+
     /** Token dispositivo — impostato da Supabase via get_smart_block_token() RPC. */
     fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
     fun setDeviceToken(ctx: Context, token: String) { sp(ctx).edit().putString("device_token", token).apply() }

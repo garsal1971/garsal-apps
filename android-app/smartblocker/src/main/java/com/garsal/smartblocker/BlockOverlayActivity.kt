@@ -174,6 +174,19 @@ class BlockOverlayActivity : Activity() {
         }
         root.addView(tvTitle, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 8))
 
+        // Titolo del task
+        val blockTitle = Prefs.getBlockTitle(this)
+        if (blockTitle.isNotBlank()) {
+            val tvTaskTitle = TextView(this).apply {
+                text = blockTitle
+                textSize = 15f
+                setTextColor(Color.parseColor("#CBD5E1"))
+                gravity = Gravity.CENTER
+                setPadding(24, 0, 24, 0)
+            }
+            root.addView(tvTaskTitle, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 6))
+        }
+
         // Info rinvii
         tvSnoozeInfo = TextView(this).apply {
             textSize = 14f
