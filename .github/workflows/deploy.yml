@@ -70,13 +70,15 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           echo "▶ Applying database migrations..."
-          supabase db push --project-ref jajlmmdsjlvzgcxiiypk
+          supabase link --project-ref jajlmmdsjlvzgcxiiypk
+          supabase db push
 
       - name: Deploy Supabase Edge Functions
         if: steps.check_changes.outputs.functions == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
+          supabase link --project-ref jajlmmdsjlvzgcxiiypk
           for FN in $(git diff HEAD~1 HEAD --name-only | grep '^supabase/functions/' | awk -F/ '{print $3}' | sort -u); do
             echo "▶ Deploy edge function: $FN"
             EXTRA=""
@@ -84,5 +86,5 @@ jobs:
               EXTRA="--no-verify-jwt"
               echo "   ↳ verify_jwt=false → aggiunto --no-verify-jwt"
             fi
-            supabase functions deploy "$FN" --project-ref jajlmmdsjlvzgcxiiypk $EXTRA
+            supabase functions deploy "$FN" $EXTRA
           done
