@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.82</title>
+    <title>Tasks v19.18.83</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2409,8 +2409,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.82';
-        const BUILD_TIME  = '2026-05-05T18:30:00Z';
+        const APP_VERSION = 'v19.18.83';
+        const BUILD_TIME  = '2026-05-05T19:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -4428,188 +4428,71 @@
                 }
 
 
-                // Badge stato
-                let statusBadge = '';
-                if (task.status === 'terminated') {
-                    statusBadge = '<span style="background: #374151; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⛔ Terminato</span>';
-                } else if (task.status === 'completed') {
-                    statusBadge = '<span style="background: var(--success); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✓ Completato</span>';
-                } else if (task.status === 'failed') {
-                    statusBadge = '<span style="background: var(--danger); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">✗ Fallito</span>';
-                } else if (task.status === 'skipped') {
-                    statusBadge = '<span style="background: var(--warning); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">⏭ Saltato</span>';
-                } else if (task.status === 'archived') {
-                    statusBadge = '<span style="background: var(--secondary); color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.9rem; font-weight: 600;">📦 Archiviato</span>';
-                }
+                // Etichetta verticale stato
+                const statusMap = {
+                    started:    { color: '#6B7280', text: 'Attivo' },
+                    completed:  { color: '#00B894', text: 'Completato' },
+                    failed:     { color: '#E74C3C', text: 'Fallito' },
+                    skipped:    { color: '#F39C12', text: 'Saltato' },
+                    terminated: { color: '#374151', text: 'Terminato' },
+                    archived:   { color: '#6C5CE7', text: 'Archiviato' },
+                };
+                const statusInfo = statusMap[task.status] || statusMap.started;
 
                 // Genera HTML per le categorie (stile dashboard)
                 let categoriesHtml = '';
                 if (cats.length > 0) {
                     const visibleCats = cats.slice(0, 1);
                     const hiddenCats = cats.slice(1);
-                    
-                    categoriesHtml = visibleCats.map(c => 
+
+                    categoriesHtml = visibleCats.map(c =>
                         `<span style="background: ${c.color}; color: white; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; white-space: nowrap; display: flex; align-items: center;">${c.icon} ${c.name}</span>`
                     ).join('');
-                    
+
                     if (hiddenCats.length > 0) {
                         const hiddenCatsJson = JSON.stringify(hiddenCats.map(c => ({ icon: c.icon, name: c.name, color: c.color })));
-                        categoriesHtml += `
-                            <span 
-                                style="
-                                    background: #6B7280; 
-                                    color: white; 
-                                    padding: 0.25rem 0.5rem; 
-                                    border-radius: 0; 
-                                    font-size: 0.9rem; 
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    white-space: nowrap;
-                                    display: flex;
-                                    align-items: center;
-                                "
-                                onclick="showCategoriesPopup(${hiddenCatsJson.replace(/"/g, '&quot;')})"
-                            >
-                                +${hiddenCats.length}
-                            </span>
-                        `;
+                        categoriesHtml += `<span style="background: #6B7280; color: white; padding: 0.25rem 0.5rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center;" onclick="showCategoriesPopup(${hiddenCatsJson.replace(/"/g, '&quot;')})">+${hiddenCats.length}</span>`;
                     }
                 }
-                
+
                 // Badge priorità
                 const priority = priorities.find(p => p.id === task.priority_id);
                 const priorityBadge = priority ? `<span style="background: ${priority.color}; color: white; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; margin-right: 0.5rem;">🎯 ${priority.name}</span>` : '';
-                
+
                 return `
-                    <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <!-- Riga 1: icona SVG + data bold | stato/priorità/categoria -->
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <div style="display: flex; align-items: center; gap: 0.4rem; color: #888;">
-                                <span style="display: flex; align-items: center;">${TASK_TYPE_SVG[task.type] || TASK_TYPE_SVG.single}</span>
-                                ${dateInfo ? `<span style="font-size: var(--mgmt-meta-size); font-weight: 600; color: #1F2937;">${dateInfo}</span>` : ''}
-                            </div>
-                            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
-                                ${statusBadge}${priorityBadge}${categoriesHtml}
-                            </div>
+                    <div class="card" style="background: white; border-radius: 0; padding: 0; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; overflow: hidden;">
+                        <!-- Etichetta verticale sinistra -->
+                        <div style="width: 22px; background: ${statusInfo.color}; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                            <span style="writing-mode: vertical-rl; transform: rotate(180deg); color: white; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; text-transform: uppercase;">${statusInfo.text}</span>
                         </div>
-                        <!-- Riga 2: titolo normale + ellipsis -->
-                        <div onclick="viewTask('${task.id}')" style="cursor: pointer; margin-bottom: 0.6rem;">
-                            <h3 style="margin: 0; font-size: var(--mgmt-title-size); color: #1F2937; font-weight: 400; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${task.title}</h3>
-                        </div>
-                        
-                        <!-- Action Buttons in basso a sinistra -->
-                        <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
-                            <button onclick="cloneTask('${task.id}')" style="
-                                background: #6c757d;
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                gap: 0.4rem;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                📋 Clona
-                            </button>
-                            <button onclick="viewTask('${task.id}')" style="
-                                background: var(--accent);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                gap: 0.4rem;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                Vedi
-                            </button>
-                            ${['started', 'completed', 'failed', 'skipped'].includes(task.status) ? `
-                                <button onclick="editTask('${task.id}')" style="
-                                    background: var(--primary);
-                                    color: white;
-                                    border: none;
-                                    padding: 0.25rem 0.6rem;
-                                    border-radius: 0;
-                                    font-size: 0.9rem;
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    gap: 0.4rem;
-                                    transition: all 0.2s ease;
-                                    white-space: nowrap;
-                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    Modifica
-                                </button>
-                                <button onclick="deleteTask('${task.id}')" style="
-                                    background: var(--danger);
-                                    color: white;
-                                    border: none;
-                                    padding: 0.25rem 0.6rem;
-                                    border-radius: 0;
-                                    font-size: 0.9rem;
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    gap: 0.4rem;
-                                    transition: all 0.2s ease;
-                                    white-space: nowrap;
-                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    Cancella
-                                </button>
-                            ` : `
-                                <button onclick="reactivateTask('${task.id}')" style="
-                                    background: var(--warning);
-                                    color: white;
-                                    border: none;
-                                    padding: 0.25rem 0.6rem;
-                                    border-radius: 0;
-                                    font-size: 0.9rem;
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    gap: 0.4rem;
-                                    transition: all 0.2s ease;
-                                    white-space: nowrap;
-                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    🔄 Riattiva
-                                </button>
-                                <button onclick="deleteTask('${task.id}')" style="
-                                    background: var(--danger);
-                                    color: white;
-                                    border: none;
-                                    padding: 0.25rem 0.6rem;
-                                    border-radius: 0;
-                                    font-size: 0.9rem;
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: center;
-                                    gap: 0.4rem;
-                                    transition: all 0.2s ease;
-                                    white-space: nowrap;
-                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    Cancella
-                                </button>
-                            `}
+                        <!-- Contenuto card -->
+                        <div style="flex: 1; padding: 0.75rem; min-width: 0;">
+                            <!-- Riga 1: icona SVG + data bold | priorità/categoria -->
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.4rem; color: #888;">
+                                    <span style="display: flex; align-items: center;">${TASK_TYPE_SVG[task.type] || TASK_TYPE_SVG.single}</span>
+                                    ${dateInfo ? `<span style="font-size: var(--mgmt-meta-size); font-weight: 600; color: #1F2937;">${dateInfo}</span>` : ''}
+                                </div>
+                                <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                                    ${priorityBadge}${categoriesHtml}
+                                </div>
+                            </div>
+                            <!-- Riga 2: titolo normale + ellipsis -->
+                            <div onclick="viewTask('${task.id}')" style="cursor: pointer; margin-bottom: 0.6rem;">
+                                <h3 style="margin: 0; font-size: var(--mgmt-title-size); color: #1F2937; font-weight: 400; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${task.title}</h3>
+                            </div>
+                            <!-- Bottoni azione -->
+                            <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
+                                <button onclick="cloneTask('${task.id}')" style="background: #6c757d; color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">📋 Clona</button>
+                                <button onclick="viewTask('${task.id}')" style="background: var(--accent); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Vedi</button>
+                                ${['started', 'completed', 'failed', 'skipped'].includes(task.status) ? `
+                                    <button onclick="editTask('${task.id}')" style="background: var(--primary); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Modifica</button>
+                                    <button onclick="deleteTask('${task.id}')" style="background: var(--danger); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Cancella</button>
+                                ` : `
+                                    <button onclick="reactivateTask('${task.id}')" style="background: var(--warning); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">🔄 Riattiva</button>
+                                    <button onclick="deleteTask('${task.id}')" style="background: var(--danger); color: white; border: none; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Cancella</button>
+                                `}
+                            </div>
                         </div>
                     </div>
                 `;
