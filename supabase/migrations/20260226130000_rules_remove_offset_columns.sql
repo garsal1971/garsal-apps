@@ -13,6 +13,11 @@
 --   - notification_spec diventa NOT NULL
 -- ============================================================
 
+-- 0. Rimuovi temporaneamente chk_entity_type per permettere la normalizzazione
+--    dei dati senza blocchi (verrà ricreato a fine migration)
+ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS chk_entity_type;
+
 -- 1. Rimuovi il vecchio vincolo UNIQUE che includeva offset_minutes
 ALTER TABLE cm_notification_rules
     DROP CONSTRAINT IF EXISTS cm_notification_rules_user_id_app_entity_id_offset_minutes_ch;
@@ -22,9 +27,7 @@ ALTER TABLE cm_notification_rules
     DROP COLUMN IF EXISTS offset_minutes,
     DROP COLUMN IF EXISTS offset_label;
 
--- 3. notification_spec obbligatorio (sostituisce i campi rimossi)
--- Prima normalizza entity_type (l'app scriveva sub-tipi task invece di 'task',
--- il constraint chk_entity_type scatterebbe sull'UPDATE seguente)
+-- 3. Normalizza entity_type (l'app scriveva sub-tipi task invece di 'task')
 UPDATE cm_notification_rules
     SET entity_type = CASE app
         WHEN 'tasks'  THEN 'task'
@@ -34,14 +37,20 @@ UPDATE cm_notification_rules
         ELSE entity_type
     END
     WHERE entity_type NOT IN ('task', 'habit', 'event', 'objective');
--- Righe con notification_spec NULL ricevono un valore di default
+
+-- 4. notification_spec obbligatorio (sostituisce i campi rimossi)
 UPDATE cm_notification_rules
     SET notification_spec = '{}'::jsonb
     WHERE notification_spec IS NULL;
 ALTER TABLE cm_notification_rules
     ALTER COLUMN notification_spec SET NOT NULL;
 
--- 4. Nuovo UNIQUE: una regola per entità × canale
+-- 5. Ricrea chk_entity_type sui dati ora normalizzati
+ALTER TABLE cm_notification_rules
+    ADD CONSTRAINT chk_entity_type
+        CHECK (entity_type IN ('task', 'habit', 'event', 'objective'));
+
+-- 6. Nuovo UNIQUE: una regola per entità × canale
 ALTER TABLE cm_notification_rules
     DROP CONSTRAINT IF EXISTS uq_rules_entity_channel;
 ALTER TABLE cm_notification_rules
