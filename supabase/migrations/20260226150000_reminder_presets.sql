@@ -12,6 +12,9 @@
 --   active         bool    Se false, non compare nel selettore
 -- ============================================================
 
+-- L'indice del UNIQUE constraint può esistere come orfano da run parziali precedenti
+DROP INDEX IF EXISTS uq_reminder_preset_label;
+
 CREATE TABLE IF NOT EXISTS ts_reminder_presets (
     id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     label          text        NOT NULL,
