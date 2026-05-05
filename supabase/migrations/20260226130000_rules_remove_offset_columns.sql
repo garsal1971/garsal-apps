@@ -23,7 +23,18 @@ ALTER TABLE cm_notification_rules
     DROP COLUMN IF EXISTS offset_label;
 
 -- 3. notification_spec obbligatorio (sostituisce i campi rimossi)
--- Righe esistenti con NULL ricevono un valore di default per poter applicare NOT NULL
+-- Prima normalizza entity_type (l'app scriveva sub-tipi task invece di 'task',
+-- il constraint chk_entity_type scatterebbe sull'UPDATE seguente)
+UPDATE cm_notification_rules
+    SET entity_type = CASE app
+        WHEN 'tasks'  THEN 'task'
+        WHEN 'habits' THEN 'habit'
+        WHEN 'events' THEN 'event'
+        WHEN 'weight' THEN 'objective'
+        ELSE entity_type
+    END
+    WHERE entity_type NOT IN ('task', 'habit', 'event', 'objective');
+-- Righe con notification_spec NULL ricevono un valore di default
 UPDATE cm_notification_rules
     SET notification_spec = '{}'::jsonb
     WHERE notification_spec IS NULL;
