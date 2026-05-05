@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.75</title>
+    <title>Tasks v19.18.76</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1480,6 +1480,21 @@
                 padding: 0.15rem 0.4rem !important;
                 font-size: 0.75rem !important;
             }
+            .task-icon-btn {
+                background: none;
+                border: 1px solid #E5E7EB;
+                border-radius: 6px;
+                padding: 4px 7px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.15s, border-color 0.15s;
+            }
+            .task-icon-btn:hover {
+                background: #F3F4F6;
+                border-color: #9CA3AF;
+            }
             .dash-cat-group {
                 margin-bottom: 0.75rem !important;
             }
@@ -2394,8 +2409,24 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.75';
-        const BUILD_TIME  = '2026-05-05T10:00:00Z';
+        const APP_VERSION = 'v19.18.76';
+        const BUILD_TIME  = '2026-05-05T16:30:00Z';
+
+        // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
+        const TASK_TYPE_SVG = {
+            single:           `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+            recurring:        `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+            simple_recurring: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="8 14 10 16 8 18"/></svg>`,
+            multiple:         `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="8" cy="15" r="1.2" fill="currentColor"/><circle cx="12" cy="15" r="1.2" fill="currentColor"/><circle cx="16" cy="15" r="1.2" fill="currentColor"/></svg>`,
+            free_repeat:      `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.25"/></svg>`,
+            workflow:         `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="15"/><polyline points="5 9 12 15 19 9"/><line x1="5" y1="20" x2="19" y2="20"/></svg>`
+        };
+        const ACTION_SVG = {
+            gestisci: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+            completa: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+            fallisci: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#E74C3C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+            salta:    `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#F39C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`
+        };
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -4050,174 +4081,127 @@
                 }))
             });
             
+            // ── Icone SVG per tipo task e azioni ─────────────────────────────────
+            const TASK_TYPE_SVG = {
+                single:           `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+                recurring:        `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+                simple_recurring: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="8 14 10 16 8 18"/></svg>`,
+                multiple:         `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="8" cy="15" r="1.2" fill="currentColor"/><circle cx="12" cy="15" r="1.2" fill="currentColor"/><circle cx="16" cy="15" r="1.2" fill="currentColor"/></svg>`,
+                free_repeat:      `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.25"/></svg>`,
+                workflow:         `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="15"/><polyline points="5 9 12 15 19 9"/><line x1="5" y1="20" x2="19" y2="20"/></svg>`
+            };
+            const ACTION_SVG = {
+                gestisci: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+                completa: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+                fallisci: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#E74C3C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+                salta:    `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#F39C12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`
+            };
+
             // Funzione per renderizzare task card
             const renderTaskCard = (task, sectionColor, index) => {
                 const cats = categories.filter(c => task.categories?.includes(c.id));
-                
-                // Icona basata sul tipo di task
-                let taskIcon = '⏰'; // default
-                if (task.type === 'recurring' || task.type === 'simple_recurring') {
-                    taskIcon = '🔁';
-                } else if (task.type === 'multiple') {
-                    taskIcon = '📅';
-                } else if (task.type === 'free_repeat') {
-                    taskIcon = '🔄';
-                }
-                
-                // Genera HTML per le categorie
+                const typeIcon = TASK_TYPE_SVG[task.type] || TASK_TYPE_SVG.single;
+
+                // Categorie
                 let categoriesHtml = '';
                 if (cats.length > 0) {
-                    // Mostra solo la prima categoria
                     const visibleCats = cats.slice(0, 1);
                     const hiddenCats = cats.slice(1);
-                    
-                    categoriesHtml = visibleCats.map(c => 
-                        `<span style="background: ${c.color}; color: white; padding: 0.25rem 0.6rem; border-radius: 0; font-size: 0.9rem; font-weight: 600; white-space: nowrap; display: flex; align-items: center;">${c.icon} ${c.name}</span>`
+                    categoriesHtml = visibleCats.map(c =>
+                        `<span style="background: ${c.color}; color: white; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.8rem; font-weight: 600; white-space: nowrap; display: flex; align-items: center;">${c.icon} ${c.name}</span>`
                     ).join('');
-                    
-                    // Se ci sono categorie nascoste, aggiungi badge +N con popup
                     if (hiddenCats.length > 0) {
                         const hiddenCatsJson = JSON.stringify(hiddenCats.map(c => ({ icon: c.icon, name: c.name, color: c.color })));
-                        categoriesHtml += `
-                            <span 
-                                style="
-                                    background: #6B7280; 
-                                    color: white; 
-                                    padding: 0.25rem 0.5rem; 
-                                    border-radius: 0; 
-                                    font-size: 0.9rem; 
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    white-space: nowrap;
-                                    display: flex;
-                                    align-items: center;
-                                "
-                                onclick="showCategoriesPopup(${hiddenCatsJson.replace(/"/g, '&quot;')})"
-                            >
-                                +${hiddenCats.length}
-                            </span>
-                        `;
+                        categoriesHtml += `<span style="background: #6B7280; color: white; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center;" onclick="showCategoriesPopup(${hiddenCatsJson.replace(/"/g, '&quot;')})">+${hiddenCats.length}</span>`;
                     }
                 }
-                
-                return `
-                    <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <!-- Header con categorie in alto -->
-                        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
-                            ${categoriesHtml}
-                        </div>
-                        
-                        <!-- Task Content -->
-                        <div onclick="viewTask('${task.id}')" style="cursor: pointer; margin-bottom: 1.5rem;">
-                            <div style="display: flex; align-items: flex-start; gap: 0.8rem;">
-                                <span style="font-size: 1.3rem; color: #666; min-width: 30px;">${taskIcon}</span>
-                                <div style="flex: 1;">
-                                    <h3 style="margin: 0; font-size: var(--mgmt-title-size); color: #333; font-weight: 600; line-height: 1.4;">${task.title}</h3>
-                                    ${(() => {
-                                        let dateStr = '';
-                                        if (task.type === 'single' && task.start_date) {
-                                            dateStr = formatDateTime(task.start_date);
-                                        } else if ((task.type === 'simple_recurring' || task.type === 'recurring') && task.next_occurrence_date) {
-                                            dateStr = formatDateTime(task.next_occurrence_date);
-                                        } else if (task.next_due) {
-                                            dateStr = formatDateTime(task.next_due);
-                                        }
-                                        return dateStr ? `<p style="margin: 0.3rem 0 0 0; font-size: var(--mgmt-meta-size); color: #000;">${dateStr}</p>` : '';
-                                    })()}
-                                    ${(() => {
-                                        let typeLabel = '';
-                                        if (task.type === 'simple_recurring' || task.type === 'recurring') {
-                                            typeLabel = getDetailedRecurringLabel(task);
-                                        } else if (task.type === 'multiple') {
-                                            const allDates = (task.multiple_dates || []);
-                                            const totalDates = allDates.length;
-                                            const nextOcc = task.next_occurrence_date ? task.next_occurrence_date.split('T')[0] : null;
-                                            
-                                            if (nextOcc) {
-                                                const remainingDates = allDates.filter(d => d >= nextOcc).length;
-                                                const nextDate = new Date(nextOcc + 'T00:00:00');
-                                                const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-                                                const nextDateStr = `${nextDate.getDate()} ${monthNames[nextDate.getMonth()]}`;
-                                                typeLabel = `Prossima: ${nextDateStr} • ${remainingDates}/${totalDates} date`;
-                                            } else {
-                                                typeLabel = `${totalDates} date completate`;
-                                            }
-                                        } else if (task.type === 'free_repeat') {
-                                            typeLabel = 'Libera ripetizione';
-                                        } else if (task.type === 'single') {
-                                            typeLabel = 'Singolo';
-                                        } else if (task.type === 'workflow') {
-                                            const steps = task.workflow_steps || [];
-                                            const completed = steps.filter(s => s.status === 'completed').length;
-                                            const failed = steps.filter(s => s.status === 'failed').length;
-                                            typeLabel = `Workflow • ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
-                                        }
-                                        return typeLabel ? `<p style="margin: 0.3rem 0 0 0; font-size: var(--mgmt-meta-size); color: #000;">${typeLabel}</p>` : '';
-                                    })()}
+
+                // Data
+                let dateStr = '';
+                if (task.type === 'single' && task.start_date) {
+                    dateStr = formatDateTime(task.start_date);
+                } else if ((task.type === 'simple_recurring' || task.type === 'recurring') && task.next_occurrence_date) {
+                    dateStr = formatDateTime(task.next_occurrence_date);
+                } else if (task.next_due) {
+                    dateStr = formatDateTime(task.next_due);
+                }
+
+                // Etichetta tipo
+                let typeLabel = '';
+                if (task.type === 'simple_recurring' || task.type === 'recurring') {
+                    typeLabel = getDetailedRecurringLabel(task);
+                } else if (task.type === 'multiple') {
+                    const allDates = (task.multiple_dates || []);
+                    const totalDates = allDates.length;
+                    const nextOcc = task.next_occurrence_date ? task.next_occurrence_date.split('T')[0] : null;
+                    if (nextOcc) {
+                        const remainingDates = allDates.filter(d => d >= nextOcc).length;
+                        const nextDate = new Date(nextOcc + 'T00:00:00');
+                        const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+                        typeLabel = `Prossima: ${nextDate.getDate()} ${monthNames[nextDate.getMonth()]} • ${remainingDates}/${totalDates} date`;
+                    } else {
+                        typeLabel = `${totalDates} date completate`;
+                    }
+                } else if (task.type === 'free_repeat') {
+                    typeLabel = 'Libera ripetizione';
+                } else if (task.type === 'workflow') {
+                    const steps = task.workflow_steps || [];
+                    const completed = steps.filter(s => s.status === 'completed').length;
+                    const failed = steps.filter(s => s.status === 'failed').length;
+                    typeLabel = `Workflow • ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
+                }
+
+                // Workflow: progress bar card
+                if (task.type === 'workflow') {
+                    const steps = task.workflow_steps || [];
+                    const completedSteps = steps.filter(s => s.status === 'completed').length;
+                    const failedSteps = steps.filter(s => s.status === 'failed').length;
+                    const doneSteps = completedSteps + failedSteps;
+                    const totalSteps = steps.length;
+                    const progressPct = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0;
+                    const activeCount = steps.filter(s => s.status === 'active').length;
+                    const progressLabel = failedSteps > 0
+                        ? `${completedSteps}✓ ${failedSteps}✗ / ${totalSteps} • ${activeCount} da fare`
+                        : `${completedSteps}/${totalSteps} completati • ${activeCount} da fare`;
+                    return `
+                        <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer;" onclick="openWorkflowPopup('${task.id}')">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.4rem; color: #888;">
+                                    <span style="display: flex; align-items: center;">${typeIcon}</span>
                                 </div>
+                                <div style="display: flex; gap: 0.3rem; align-items: center;">${categoriesHtml}</div>
+                            </div>
+                            <div style="margin-bottom: 0.6rem;">
+                                <h3 style="margin: 0; font-size: var(--mgmt-title-size); color: #1F2937; font-weight: 600; line-height: 1.3;">${task.title}</h3>
+                                <div style="margin-top: 0.4rem; background: #e9ecef; height: 5px; overflow: hidden;">
+                                    <div style="background: ${failedSteps > 0 ? '#E74C3C' : 'var(--success)'}; height: 100%; width: ${progressPct}%; transition: width 0.3s;"></div>
+                                </div>
+                                <p style="margin: 0.15rem 0 0; font-size: var(--mgmt-meta-size); color: #888;">${progressLabel}</p>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <button class="task-icon-btn" title="Gestisci workflow" onclick="event.stopPropagation(); openWorkflowPopup('${task.id}')">${ACTION_SVG.gestisci}</button>
                             </div>
                         </div>
-                        
-                        <!-- Action Buttons in basso a sinistra - più piccoli -->
-                        <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
-                            <button onclick="event.stopPropagation(); completeTask('${task.id}')" style="
-                                background: #4CAF50;
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                gap: 0.4rem;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='#4CAF50'">
-                                Completato
-                            </button>
-                            ${task.type !== 'free_repeat' ? `
-                            <button onclick="event.stopPropagation(); failTask('${task.id}')" style="
-                                background: #E74C3C;
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                gap: 0.4rem;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#E74C3C'">
-                                Fallito
-                            </button>
-                            ` : ''}
-                            ${(task.type === 'recurring' || task.type === 'simple_recurring' || task.type === 'multiple') ? `
-                            <button onclick="event.stopPropagation(); skipTask('${task.id}')" style="
-                                background: #F39C12;
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                gap: 0.4rem;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.background='#e67e22'" onmouseout="this.style.background='#F39C12'">
-                                Salta
-                            </button>
-                            ` : ''}
+                    `;
+                }
+
+                return `
+                    <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem; color: #888;">
+                                <span style="display: flex; align-items: center;">${typeIcon}</span>
+                                ${dateStr ? `<span style="font-size: var(--mgmt-meta-size);">${dateStr}</span>` : ''}
+                            </div>
+                            <div style="display: flex; gap: 0.3rem; align-items: center;">${categoriesHtml}</div>
+                        </div>
+                        <div onclick="viewTask('${task.id}')" style="cursor: pointer; margin-bottom: 0.6rem;">
+                            <h3 style="margin: 0; font-size: var(--mgmt-title-size); color: #1F2937; font-weight: 600; line-height: 1.3;">${task.title}</h3>
+                            ${typeLabel ? `<p style="margin: 0.15rem 0 0; font-size: var(--mgmt-meta-size); color: #888;">${typeLabel}</p>` : ''}
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <button class="task-icon-btn" title="Completato" onclick="event.stopPropagation(); completeTask('${task.id}')">${ACTION_SVG.completa}</button>
+                            ${task.type !== 'free_repeat' ? `<button class="task-icon-btn" title="Fallito" onclick="event.stopPropagation(); failTask('${task.id}')">${ACTION_SVG.fallisci}</button>` : ''}
+                            ${(task.type === 'recurring' || task.type === 'simple_recurring' || task.type === 'multiple') ? `<button class="task-icon-btn" title="Salta" onclick="event.stopPropagation(); skipTask('${task.id}')">${ACTION_SVG.salta}</button>` : ''}
                         </div>
                     </div>
                 `;
@@ -9594,28 +9578,18 @@ Per attivarle:
             
             const renderTaskCard = (task, sectionColor, index) => {
                 const cats = categories.filter(c => task.categories?.includes(c.id));
-                
-                let taskIcon = '⏰';
-                if (task.type === 'recurring' || task.type === 'simple_recurring') {
-                    taskIcon = '🔁';
-                } else if (task.type === 'multiple') {
-                    taskIcon = '📅';
-                } else if (task.type === 'free_repeat') {
-                    taskIcon = '🔄';
-                } else if (task.type === 'workflow') {
-                    taskIcon = '🔀';
-                }
-                
+                const typeIcon = TASK_TYPE_SVG[task.type] || TASK_TYPE_SVG.single;
+
                 let categoriesHtml = '';
                 if (cats.length > 0) {
-                    categoriesHtml = cats.slice(0, 2).map(c => 
-                        `<span class="dash-task-cat-chip" style="background: ${c.color}; color: white; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.8rem; font-weight: 600; white-space: nowrap;">${c.icon} ${c.name}</span>`
+                    categoriesHtml = cats.slice(0, 2).map(c =>
+                        `<span class="dash-task-cat-chip" style="background: ${c.color}; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.75rem; font-weight: 600; white-space: nowrap;">${c.icon} ${c.name}</span>`
                     ).join('');
                     if (cats.length > 2) {
-                        categoriesHtml += `<span class="dash-task-cat-chip" style="background: #6B7280; color: white; padding: 0.2rem 0.4rem; border-radius: 0; font-size: 0.8rem; font-weight: 600;">+${cats.length - 2}</span>`;
+                        categoriesHtml += `<span class="dash-task-cat-chip" style="background: #6B7280; color: white; padding: 0.15rem 0.4rem; border-radius: 0; font-size: 0.75rem; font-weight: 600;">+${cats.length - 2}</span>`;
                     }
                 }
-                
+
                 let dateStr = '';
                 if (task.type === 'single' && task.start_date) {
                     dateStr = formatDateTime(task.start_date);
@@ -9624,7 +9598,7 @@ Per attivarle:
                 } else if (task.next_due) {
                     dateStr = formatDateTime(task.next_due);
                 }
-                
+
                 let typeLabel = '';
                 if (task.type === 'simple_recurring' || task.type === 'recurring') {
                     typeLabel = getDetailedRecurringLabel(task);
@@ -9636,8 +9610,7 @@ Per attivarle:
                         const remainingDates = allDates.filter(d => d >= nextOcc).length;
                         const nextDate = new Date(nextOcc + 'T00:00:00');
                         const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-                        const nextDateStr = `${nextDate.getDate()} ${monthNames[nextDate.getMonth()]}`;
-                        typeLabel = `Prossima: ${nextDateStr} • ${remainingDates}/${totalDates} date`;
+                        typeLabel = `Prossima: ${nextDate.getDate()} ${monthNames[nextDate.getMonth()]} • ${remainingDates}/${totalDates} date`;
                     } else {
                         typeLabel = `${totalDates} date completate`;
                     }
@@ -9648,11 +9621,9 @@ Per attivarle:
                     const completed = steps.filter(s => s.status === 'completed').length;
                     const failed = steps.filter(s => s.status === 'failed').length;
                     typeLabel = `Progresso: ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
-                } else if (task.type === 'single') {
-                    typeLabel = 'Singolo';
                 }
-                
-                // Per workflow, rendering compatto - click apre popup
+
+                // Workflow: progress bar card
                 if (task.type === 'workflow') {
                     const steps = task.workflow_steps || [];
                     const completedSteps = steps.filter(s => s.status === 'completed').length;
@@ -9661,59 +9632,49 @@ Per attivarle:
                     const totalSteps = steps.length;
                     const progressPct = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0;
                     const activeCount = steps.filter(s => s.status === 'active').length;
-                    const progressLabel = failedSteps > 0 
-                        ? `${completedSteps}✓ ${failedSteps}✗ / ${totalSteps} • ${activeCount} da fare` 
+                    const progressLabel = failedSteps > 0
+                        ? `${completedSteps}✓ ${failedSteps}✗ / ${totalSteps} • ${activeCount} da fare`
                         : `${completedSteps}/${totalSteps} completati • ${activeCount} da fare`;
-                    
+
                     return `
                         <div class="card dash-task" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 0.6rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer;" onclick="openWorkflowPopup('${task.id}')">
-                            <div class="dash-task-body" style="display: flex; align-items: flex-start; gap: 0.8rem;">
-                                <span class="dash-task-icon" style="font-size: 1.3rem; color: #666; min-width: 30px;">${taskIcon}</span>
-                                <div class="dash-task-info" style="flex: 1;">
-                                    <h3 class="dash-task-title" style="margin: 0; font-size: var(--dash-title-size); color: #333; font-weight: 600; line-height: 1.4;">${task.title}</h3>
-                                    <div style="margin-top: 0.3rem; background: #e9ecef; height: 6px; overflow: hidden;">
-                                        <div style="background: ${failedSteps > 0 ? '#E74C3C' : 'var(--success)'}; height: 100%; width: ${progressPct}%; transition: width 0.3s;"></div>
-                                    </div>
-                                    <p class="dash-task-meta" style="margin: 0.2rem 0 0 0; font-size: var(--dash-meta-size); color: #666;">${progressLabel}</p>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+                                <div style="display: flex; align-items: center; gap: 0.4rem; color: #888;">
+                                    <span style="display: flex; align-items: center;">${typeIcon}</span>
                                 </div>
+                                <div style="display: flex; gap: 0.25rem; align-items: center;">${categoriesHtml}</div>
                             </div>
-                            <div class="dash-task-actions" style="display: flex; gap: 0.5rem; justify-content: flex-start; align-items: center; flex-wrap: wrap; margin-top: 0.5rem;">
-                                <button class="dash-task-btn" onclick="event.stopPropagation(); openWorkflowPopup('${task.id}')" style="background: #2563EB; color: white; border: none; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563EB'">
-                                    🔀 Gestisci
-                                </button>
-                                ${categoriesHtml ? `<div class="dash-task-cats" style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin-left: auto;">${categoriesHtml}</div>` : ''}
+                            <div style="margin-bottom: 0.5rem;">
+                                <h3 class="dash-task-title" style="margin: 0; font-size: var(--dash-title-size); color: #1F2937; font-weight: 600; line-height: 1.3;">${task.title}</h3>
+                                <div style="margin-top: 0.35rem; background: #e9ecef; height: 5px; overflow: hidden;">
+                                    <div style="background: ${failedSteps > 0 ? '#E74C3C' : 'var(--success)'}; height: 100%; width: ${progressPct}%; transition: width 0.3s;"></div>
+                                </div>
+                                <p class="dash-task-meta" style="margin: 0.15rem 0 0; font-size: var(--dash-meta-size); color: #888;">${progressLabel}</p>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <button class="task-icon-btn" title="Gestisci workflow" onclick="event.stopPropagation(); openWorkflowPopup('${task.id}')">${ACTION_SVG.gestisci}</button>
                             </div>
                         </div>
                     `;
                 }
-                
+
                 return `
                     <div class="card dash-task" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 0.6rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        
-                        <div class="dash-task-body" onclick="viewTask('${task.id}')" style="cursor: pointer; margin-bottom: 0.75rem; display: flex; align-items: flex-start; gap: 0.8rem;">
-                            <span class="dash-task-icon" style="font-size: 1.3rem; color: #666; min-width: 30px;">${taskIcon}</span>
-                            <div class="dash-task-info" style="flex: 1;">
-                                <h3 class="dash-task-title" style="margin: 0; font-size: var(--dash-title-size); color: #333; font-weight: 600; line-height: 1.4;">${task.title}</h3>
-                                ${dateStr ? `<p class="dash-task-meta" style="margin: 0.2rem 0 0 0; font-size: var(--dash-meta-size); color: #000;">${dateStr}</p>` : ''}
-                                ${typeLabel ? `<p class="dash-task-meta" style="margin: 0.2rem 0 0 0; font-size: var(--dash-meta-size); color: #000;">${typeLabel}</p>` : ''}
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem; color: #888;">
+                                <span style="display: flex; align-items: center;">${typeIcon}</span>
+                                ${dateStr ? `<span class="dash-task-meta" style="font-size: var(--dash-meta-size);">${dateStr}</span>` : ''}
                             </div>
+                            <div style="display: flex; gap: 0.25rem; align-items: center;">${categoriesHtml}</div>
                         </div>
-                        
-                        <div class="dash-task-actions" style="display: flex; gap: 0.5rem; justify-content: flex-start; align-items: center; flex-wrap: wrap;">
-                            <button class="dash-task-btn" onclick="event.stopPropagation(); completeTask('${task.id}')" style="background: #4CAF50; color: white; border: none; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;" onmouseover="this.style.background='#45a049'" onmouseout="this.style.background='#4CAF50'">
-                                Completato
-                            </button>
-                            ${task.type !== 'free_repeat' ? `
-                            <button class="dash-task-btn" onclick="event.stopPropagation(); failTask('${task.id}')" style="background: #E74C3C; color: white; border: none; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;" onmouseover="this.style.background='#c0392b'" onmouseout="this.style.background='#E74C3C'">
-                                Fallito
-                            </button>
-                            ` : ''}
-                            ${(task.type === 'recurring' || task.type === 'simple_recurring' || task.type === 'multiple') ? `
-                            <button class="dash-task-btn" onclick="event.stopPropagation(); skipTask('${task.id}')" style="background: #F39C12; color: white; border: none; padding: 0.2rem 0.5rem; border-radius: 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;" onmouseover="this.style.background='#e67e22'" onmouseout="this.style.background='#F39C12'">
-                                Salta
-                            </button>
-                            ` : ''}
-                            ${categoriesHtml ? `<div class="dash-task-cats" style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin-left: auto;">${categoriesHtml}</div>` : ''}
+                        <div onclick="viewTask('${task.id}')" style="cursor: pointer; margin-bottom: 0.5rem;">
+                            <h3 class="dash-task-title" style="margin: 0; font-size: var(--dash-title-size); color: #1F2937; font-weight: 600; line-height: 1.3;">${task.title}</h3>
+                            ${typeLabel ? `<p class="dash-task-meta" style="margin: 0.1rem 0 0; font-size: var(--dash-meta-size); color: #888;">${typeLabel}</p>` : ''}
+                        </div>
+                        <div class="dash-task-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                            <button class="task-icon-btn" title="Completato" onclick="event.stopPropagation(); completeTask('${task.id}')">${ACTION_SVG.completa}</button>
+                            ${task.type !== 'free_repeat' ? `<button class="task-icon-btn" title="Fallito" onclick="event.stopPropagation(); failTask('${task.id}')">${ACTION_SVG.fallisci}</button>` : ''}
+                            ${(task.type === 'recurring' || task.type === 'simple_recurring' || task.type === 'multiple') ? `<button class="task-icon-btn" title="Salta" onclick="event.stopPropagation(); skipTask('${task.id}')">${ACTION_SVG.salta}</button>` : ''}
                         </div>
                     </div>
                 `;
