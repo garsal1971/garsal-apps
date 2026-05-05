@@ -37,6 +37,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_cm_user_notification_settings_updated_at ON cm_user_notification_settings;
 CREATE TRIGGER trg_cm_user_notification_settings_updated_at
     BEFORE UPDATE ON cm_user_notification_settings
     FOR EACH ROW EXECUTE FUNCTION cm_set_updated_at();
