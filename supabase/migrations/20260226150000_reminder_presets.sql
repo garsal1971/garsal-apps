@@ -44,6 +44,7 @@ ON CONFLICT (label) DO NOTHING;
 -- RLS: lettura pubblica (autenticati), scrittura solo admin
 ALTER TABLE ts_reminder_presets ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "reminder_presets_select" ON ts_reminder_presets;
 CREATE POLICY "reminder_presets_select"
     ON ts_reminder_presets FOR SELECT
     USING (auth.uid() IS NOT NULL);

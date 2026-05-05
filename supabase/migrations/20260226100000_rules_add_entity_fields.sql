@@ -19,8 +19,9 @@
 -- ============================================================
 
 ALTER TABLE cm_notification_rules
-    ADD COLUMN entity_title text        NOT NULL DEFAULT '',
-    ADD COLUMN due_at       timestamptz NOT NULL DEFAULT now();
+    ADD COLUMN IF NOT EXISTS entity_title text        NOT NULL DEFAULT '';
+ALTER TABLE cm_notification_rules
+    ADD COLUMN IF NOT EXISTS due_at       timestamptz NOT NULL DEFAULT now();
 
 -- Rimuovi il DEFAULT temporaneo (le app devono sempre fornire i valori)
 ALTER TABLE cm_notification_rules

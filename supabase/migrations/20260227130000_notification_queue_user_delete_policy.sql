@@ -6,6 +6,7 @@
 -- notifiche con status = 'cancelled' (hard delete dal bottone UI).
 -- ============================================================
 
+DROP POLICY IF EXISTS "Utente elimina la propria queue annullata" ON cm_notification_queue;
 CREATE POLICY "Utente elimina la propria queue annullata"
     ON cm_notification_queue
     FOR DELETE

@@ -49,6 +49,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_quick_notify_config_updated_at ON cm_quick_notify_config;
 CREATE TRIGGER trg_quick_notify_config_updated_at
     BEFORE UPDATE ON cm_quick_notify_config
     FOR EACH ROW EXECUTE FUNCTION cm_set_updated_at();
@@ -56,18 +57,22 @@ CREATE TRIGGER trg_quick_notify_config_updated_at
 -- RLS: ogni utente vede e modifica solo la propria riga
 ALTER TABLE cm_quick_notify_config ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "own_quick_notify_config_select" ON cm_quick_notify_config;
 CREATE POLICY "own_quick_notify_config_select"
     ON cm_quick_notify_config FOR SELECT
     USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "own_quick_notify_config_insert" ON cm_quick_notify_config;
 CREATE POLICY "own_quick_notify_config_insert"
     ON cm_quick_notify_config FOR INSERT
     WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "own_quick_notify_config_update" ON cm_quick_notify_config;
 CREATE POLICY "own_quick_notify_config_update"
     ON cm_quick_notify_config FOR UPDATE
     USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "own_quick_notify_config_delete" ON cm_quick_notify_config;
 CREATE POLICY "own_quick_notify_config_delete"
     ON cm_quick_notify_config FOR DELETE
     USING (user_id = auth.uid());

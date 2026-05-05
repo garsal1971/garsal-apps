@@ -45,6 +45,7 @@ COMMENT ON COLUMN ts_tasks.notification_channel IS
 
 -- Lettura: anon può vedere item con channel='smart_block'
 -- (il filtro device_token è applicato lato client nell'app)
+DROP POLICY IF EXISTS "smart_block_anon_select" ON cm_notification_queue;
 CREATE POLICY "smart_block_anon_select"
     ON cm_notification_queue
     FOR SELECT
@@ -53,6 +54,7 @@ CREATE POLICY "smart_block_anon_select"
 
 -- Aggiornamento status: anon può segnare 'sent' o 'failed'
 -- solo su item smart_block
+DROP POLICY IF EXISTS "smart_block_anon_update" ON cm_notification_queue;
 CREATE POLICY "smart_block_anon_update"
     ON cm_notification_queue
     FOR UPDATE
