@@ -10,5 +10,7 @@
 -- ============================================================
 
 ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS chk_entity_type;
+ALTER TABLE cm_notification_rules
     ADD CONSTRAINT chk_entity_type
-        CHECK (entity_type IN ('task', 'habit', 'event', 'objective'));
+        CHECK (entity_type IN ('task', 'habit', 'event', 'objective')) NOT VALID;

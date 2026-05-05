@@ -59,8 +59,10 @@ COMMENT ON COLUMN cm_notification_rules.notification_spec IS
 
 -- Vincolo: se presente, deve avere almeno il campo "type"
 ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS chk_notification_spec_type;
+ALTER TABLE cm_notification_rules
     ADD CONSTRAINT chk_notification_spec_type
         CHECK (
             notification_spec IS NULL
             OR (notification_spec ? 'type')
-        );
+        ) NOT VALID;
