@@ -13,10 +13,12 @@
 --   - notification_spec diventa NOT NULL
 -- ============================================================
 
--- 0. Rimuovi temporaneamente chk_entity_type per permettere la normalizzazione
---    dei dati senza blocchi (verrà ricreato a fine migration)
+-- 0. Rimuovi temporaneamente i CHECK constraint per permettere la normalizzazione
+--    dei dati senza blocchi (chk_entity_type verrà ricreato a fine migration)
 ALTER TABLE cm_notification_rules
     DROP CONSTRAINT IF EXISTS chk_entity_type;
+ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS chk_notification_spec_type;
 
 -- 1. Rimuovi il vecchio vincolo UNIQUE che includeva offset_minutes
 ALTER TABLE cm_notification_rules
@@ -39,8 +41,9 @@ UPDATE cm_notification_rules
     WHERE entity_type NOT IN ('task', 'habit', 'event', 'objective');
 
 -- 4. notification_spec obbligatorio (sostituisce i campi rimossi)
+--    Default con 'type' per soddisfare chk_notification_spec_type delle migrazioni successive
 UPDATE cm_notification_rules
-    SET notification_spec = '{}'::jsonb
+    SET notification_spec = '{"type":"legacy"}'::jsonb
     WHERE notification_spec IS NULL;
 ALTER TABLE cm_notification_rules
     ALTER COLUMN notification_spec SET NOT NULL;
