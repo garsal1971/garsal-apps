@@ -12,8 +12,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.time.OffsetDateTime
@@ -60,6 +62,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvDeviceToken: TextView
     private lateinit var tvQueueStatus: TextView
 
+    private lateinit var mainContainer: LinearLayout
+    private lateinit var settingsContainer: LinearLayout
+    private lateinit var logContainer: LinearLayout
+
     private fun buildLayout(): ScrollView {
         val scroll = ScrollView(this)
         val root = LinearLayout(this).apply {
@@ -73,21 +79,57 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { this.topMargin = topMargin }
 
-        // Titolo
-        root.addView(TextView(this).apply {
+        // ── Header row: titolo + hamburger ──────────────────────────────────
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+
+        val titleCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        titleCol.addView(TextView(this).apply {
             text = "🔐 Smart Blocker"
             textSize = 28f
             setTextColor(0xFF6C5CE7.toInt())
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }, lp(0))
-
-        root.addView(TextView(this).apply {
-            text = "v1.2.6 · PIN: ${Config.PIN}"
+        })
+        titleCol.addView(TextView(this).apply {
+            text = "v1.2.7 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
-        }, lp(4))
+        })
+        headerRow.addView(titleCol, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-        // Stato blocco
+        val hamburgerBtn = Button(this).apply {
+            text = "☰"
+            textSize = 20f
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setTextColor(0xFF6C5CE7.toInt())
+        }
+        headerRow.addView(hamburgerBtn, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        root.addView(headerRow, lp(0))
+
+        hamburgerBtn.setOnClickListener { anchor ->
+            val popup = PopupMenu(this, anchor)
+            popup.menu.add(0, 1, 0, "🏠 Home")
+            popup.menu.add(0, 2, 1, "⚙️ Impostazioni")
+            popup.menu.add(0, 3, 2, "📋 Log")
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> showSection(mainContainer)
+                    2 -> showSection(settingsContainer)
+                    3 -> showSection(logContainer)
+                }
+                true
+            }
+            popup.show()
+        }
+
+        // ── Stato blocco (sempre visibile) ───────────────────────────────────
         tvBlockState = TextView(this).apply {
             textSize = 16f
             setPadding(24, 24, 24, 24)
@@ -96,8 +138,55 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(tvBlockState, lp(32))
 
+        // ── Main container (default visibile) ────────────────────────────────
+        mainContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        // Coda Supabase
+        mainContainer.addView(TextView(this).apply {
+            text = "Coda Supabase"
+            textSize = 18f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }, lp(32))
+
+        tvQueueStatus = TextView(this).apply {
+            text = "—"
+            textSize = 13f
+            setTextColor(0xFF374151.toInt())
+            setPadding(0, 4, 0, 4)
+        }
+        mainContainer.addView(tvQueueStatus, lp(8))
+
+        mainContainer.addView(Button(this).apply {
+            text = "🔄 Controlla ora"
+            setBackgroundColor(0xFF374151.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
+            setOnClickListener { checkQueueNow() }
+        }, lp(8))
+
+        // Pulsante test blocco
+        mainContainer.addView(Button(this).apply {
+            text = "🧪 Testa blocco ora"
+            setBackgroundColor(0xFF6C5CE7.toInt())
+            setTextColor(0xFFFFFFFF.toInt())
+            setOnClickListener {
+                Prefs.setState(this@MainActivity, Prefs.STATE_TRIGGERED)
+                Prefs.setSnoozeCount(this@MainActivity, 0)
+                startService(Intent(this@MainActivity, BlockerService::class.java).apply {
+                    action = BlockerService.ACTION_SHOW_OVERLAY
+                })
+            }
+        }, lp(32))
+
+        root.addView(mainContainer, lp(16))
+
+        // ── Settings container (nascosto di default) ─────────────────────────
+        settingsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+
         // Sezione permessi
-        root.addView(TextView(this).apply {
+        settingsContainer.addView(TextView(this).apply {
             text = "Permessi necessari"
             textSize = 18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -105,8 +194,8 @@ class MainActivity : AppCompatActivity() {
 
         // Overlay
         tvStatusOverlay = TextView(this).apply { textSize = 14f }
-        root.addView(tvStatusOverlay, lp(8))
-        root.addView(Button(this).apply {
+        settingsContainer.addView(tvStatusOverlay, lp(8))
+        settingsContainer.addView(Button(this).apply {
             text = "Concedi permesso Overlay"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -116,8 +205,8 @@ class MainActivity : AppCompatActivity() {
 
         // Accessibilità
         tvStatusAccessibility = TextView(this).apply { textSize = 14f }
-        root.addView(tvStatusAccessibility, lp(16))
-        root.addView(Button(this).apply {
+        settingsContainer.addView(tvStatusAccessibility, lp(16))
+        settingsContainer.addView(Button(this).apply {
             text = "Abilita Accessibilità"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -126,8 +215,8 @@ class MainActivity : AppCompatActivity() {
 
         // Alarm esatto
         tvStatusAlarm = TextView(this).apply { textSize = 14f }
-        root.addView(tvStatusAlarm, lp(16))
-        root.addView(Button(this).apply {
+        settingsContainer.addView(tvStatusAlarm, lp(16))
+        settingsContainer.addView(Button(this).apply {
             text = "Concedi Alarm Esatto"
             setOnClickListener {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
@@ -136,29 +225,35 @@ class MainActivity : AppCompatActivity() {
             }
         }, lp(4))
 
-        // Full-screen intent (necessario per aprire blocco da background/sleep)
+        // Full-screen intent
         tvStatusFullScreen = TextView(this).apply { textSize = 14f }
-        root.addView(tvStatusFullScreen, lp(16))
-        root.addView(Button(this).apply {
+        settingsContainer.addView(tvStatusFullScreen, lp(16))
+        settingsContainer.addView(Button(this).apply {
             text = "Concedi Notifiche Full-Screen"
             setOnClickListener {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-                    startActivity(Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENTS",
-                        Uri.parse("package:$packageName")))
-                else
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                        startActivity(Intent("android.settings.MANAGE_APP_USE_FULL_SCREEN_INTENTS",
+                            Uri.parse("package:$packageName")))
+                    else
+                        startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                        })
+                } catch (e: Exception) {
                     startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                         putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                     })
+                }
             }
         }, lp(4))
 
-        // Impostazioni limitate (Android 13+ sideload)
-        root.addView(TextView(this).apply {
+        // Impostazioni limitate
+        settingsContainer.addView(TextView(this).apply {
             text = "⚠️ Se l'accessibilità è bloccata, abilita prima le impostazioni limitate per questa app:"
             textSize = 12f
             setTextColor(0xFF6B7280.toInt())
         }, lp(6))
-        root.addView(Button(this).apply {
+        settingsContainer.addView(Button(this).apply {
             text = "🔓 Impostazioni limitate"
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -167,19 +262,18 @@ class MainActivity : AppCompatActivity() {
         }, lp(4))
 
         // Configurazione blocco
-        root.addView(TextView(this).apply {
+        settingsContainer.addView(TextView(this).apply {
             text = "Configurazione blocco"
             textSize = 18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }, lp(32))
 
-        root.addView(TextView(this).apply {
+        settingsContainer.addView(TextView(this).apply {
             text = "Rinvii: ${Config.MAX_SNOOZES}  ·  Durata rinvio: ${Config.SNOOZE_DURATION_MS / 60000} min\nI blocchi arrivano da tasks.html via Supabase"
             textSize = 15f
             setTextColor(0xFF374151.toInt())
         }, lp(8))
 
-        // Toggle avvio automatico al boot
         val rowBoot = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -197,16 +291,16 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
         rowBoot.addView(switchBoot)
-        root.addView(rowBoot, lp(12))
+        settingsContainer.addView(rowBoot, lp(12))
 
-        // Sezione Device Token (sola lettura — impostato da Supabase)
-        root.addView(TextView(this).apply {
+        // Device Token
+        settingsContainer.addView(TextView(this).apply {
             text = "Device Token"
             textSize = 18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }, lp(32))
 
-        root.addView(TextView(this).apply {
+        settingsContainer.addView(TextView(this).apply {
             text = "Token impostato da Supabase — nessuna configurazione richiesta"
             textSize = 13f
             setTextColor(0xFF6B7280.toInt())
@@ -219,46 +313,17 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(0xFFF3F0FF.toInt())
             typeface = android.graphics.Typeface.MONOSPACE
         }
-        root.addView(tvDeviceToken, lp(8))
+        settingsContainer.addView(tvDeviceToken, lp(8))
 
-        // Sezione Queue Supabase
-        root.addView(TextView(this).apply {
-            text = "Coda Supabase"
-            textSize = 18f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }, lp(32))
+        root.addView(settingsContainer, lp(16))
 
-        tvQueueStatus = TextView(this).apply {
-            text = "—"
-            textSize = 13f
-            setTextColor(0xFF374151.toInt())
-            setPadding(0, 4, 0, 4)
+        // ── Log container (nascosto di default) ──────────────────────────────
+        logContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
         }
-        root.addView(tvQueueStatus, lp(8))
 
-        root.addView(Button(this).apply {
-            text = "🔄 Controlla ora"
-            setBackgroundColor(0xFF374151.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener { checkQueueNow() }
-        }, lp(8))
-
-        // Pulsante test blocco
-        root.addView(Button(this).apply {
-            text = "🧪 Testa blocco ora"
-            setBackgroundColor(0xFF6C5CE7.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener {
-                Prefs.setState(this@MainActivity, Prefs.STATE_TRIGGERED)
-                Prefs.setSnoozeCount(this@MainActivity, 0)
-                startService(Intent(this@MainActivity, BlockerService::class.java).apply {
-                    action = BlockerService.ACTION_SHOW_OVERLAY
-                })
-            }
-        }, lp(32))
-
-        // ── Sezione Log ──────────────────────────────────────────────────────
-        root.addView(TextView(this).apply {
+        logContainer.addView(TextView(this).apply {
             text = "Log app"
             textSize = 18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -308,7 +373,7 @@ class MainActivity : AppCompatActivity() {
             }
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
-        root.addView(rowLog, lp(8))
+        logContainer.addView(rowLog, lp(8))
 
         tvLogView = TextView(this).apply {
             textSize = 11f
@@ -317,13 +382,20 @@ class MainActivity : AppCompatActivity() {
             setPadding(20, 20, 20, 20)
             typeface = android.graphics.Typeface.MONOSPACE
         }
-        root.addView(tvLogView, lp(8))
+        logContainer.addView(tvLogView, lp(8))
+
+        root.addView(logContainer, lp(16))
 
         return scroll
     }
 
+    private fun showSection(target: LinearLayout) {
+        mainContainer.visibility     = if (target == mainContainer)     View.VISIBLE else View.GONE
+        settingsContainer.visibility = if (target == settingsContainer) View.VISIBLE else View.GONE
+        logContainer.visibility      = if (target == logContainer)      View.VISIBLE else View.GONE
+    }
+
     private fun checkQueueNow() {
-        val token = Prefs.getDeviceToken(this)
         tvQueueStatus.text = "⏳ Interrogo Supabase…"
         tvQueueStatus.setTextColor(0xFF6B7280.toInt())
         Thread {
@@ -343,7 +415,6 @@ class MainActivity : AppCompatActivity() {
                         tvQueueStatus.setTextColor(0xFFE74C3C.toInt())
                     }
                     else -> {
-                        // Mostra lista blocchi
                         val sb = StringBuilder()
                         for (e in result.entries) {
                             val time = formatFireAt(e.fireAt)
@@ -354,12 +425,11 @@ class MainActivity : AppCompatActivity() {
                                 e.status == "pending" -> "⏳ in attesa"
                                 else                -> e.status
                             }
-                            sb.append("$time — ${e.title.take(30)}\n$stato\n\n")
+                            sb.append("🔔 fires at: $time\n${e.title.take(30)} · $stato\n\n")
                         }
                         tvQueueStatus.text = sb.toString().trimEnd()
                         tvQueueStatus.setTextColor(0xFF374151.toInt())
 
-                        // Se ci sono blocchi pronti → triggera il servizio
                         if (result.dueIds.isNotEmpty()) {
                             startService(Intent(this@MainActivity, BlockerService::class.java).apply {
                                 action = BlockerService.ACTION_CHECK_NOW
@@ -409,7 +479,6 @@ class MainActivity : AppCompatActivity() {
         tvStatusFullScreen.text = if (fsOk) "✅ Full-screen intent: concesso" else "❌ Full-screen intent: mancante (blocco non visibile da background)"
         tvStatusFullScreen.setTextColor(if (fsOk) 0xFF00B894.toInt() else 0xFFE74C3C.toInt())
 
-        // Mostra il token (generato automaticamente da Prefs se non esiste)
         tvDeviceToken.text = Prefs.getDeviceToken(this)
 
         val state = Prefs.getState(this)
@@ -424,7 +493,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshLog() {
         val text = AppLogger.read(this)
-        // Mostra solo le ultime 80 righe per non appesantire l'UI
         val lines = text.lines()
         tvLogView.text = if (lines.size > 80) lines.takeLast(80).joinToString("\n") else text
     }
