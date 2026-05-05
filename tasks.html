@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.74</title>
+    <title>Tasks v19.18.75</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2394,8 +2394,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.74';
-        const BUILD_TIME  = '2026-05-03T18:00:00Z';
+        const APP_VERSION = 'v19.18.75';
+        const BUILD_TIME  = '2026-05-05T10:00:00Z';
 
         console.log('%c● Tasks ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 8px;border-radius:3px 0 0 3px',
@@ -7536,82 +7536,13 @@
 
                 debugLog('✅ Completing task:', task.title, 'type:', task.type);
 
-                // Task multiplo: bypass RPC (bug text[] → jsonb nel DB), gestione diretta in JS
-                if (task.type === 'multiple') {
-                    let datesArray = task.multiple_dates;
-                    if (typeof datesArray === 'string') datesArray = JSON.parse(datesArray);
-
-                    const sortedDates = [...datesArray].sort();
-                    const currentDateStr = (task.next_occurrence_date || '').split('T')[0];
-                    const currentIndex = sortedDates.indexOf(currentDateStr);
-
-                    let nextOccurrence = null;
-                    if (currentIndex !== -1 && currentIndex < sortedDates.length - 1) {
-                        nextOccurrence = sortedDates[currentIndex + 1] + 'T00:00:00';
-                    }
-
-                    const fromStatus = task.status;
-                    const pts = task.success_points || 0;
-
-                    await sb.from('ts_history').insert([historyRecord(id, fromStatus, 'completed', 'completed', pts)]);
-
-                    await sb.from('ts_tasks').update({
-                        status: nextOccurrence === null ? 'terminated' : 'completed',
-                        last_completed_date: new Date().toISOString(),
-                        next_occurrence_date: nextOccurrence
-                    }).eq('id', id);
-
-                    if (nextOccurrence === null) {
-                        await sb.from('ts_history').insert([termRecord(id, 'completed')]);
-                        await deleteNotificationRules(id);
-                    }
-
-                    await loadTasks();
-                    await loadHistory();
-                    renderDashboard();
-                    renderCalendar();
-                    renderManagement();
-                    showToast('✅ Task completato!');
-                    return;
-                }
-
-                // Task ricorrente: bypass RPC, gestione diretta in JS (stesso pattern di failTask)
-                if (task.type === 'recurring') {
-                    const baseDate = task.next_occurrence_date
-                        ? new Date(task.next_occurrence_date)
-                        : new Date(task.start_date);
-                    const nextDate = getNextRecurringDate(task, baseDate);
-
-                    const fromStatus = task.status;
-                    const pts = task.success_points || 0;
-
-                    await sb.from('ts_history').insert([historyRecord(id, fromStatus, 'completed', 'completed', pts)]);
-
-                    if (!nextDate) {
-                        await sb.from('ts_tasks').update({
-                            status: 'terminated',
-                            last_completed_date: new Date().toISOString(),
-                            next_occurrence_date: null
-                        }).eq('id', id);
-                        await sb.from('ts_history').insert([termRecord(id, 'completed')]);
-                        await deleteNotificationRules(id);
-                    } else {
-                        await sb.from('ts_tasks').update({
-                            status: 'completed',
-                            last_completed_date: new Date().toISOString(),
-                            next_occurrence_date: nextDate.toISOString()
-                        }).eq('id', id);
-                    }
-
-                    await loadTasks();
-                    await loadHistory();
-                    renderDashboard();
-                    renderCalendar();
-                    renderManagement();
-                    showToast('✅ Task completato!');
-                    return;
-                }
-
+                // ─────────────────────────────────────────────────────────────────
+                // PUNTO UNICO DI COMPLETAMENTO: task_complete RPC su Supabase.
+                // Non aggiungere bypass client-side per nessun tipo di task —
+                // tutta la logica (orario, prossima occorrenza, history, notifiche)
+                // è gestita dalla funzione SQL task_complete(uuid, date).
+                // Vedere: supabase/migrations/20260505100000_fix_task_complete_multiple_time.sql
+                // ─────────────────────────────────────────────────────────────────
                 const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD locale
 
                 const { data: result, error: rpcErr } = await sb.rpc('task_complete', {
