@@ -40,6 +40,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS cm_profile_updated_at ON cm_profile;
 CREATE TRIGGER cm_profile_updated_at
   BEFORE UPDATE ON cm_profile
   FOR EACH ROW EXECUTE FUNCTION cm_profile_set_updated_at();
@@ -47,18 +48,22 @@ CREATE TRIGGER cm_profile_updated_at
 -- RLS: ogni utente vede e modifica solo il proprio profilo
 ALTER TABLE cm_profile ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "profilo: lettura proprio record" ON cm_profile;
 CREATE POLICY "profilo: lettura proprio record"
   ON cm_profile FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "profilo: inserimento proprio record" ON cm_profile;
 CREATE POLICY "profilo: inserimento proprio record"
   ON cm_profile FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "profilo: aggiornamento proprio record" ON cm_profile;
 CREATE POLICY "profilo: aggiornamento proprio record"
   ON cm_profile FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "profilo: eliminazione proprio record" ON cm_profile;
 CREATE POLICY "profilo: eliminazione proprio record"
   ON cm_profile FOR DELETE
   USING (auth.uid() = user_id);

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS cm_smart_block_devices (
 ALTER TABLE cm_smart_block_devices ENABLE ROW LEVEL SECURITY;
 
 -- Chiunque (incluso anon) può registrare il proprio dispositivo
+DROP POLICY IF EXISTS "anon_insert_device" ON cm_smart_block_devices;
 CREATE POLICY "anon_insert_device"
     ON cm_smart_block_devices
     FOR INSERT
@@ -35,6 +36,7 @@ CREATE POLICY "anon_insert_device"
     WITH CHECK (true);
 
 -- Solo utenti autenticati leggono la lista (tasks.html)
+DROP POLICY IF EXISTS "auth_select_devices" ON cm_smart_block_devices;
 CREATE POLICY "auth_select_devices"
     ON cm_smart_block_devices
     FOR SELECT
@@ -42,6 +44,7 @@ CREATE POLICY "auth_select_devices"
     USING (true);
 
 -- Consente all'app Android (anon) di aggiornare il label del proprio dispositivo
+DROP POLICY IF EXISTS "anon_update_own_device" ON cm_smart_block_devices;
 CREATE POLICY "anon_update_own_device"
     ON cm_smart_block_devices
     FOR UPDATE

@@ -7,6 +7,7 @@
 -- La policy SELECT esiste già dalla migration 20260225120000.
 -- ============================================================
 
+DROP POLICY IF EXISTS "Utente aggiorna la propria queue" ON cm_notification_queue;
 CREATE POLICY "Utente aggiorna la propria queue"
     ON cm_notification_queue
     FOR UPDATE

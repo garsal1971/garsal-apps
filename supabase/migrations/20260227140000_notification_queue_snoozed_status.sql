@@ -25,7 +25,7 @@ ALTER TABLE cm_notification_queue
 --    (Job 2 Fase 0 deve trovare i snoozed con fire_at <= now)
 DROP INDEX IF EXISTS idx_queue_fire_at_status;
 
-CREATE INDEX idx_queue_fire_at_status
+CREATE INDEX IF NOT EXISTS idx_queue_fire_at_status
     ON cm_notification_queue (fire_at, status)
     WHERE status IN ('pending', 'sending', 'snoozed');
 

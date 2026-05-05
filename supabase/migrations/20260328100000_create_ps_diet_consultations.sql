@@ -17,9 +17,12 @@ GRANT ALL ON TABLE ps_diet_consultations TO service_role;
 
 ALTER TABLE ps_diet_consultations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "dieta: select" ON ps_diet_consultations;
 CREATE POLICY "dieta: select" ON ps_diet_consultations FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "dieta: insert" ON ps_diet_consultations;
 CREATE POLICY "dieta: insert" ON ps_diet_consultations FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "dieta: delete" ON ps_diet_consultations;
 CREATE POLICY "dieta: delete" ON ps_diet_consultations FOR DELETE TO authenticated
   USING (auth.uid() = user_id);
