@@ -12,19 +12,19 @@
 --   active         bool    Se false, non compare nel selettore
 -- ============================================================
 
--- L'indice del UNIQUE constraint può esistere come orfano da run parziali precedenti
-DROP INDEX IF EXISTS uq_reminder_preset_label;
-
 CREATE TABLE IF NOT EXISTS ts_reminder_presets (
     id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     label          text        NOT NULL,
     offset_minutes int         NOT NULL CHECK (offset_minutes > 0),
     sort_order     int         NOT NULL DEFAULT 0,
     active         boolean     NOT NULL DEFAULT true,
-    created_at     timestamptz NOT NULL DEFAULT now(),
-
-    CONSTRAINT uq_reminder_preset_label UNIQUE (label)
+    created_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- Indice UNIQUE separato con nome prefissato ts_ per evitare conflitti
+-- con indici omonimi su altre tabelle (es. cm_reminder_presets)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_ts_reminder_preset_label
+    ON ts_reminder_presets (label);
 
 -- Dati iniziali — rispecchiano la lista hardcoded originale
 INSERT INTO ts_reminder_presets (label, offset_minutes, sort_order) VALUES
