@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.81</title>
+    <title>Tasks v19.18.82</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2409,8 +2409,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.81';
-        const BUILD_TIME  = '2026-05-05T18:00:00Z';
+        const APP_VERSION = 'v19.18.82';
+        const BUILD_TIME  = '2026-05-05T18:30:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -4408,116 +4408,26 @@
             // Renderizza
             const html = filteredTasks.map((task, index) => {
                 const cats = categories.filter(c => task.categories?.includes(c.id));
-                let typeLabel = '';
-                let taskIcon = '⏰';
-                
-                // Funzione helper per formattare le date/giorni
-                function formatDateRange(task) {
-                    const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-                    const dayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
-                    
-                    if (task.type === 'recurring' || task.type === 'free_repeat') {
-                        if (task.recurring_frequency === 'yearly' && task.recurring_dates?.length > 0) {
-                            const sortedDates = [...task.recurring_dates].sort();
-                            if (sortedDates.length > 1) {
-                                const [firstDay, firstMonth] = sortedDates[0].split('-');
-                                const [lastDay, lastMonth] = sortedDates[sortedDates.length - 1].split('-');
-                                return `dal ${parseInt(firstDay)} ${monthNames[parseInt(firstMonth) - 1]} al ${parseInt(lastDay)} ${monthNames[parseInt(lastMonth) - 1]}`;
-                            } else {
-                                const [day, month] = sortedDates[0].split('-');
-                                return `${parseInt(day)} ${monthNames[parseInt(month) - 1]}`;
-                            }
-                        } else if (task.recurring_frequency === 'weekly' && task.recurring_days_of_week?.length > 0) {
-                            const days = task.recurring_days_of_week.map(d => dayNames[d]);
-                            if (days.length > 1) {
-                                return `da ${days[0]} a ${days[days.length - 1]}`;
-                            } else {
-                                return days[0];
-                            }
-                        } else if (task.recurring_frequency === 'monthly' && task.recurring_day_of_month?.length > 0) {
-                            const days = [...task.recurring_day_of_month].sort((a, b) => a - b);
-                            if (days.length > 1) {
-                                return `dal ${days[0]} al ${days[days.length - 1]}`;
-                            } else {
-                                return `giorno ${days[0]}`;
-                            }
-                        }
-                    } else if (task.type === 'multiple' && task.multiple_dates?.length > 0) {
-                        const sortedDates = [...task.multiple_dates].sort();
-                        if (sortedDates.length > 1) {
-                            const firstDate = new Date(sortedDates[0] + 'T00:00:00');
-                            const lastDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
-                            return `dal ${firstDate.getDate()} ${monthNames[firstDate.getMonth()]} al ${lastDate.getDate()} ${monthNames[lastDate.getMonth()]}`;
-                        } else {
-                            const date = new Date(sortedDates[0] + 'T00:00:00');
-                            return `${date.getDate()} ${monthNames[date.getMonth()]}`;
-                        }
-                    } else if (task.type === 'single') {
-                        if (task.deadline) {
-                            const start = new Date(task.start_date);
-                            const end = new Date(task.deadline);
-                            return `dal ${start.getDate()} ${monthNames[start.getMonth()]} al ${end.getDate()} ${monthNames[end.getMonth()]}`;
-                        } else {
-                            const start = new Date(task.start_date);
-                            return `${start.getDate()} ${monthNames[start.getMonth()]}`;
-                        }
-                    } else if (task.type === 'simple_recurring') {
-                        if (task.next_occurrence_date) {
-                            const next = new Date(task.next_occurrence_date);
-                            return `prossima: ${next.getDate()} ${monthNames[next.getMonth()]}`;
-                        }
-                    }
-                    return '';
-                }
-                
-                const dateInfo = formatDateRange(task);
-                
+
+                // Data da mostrare per tipo
+                let dateInfo = '';
                 if (task.type === 'single') {
-                    typeLabel = dateInfo ? `${dateInfo} • Singolo` : '📅 Singolo';
-                    taskIcon = '📅';
+                    dateInfo = task.start_date ? formatDateTime(task.start_date) : '';
                 } else if (task.type === 'recurring') {
-                    const recurLabel = getRecurringLabel(task);
-                    typeLabel = dateInfo ? `${dateInfo} • Ricorrente • ${recurLabel}` : `♾️ Ricorrente • ${recurLabel}`;
-                    taskIcon = '🔁';
+                    dateInfo = task.start_date ? formatDateTime(task.start_date) : '';
                 } else if (task.type === 'simple_recurring') {
-                    const recurLabel = getRecurringLabel(task);
-                    typeLabel = dateInfo ? `${dateInfo} • Ricorrenza semplice • ${recurLabel}` : `🔁 Ricorrenza semplice • ${recurLabel}`;
-                    taskIcon = '🔁';
+                    dateInfo = task.start_date ? formatDateTime(task.start_date) : '';
                 } else if (task.type === 'multiple') {
-                    // Calcola la prossima data e il conteggio
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    
-                    const allDates = (task.multiple_dates || []);
-                    const totalDates = allDates.length;
-                    
-                    // Usa next_occurrence_date come riferimento per la prossima data
-                    const nextOcc = task.next_occurrence_date ? task.next_occurrence_date.split('T')[0] : null;
-                    
-                    if (nextOcc) {
-                        // Conta le date rimanenti: dalla next_occurrence_date in poi (inclusa)
-                        const remainingDates = allDates.filter(d => d >= nextOcc).length;
-                        
-                        const nextDate = new Date(nextOcc + 'T00:00:00');
-                        const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-                        const nextDateStr = `${nextDate.getDate()} ${monthNames[nextDate.getMonth()]}`;
-                        typeLabel = `prossima: ${nextDateStr} • Multiplo • ${remainingDates}/${totalDates} date`;
-                    } else {
-                        typeLabel = dateInfo ? `${dateInfo} • Multiplo • ${totalDates} date completate` : `📅 Multiplo (${totalDates} date completate)`;
-                    }
-                    taskIcon = '📅';
-                } else if (task.type === 'free_repeat') {
-                    const recurLabel = getRecurringLabel(task);
-                    typeLabel = dateInfo ? `${dateInfo} • A libera ripetizione • ${recurLabel}` : '🔄 A libera ripetizione';
-                    taskIcon = '🔄';
+                    const sorted = (task.multiple_dates || []).filter(Boolean).sort();
+                    dateInfo = sorted.length > 0 ? formatDateTime(sorted[0] + 'T00:00:00') : '';
                 } else if (task.type === 'workflow') {
-                    const steps = task.workflow_steps || [];
-                    const completed = steps.filter(s => s.status === 'completed').length;
-                    const failed = steps.filter(s => s.status === 'failed').length;
-                    typeLabel = `🔀 Workflow • ${completed}✓${failed > 0 ? ' ' + failed + '✗' : ''} / ${steps.length} step`;
-                    taskIcon = '🔀';
+                    const wfDates = (task.workflow_steps || []).map(s => s.start_date).filter(Boolean).sort();
+                    dateInfo = wfDates.length > 0 ? formatDateTime(wfDates[0]) : '';
+                } else if (task.type === 'free_repeat') {
+                    dateInfo = task.start_date ? formatDateTime(task.start_date) : '';
                 }
-                
+
+
                 // Badge stato
                 let statusBadge = '';
                 if (task.status === 'terminated') {
