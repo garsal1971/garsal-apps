@@ -28,5 +28,7 @@ ALTER TABLE cm_notification_rules
 
 -- 4. Nuovo UNIQUE: una regola per entità × canale
 ALTER TABLE cm_notification_rules
+    DROP CONSTRAINT IF EXISTS uq_rules_entity_channel;
+ALTER TABLE cm_notification_rules
     ADD CONSTRAINT uq_rules_entity_channel
         UNIQUE (user_id, app, entity_id, channel);
