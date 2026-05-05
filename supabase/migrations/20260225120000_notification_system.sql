@@ -45,6 +45,7 @@ CREATE TRIGGER trg_cm_user_notification_settings_updated_at
 -- RLS
 ALTER TABLE cm_user_notification_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Utente vede solo le proprie impostazioni" ON cm_user_notification_settings;
 CREATE POLICY "Utente vede solo le proprie impostazioni"
     ON cm_user_notification_settings
     FOR ALL
@@ -75,12 +76,13 @@ CREATE TABLE IF NOT EXISTS cm_notification_rules (
     UNIQUE (user_id, app, entity_id, offset_minutes, channel)
 );
 
-CREATE INDEX idx_rules_user_app ON cm_notification_rules (user_id, app);
-CREATE INDEX idx_rules_entity   ON cm_notification_rules (app, entity_id);
+CREATE INDEX IF NOT EXISTS idx_rules_user_app ON cm_notification_rules (user_id, app);
+CREATE INDEX IF NOT EXISTS idx_rules_entity   ON cm_notification_rules (app, entity_id);
 
 -- RLS
 ALTER TABLE cm_notification_rules ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Utente gestisce solo le proprie regole" ON cm_notification_rules;
 CREATE POLICY "Utente gestisce solo le proprie regole"
     ON cm_notification_rules
     FOR ALL
@@ -113,12 +115,13 @@ CREATE TABLE IF NOT EXISTS cm_notification_queue (
     UNIQUE (rule_id, fire_at)
 );
 
-CREATE INDEX idx_queue_fire_at_status ON cm_notification_queue (fire_at, status)
+CREATE INDEX IF NOT EXISTS idx_queue_fire_at_status ON cm_notification_queue (fire_at, status)
     WHERE status = 'pending';
 
 -- RLS (solo service_role / cron job può scrivere; utente può solo leggere le proprie)
 ALTER TABLE cm_notification_queue ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Utente legge la propria queue" ON cm_notification_queue;
 CREATE POLICY "Utente legge la propria queue"
     ON cm_notification_queue
     FOR SELECT
