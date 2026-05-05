@@ -23,6 +23,10 @@ ALTER TABLE cm_notification_rules
     DROP COLUMN IF EXISTS offset_label;
 
 -- 3. notification_spec obbligatorio (sostituisce i campi rimossi)
+-- Righe esistenti con NULL ricevono un valore di default per poter applicare NOT NULL
+UPDATE cm_notification_rules
+    SET notification_spec = '{}'::jsonb
+    WHERE notification_spec IS NULL;
 ALTER TABLE cm_notification_rules
     ALTER COLUMN notification_spec SET NOT NULL;
 
