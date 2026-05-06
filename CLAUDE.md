@@ -348,3 +348,20 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 4. **Large file sizes**: `tasks.html` is ~445 KB and ~8 900 lines. When editing, use search to navigate to the relevant section. Sections are marked with `// ========================================` banners.
 5. **No hot reload**: There is no dev server. After editing, hard-refresh the browser (`Cmd/Ctrl+Shift+R`).
 6. **Duplicate `renderTaskCard`**: `tasks.html` defines `renderTaskCard` in two places (dashboard view and categories/management view). Both must be kept in sync when changing card rendering logic.
+
+---
+
+## Regola obbligatoria — Modifiche a tabelle o campi JSON
+
+**PRIMA di qualsiasi modifica** a:
+- struttura di una tabella Supabase (aggiunta/rimozione/rinomina colonne)
+- struttura di un campo JSON/JSONB esistente (aggiunta/rimozione/rinomina chiavi)
+
+Claude **deve avvisare esplicitamente** l'utente e attendere conferma. Non procedere mai in autonomia con queste modifiche.
+
+Esempi che richiedono avviso preventivo:
+- aggiungere un campo `smart_block_fire_at` dentro `reminder_presets`
+- rinominare una colonna `due_at` → `fire_at`
+- aggiungere una colonna `notification_spec` a `cm_notification_rules`
+
+Se il codice necessita di un campo che non esiste ancora nel DB, proporre la migration SQL all'utente e **non inventare campi nuovi senza chiedere**.
