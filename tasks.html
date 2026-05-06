@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.88</title>
+    <title>Tasks v19.18.89</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2425,8 +2425,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.88';
-        const BUILD_TIME  = '2026-05-05T20:30:00Z';
+        const APP_VERSION = 'v19.18.89';
+        const BUILD_TIME  = '2026-05-06T13:30:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2793,7 +2793,7 @@
 
                     const ruleSB = { user_id: userId, app: 'tasks', entity_id: String(taskId),
                         entity_type: taskType, entity_title: entityTitle || null,
-                        reminder_presets: rulePresetsSB, channel: 'smart_block', enabled: true };
+                        reminder_presets: rulePresetsSB, notification_spec: {}, channel: 'smart_block', enabled: true };
 
                     const { error: sbErr } = existingSB?.id
                         ? await authSb.from('cm_notification_rules').update(ruleSB).eq('id', existingSB.id)
@@ -2866,14 +2866,15 @@
                     rulePresets.telegram_complete_button = true;
 
                 const rule = {
-                    user_id:          userId,
-                    app:              'tasks',
-                    entity_id:        String(taskId),
-                    entity_type:      taskType,
-                    entity_title:     entityTitle || null,
-                    reminder_presets: rulePresets,
-                    channel:          notificationChannel,
-                    enabled:          true
+                    user_id:           userId,
+                    app:               'tasks',
+                    entity_id:         String(taskId),
+                    entity_type:       taskType,
+                    entity_title:      entityTitle || null,
+                    reminder_presets:  rulePresets,
+                    notification_spec: {},
+                    channel:           notificationChannel,
+                    enabled:           true
                 };
 
                 let error;
