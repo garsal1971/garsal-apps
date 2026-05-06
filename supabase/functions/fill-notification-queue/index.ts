@@ -178,7 +178,8 @@ Deno.serve(async (_req) => {
     let errors   = 0
 
     for (const rule of (rules as Rule[]) ?? []) {
-      const rp = rule.reminder_presets
+      const rawRp = rule.reminder_presets
+      const rp: ReminderPresetsJson = typeof rawRp === 'string' ? JSON.parse(rawRp) : rawRp
 
       // Detect struttura: smart_block | quick (app='quick') | habit (times[]) | task (due_at)
       const isSmartBlock = rule.channel === 'smart_block'
