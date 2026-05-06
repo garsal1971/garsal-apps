@@ -22,8 +22,10 @@
 //
 // Strutture reminder_presets:
 //
-// TASKS:
+// TASKS (telegram):
 //   { "reminders": [1, 3], "due_at": "2026-03-10T10:00:00Z" }
+// SMART BLOCK:
+//   { "due_at": "2026-03-10T10:00:00Z", "device_token": "..." }
 //
 // HABITS (daily / daily_multiple):
 //   { "reminders": [1, 3], "times": ["08:00","22:00"], "from-to": ["2026-03-01","2026-05-30"] }
@@ -79,9 +81,8 @@ interface HabitReminderPresets {
 }
 
 interface SmartBlockReminderPresets {
-  smart_block_fire_at: string   // ISO datetime — orario arrotondato ai 10 min
-  device_token?:       string
-  due_at?:             string
+  due_at:        string   // ISO datetime — orario del blocco smart block
+  device_token?: string
 }
 
 type ReminderPresetsJson = TaskReminderPresets | HabitReminderPresets | QuickReminderPresets | SmartBlockReminderPresets
@@ -188,12 +189,12 @@ Deno.serve(async (_req) => {
 
       if (isSmartBlock) {
         const sbrp = rp as SmartBlockReminderPresets
-        if (!sbrp.smart_block_fire_at) {
-          console.warn(`[fill-queue] regola smart_block ${rule.id} senza smart_block_fire_at, skip`)
+        if (!sbrp.due_at) {
+          console.warn(`[fill-queue] regola smart_block ${rule.id} senza due_at, skip`)
           skipped++
           continue
         }
-        console.log(`[fill-queue] smart_block rule=${rule.id} fire_at=${sbrp.smart_block_fire_at} token=${sbrp.device_token ? sbrp.device_token.slice(0,8)+'…' : 'none'}`)
+        console.log(`[fill-queue] smart_block rule=${rule.id} due_at=${sbrp.due_at} token=${sbrp.device_token ? sbrp.device_token.slice(0,8)+'…' : 'none'}`)
         entries = generateSmartBlockEntry(sbrp, now, horizon, rule.id)
         console.log(`[fill-queue] smart_block entries generati: ${entries.length}`)
       } else if (isQuick) {
@@ -460,7 +461,7 @@ function generateHabitEntries(
 }
 
 // ---------------------------------------------------------------------------
-// Genera entry per Smart Block (fire_at diretto da smart_block_fire_at)
+// Genera entry per Smart Block (fire_at diretto da due_at)
 // Una regola smart_block → 1 entry nella queue, letta dall'app Android
 // ---------------------------------------------------------------------------
 function generateSmartBlockEntry(
@@ -469,16 +470,17 @@ function generateSmartBlockEntry(
   horizon: Date,
   ruleId:  string,
 ): QueueEntry[] {
-  const fireAt = new Date(rp.smart_block_fire_at)
+  const fireAt = new Date(rp.due_at)
   // Grace window di 2 ore nel passato: consente all'app Android di raccogliere
   // blocchi recenti anche se la edge function gira con ritardo.
   // Nessun limite minimo: le entry passate più vecchie di 2h vengono saltate.
   const grace = new Date(now.getTime() - 2 * 60 * 60 * 1000)
   if (fireAt < grace || fireAt > horizon) return []
-  const dateStr = rp.smart_block_fire_at.slice(0, 10)
-  const timeStr = rp.smart_block_fire_at.slice(11, 16)
+  const fireAtIso = fireAt.toISOString()
+  const dateStr   = fireAtIso.slice(0, 10)
+  const timeStr   = fireAtIso.slice(11, 16)
   return [{
-    fire_at:         fireAt.toISOString(),
+    fire_at:         fireAtIso,
     label:           '',
     time:            timeStr,
     occurrence_id:   `${ruleId}:${dateStr}:${timeStr}`,
