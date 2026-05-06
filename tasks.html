@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.92</title>
+    <title>Tasks v19.18.93</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2425,8 +2425,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.92';
-        const BUILD_TIME  = '2026-05-06T16:30:00Z';
+        const APP_VERSION = 'v19.18.93';
+        const BUILD_TIME  = '2026-05-06T16:50:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2763,9 +2763,7 @@
                         console.warn('⚠️ syncNotificationRules smart_block: due_at mancante, skip');
                         return;
                     }
-                    const fireAt = new Date(dueDate).toISOString();
-                    console.log(`🔐 smart_block fire_at derivato da due_at: ${fireAt}`);
-                    const rulePresetsSB = { reminders: [], due_at: dueDate, smart_block_fire_at: fireAt };
+                    const rulePresetsSB = { reminders: [], due_at: dueDate };
                     const devToken = sbDeviceToken || localStorage.getItem('sb_smartblock_device_token');
                     if (devToken) rulePresetsSB.device_token = devToken;
 
@@ -2782,7 +2780,7 @@
                         : await authSb.from('cm_notification_rules').insert(ruleSB);
                     if (sbErr) { console.error('❌ syncNotificationRules smart_block error:', sbErr); showToast(`❌ Errore: ${sbErr.message}`); }
                     else {
-                        const romeTime = new Date(fireAt).toLocaleString('it', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+                        const romeTime = new Date(dueDate).toLocaleString('it', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
                         if (!devToken) showToast('⚠️ Smart Block salvato ma Device Token mancante');
                         else showToast(`🔐 Smart Block: blocco alle ${romeTime} (ora italiana)`);
                         triggerFillQueue();
@@ -2937,13 +2935,12 @@
                 let presets = existing.reminder_presets;
                 if (typeof presets === 'string') presets = JSON.parse(presets);
                 presets.due_at = newDueAt;
-                presets.smart_block_fire_at = new Date(newDueAt).toISOString();
                 const { error } = await sb.from('cm_notification_rules')
                     .update({ reminder_presets: presets })
                     .eq('id', existing.id);
                 if (error) console.warn('⚠️ updateSmartBlockFireAt error:', error);
                 else {
-                    console.log(`🔐 updateSmartBlockFireAt: task ${taskId} due_at=${newDueAt} fire_at=${presets.smart_block_fire_at}`);
+                    console.log(`🔐 updateSmartBlockFireAt: task ${taskId} due_at=${newDueAt}`);
                     triggerFillQueue();
                 }
             } catch (e) {
