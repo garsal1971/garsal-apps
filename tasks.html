@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.94</title>
+    <title>Tasks v19.18.95</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2425,8 +2425,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.94';
-        const BUILD_TIME  = '2026-05-06T17:30:00Z';
+        const APP_VERSION = 'v19.18.95';
+        const BUILD_TIME  = '2026-05-06T18:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2763,12 +2763,7 @@
                         console.warn('⚠️ syncNotificationRules smart_block: due_at mancante, skip');
                         return;
                     }
-                    const devToken = sbDeviceToken || localStorage.getItem('sb_smartblock_device_token');
-                    if (!devToken) {
-                        showToast('❌ Device Token mancante: apri l\'app SmartBlocker sul telefono per registrarlo');
-                        return;
-                    }
-                    const rulePresetsSB = { reminders: [], due_at: dueDate, device_token: devToken };
+                    const rulePresetsSB = { reminders: [], due_at: dueDate };
 
                     const { data: existingSB } = await authSb.from('cm_notification_rules')
                         .select('id').eq('user_id', userId).eq('app', 'tasks')
