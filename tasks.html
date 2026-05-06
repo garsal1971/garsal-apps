@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.91</title>
+    <title>Tasks v19.18.92</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2425,8 +2425,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.91';
-        const BUILD_TIME  = '2026-05-06T16:10:00Z';
+        const APP_VERSION = 'v19.18.92';
+        const BUILD_TIME  = '2026-05-06T16:30:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2757,33 +2757,15 @@
 
                 console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, channel=${notificationChannel}, labels=${JSON.stringify(reminderLabels)}`);
 
-                // ── Smart Block: fire_at in ora di Roma (Europe/Rome) → UTC ──
-                // euToRomeUTC usa Intl — indipendente dal timezone del browser.
-                // Non usare dueDate (calcolato con euToIso che usa timezone browser).
+                // ── Smart Block: fire_at derivato da due_at (già UTC dal DB) ──
                 if (notificationChannel === 'smart_block') {
-                    const startDateRaw = document.getElementById('taskStartDate')?.value || '';
-                    if (!startDateRaw) {
-                        console.warn('⚠️ syncNotificationRules smart_block: data mancante, skip');
+                    if (!dueDate) {
+                        console.warn('⚠️ syncNotificationRules smart_block: due_at mancante, skip');
                         return;
                     }
-                    const taskTypeEl = document.getElementById('taskType')?.value || '';
-                    let fireAt;
-                    if (taskTypeEl === 'multiple' || taskTypeEl === 'free_repeat') {
-                        const timeVal = document.getElementById('taskTime')?.value || '';
-                        if (!timeVal) {
-                            console.warn('⚠️ syncNotificationRules smart_block: ora task mancante, skip');
-                            return;
-                        }
-                        fireAt = euToRomeUTC(startDateRaw, timeVal); // data da form, ora da taskTime
-                    } else {
-                        fireAt = euToRomeUTC(startDateRaw); // data+ora da form (Flatpickr)
-                    }
-                    if (!fireAt) {
-                        console.warn('⚠️ syncNotificationRules smart_block: conversione Roma→UTC fallita, skip');
-                        return;
-                    }
-                    console.log(`🔐 smart_block fire_at: ${startDateRaw} (Roma) → ${fireAt} (UTC)`);
-                    const rulePresetsSB = { reminders: [], due_at: dueDate || null, smart_block_fire_at: fireAt };
+                    const fireAt = new Date(dueDate).toISOString();
+                    console.log(`🔐 smart_block fire_at derivato da due_at: ${fireAt}`);
+                    const rulePresetsSB = { reminders: [], due_at: dueDate, smart_block_fire_at: fireAt };
                     const devToken = sbDeviceToken || localStorage.getItem('sb_smartblock_device_token');
                     if (devToken) rulePresetsSB.device_token = devToken;
 
@@ -2942,8 +2924,9 @@
             }
         }
 
-        async function updateSmartBlockFireAt(taskId, newFireAtISO) {
+        async function updateSmartBlockFireAt(taskId, newDueAt) {
             if (notificationChannel !== 'smart_block') return;
+            if (!newDueAt) return;
             try {
                 const { data: existing } = await sb.from('cm_notification_rules')
                     .select('id, reminder_presets')
@@ -2953,14 +2936,14 @@
                 if (!existing?.id) return;
                 let presets = existing.reminder_presets;
                 if (typeof presets === 'string') presets = JSON.parse(presets);
-                presets.smart_block_fire_at = newFireAtISO;
-                presets.due_at = newFireAtISO;
+                presets.due_at = newDueAt;
+                presets.smart_block_fire_at = new Date(newDueAt).toISOString();
                 const { error } = await sb.from('cm_notification_rules')
                     .update({ reminder_presets: presets })
                     .eq('id', existing.id);
                 if (error) console.warn('⚠️ updateSmartBlockFireAt error:', error);
                 else {
-                    console.log(`🔐 updateSmartBlockFireAt: task ${taskId} → ${newFireAtISO}`);
+                    console.log(`🔐 updateSmartBlockFireAt: task ${taskId} due_at=${newDueAt} fire_at=${presets.smart_block_fire_at}`);
                     triggerFillQueue();
                 }
             } catch (e) {
