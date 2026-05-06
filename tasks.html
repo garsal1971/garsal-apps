@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.90</title>
+    <title>Tasks v19.18.91</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2425,8 +2425,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.90';
-        const BUILD_TIME  = '2026-05-06T14:10:00Z';
+        const APP_VERSION = 'v19.18.91';
+        const BUILD_TIME  = '2026-05-06T16:10:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2939,6 +2939,32 @@
                 }
             } catch (e) {
                 console.error('❌ deleteNotificationRules exception:', e);
+            }
+        }
+
+        async function updateSmartBlockFireAt(taskId, newFireAtISO) {
+            if (notificationChannel !== 'smart_block') return;
+            try {
+                const { data: existing } = await sb.from('cm_notification_rules')
+                    .select('id, reminder_presets')
+                    .eq('app', 'tasks')
+                    .eq('entity_id', String(taskId))
+                    .maybeSingle();
+                if (!existing?.id) return;
+                let presets = existing.reminder_presets;
+                if (typeof presets === 'string') presets = JSON.parse(presets);
+                presets.smart_block_fire_at = newFireAtISO;
+                presets.due_at = newFireAtISO;
+                const { error } = await sb.from('cm_notification_rules')
+                    .update({ reminder_presets: presets })
+                    .eq('id', existing.id);
+                if (error) console.warn('⚠️ updateSmartBlockFireAt error:', error);
+                else {
+                    console.log(`🔐 updateSmartBlockFireAt: task ${taskId} → ${newFireAtISO}`);
+                    triggerFillQueue();
+                }
+            } catch (e) {
+                console.warn('⚠️ updateSmartBlockFireAt exception:', e.message);
             }
         }
 
@@ -7354,6 +7380,9 @@
                 await loadTasks();
                 await loadHistory();
 
+                const completedTask = tasks.find(t => t.id === id);
+                if (completedTask?.next_occurrence_date) await updateSmartBlockFireAt(id, completedTask.next_occurrence_date);
+
                 renderDashboard();
                 renderCalendar();
                 renderManagement();
@@ -7397,14 +7426,15 @@
                     status: 'failed',
                     next_occurrence_date: nextDate.toISOString()
                 }).eq('id', id);
-                
+
                 await loadTasks();
-                
+                await updateSmartBlockFireAt(id, nextDate.toISOString());
+
             // Per ricorrenti avanzati, calcola prossima occorrenza
             } else if (task.type === 'recurring') {
                 const baseDate = task.next_occurrence_date ? new Date(task.next_occurrence_date) : new Date(task.start_date);
                 const nextDate = getNextRecurringDate(task, baseDate);
-                
+
                 // Se non c'è prossima occorrenza, chiudi il task
                 if (!nextDate) {
                     await sb.from('ts_tasks').update({
@@ -7421,6 +7451,7 @@
                 }
 
                 await loadTasks();
+                if (nextDate) await updateSmartBlockFireAt(id, nextDate.toISOString());
 
             // Per task multipli, passa alla prossima data
             } else if (task.type === 'multiple') {
@@ -7599,7 +7630,8 @@
             
             await loadTasks();
             await loadHistory();
-            
+            if (newDate) await updateSmartBlockFireAt(id, newDate.toISOString());
+
             showToast(`⏭ ${skipMessage}`);
             
             // Refresh della vista corrente
