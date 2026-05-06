@@ -81,8 +81,7 @@ interface HabitReminderPresets {
 }
 
 interface SmartBlockReminderPresets {
-  due_at:        string   // ISO datetime — orario del blocco smart block
-  device_token?: string
+  due_at: string   // ISO datetime — orario del blocco smart block
 }
 
 type ReminderPresetsJson = TaskReminderPresets | HabitReminderPresets | QuickReminderPresets | SmartBlockReminderPresets
@@ -164,6 +163,17 @@ Deno.serve(async (_req) => {
     }
     console.log(`[fill-queue] preset caricati: ${presetsMap.size}`)
 
+    // 1b. Carica device token per utente → mappa user_id → smart_block_device_token
+    const { data: notifSettingsRows } = await sb
+      .from('cm_user_notification_settings')
+      .select('user_id, smart_block_device_token')
+
+    const deviceTokenMap = new Map<string, string>()
+    for (const s of (notifSettingsRows ?? []) as Array<{ user_id: string; smart_block_device_token: string | null }>) {
+      if (s.smart_block_device_token) deviceTokenMap.set(s.user_id, s.smart_block_device_token)
+    }
+    console.log(`[fill-queue] device token caricati: ${deviceTokenMap.size}`)
+
     // 2. Carica tutte le regole attive
     const { data: rules, error: rulesError } = await sb
       .from('cm_notification_rules')
@@ -195,7 +205,8 @@ Deno.serve(async (_req) => {
           skipped++
           continue
         }
-        console.log(`[fill-queue] smart_block rule=${rule.id} due_at=${sbrp.due_at} token=${sbrp.device_token ? sbrp.device_token.slice(0,8)+'…' : 'none'}`)
+        const deviceToken = deviceTokenMap.get(rule.user_id)
+        console.log(`[fill-queue] smart_block rule=${rule.id} due_at=${sbrp.due_at} token=${deviceToken ? deviceToken.slice(0,8)+'…' : 'none'}`)
         entries = generateSmartBlockEntry(sbrp, now, horizon, rule.id)
         console.log(`[fill-queue] smart_block entries generati: ${entries.length}`)
       } else if (isQuick) {
@@ -260,8 +271,8 @@ Deno.serve(async (_req) => {
         // Le notifiche quick non hanno completion_update — snooze/cancel sempre visibili
         let entryMetadata: Record<string, unknown> | null = null
         if (isSmartBlock) {
-          const sbrp = rp as SmartBlockReminderPresets
-          if (sbrp.device_token) entryMetadata = { device_token: sbrp.device_token }
+          const deviceToken = deviceTokenMap.get(rule.user_id)
+          if (deviceToken) entryMetadata = { device_token: deviceToken }
         } else if (isQuick) {
           const qrp = rp as QuickReminderPresets
           entryMetadata = {
