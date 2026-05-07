@@ -248,9 +248,7 @@ Deno.serve(async (_req) => {
         .delete({ count: 'exact' })
         .eq('rule_id', rule.id)
         .eq('status', 'pending')
-      const { error: delErr, count: delCount } = isSmartBlock
-        ? await delQuery
-        : await delQuery.gt('fire_at', safeDelete.toISOString())
+      const { error: delErr, count: delCount } = await delQuery.gt('fire_at', safeDelete.toISOString())
 
       if (delErr) {
         console.error(`[fill-queue] delete error rule=${rule.id}:`, delErr)
@@ -483,11 +481,7 @@ function generateSmartBlockEntry(
   ruleId:  string,
 ): QueueEntry[] {
   const fireAt = new Date(rp.due_at)
-  // Grace window di 2 ore nel passato: consente all'app Android di raccogliere
-  // blocchi recenti anche se la edge function gira con ritardo.
-  // Nessun limite minimo: le entry passate più vecchie di 2h vengono saltate.
-  const grace = new Date(now.getTime() - 2 * 60 * 60 * 1000)
-  if (fireAt < grace || fireAt > horizon) return []
+  if (fireAt <= now || fireAt > horizon) return []
   const fireAtIso = fireAt.toISOString()
   const dateStr   = fireAtIso.slice(0, 10)
   const timeStr   = fireAtIso.slice(11, 16)
