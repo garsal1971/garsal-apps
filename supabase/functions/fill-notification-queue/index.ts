@@ -142,12 +142,26 @@ Deno.serve(async (_req) => {
       .from('cm_notification_queue')
       .delete({ count: 'exact' })
       .eq('status', 'sent')
+      .neq('channel', 'smart_block')
       .lt('fire_at', sentCutoff)
 
     if (sentCleanErr) {
       console.error('[fill-queue] pulizia sent vecchi error:', sentCleanErr)
     } else {
       console.log(`[fill-queue] pulizia sent >7gg: ${sentCleanCount ?? 0} righe eliminate`)
+    }
+
+    // Pulizia smart_block sent: cancella tutte ad ogni run
+    const { error: sbSentCleanErr, count: sbSentCleanCount } = await sb
+      .from('cm_notification_queue')
+      .delete({ count: 'exact' })
+      .eq('status', 'sent')
+      .eq('channel', 'smart_block')
+
+    if (sbSentCleanErr) {
+      console.error('[fill-queue] pulizia smart_block sent error:', sbSentCleanErr)
+    } else {
+      console.log(`[fill-queue] pulizia smart_block sent: ${sbSentCleanCount ?? 0} righe eliminate`)
     }
 
     // 1. Carica tutti i preset → mappa int_id → {label, offset_minutes}
