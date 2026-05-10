@@ -2303,6 +2303,14 @@
                     </label>
                 </div>
 
+                <!-- MOSTRA IN PANORAMICA -->
+                <div class="form-group" style="margin-top: 0.5rem;">
+                    <label style="display:flex; align-items:center; gap:0.6rem; cursor:pointer; user-select:none;">
+                        <input type="checkbox" id="taskShowInPanoramica" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;" checked>
+                        <span class="form-label" style="margin:0;">Mostra in Panoramica</span>
+                    </label>
+                </div>
+
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Salva Task</button>
             </form>
         </div>
@@ -2425,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.96';
-        const BUILD_TIME  = '2026-05-10T10:00:00Z';
+        const APP_VERSION = 'v19.18.97';
+        const BUILD_TIME  = '2026-05-10T11:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -5587,6 +5595,7 @@
             // Campo riservato: visibile e pre-selezionato solo in modalità nascosta
             updateRiservatoVisibility();
             document.getElementById('taskRiservato').checked = hiddenMode;
+            document.getElementById('taskShowInPanoramica').checked = true;
 
             updateTaskFields();
         }
@@ -5706,6 +5715,7 @@
             // Nascosto: visibile solo in modalità nascosta
             updateRiservatoVisibility();
             document.getElementById('taskRiservato').checked = hiddenMode && !!task.riservato;
+            document.getElementById('taskShowInPanoramica').checked = task.show_in_panoramica !== false;
 
             // Punti
             document.getElementById('successPoints').value = task.success_points;
@@ -6621,6 +6631,7 @@
                 skip_points: parseInt(document.getElementById('skipPoints').value),
                 late_points: parseInt(document.getElementById('latePoints').value) || 0,
                 riservato: hiddenMode && document.getElementById('taskRiservato').checked,
+                show_in_panoramica: document.getElementById('taskShowInPanoramica').checked,
                 status: 'started'
             };
 
@@ -9344,7 +9355,7 @@ Per attivarle:
             const nextNDays = new Date(today);
             nextNDays.setDate(nextNDays.getDate() + upcomingDays);
             
-            const activeTasks = tasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status));
+            const activeTasks = tasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status) && t.show_in_panoramica !== false);
             const freeRepeatTasks = activeTasks.filter(t => t.type === 'free_repeat');
             const scheduledTasks = activeTasks.filter(t => t.type !== 'free_repeat');
             
