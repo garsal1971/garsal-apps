@@ -2425,8 +2425,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.95';
-        const BUILD_TIME  = '2026-05-06T18:00:00Z';
+        const APP_VERSION = 'v19.18.96';
+        const BUILD_TIME  = '2026-05-10T10:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -4141,6 +4141,8 @@
                 if (task.type === 'single' && task.start_date) {
                     dateStr = formatDateTime(task.start_date);
                 } else if ((task.type === 'simple_recurring' || task.type === 'recurring') && task.next_occurrence_date) {
+                    dateStr = formatDateTime(task.next_occurrence_date);
+                } else if (task.type === 'multiple' && task.next_occurrence_date) {
                     dateStr = formatDateTime(task.next_occurrence_date);
                 } else if (task.next_due) {
                     dateStr = formatDateTime(task.next_due);
@@ -9409,6 +9411,8 @@ Per attivarle:
                 if (task.type === 'single' && task.start_date) {
                     dateStr = formatDateTime(task.start_date);
                 } else if ((task.type === 'simple_recurring' || task.type === 'recurring') && task.next_occurrence_date) {
+                    dateStr = formatDateTime(task.next_occurrence_date);
+                } else if (task.type === 'multiple' && task.next_occurrence_date) {
                     dateStr = formatDateTime(task.next_occurrence_date);
                 } else if (task.next_due) {
                     dateStr = formatDateTime(task.next_due);
