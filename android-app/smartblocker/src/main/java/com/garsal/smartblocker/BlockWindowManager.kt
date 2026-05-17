@@ -51,7 +51,6 @@ class BlockWindowManager(private val ctx: Context) {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
             WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
@@ -67,6 +66,7 @@ class BlockWindowManager(private val ctx: Context) {
             handler.post(clockTick)
             refreshUI()
         } catch (e: Exception) {
+            AppLogger.log(ctx, "WINDOW", "errore show(): ${e.message}")
             rootView = null
         }
     }
@@ -123,6 +123,7 @@ class BlockWindowManager(private val ctx: Context) {
                 Thread {
                     val api = SupabaseApi(ctx)
                     entityIds.forEach { api.completeTask(it) }
+                    api.triggerFillQueue()
                 }.start()
             }
             dismiss()

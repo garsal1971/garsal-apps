@@ -167,11 +167,27 @@ class SupabaseApi(private val ctx: Context) {
             val body = "{\"p_task_id\":\"$entityId\",\"p_today\":\"$today\"}"
             conn.outputStream.write(body.toByteArray())
             val code = conn.responseCode
-            val resp = conn.inputStream?.bufferedReader()?.readText() ?: ""
+            val resp = if (code < 400) conn.inputStream?.bufferedReader()?.readText() ?: ""
+                       else conn.errorStream?.bufferedReader()?.readText() ?: ""
             conn.disconnect()
             AppLogger.log(ctx, "SUPABASE", "completeTask $entityId p_today=$today → HTTP $code $resp")
         } catch (e: Exception) {
             AppLogger.log(ctx, "SUPABASE", "completeTask errore: ${e.message}")
+        }
+    }
+
+    /**
+     * Chiama la Edge Function fill-notification-queue per aggiornare immediatamente la coda.
+     */
+    fun triggerFillQueue() {
+        try {
+            val urlStr = "$base/functions/v1/fill-notification-queue"
+            val conn = openConn(urlStr, "POST")
+            val code = conn.responseCode
+            conn.disconnect()
+            AppLogger.log(ctx, "SUPABASE", "triggerFillQueue → HTTP $code")
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "SUPABASE", "triggerFillQueue errore: ${e.message}")
         }
     }
 

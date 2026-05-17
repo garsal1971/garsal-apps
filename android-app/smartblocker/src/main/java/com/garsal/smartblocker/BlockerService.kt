@@ -2,6 +2,7 @@ package com.garsal.smartblocker
 
 import android.app.*
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.provider.Settings
 import android.os.Handler
@@ -29,7 +30,12 @@ class BlockerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIF_ID, buildNotification())
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIF_ID, buildNotification())
+        }
 
         val pm = getSystemService(PowerManager::class.java)
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SmartBlocker::WakeLock")
