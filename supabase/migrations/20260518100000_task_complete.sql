@@ -1,4 +1,12 @@
-
+CREATE OR REPLACE FUNCTION task_complete(
+  p_task_id uuid,
+  p_today   date DEFAULT CURRENT_DATE
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   v_task                ts_tasks%ROWTYPE;
   v_from_status         text;
@@ -189,3 +197,4 @@ BEGIN
     'type',   v_task.type
   );
 END;
+$$;
