@@ -14,37 +14,41 @@ jobs:
       contents: read
 
     steps:
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
-      - name: Run pg_dump (schema + data)
+      - name: Dump schema + data
         env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD:  ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           TIMESTAMP=$(date -u '+%Y%m%d_%H%M%S')
-          FILENAME="backup_${TIMESTAMP}.sql"
+          SCHEMA_FILE="backup_schema_${TIMESTAMP}.sql"
+          DATA_FILE="backup_data_${TIMESTAMP}.sql"
 
-          pg_dump \
-            --host=db.jajlmmdsjlvzgcxiiypk.supabase.co \
-            --port=5432 \
-            --username=postgres \
-            --dbname=postgres \
-            --no-password \
-            --format=plain \
-            --no-owner \
-            --no-acl \
-            --schema=public \
-            --file="${FILENAME}"
+          supabase db dump \
+            --project-ref jajlmmdsjlvzgcxiiypk \
+            --password "${SUPABASE_DB_PASSWORD}" \
+            -f "${SCHEMA_FILE}"
 
-          echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
-          echo "Backup completato: $(du -sh ${FILENAME} | cut -f1)"
+          supabase db dump \
+            --project-ref jajlmmdsjlvzgcxiiypk \
+            --password "${SUPABASE_DB_PASSWORD}" \
+            --data-only \
+            -f "${DATA_FILE}"
+
+          echo "SCHEMA_FILE=${SCHEMA_FILE}" >> $GITHUB_ENV
+          echo "DATA_FILE=${DATA_FILE}"     >> $GITHUB_ENV
+          echo "Schema: $(du -sh ${SCHEMA_FILE} | cut -f1) — Data: $(du -sh ${DATA_FILE} | cut -f1)"
 
       - name: Upload backup as artifact
         uses: actions/upload-artifact@v4
         with:
           name: db-backup-${{ github.run_number }}
-          path: ${{ env.FILENAME }}
+          path: |
+            ${{ env.SCHEMA_FILE }}
+            ${{ env.DATA_FILE }}
           # Artefatti conservati 90 giorni (max gratuito su GitHub Actions)
           retention-days: 90
