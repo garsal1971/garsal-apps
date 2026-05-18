@@ -14,41 +14,41 @@ jobs:
       contents: read
 
     steps:
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
 
-      - name: Dump schema + data
+      - name: Run pg_dump (schema + data, IPv4 forzato)
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD:  ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           TIMESTAMP=$(date -u '+%Y%m%d_%H%M%S')
-          SCHEMA_FILE="backup_schema_${TIMESTAMP}.sql"
-          DATA_FILE="backup_data_${TIMESTAMP}.sql"
+          FILENAME="backup_${TIMESTAMP}.sql"
+          DB_HOST="db.jajlmmdsjlvzgcxiiypk.supabase.co"
 
-          supabase db dump \
-            --project-ref jajlmmdsjlvzgcxiiypk \
-            --password "${SUPABASE_DB_PASSWORD}" \
-            -f "${SCHEMA_FILE}"
+          # Risolve il nome host in IPv4 per evitare il problema IPv6 di GitHub Actions
+          IPV4=$(getent ahostsv4 "${DB_HOST}" | awk '/STREAM/{print $1; exit}')
+          echo "Host risolto: ${DB_HOST} → ${IPV4}"
 
-          supabase db dump \
-            --project-ref jajlmmdsjlvzgcxiiypk \
-            --password "${SUPABASE_DB_PASSWORD}" \
-            --data-only \
-            -f "${DATA_FILE}"
+          PGHOSTADDR="${IPV4}" pg_dump \
+            --host="${DB_HOST}" \
+            --port=5432 \
+            --username=postgres \
+            --dbname=postgres \
+            --no-password \
+            --format=plain \
+            --no-owner \
+            --no-acl \
+            --schema=public \
+            --file="${FILENAME}"
 
-          echo "SCHEMA_FILE=${SCHEMA_FILE}" >> $GITHUB_ENV
-          echo "DATA_FILE=${DATA_FILE}"     >> $GITHUB_ENV
-          echo "Schema: $(du -sh ${SCHEMA_FILE} | cut -f1) — Data: $(du -sh ${DATA_FILE} | cut -f1)"
+          echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
+          echo "Backup completato: $(du -sh ${FILENAME} | cut -f1)"
 
       - name: Upload backup as artifact
         uses: actions/upload-artifact@v4
         with:
           name: db-backup-${{ github.run_number }}
-          path: |
-            ${{ env.SCHEMA_FILE }}
-            ${{ env.DATA_FILE }}
-          # Artefatti conservati 90 giorni (max gratuito su GitHub Actions)
+          path: ${{ env.FILENAME }}
           retention-days: 90
