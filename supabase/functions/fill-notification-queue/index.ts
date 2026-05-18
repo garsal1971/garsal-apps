@@ -1,7 +1,7 @@
 // ============================================================
 // Job 1 — fill-notification-queue
 // Frequenza: ogni 6 ore (cron: "0 */6 * * *")
-// Aggiornato: 2026-03-11 — refactoring occorrenze e body unificato
+// Aggiornato: 2026-05-18 — fix smart_block delete: cancella TUTTE le pending (non solo future)
 //
 // Concetti chiave:
 //   REGOLA  = 1 row in cm_notification_rules (configurazione persistente)
@@ -254,15 +254,16 @@ Deno.serve(async (_req) => {
       }
 
       // 3. Elimina entry pending stale per questa regola.
-      // Per smart_block: cancella TUTTE le pending (incluse passate) così le entry
-      // con fire_at sbagliato non restano in coda a confondere l'app Android.
-      // Per altri canali: cancella solo quelle future (safe window di 2 min).
-      const delQuery = sb
+      // smart_block: cancella TUTTE le pending (incluse passate) — evita conflitti upsert su fire_at invariato
+      // Altri canali: cancella solo future (safe window di 2 min)
+      const baseDelQuery = sb
         .from('cm_notification_queue')
         .delete({ count: 'exact' })
         .eq('rule_id', rule.id)
         .eq('status', 'pending')
-      const { error: delErr, count: delCount } = await delQuery.gt('fire_at', safeDelete.toISOString())
+      const { error: delErr, count: delCount } = isSmartBlock
+        ? await baseDelQuery
+        : await baseDelQuery.gt('fire_at', safeDelete.toISOString())
 
       if (delErr) {
         console.error(`[fill-queue] delete error rule=${rule.id}:`, delErr)
@@ -338,15 +339,18 @@ Deno.serve(async (_req) => {
         }
         if (entryMetadata) queueEntry.metadata = entryMetadata
 
-        const { error: upsertError } = await sb
+        const { error: upsertError, count: upsertCount } = await sb
           .from('cm_notification_queue')
           .upsert(
             queueEntry,
-            { onConflict: 'rule_id,fire_at', ignoreDuplicates: true }
+            { onConflict: 'rule_id,fire_at', ignoreDuplicates: true, count: 'exact' }
           )
 
         if (upsertError) {
           console.error(`[fill-queue] upsert error rule=${rule.id} fire_at=${entry.fire_at}:`, upsertError)
+          errors++
+        } else if ((upsertCount ?? 0) === 0) {
+          console.warn(`[fill-queue] upsert no-op (conflitto su rule_id,fire_at) rule=${rule.id} fire_at=${entry.fire_at}`)
           errors++
         } else {
           inserted++
