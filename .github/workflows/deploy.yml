@@ -71,6 +71,17 @@ jobs:
         run: |
           echo "▶ Applying database migrations..."
           supabase link --project-ref jajlmmdsjlvzgcxiiypk
+
+          # Crea placeholder locali per migration presenti su remote ma assenti in locale.
+          # Senza questi file, supabase db push fallisce con "Remote migration versions not found".
+          supabase migration list 2>&1 | grep -oE '[0-9]{14}' | sort -u | while read ver; do
+            if ! compgen -G "supabase/migrations/${ver}_*.sql" > /dev/null 2>&1; then
+              echo "-- Placeholder: migration $ver applicata direttamente su Supabase." \
+                > "supabase/migrations/${ver}_remote_placeholder.sql"
+              echo "  → Placeholder creato per versione $ver"
+            fi
+          done
+
           supabase db push
 
       - name: Deploy Supabase Edge Functions
