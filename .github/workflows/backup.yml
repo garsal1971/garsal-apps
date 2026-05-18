@@ -19,20 +19,25 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
 
-      - name: Run pg_dump (schema + data, IPv4 forzato)
+      - name: Force IPv4 DNS resolution
+        run: |
+          DB_HOST="db.jajlmmdsjlvzgcxiiypk.supabase.co"
+          # Risolve in IPv4 e lo fissa in /etc/hosts così pg_dump non usa mai IPv6
+          IPV4=$(python3 -c "import socket; print(socket.getaddrinfo('${DB_HOST}', 5432, socket.AF_INET)[0][4][0])")
+          echo "Resolved IPv4: ${IPV4}"
+          echo "${IPV4} ${DB_HOST}" | sudo tee -a /etc/hosts
+          # Verifica
+          getent hosts "${DB_HOST}"
+
+      - name: Run pg_dump (schema + data)
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           TIMESTAMP=$(date -u '+%Y%m%d_%H%M%S')
           FILENAME="backup_${TIMESTAMP}.sql"
-          DB_HOST="db.jajlmmdsjlvzgcxiiypk.supabase.co"
 
-          # Risolve il nome host in IPv4 per evitare il problema IPv6 di GitHub Actions
-          IPV4=$(getent ahostsv4 "${DB_HOST}" | awk '/STREAM/{print $1; exit}')
-          echo "Host risolto: ${DB_HOST} → ${IPV4}"
-
-          PGHOSTADDR="${IPV4}" pg_dump \
-            --host="${DB_HOST}" \
+          pg_dump \
+            --host=db.jajlmmdsjlvzgcxiiypk.supabase.co \
             --port=5432 \
             --username=postgres \
             --dbname=postgres \
