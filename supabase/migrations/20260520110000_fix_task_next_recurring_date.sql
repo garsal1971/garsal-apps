@@ -6,7 +6,7 @@
 
 CREATE OR REPLACE FUNCTION task_next_recurring_date(
   p_task  ts_tasks,
-  p_from  date
+  p_base  date
 )
 RETURNS date
 LANGUAGE plpgsql
@@ -33,7 +33,7 @@ BEGIN
 
   -- ── daily ──────────────────────────────────────────────────────────────
   IF v_freq = 'daily' THEN
-    RETURN p_from + (v_interval || ' days')::interval;
+    RETURN p_base + (v_interval || ' days')::interval;
 
   -- ── weekly ─────────────────────────────────────────────────────────────
   ELSIF v_freq = 'weekly' THEN
@@ -47,11 +47,11 @@ BEGIN
       v_dow_arr := ARRAY[extract(dow FROM p_task.start_date::date)::integer];
     END IF;
 
-    v_cur_dow := extract(dow FROM p_from)::integer;
+    v_cur_dow := extract(dow FROM p_base)::integer;
 
     -- Cerca nella settimana corrente (da domani in poi)
     FOR i IN 1..(7 - v_cur_dow) LOOP
-      v_test := p_from + i;
+      v_test := p_base + i;
       IF extract(dow FROM v_test)::integer = ANY(v_dow_arr) THEN
         RETURN v_test;
       END IF;
@@ -62,7 +62,7 @@ BEGIN
       v_days_to_sun integer := (7 - v_cur_dow) % 7;
     BEGIN
       IF v_days_to_sun = 0 THEN v_days_to_sun := 7; END IF;
-      v_sun_base := p_from + v_days_to_sun + (v_interval - 1) * 7;
+      v_sun_base := p_base + v_days_to_sun + (v_interval - 1) * 7;
     END;
 
     FOR i IN 0..6 LOOP
@@ -86,11 +86,11 @@ BEGIN
 
     -- Cerca un giorno valido nel mese corrente (dopo oggi)
     FOREACH v_day IN ARRAY v_dom_arr LOOP
-      IF v_day > extract(day FROM p_from)::integer THEN
+      IF v_day > extract(day FROM p_base)::integer THEN
         BEGIN
           RETURN make_date(
-            extract(year  FROM p_from)::integer,
-            extract(month FROM p_from)::integer,
+            extract(year  FROM p_base)::integer,
+            extract(month FROM p_base)::integer,
             v_day
           );
         EXCEPTION WHEN OTHERS THEN NULL;
@@ -99,7 +99,7 @@ BEGIN
     END LOOP;
 
     -- Vai al mese target (interval mesi avanti)
-    v_test := (date_trunc('month', p_from) + (v_interval || ' months')::interval)::date;
+    v_test := (date_trunc('month', p_base) + (v_interval || ' months')::interval)::date;
     FOREACH v_day IN ARRAY v_dom_arr LOOP
       BEGIN
         RETURN make_date(
@@ -115,7 +115,7 @@ BEGIN
 
   -- ── yearly ─────────────────────────────────────────────────────────────
   ELSIF v_freq = 'yearly' THEN
-    v_yr := extract(year FROM p_from)::integer;
+    v_yr := extract(year FROM p_base)::integer;
 
     IF p_task.recurring_dates IS NOT NULL
        AND array_length(p_task.recurring_dates, 1) > 0
@@ -139,7 +139,7 @@ BEGIN
       v_m := v_parts[2]::integer;
       BEGIN
         v_test := make_date(v_yr, v_m, v_d);
-        IF v_test > p_from THEN
+        IF v_test > p_base THEN
           RETURN v_test;
         END IF;
       EXCEPTION WHEN OTHERS THEN NULL;
