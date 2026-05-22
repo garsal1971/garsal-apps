@@ -158,13 +158,12 @@ Deno.serve(async (req) => {
     for (const user of allUsers) {
       console.log(`[rebuild-rules] elaborazione utente ${user.user_id}`)
 
-      // Carica regole esistenti per i task di questo utente (solo canale telegram)
+      // Carica regole esistenti per i task di questo utente
       const { data: existingRules, error: existErr } = await sb
         .from('cm_notification_rules')
         .select('id, entity_id, reminder_presets')
         .eq('user_id', user.user_id)
         .eq('app', 'tasks')
-        .eq('channel', 'telegram')
 
       if (existErr) {
         console.error(`[rebuild-rules] errore caricamento regole utente ${user.user_id}:`, existErr)
