@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.19.6</title>
+    <title>Tasks v19.19.7</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1830,7 +1830,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.19.6</span>
+                        <span>Tasks v19.19.7</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2433,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.19.6';
-        const BUILD_TIME  = '2026-05-22T14:30:00Z';
+        const APP_VERSION = 'v19.19.7';
+        const BUILD_TIME  = '2026-05-22T15:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -5701,10 +5701,12 @@
                     // Ripristina label preset Telegram dalla regola (fonte autorevole: int_id → label)
                     if (tgRule) {
                         const tgPresetIds = tgRule.reminder_presets?.reminders || [];
-                        if (tgPresetIds.length > 0) {
-                            reminders = tgPresetIds
-                                .map(id => reminderPresets.find(p => p.int_id === id)?.label)
+                        if (tgPresetIds.length > 0 && reminderPresets.length > 0) {
+                            const fromRule = tgPresetIds
+                                .map(id => reminderPresets.find(p => String(p.int_id) === String(id))?.label)
                                 .filter(Boolean);
+                            if (fromRule.length > 0) reminders = fromRule;
+                            // else: mantieni task.reminders già caricato
                         }
                         if (tgRule.reminder_presets?.telegram_complete_button != null)
                             telegramCompleteButton = tgRule.reminder_presets.telegram_complete_button;
@@ -5717,9 +5719,10 @@
                         smartBlockEnabled = true;
                         const bothPresetIds = bothRule.reminder_presets?.reminders || [];
                         if (bothPresetIds.length > 0) {
-                            reminders = bothPresetIds
-                                .map(id => reminderPresets.find(p => p.int_id === id)?.label)
+                            const fromBoth = bothPresetIds
+                                .map(id => reminderPresets.find(p => String(p.int_id) === String(id))?.label)
                                 .filter(Boolean);
+                            if (fromBoth.length > 0) reminders = fromBoth;
                         }
                         if (bothRule.reminder_presets?.telegram_complete_button != null)
                             telegramCompleteButton = bothRule.reminder_presets.telegram_complete_button;
@@ -5731,10 +5734,9 @@
                 // Fallback: task con reminders in task.reminders ma senza regola → abilita Telegram
                 if (!telegramEnabled && reminders.length > 0) {
                     telegramEnabled = true;
-                    console.log('🔔 fallback: telegramEnabled=true da task.reminders');
                 }
             } catch (e) { console.warn('editTask: impossibile leggere canale notifica', e); }
-            
+
             // Nascosto: visibile solo in modalità nascosta
             updateRiservatoVisibility();
             document.getElementById('taskRiservato').checked = hiddenMode && !!task.riservato;
@@ -5748,8 +5750,9 @@
             
             renderCategoriesSelect();
             updateTaskFields();
+            if (reminderPresets.length === 0) await loadReminderPresets();
             renderReminders();
-            
+
             document.getElementById('taskModal').classList.add('active');
             // Scroll al primo campo
             const modalContentEdit = document.querySelector('#taskModal .modal-content');
