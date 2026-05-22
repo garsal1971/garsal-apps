@@ -2433,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.19.7';
-        const BUILD_TIME  = '2026-05-22T15:00:00Z';
+        const APP_VERSION = 'v19.20.0';
+        const BUILD_TIME  = '2026-05-22T17:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2599,6 +2599,7 @@
         let smartBlockEnabled      = false; // Canale Smart Block attivo per il task corrente
         let currentReminderTab     = 'telegram'; // Tab attivo nel pannello promemoria
         let sbDeviceToken = null; // Token dispositivo Android (caricato da cm_user_notification_settings)
+        let notificationRulesMap = {}; // entity_id → { presetIds: number[], telegramCompleteButton: bool }
         let selectedCategories = [];
         let currentViewTaskId = null;
         let notes = []; // Appunti
@@ -2680,8 +2681,9 @@
             await initNotificationSystem();
             await loadNotifSettings();
 
-            // Carica preset promemoria da DB
+            // Carica preset promemoria e mappa regole notifica
             await loadReminderPresets();
+            await loadNotificationRulesMap();
 
             // Aggiorna badge promemoria
             updateRemindersCount();
@@ -2703,6 +2705,35 @@
             } catch (e) {
                 console.error('loadReminderPresets exception:', e);
             }
+        }
+
+        async function loadNotificationRulesMap() {
+            try {
+                const { data, error } = await sb
+                    .from('cm_notification_rules')
+                    .select('entity_id, reminder_presets')
+                    .eq('app', 'tasks')
+                    .eq('channel', 'telegram');
+                if (error) { console.warn('loadNotificationRulesMap error:', error); return; }
+                notificationRulesMap = {};
+                for (const r of data || []) {
+                    notificationRulesMap[String(r.entity_id)] = {
+                        presetIds: r.reminder_presets?.reminders || [],
+                        telegramCompleteButton: r.reminder_presets?.telegram_complete_button !== false,
+                    };
+                }
+                console.log('📋 notificationRulesMap loaded:', Object.keys(notificationRulesMap).length, 'rules');
+            } catch (e) {
+                console.warn('loadNotificationRulesMap exception:', e);
+            }
+        }
+
+        function getTaskReminderLabels(taskId) {
+            const rule = notificationRulesMap[String(taskId)];
+            if (!rule?.presetIds?.length) return [];
+            return rule.presetIds
+                .map(id => reminderPresets.find(p => p.int_id === id)?.label)
+                .filter(Boolean);
         }
 
         // ========================================
@@ -2865,6 +2896,7 @@
 
                 if (toasts.length > 0) showToast(toasts.join(' · '));
                 console.log(`✅ syncNotificationRules: task ${taskId} completato`);
+                loadNotificationRulesMap();
                 triggerFillQueue();
             } catch (e) {
                 console.error('❌ syncNotificationRules exception:', e);
@@ -4878,41 +4910,31 @@
             // Trova tutti i promemoria scaduti nelle ultime 24 ore
             const expiredReminders = [];
             
-            tasks.filter(t => t.status === 'active' && t.reminders && t.reminders.length > 0).forEach(task => {
+            tasks.filter(t => t.status === 'active' && notificationRulesMap[String(t.id)]?.presetIds?.length > 0).forEach(task => {
                 // Determina la data target del task
                 let targetDate = null;
-                
+
                 if (task.type === 'single') {
                     targetDate = new Date(task.start_date);
                 } else if (task.type === 'recurring' || task.type === 'simple_recurring') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 } else if (task.type === 'multiple') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 }
-                
+
                 if (!targetDate) return;
-                
-                // Controlla ogni promemoria del task
-                task.reminders.forEach(reminder => {
-                    const reminderTime = calculateReminderTime(targetDate, reminder);
-                    if (!reminderTime) return;
 
-                    // Verifica se il promemoria è scaduto nelle ultime 24 ore
+                const rule = notificationRulesMap[String(task.id)];
+                rule.presetIds.forEach(presetId => {
+                    const preset = reminderPresets.find(p => p.int_id === presetId);
+                    if (!preset) return;
+                    const reminderTime = new Date(targetDate.getTime() - preset.offset_minutes * 60 * 1000);
+
                     if (reminderTime >= twentyFourHoursAgo && reminderTime <= now) {
-                        // Salta i promemoria nascosti manualmente
                         const dateKey = localDateStr(targetDate);
-                        if (localStorage.getItem(`dismissed_${task.id}_${reminder}_${dateKey}`)) return;
+                        if (localStorage.getItem(`dismissed_${task.id}_${preset.label}_${dateKey}`)) return;
 
-                        expiredReminders.push({
-                            task: task,
-                            reminder: reminder,
-                            reminderTime: reminderTime,
-                            targetDate: targetDate
-                        });
+                        expiredReminders.push({ task, reminder: preset.label, reminderTime, targetDate });
                     }
                 });
             });
@@ -5068,34 +5090,27 @@
 
             const upcomingReminders = [];
 
-            tasks.filter(t => t.status === 'active' && t.reminders && t.reminders.length > 0).forEach(task => {
+            tasks.filter(t => t.status === 'active' && notificationRulesMap[String(t.id)]?.presetIds?.length > 0).forEach(task => {
                 let targetDate = null;
 
                 if (task.type === 'single') {
                     targetDate = new Date(task.start_date);
                 } else if (task.type === 'recurring' || task.type === 'simple_recurring') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 } else if (task.type === 'multiple') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 }
 
                 if (!targetDate) return;
 
-                task.reminders.forEach(reminder => {
-                    const reminderTime = calculateReminderTime(targetDate, reminder);
-                    if (!reminderTime) return;
+                const rule = notificationRulesMap[String(task.id)];
+                rule.presetIds.forEach(presetId => {
+                    const preset = reminderPresets.find(p => p.int_id === presetId);
+                    if (!preset) return;
+                    const reminderTime = new Date(targetDate.getTime() - preset.offset_minutes * 60 * 1000);
 
                     if (reminderTime > now && reminderTime <= sevenDaysFromNow) {
-                        upcomingReminders.push({
-                            task: task,
-                            reminder: reminder,
-                            reminderTime: reminderTime,
-                            targetDate: targetDate
-                        });
+                        upcomingReminders.push({ task, reminder: preset.label, reminderTime, targetDate });
                     }
                 });
             });
@@ -5420,11 +5435,12 @@
                 `;
             }
             
-            if (task.reminders?.length) {
+            const taskReminderLabels = getTaskReminderLabels(task.id);
+            if (taskReminderLabels.length) {
                 details += `
                     <div class="task-detail-row">
                         <span class="task-detail-label">Promemoria:</span>
-                        <span>${task.reminders.join(', ')}</span>
+                        <span>${taskReminderLabels.join(', ')}</span>
                     </div>
                 `;
             }
@@ -5678,13 +5694,14 @@
             // Categorie
             selectedCategories = task.categories || [];
             
-            // Promemoria
-            reminders = task.reminders || [];
+            // Promemoria — fonte: cm_notification_rules.reminder_presets (JSONB)
+            reminders              = [];
             telegramCompleteButton = true;
             telegramEnabled        = false;
             smartBlockEnabled      = false;
             currentReminderTab     = 'telegram';
             try {
+                if (reminderPresets.length === 0) await loadReminderPresets();
                 const editUserId = decodeJWT(sbAccessToken)?.sub;
                 const { data: rules, error: ruleErr } = await authSb
                     .from('cm_notification_rules')
@@ -5705,8 +5722,7 @@
                             const fromRule = tgPresetIds
                                 .map(id => reminderPresets.find(p => String(p.int_id) === String(id))?.label)
                                 .filter(Boolean);
-                            if (fromRule.length > 0) reminders = fromRule;
-                            // else: mantieni task.reminders già caricato
+                            reminders = fromRule;
                         }
                         if (tgRule.reminder_presets?.telegram_complete_button != null)
                             telegramCompleteButton = tgRule.reminder_presets.telegram_complete_button;
@@ -5729,11 +5745,6 @@
                     }
 
                     console.log('🔔 telegram:', telegramEnabled, '— smart_block:', smartBlockEnabled, '— reminders:', reminders);
-                }
-
-                // Fallback: task con reminders in task.reminders ma senza regola → abilita Telegram
-                if (!telegramEnabled && reminders.length > 0) {
-                    telegramEnabled = true;
                 }
             } catch (e) { console.warn('editTask: impossibile leggere canale notifica', e); }
 
@@ -6681,7 +6692,6 @@
                 categories: selectedCategories,
                 priority_id: document.getElementById('taskPriority').value || null,
                 start_date: startDateValue || localDateTimeStr(),
-                reminders: reminders,
                 success_points: parseInt(document.getElementById('successPoints').value),
                 failure_points: parseInt(document.getElementById('failurePoints').value),
                 skip_points: parseInt(document.getElementById('skipPoints').value),
@@ -8247,54 +8257,34 @@
             console.log('🔔 Checking reminders at', now.toLocaleString('it-IT'));
             console.log('🔔 Total tasks:', tasks.length);
             
-            const tasksWithReminders = tasks.filter(t => t.status === 'active' && t.reminders && t.reminders.length > 0);
+            const tasksWithReminders = tasks.filter(t => t.status === 'active' && notificationRulesMap[String(t.id)]?.presetIds?.length > 0);
             console.log('🔔 Tasks with reminders:', tasksWithReminders.length);
-            
-            // Controlla tutti i task attivi con promemoria
+
             tasksWithReminders.forEach(task => {
-                console.log('📋 Checking task:', task.title, '| Type:', task.type, '| Reminders:', task.reminders);
-                
-                // Determina la data target del task
+                const rule = notificationRulesMap[String(task.id)];
+                console.log('📋 Checking task:', task.title, '| Type:', task.type, '| PresetIds:', rule?.presetIds);
+
                 let targetDate = null;
-                
+
                 if (task.type === 'single') {
                     targetDate = new Date(task.start_date);
-                    console.log('  → Single task, target:', targetDate);
                 } else if (task.type === 'recurring' || task.type === 'simple_recurring') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                        console.log('  → Recurring task, next occurrence:', targetDate);
-                    } else {
-                        console.log('  → No next_occurrence_date');
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 } else if (task.type === 'multiple') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                        console.log('  → Multiple task, next occurrence:', targetDate);
-                    } else {
-                        console.log('  → No next_occurrence_date');
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 }
-                
-                if (!targetDate) {
-                    console.log('  ❌ No target date, skipping');
-                    return;
-                }
-                
-                // Controlla ogni promemoria
-                task.reminders.forEach(reminder => {
-                    console.log('  🔔 Checking reminder:', reminder);
-                    const reminderTime = calculateReminderTime(targetDate, reminder);
-                    console.log('    → Reminder time:', reminderTime);
-                    console.log('    → Current time:', now);
-                    if (reminderTime) {
-                        const diff = now - reminderTime;
-                        console.log('    → Time diff (ms):', diff, '| Within 30s:', Math.abs(diff) < 30000);
-                    }
-                    
+
+                if (!targetDate) { console.log('  ❌ No target date, skipping'); return; }
+
+                rule.presetIds.forEach(presetId => {
+                    const preset = reminderPresets.find(p => p.int_id === presetId);
+                    if (!preset) return;
+                    const reminder = preset.label;
+                    const reminderTime = new Date(targetDate.getTime() - preset.offset_minutes * 60 * 1000);
+                    const diff = now - reminderTime;
+                    console.log('  🔔', reminder, '→', reminderTime, '| diff ms:', diff);
+
                     const shouldNotify = shouldTriggerReminder(now, targetDate, reminder, task.id);
-                    console.log('    → Should notify:', shouldNotify);
-                    
                     if (shouldNotify) {
                         console.log('    ✅ SENDING NOTIFICATION');
                         sendNotification(task, reminder, targetDate);
@@ -8316,32 +8306,29 @@
             const now = new Date();
             const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
             let count = 0;
-            
-            tasks.filter(t => t.status === 'active' && t.reminders && t.reminders.length > 0).forEach(task => {
+
+            tasks.filter(t => t.status === 'active' && notificationRulesMap[String(t.id)]?.presetIds?.length > 0).forEach(task => {
                 let targetDate = null;
-                
+
                 if (task.type === 'single') {
                     targetDate = new Date(task.start_date);
                 } else if (task.type === 'recurring' || task.type === 'simple_recurring') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 } else if (task.type === 'multiple') {
-                    if (task.next_occurrence_date) {
-                        targetDate = new Date(task.next_occurrence_date);
-                    }
+                    if (task.next_occurrence_date) targetDate = new Date(task.next_occurrence_date);
                 }
-                
+
                 if (!targetDate) return;
-                
-                task.reminders.forEach(reminder => {
-                    const reminderTime = calculateReminderTime(targetDate, reminder);
-                    if (reminderTime && reminderTime >= twentyFourHoursAgo && reminderTime <= now) {
-                        count++;
-                    }
+
+                const rule = notificationRulesMap[String(task.id)];
+                rule.presetIds.forEach(presetId => {
+                    const preset = reminderPresets.find(p => p.int_id === presetId);
+                    if (!preset) return;
+                    const reminderTime = new Date(targetDate.getTime() - preset.offset_minutes * 60 * 1000);
+                    if (reminderTime >= twentyFourHoursAgo && reminderTime <= now) count++;
                 });
             });
-            
+
             updateRemindersBadge(count);
         }
         
