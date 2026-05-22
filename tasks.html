@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.19.0</title>
+    <title>Tasks v19.19.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1830,7 +1830,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.19.0</span>
+                        <span>Tasks v19.19.1</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2433,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.19.0';
-        const BUILD_TIME  = '2026-05-22T12:00:00Z';
+        const APP_VERSION = 'v19.19.1';
+        const BUILD_TIME  = '2026-05-22T12:30:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2595,8 +2595,9 @@
         let settings = {};
         let reminders = [];
         let telegramCompleteButton = true; // Toggle bottone "Fatto" Telegram per il task corrente
-        let telegramEnabled   = false; // Canale Telegram attivo per il task corrente
-        let smartBlockEnabled = false; // Canale Smart Block attivo per il task corrente
+        let telegramEnabled        = false; // Canale Telegram attivo per il task corrente
+        let smartBlockEnabled      = false; // Canale Smart Block attivo per il task corrente
+        let currentReminderTab     = 'telegram'; // Tab attivo nel pannello promemoria
         let sbDeviceToken = null; // Token dispositivo Android (caricato da cm_user_notification_settings)
         let selectedCategories = [];
         let currentViewTaskId = null;
@@ -5565,8 +5566,9 @@
             selectedCategories = [];
             reminders = [];
             telegramCompleteButton = true;
-            telegramEnabled   = false;
-            smartBlockEnabled = false;
+            telegramEnabled        = false;
+            smartBlockEnabled      = false;
+            currentReminderTab     = 'telegram';
             console.log('🟢 reminders reset to:', reminders);
             yearlyDates = []; // Reset date annuali
             multipleDates = []; // Reset date multiple
@@ -5688,8 +5690,9 @@
             // Promemoria
             reminders = task.reminders || [];
             telegramCompleteButton = true;
-            telegramEnabled   = false;
-            smartBlockEnabled = false;
+            telegramEnabled        = false;
+            smartBlockEnabled      = false;
+            currentReminderTab     = 'telegram';
             try {
                 const editUserId = decodeJWT(sbAccessToken)?.sub;
                 const { data: rules, error: ruleErr } = await authSb
@@ -6511,68 +6514,90 @@
         }
 
         function renderReminders() {
-            console.log('🔵 renderReminders called, reminders:', reminders, 'telegram:', telegramEnabled, 'smartBlock:', smartBlockEnabled);
             const listEl = document.getElementById('remindersList');
-
-            if (!listEl) {
-                console.error('❌ remindersList element not found');
-                return;
-            }
+            if (!listEl) return;
 
             const availableReminders = reminderPresets.map(p => p.label);
             const currentType = document.getElementById('taskType')?.value || '';
             const showTelegramToggle = currentType !== 'workflow';
             const sbFire = smartBlockFireHour();
+            const isTGTab = currentReminderTab === 'telegram';
+
+            const dot = (on, color) => on
+                ? `<span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;margin-left:4px;vertical-align:middle;flex-shrink:0;"></span>`
+                : '';
 
             listEl.innerHTML = `
-                <!-- Toggle canali indipendenti -->
-                <div style="display:flex;gap:6px;margin-bottom:10px;">
-                    <button type="button" class="notif-channel-pill ${telegramEnabled ? 'active' : ''}"
-                            onclick="toggleTelegramChannel()">📱 Telegram</button>
-                    <button type="button" class="notif-channel-pill ${smartBlockEnabled ? 'active' : ''}"
-                            onclick="toggleSmartBlockChannel()">🔐 Smart Block</button>
+                <!-- Tab bar -->
+                <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:10px;gap:0;">
+                    <button type="button" onclick="switchReminderTab('telegram')" style="
+                        display:flex;align-items:center;gap:4px;
+                        padding:6px 16px;border:none;background:none;cursor:pointer;font-size:0.88rem;
+                        border-bottom:2px solid ${isTGTab ? 'var(--accent)' : 'transparent'};
+                        margin-bottom:-2px;
+                        color:${isTGTab ? 'var(--accent)' : 'var(--muted)'};
+                        font-weight:${isTGTab ? '600' : '400'};
+                    ">📱 Telegram${dot(telegramEnabled, 'var(--accent)')}</button>
+                    <button type="button" onclick="switchReminderTab('smart_block')" style="
+                        display:flex;align-items:center;gap:4px;
+                        padding:6px 16px;border:none;background:none;cursor:pointer;font-size:0.88rem;
+                        border-bottom:2px solid ${!isTGTab ? 'var(--secondary)' : 'transparent'};
+                        margin-bottom:-2px;
+                        color:${!isTGTab ? 'var(--secondary)' : 'var(--muted)'};
+                        font-weight:${!isTGTab ? '600' : '400'};
+                    ">🔐 Smart Block${dot(smartBlockEnabled, 'var(--secondary)')}</button>
                 </div>
-                ${smartBlockEnabled ? `
-                <div style="padding:0.5rem 0.6rem;background:#f3f0ff;border:1px solid #c4b5fd;border-radius:8px;margin-bottom:0.5rem;">
-                    <span style="font-size:0.9rem;color:var(--secondary);font-weight:600;">
-                        🔐 Blocco alle ${sbFire ? sbFire.label : '— imposta data e ora —'}
-                    </span>
-                </div>` : ''}
+
+                ${isTGTab ? `
+                <!-- Contenuto tab Telegram -->
+                <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">
+                    <input type="checkbox" ${telegramEnabled ? 'checked' : ''}
+                           onchange="telegramEnabled=this.checked;renderReminders()"
+                           style="width:15px;height:15px;accent-color:var(--accent);">
+                    <span style="font-size:0.85rem;font-weight:600;color:var(--dark);">Attiva notifiche Telegram</span>
+                </label>
                 ${telegramEnabled ? `
-                <!-- Chip preset Telegram -->
-                <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; min-height: 36px; margin-bottom: 0.5rem;">
+                <div style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:6px;min-height:36px;margin-bottom:0.5rem;">
                     ${availableReminders.map(r => {
                         const isSelected = reminders.includes(r);
                         return `<div onclick="${isSelected ? `unselectReminderInline('${r}')` : `selectReminderInline('${r}')`}" style="
-                            display: inline-flex; align-items: center; gap: 0.3rem;
-                            padding: 0.25rem 0.6rem; border-radius: 20px; cursor: pointer;
-                            font-size: 0.85rem; transition: all 0.15s; user-select: none;
-                            ${isSelected
-                                ? 'background: var(--accent); color: #fff; border: 1px solid var(--accent);'
-                                : 'background: #fff; color: #333; border: 1px solid #ddd;'}
+                            display:inline-flex;align-items:center;gap:0.3rem;
+                            padding:0.25rem 0.6rem;border-radius:20px;cursor:pointer;
+                            font-size:0.85rem;transition:all 0.15s;user-select:none;
+                            ${isSelected ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);' : 'background:#fff;color:#333;border:1px solid #ddd;'}
                         " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                            ${r}
-                            ${isSelected ? '<span style="margin-left: 0.2rem; font-size: 0.9rem;">✕</span>' : ''}
+                            ${r}${isSelected ? '<span style="margin-left:0.2rem;font-size:0.9rem;">✕</span>' : ''}
                         </div>`;
                     }).join('')}
                 </div>
                 ${showTelegramToggle ? `
-                <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.15rem 0.1rem;
-                              cursor: ${reminders.length > 0 ? 'pointer' : 'not-allowed'};
-                              opacity: ${reminders.length > 0 ? '1' : '0.4'};">
+                <label style="display:flex;align-items:center;gap:0.5rem;padding:0.15rem 0.1rem;
+                              cursor:${reminders.length > 0 ? 'pointer' : 'not-allowed'};
+                              opacity:${reminders.length > 0 ? '1' : '0.4'};">
                     <input type="checkbox" id="telegramCompleteToggle"
                            ${telegramCompleteButton && reminders.length > 0 ? 'checked' : ''}
                            ${reminders.length === 0 ? 'disabled' : ''}
-                           onchange="telegramCompleteButton = this.checked"
-                           style="width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0;
-                                  cursor: ${reminders.length > 0 ? 'pointer' : 'not-allowed'};">
-                    <span style="font-size: 0.82rem; color: var(--muted); user-select: none;">
-                        Bottone "Fatto" su Telegram
-                    </span>
+                           onchange="telegramCompleteButton=this.checked"
+                           style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0;
+                                  cursor:${reminders.length > 0 ? 'pointer' : 'not-allowed'};">
+                    <span style="font-size:0.82rem;color:var(--muted);user-select:none;">Bottone "Fatto" su Telegram</span>
                 </label>` : ''}` : ''}
+                ` : `
+                <!-- Contenuto tab Smart Block -->
+                <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">
+                    <input type="checkbox" ${smartBlockEnabled ? 'checked' : ''}
+                           onchange="smartBlockEnabled=this.checked;renderReminders()"
+                           style="width:15px;height:15px;accent-color:var(--secondary);">
+                    <span style="font-size:0.85rem;font-weight:600;color:var(--dark);">Attiva Smart Block</span>
+                </label>
+                ${smartBlockEnabled ? `
+                <div style="padding:0.5rem 0.6rem;background:#f3f0ff;border:1px solid #c4b5fd;border-radius:8px;">
+                    <span style="font-size:0.9rem;color:var(--secondary);font-weight:600;">
+                        🔐 Blocco alle ${sbFire ? sbFire.label : '— imposta data e ora —'}
+                    </span>
+                </div>` : ''}
+                `}
             `;
-
-            console.log('🔵 Chip+textbox rendered');
         }
         
         function selectReminderInline(value) {
@@ -6592,6 +6617,11 @@
                 if (reminders.length === 0) telegramCompleteButton = false;
                 renderReminders();
             }
+        }
+
+        function switchReminderTab(tab) {
+            currentReminderTab = tab;
+            renderReminders();
         }
 
         function toggleTelegramChannel() {
