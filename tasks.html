@@ -2433,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.20.0';
-        const BUILD_TIME  = '2026-05-22T17:00:00Z';
+        const APP_VERSION = 'v19.20.1';
+        const BUILD_TIME  = '2026-05-22T18:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2994,7 +2994,7 @@
         async function loadPriorities() {
             console.log('Loading priorities...');
             try {
-                const { data, error } = await sb.from('ts_priorities').select('*').order('value', { ascending: false });
+                const { data, error } = await sb.from('cm_priorities').select('*').order('value', { ascending: false });
                 if (error) {
                     console.error('Error loading priorities:', error);
                     await initializeDefaultPriorities();
@@ -3023,7 +3023,7 @@
             priorities = defaultPriorities;
             try {
                 for (const priority of defaultPriorities) {
-                    await sb.from('ts_priorities').insert([priority]);
+                    await sb.from('cm_priorities').insert([priority]);
                 }
                 console.log('Default priorities created');
             } catch (e) {
@@ -3049,7 +3049,7 @@
             };
             
             try {
-                const { error } = await sb.from('ts_priorities').insert([newPriority]);
+                const { error } = await sb.from('cm_priorities').insert([newPriority]);
                 if (error) throw error;
                 
                 priorities.push(newPriority);
@@ -3072,7 +3072,7 @@
             if (!confirm('Eliminare questa priorità?')) return;
             
             try {
-                const { error } = await sb.from('ts_priorities').delete().eq('id', id);
+                const { error } = await sb.from('cm_priorities').delete().eq('id', id);
                 if (error) throw error;
                 
                 priorities = priorities.filter(p => p.id !== id);
@@ -3099,7 +3099,7 @@
             if (!newColor) return;
             
             try {
-                const { error } = await sb.from('ts_priorities').update({
+                const { error } = await sb.from('cm_priorities').update({
                     name: newName,
                     value: newValue,
                     color: newColor
