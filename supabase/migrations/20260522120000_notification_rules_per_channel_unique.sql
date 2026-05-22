@@ -15,11 +15,11 @@ BEGIN
     AND rel.relname = 'cm_notification_rules'
     AND con.contype = 'u'
     AND (
-      SELECT array_agg(att.attname ORDER BY att.attname)
+      SELECT array_agg(att.attname::text ORDER BY att.attname::text)
       FROM pg_attribute att
       WHERE att.attrelid = rel.oid
         AND att.attnum = ANY(SELECT unnest(con.conkey))
-    ) = ARRAY['app', 'entity_id', 'user_id']
+    ) = ARRAY['app', 'entity_id', 'user_id']::text[]
   LIMIT 1;
 
   IF v_conname IS NOT NULL THEN
