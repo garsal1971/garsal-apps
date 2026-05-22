@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.18.99</title>
+    <title>Tasks v19.19.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1830,7 +1830,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.17.48</span>
+                        <span>Tasks v19.19.0</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2205,7 +2205,7 @@
                 <div class="form-group hidden" id="taskTimeGroup">
                     <label class="form-label">Orario</label>
                     <input type="time" class="form-input" id="taskTime"
-                           oninput="if(notificationChannel==='smart_block') renderReminders()">
+                           oninput="if(smartBlockEnabled) renderReminders()">
                 </div>
 
                 <!-- POPUP CALENDARIO MULTI-SELEZIONE -->
@@ -2433,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.18.99';
-        const BUILD_TIME  = '2026-05-20T10:00:00Z';
+        const APP_VERSION = 'v19.19.0';
+        const BUILD_TIME  = '2026-05-22T12:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2595,7 +2595,8 @@
         let settings = {};
         let reminders = [];
         let telegramCompleteButton = true; // Toggle bottone "Fatto" Telegram per il task corrente
-        let notificationChannel = 'telegram'; // 'telegram' | 'smart_block'
+        let telegramEnabled   = false; // Canale Telegram attivo per il task corrente
+        let smartBlockEnabled = false; // Canale Smart Block attivo per il task corrente
         let sbDeviceToken = null; // Token dispositivo Android (caricato da cm_user_notification_settings)
         let selectedCategories = [];
         let currentViewTaskId = null;
@@ -2622,7 +2623,7 @@
                 onChange: function() {
                     updateRecurringFieldsFromStartDate();
                     autoUpdateDeadline();
-                    if (notificationChannel === 'smart_block') renderReminders();
+                    if (smartBlockEnabled) renderReminders();
                 }
             });
             fpDeadline = flatpickr(document.getElementById('taskDeadline'), FP_OPTS_BASE);
@@ -2763,125 +2764,116 @@
                     return;
                 }
 
-                console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, channel=${notificationChannel}, labels=${JSON.stringify(reminderLabels)}`);
+                console.log(`🔔 syncNotificationRules — taskId=${taskId}, type=${taskType}, telegram=${telegramEnabled}, smartBlock=${smartBlockEnabled}, labels=${JSON.stringify(reminderLabels)}`);
 
-                // ── Smart Block: fire_at derivato da due_at (già UTC dal DB) ──
-                if (notificationChannel === 'smart_block') {
+                const toasts = [];
+
+                // ── Smart Block ──────────────────────────────────────────────────
+                if (smartBlockEnabled) {
                     if (!dueDate) {
                         console.warn('⚠️ syncNotificationRules smart_block: due_at mancante, skip');
-                        return;
+                        toasts.push('⚠️ Smart Block: imposta data e ora per il task');
+                    } else {
+                        const rulePresetsSB = { reminders: [], due_at: dueDate };
+
+                        const { data: existingSB } = await authSb.from('cm_notification_rules')
+                            .select('id').eq('user_id', userId).eq('app', 'tasks')
+                            .eq('entity_id', String(taskId)).eq('channel', 'smart_block').maybeSingle();
+
+                        const ruleSB = { user_id: userId, app: 'tasks', entity_id: String(taskId),
+                            entity_type: 'task', entity_title: entityTitle || null,
+                            reminder_presets: rulePresetsSB, notification_spec: {}, channel: 'smart_block', enabled: true };
+
+                        const { error: sbErr } = existingSB?.id
+                            ? await authSb.from('cm_notification_rules').update(ruleSB).eq('id', existingSB.id)
+                            : await authSb.from('cm_notification_rules').insert(ruleSB);
+
+                        if (sbErr) { console.error('❌ syncNotificationRules smart_block error:', sbErr); toasts.push(`❌ Smart Block: ${sbErr.message}`); }
+                        else {
+                            const romeTime = new Date(dueDate).toLocaleString('it', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+                            console.log(`🔐 Smart Block salvato: blocco alle ${romeTime}`);
+                            toasts.push(`🔐 Smart Block: blocco alle ${romeTime}`);
+                        }
                     }
-                    const rulePresetsSB = { reminders: [], due_at: dueDate };
+                } else {
+                    const { error: delSB } = await authSb.from('cm_notification_rules')
+                        .delete()
+                        .eq('app', 'tasks').eq('entity_id', String(taskId))
+                        .eq('user_id', userId).eq('channel', 'smart_block');
+                    if (delSB) console.warn('⚠️ delete smart_block rule error:', delSB);
+                }
 
-                    const { data: existingSB } = await authSb.from('cm_notification_rules')
-                        .select('id').eq('user_id', userId).eq('app', 'tasks')
-                        .eq('entity_id', String(taskId)).maybeSingle();
+                // ── Telegram ─────────────────────────────────────────────────────
+                if (telegramEnabled && reminderLabels?.length > 0) {
+                    const unmatched = [];
+                    const presetIds = reminderLabels
+                        .map(label => {
+                            const preset = reminderPresets.find(p => p.label === label);
+                            if (!preset || preset.int_id == null) { unmatched.push(label); return null; }
+                            return preset.int_id;
+                        })
+                        .filter(id => id != null);
 
-                    const ruleSB = { user_id: userId, app: 'tasks', entity_id: String(taskId),
-                        entity_type: 'task', entity_title: entityTitle || null,
-                        reminder_presets: rulePresetsSB, notification_spec: {}, channel: 'smart_block', enabled: true };
-
-                    const { error: sbErr } = existingSB?.id
-                        ? await authSb.from('cm_notification_rules').update(ruleSB).eq('id', existingSB.id)
-                        : await authSb.from('cm_notification_rules').insert(ruleSB);
-                    if (sbErr) { console.error('❌ syncNotificationRules smart_block error:', sbErr); showToast(`❌ Errore: ${sbErr.message}`); }
-                    else {
-                        const romeTime = new Date(dueDate).toLocaleString('it', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
-                        showToast(`🔐 Smart Block: blocco alle ${romeTime} (ora italiana)`);
-                        triggerFillQueue();
+                    if (unmatched.length > 0) {
+                        console.warn('⚠️ syncNotificationRules: label senza int_id:', unmatched);
+                        toasts.push(`⚠️ Preset non trovati: ${unmatched.join(', ')}`);
                     }
-                    return;
-                }
 
-                // ── Telegram: logica preset standard ────────────────────────────
+                    if (presetIds.length === 0) {
+                        const { error: delTG } = await authSb.from('cm_notification_rules')
+                            .delete()
+                            .eq('app', 'tasks').eq('entity_id', String(taskId))
+                            .eq('user_id', userId).eq('channel', 'telegram');
+                        if (delTG) console.warn('⚠️ delete telegram rule (no presetIds) error:', delTG);
+                    } else {
+                        const { data: existingTG } = await authSb
+                            .from('cm_notification_rules')
+                            .select('id')
+                            .eq('user_id', userId).eq('app', 'tasks')
+                            .eq('entity_id', String(taskId)).eq('channel', 'telegram')
+                            .maybeSingle();
 
-                // Se nessun promemoria → elimina il record del task e termina
-                if (!reminderLabels || reminderLabels.length === 0) {
-                    const { error: delErr } = await authSb.from('cm_notification_rules')
-                        .delete()
-                        .eq('app', 'tasks')
-                        .eq('entity_id', String(taskId))
-                        .eq('user_id', userId);
-                    if (delErr) console.warn('⚠️ syncNotificationRules delete error:', delErr);
-                    console.log(`ℹ️ syncNotificationRules: nessun promemoria per task ${taskId}, record eliminato`);
-                    triggerFillQueue();
-                    return;
-                }
+                        const rulePresets = { reminders: presetIds, due_at: dueDate || null };
+                        if (taskType !== 'workflow' && telegramCompleteButton)
+                            rulePresets.telegram_complete_button = true;
 
-                // Mappa le label → int_id (chiave semplice numerica del preset)
-                const unmatched = [];
-                const presetIds = reminderLabels
-                    .map(label => {
-                        const preset = reminderPresets.find(p => p.label === label);
-                        if (!preset || preset.int_id == null) { unmatched.push(label); return null; }
-                        return preset.int_id;
-                    })
-                    .filter(id => id != null);
+                        const rule = {
+                            user_id:           userId,
+                            app:               'tasks',
+                            entity_id:         String(taskId),
+                            entity_type:       'task',
+                            entity_title:      entityTitle || null,
+                            reminder_presets:  rulePresets,
+                            notification_spec: {},
+                            channel:           'telegram',
+                            enabled:           true
+                        };
 
-                if (unmatched.length > 0) {
-                    console.warn('⚠️ syncNotificationRules: label senza int_id corrispondente:', unmatched);
-                    showToast(`⚠️ Promemoria non trovati nei preset: ${unmatched.join(', ')}`);
-                }
+                        let error;
+                        if (existingTG?.id) {
+                            ({ error } = await authSb.from('cm_notification_rules').update(rule).eq('id', existingTG.id));
+                        } else {
+                            ({ error } = await authSb.from('cm_notification_rules').insert(rule));
+                        }
 
-                // Se nessun preset_id valido trovato → tratta come nessun promemoria
-                if (presetIds.length === 0) {
-                    console.warn('⚠️ syncNotificationRules: nessun preset_id valido, elimino eventuale regola esistente');
-                    const { error: delErr2 } = await authSb.from('cm_notification_rules')
-                        .delete()
-                        .eq('app', 'tasks')
-                        .eq('entity_id', String(taskId))
-                        .eq('user_id', userId);
-                    if (delErr2) console.warn('⚠️ syncNotificationRules delete (no presetIds) error:', delErr2);
-                    triggerFillQueue();
-                    return;
-                }
-
-                // SELECT + INSERT/UPDATE: più affidabile di upsert con onConflict
-                // (non richiede UNIQUE CONSTRAINT se non già presente sul DB)
-                const { data: existing } = await authSb
-                    .from('cm_notification_rules')
-                    .select('id')
-                    .eq('user_id', userId)
-                    .eq('app', 'tasks')
-                    .eq('entity_id', String(taskId))
-                    .maybeSingle();
-
-                const rulePresets = { reminders: presetIds, due_at: dueDate || null };
-                if (taskType !== 'workflow' && telegramCompleteButton)
-                    rulePresets.telegram_complete_button = true;
-
-                const rule = {
-                    user_id:           userId,
-                    app:               'tasks',
-                    entity_id:         String(taskId),
-                    entity_type:       'task',
-                    entity_title:      entityTitle || null,
-                    reminder_presets:  rulePresets,
-                    notification_spec: {},
-                    channel:           notificationChannel,
-                    enabled:           true
-                };
-
-                let error;
-                if (existing?.id) {
-                    ({ error } = await authSb
-                        .from('cm_notification_rules')
-                        .update(rule)
-                        .eq('id', existing.id));
+                        if (error) {
+                            console.error('❌ syncNotificationRules telegram error:', error);
+                            toasts.push(`❌ Telegram: ${error.message || JSON.stringify(error)}`);
+                        } else {
+                            console.log(`✅ Telegram promemoria salvati: task ${taskId} → preset IDs ${JSON.stringify(presetIds)}`);
+                            toasts.push('🔔 Telegram: promemoria salvati');
+                        }
+                    }
                 } else {
-                    ({ error } = await authSb
-                        .from('cm_notification_rules')
-                        .insert(rule));
+                    const { error: delTG } = await authSb.from('cm_notification_rules')
+                        .delete()
+                        .eq('app', 'tasks').eq('entity_id', String(taskId))
+                        .eq('user_id', userId).eq('channel', 'telegram');
+                    if (delTG) console.warn('⚠️ delete telegram rule error:', delTG);
                 }
 
-                if (error) {
-                    console.error('❌ syncNotificationRules save error:', error);
-                    showToast(`❌ Errore salvataggio promemoria: ${error.message || JSON.stringify(error)}`);
-                } else {
-                    console.log(`✅ syncNotificationRules: task ${taskId} → preset IDs ${JSON.stringify(presetIds)}`);
-                    showToast('🔔 Promemoria salvati');
-                    triggerFillQueue();
-                }
+                if (toasts.length > 0) showToast(toasts.join(' · '));
+                triggerFillQueue();
             } catch (e) {
                 console.error('❌ syncNotificationRules exception:', e);
                 showToast(`❌ Eccezione promemoria: ${e.message}`);
@@ -2928,13 +2920,14 @@
         }
 
         async function updateSmartBlockFireAt(taskId, newDueAt) {
-            if (notificationChannel !== 'smart_block') return;
+            if (!smartBlockEnabled) return;
             if (!newDueAt) return;
             try {
                 const { data: existing } = await sb.from('cm_notification_rules')
                     .select('id, reminder_presets')
                     .eq('app', 'tasks')
                     .eq('entity_id', String(taskId))
+                    .eq('channel', 'smart_block')
                     .maybeSingle();
                 if (!existing?.id) return;
                 let presets = existing.reminder_presets;
@@ -5572,7 +5565,8 @@
             selectedCategories = [];
             reminders = [];
             telegramCompleteButton = true;
-            notificationChannel = 'telegram';
+            telegramEnabled   = false;
+            smartBlockEnabled = false;
             console.log('🟢 reminders reset to:', reminders);
             yearlyDates = []; // Reset date annuali
             multipleDates = []; // Reset date multiple
@@ -5694,21 +5688,24 @@
             // Promemoria
             reminders = task.reminders || [];
             telegramCompleteButton = true;
-            notificationChannel = 'telegram';
+            telegramEnabled   = false;
+            smartBlockEnabled = false;
             try {
                 const editUserId = decodeJWT(sbAccessToken)?.sub;
                 const { data: rules, error: ruleErr } = await authSb
                     .from('cm_notification_rules')
-                    .select('channel, user_id, entity_id, app')
+                    .select('channel, user_id, entity_id, app, reminder_presets')
                     .eq('app', 'tasks')
                     .eq('entity_id', String(id));
                 console.log('🔔 editTask notif rules query — id:', id, 'userId:', editUserId, 'rows:', rules, 'err:', ruleErr);
                 if (rules?.length) {
-                    const myRule = rules.find(r => !editUserId || r.user_id === editUserId);
-                    const sbRule = rules.find(r => r.channel === 'smart_block');
-                    const best   = sbRule || myRule || rules[0];
-                    if (best?.channel) notificationChannel = best.channel;
-                    console.log('🔔 canale scelto:', notificationChannel, '— best rule:', best);
+                    const tgRule = rules.find(r => r.channel === 'telegram'    && (!editUserId || r.user_id === editUserId));
+                    const sbRule = rules.find(r => r.channel === 'smart_block' && (!editUserId || r.user_id === editUserId));
+                    telegramEnabled   = !!tgRule;
+                    smartBlockEnabled = !!sbRule;
+                    if (tgRule?.reminder_presets?.telegram_complete_button != null)
+                        telegramCompleteButton = tgRule.reminder_presets.telegram_complete_button;
+                    console.log('🔔 telegram:', telegramEnabled, '— smart_block:', smartBlockEnabled);
                 }
             } catch (e) { console.warn('editTask: impossibile leggere canale notifica', e); }
             
@@ -6514,9 +6511,8 @@
         }
 
         function renderReminders() {
-            console.log('🔵 renderReminders called, reminders:', reminders);
+            console.log('🔵 renderReminders called, reminders:', reminders, 'telegram:', telegramEnabled, 'smartBlock:', smartBlockEnabled);
             const listEl = document.getElementById('remindersList');
-            console.log('🔵 remindersList element:', listEl);
 
             if (!listEl) {
                 console.error('❌ remindersList element not found');
@@ -6526,23 +6522,23 @@
             const availableReminders = reminderPresets.map(p => p.label);
             const currentType = document.getElementById('taskType')?.value || '';
             const showTelegramToggle = currentType !== 'workflow';
-            const isSB = notificationChannel === 'smart_block';
-            const sbFire = isSB ? smartBlockFireHour() : null;
+            const sbFire = smartBlockFireHour();
 
             listEl.innerHTML = `
-                <!-- Selettore canale: Telegram | Smart Block -->
+                <!-- Toggle canali indipendenti -->
                 <div style="display:flex;gap:6px;margin-bottom:10px;">
-                    <button type="button" class="notif-channel-pill ${!isSB ? 'active' : ''}"
-                            onclick="selectNotifChannel('telegram')">📱 Telegram</button>
-                    <button type="button" class="notif-channel-pill ${isSB ? 'active' : ''}"
-                            onclick="selectNotifChannel('smart_block')">🔐 Smart Block</button>
+                    <button type="button" class="notif-channel-pill ${telegramEnabled ? 'active' : ''}"
+                            onclick="toggleTelegramChannel()">📱 Telegram</button>
+                    <button type="button" class="notif-channel-pill ${smartBlockEnabled ? 'active' : ''}"
+                            onclick="toggleSmartBlockChannel()">🔐 Smart Block</button>
                 </div>
-                ${isSB ? `
+                ${smartBlockEnabled ? `
                 <div style="padding:0.5rem 0.6rem;background:#f3f0ff;border:1px solid #c4b5fd;border-radius:8px;margin-bottom:0.5rem;">
                     <span style="font-size:0.9rem;color:var(--secondary);font-weight:600;">
                         🔐 Blocco alle ${sbFire ? sbFire.label : '— imposta data e ora —'}
                     </span>
-                </div>` : `
+                </div>` : ''}
+                ${telegramEnabled ? `
                 <!-- Chip preset Telegram -->
                 <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.5rem; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; min-height: 36px; margin-bottom: 0.5rem;">
                     ${availableReminders.map(r => {
@@ -6573,7 +6569,7 @@
                     <span style="font-size: 0.82rem; color: var(--muted); user-select: none;">
                         Bottone "Fatto" su Telegram
                     </span>
-                </label>` : ''}`}
+                </label>` : ''}` : ''}
             `;
 
             console.log('🔵 Chip+textbox rendered');
@@ -6598,9 +6594,13 @@
             }
         }
 
-        function selectNotifChannel(ch) {
-            notificationChannel = ch;
-            if (ch === 'smart_block') { reminders = []; telegramCompleteButton = false; }
+        function toggleTelegramChannel() {
+            telegramEnabled = !telegramEnabled;
+            renderReminders();
+        }
+
+        function toggleSmartBlockChannel() {
+            smartBlockEnabled = !smartBlockEnabled;
             renderReminders();
         }
 
