@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.19.4</title>
+    <title>Tasks v19.19.5</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1830,7 +1830,7 @@
                     <h3 style="margin-bottom: 1rem;">Informazioni Sistema</h3>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Versione:</span>
-                        <span>Tasks v19.19.4</span>
+                        <span>Tasks v19.19.5</span>
                     </div>
                     <div class="task-detail-row">
                         <span class="task-detail-label">Database:</span>
@@ -2433,8 +2433,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.19.4';
-        const BUILD_TIME  = '2026-05-22T13:45:00Z';
+        const APP_VERSION = 'v19.19.5';
+        const BUILD_TIME  = '2026-05-22T14:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -5697,9 +5697,19 @@
                     const sbRule = rules.find(r => r.channel === 'smart_block' && (!editUserId || r.user_id === editUserId));
                     telegramEnabled   = !!tgRule;
                     smartBlockEnabled = !!sbRule;
-                    if (tgRule?.reminder_presets?.telegram_complete_button != null)
-                        telegramCompleteButton = tgRule.reminder_presets.telegram_complete_button;
-                    console.log('🔔 telegram:', telegramEnabled, '— smart_block:', smartBlockEnabled);
+
+                    // Ripristina label preset Telegram dalla regola (fonte autorevole: int_id → label)
+                    if (tgRule) {
+                        const tgPresetIds = tgRule.reminder_presets?.reminders || [];
+                        if (tgPresetIds.length > 0) {
+                            reminders = tgPresetIds
+                                .map(id => reminderPresets.find(p => p.int_id === id)?.label)
+                                .filter(Boolean);
+                        }
+                        if (tgRule.reminder_presets?.telegram_complete_button != null)
+                            telegramCompleteButton = tgRule.reminder_presets.telegram_complete_button;
+                    }
+                    console.log('🔔 telegram:', telegramEnabled, '— smart_block:', smartBlockEnabled, '— reminders:', reminders);
                 }
             } catch (e) { console.warn('editTask: impossibile leggere canale notifica', e); }
             
