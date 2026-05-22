@@ -5703,7 +5703,7 @@
             try {
                 if (reminderPresets.length === 0) await loadReminderPresets();
                 const editUserId = decodeJWT(sbAccessToken)?.sub;
-                const { data: rules, error: ruleErr } = await authSb
+                const { data: rules, error: ruleErr } = await sb
                     .from('cm_notification_rules')
                     .select('channel, user_id, entity_id, app, reminder_presets')
                     .eq('app', 'tasks')
