@@ -377,7 +377,8 @@
                 <div class="page-title">Archivio</div>
                 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                     <button class="btn btn-accent btn-small" onclick="openNewPlaylistModal()">+ Nuova Playlist</button>
-                    <button class="btn btn-ghost btn-small" onclick="document.getElementById('csvInput').click()">📂 Importa CSV</button>
+                    <button class="btn btn-ghost btn-small" onclick="document.getElementById('csvInput').click()">📂 CSV da file</button>
+                    <button class="btn btn-ghost btn-small" onclick="openCsvModal()">✏️ Incolla CSV</button>
                     <input type="file" id="csvInput" accept=".csv,.txt" style="display:none;" onchange="handleCsvFile(this)">
                 </div>
             </div>
@@ -457,8 +458,16 @@
             <input type="text" class="form-input" id="csvPlName" placeholder="Nome della nuova playlist...">
         </div>
         <div class="form-group">
+            <label class="form-label">Testo CSV</label>
+            <textarea class="form-textarea" id="csvTextarea" rows="7"
+                placeholder="Incolla o scrivi qui il CSV, una riga per video:&#10;dQw4w9WgXcQ,Titolo video&#10;https://youtu.be/abc12345678&#10;https://www.youtube.com/watch?v=xyz..."></textarea>
+            <div style="display:flex;justify-content:flex-end;margin-top:0.4rem;">
+                <button class="btn btn-ghost btn-small" onclick="analyzeCsvText()">🔍 Analizza</button>
+            </div>
+        </div>
+        <div class="form-group">
             <label class="form-label">Anteprima — <span id="csvValidN">0</span> video validi</label>
-            <div class="csv-preview" id="csvPreview"></div>
+            <div class="csv-preview" id="csvPreview"><div style="padding:0.5rem;color:var(--muted);font-size:0.82rem;">Incolla il CSV sopra e clicca Analizza, oppure carica un file.</div></div>
         </div>
         <div style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">
             Formato: una riga per video. URL YouTube, youtu.be, o ID da 11 caratteri, con titolo opzionale dopo la virgola.
@@ -1036,11 +1045,31 @@ async function moveItem(idx, dir) {
 // ==========================================
 // CSV IMPORT
 // ==========================================
+function openCsvModal() {
+    document.getElementById('csvTextarea').value = '';
+    document.getElementById('csvPlName').value   = '';
+    document.getElementById('csvValidN').textContent = '0';
+    document.getElementById('csvPreview').innerHTML =
+        '<div style="padding:0.5rem;color:var(--muted);font-size:0.82rem;">Incolla il CSV sopra e clicca Analizza, oppure carica un file.</div>';
+    csvRows = [];
+    openModal('modalCsv');
+    setTimeout(() => document.getElementById('csvTextarea').focus(), 100);
+}
+
+function analyzeCsvText() {
+    const text = document.getElementById('csvTextarea').value.trim();
+    if (!text) { showToast('⚠️ Nessun testo da analizzare'); return; }
+    parseCsv(text, document.getElementById('csvPlName').value || 'Nuova Playlist');
+}
+
 function handleCsvFile(input) {
     const f = input.files[0];
     if (!f) return;
     const r = new FileReader();
-    r.onload = e => parseCsv(e.target.result, f.name.replace(/\.[^.]+$/,''));
+    r.onload = e => {
+        document.getElementById('csvTextarea').value = e.target.result;
+        parseCsv(e.target.result, f.name.replace(/\.[^.]+$/,''));
+    };
     r.readAsText(f);
     input.value = '';
 }
@@ -1057,8 +1086,8 @@ function parseCsv(text, sugName) {
         csvRows.push({ vid, raw, title: title||null, ok: !!vid });
     }
     const valid = csvRows.filter(r => r.ok);
-    document.getElementById('csvValidN').textContent    = valid.length;
-    document.getElementById('csvPlName').value          = sugName;
+    document.getElementById('csvValidN').textContent = valid.length;
+    if (!document.getElementById('csvPlName').value.trim()) document.getElementById('csvPlName').value = sugName;
     document.getElementById('csvPreview').innerHTML = csvRows.slice(0,50).map(r => `
         <div class="csv-row${r.ok?'':' bad'}">
             ${r.ok ? `<img src="${thumb(r.vid)}" width="38" height="22" style="flex-shrink:0;object-fit:cover;" loading="lazy">` : '<span style="width:38px;flex-shrink:0;text-align:center;">⚠️</span>'}
