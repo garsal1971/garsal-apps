@@ -668,6 +668,12 @@ function createYTPlayer() {
 
 function onYTReady() {
     console.log('✅ YT player ready');
+    try {
+        const iframe = ytPlayer.getIframe();
+        iframe.setAttribute('allow',
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share');
+        iframe.setAttribute('allowfullscreen', '');
+    } catch(_) {}
 }
 
 function onYTStateChange(e) {
