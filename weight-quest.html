@@ -1225,8 +1225,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.104';
-        var BUILD_TIME  = '2026-04-14T20:30:00Z';
+        var APP_VERSION = 'v3.5.105';
+        var BUILD_TIME  = '2026-05-23T10:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1669,15 +1669,14 @@
 
             log('Salvataggio peso manuale: ' + weight + ' kg per ' + date);
 
-            // Cattura il minimo dei massimi giornalieri prima del salvataggio.
-            // La celebrazione scatta solo se anche il valore peggiore della giornata
-            // scende sotto la soglia (non basta una singola misura favorevole).
+            // Cattura il minimo dei minimi giornalieri prima del salvataggio.
+            // La celebrazione scatta quando il minimo della giornata <= soglia.
             if (userData.weights && userData.weights.length > 0) {
-                var prevDailyMaxes = getDailyMaxWeights(
+                var prevDailyMins = getDailyMinWeights(
                     userData.weights.filter(function(r) { return r.weight != null && isFinite(r.weight); })
                 );
-                preSmileWeight = prevDailyMaxes.length
-                    ? Math.min.apply(null, prevDailyMaxes.map(function(r) { return r.weight; }))
+                preSmileWeight = prevDailyMins.length
+                    ? Math.min.apply(null, prevDailyMins.map(function(r) { return r.weight; }))
                     : weight + 1;
             } else {
                 preSmileWeight = weight + 1; // Se nessun dato, tratta come primo inserimento
@@ -1981,12 +1980,12 @@
 
         // Per ogni giornata restituisce il peso massimo (peggiore) di quella giornata.
         // Un traguardo si considera raggiunto solo quando anche la misurazione peggiore
-        // del giorno scende sotto la soglia (max_giornaliero < soglia).
-        function getDailyMaxWeights(weights) {
+        // del giorno scende sotto la soglia (min_giornaliero <= soglia).
+        function getDailyMinWeights(weights) {
             var byDate = {};
             weights.forEach(function(r) {
                 if (r.date && r.weight != null && isFinite(r.weight)) {
-                    if (!(r.date in byDate) || r.weight > byDate[r.date]) {
+                    if (!(r.date in byDate) || r.weight < byDate[r.date]) {
                         byDate[r.date] = r.weight;
                     }
                 }
@@ -2059,17 +2058,17 @@
                 }).slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; });
             }
 
-            // Massimo giornaliero: il traguardo è raggiunto solo quando
-            // anche la misura peggiore della giornata scende sotto la soglia.
-            var dailyMaxes = getDailyMaxWeights(objWeights);
-            var minDailyMax = dailyMaxes.length
-                ? Math.min.apply(null, dailyMaxes.map(function(r) { return r.weight; }))
+            // Minimo giornaliero: il traguardo è raggiunto quando
+            // il minimo della giornata è <= soglia.
+            var dailyMins = getDailyMinWeights(objWeights);
+            var minDailyMin = dailyMins.length
+                ? Math.min.apply(null, dailyMins.map(function(r) { return r.weight; }))
                 : Infinity;
 
-            // Prima data in cui il massimo della giornata è < t
+            // Prima data in cui il minimo della giornata è <= t
             function firstDateBelow(t) {
-                for (var i = 0; i < dailyMaxes.length; i++) {
-                    if (dailyMaxes[i].weight < t) return dailyMaxes[i].date;
+                for (var i = 0; i < dailyMins.length; i++) {
+                    if (dailyMins[i].weight <= t) return dailyMins[i].date;
                 }
                 return null;
             }
@@ -2078,7 +2077,7 @@
             bar.innerHTML = '';
             bar.style.display = 'flex';
             thresholds.forEach(function(t, i) {
-                var reached = isFinite(minDailyMax) && minDailyMax < t;
+                var reached = isFinite(minDailyMin) && minDailyMin <= t;
                 var firstDate = reached ? firstDateBelow(t) : null;
 
                 var div = document.createElement('div');
@@ -2137,23 +2136,22 @@
             var endW    = parseFloat(obj.end_weight);
             if (!isFinite(startW) || !isFinite(endW)) return;
 
-            // Minimo del massimo giornaliero: la soglia scatta solo quando
-            // anche la misura peggiore della giornata è sotto la soglia.
+            // Minimo giornaliero: la soglia scatta quando il minimo della giornata <= soglia.
             var validWeights = data.filter(function(r) { return r.weight != null && isFinite(r.weight); });
             if (!validWeights.length) return;
-            var newDailyMaxes = getDailyMaxWeights(validWeights);
-            var newMin = newDailyMaxes.length
-                ? Math.min.apply(null, newDailyMaxes.map(function(r) { return r.weight; }))
+            var newDailyMins = getDailyMinWeights(validWeights);
+            var newMin = newDailyMins.length
+                ? Math.min.apply(null, newDailyMins.map(function(r) { return r.weight; }))
                 : Infinity;
 
             // Soglie intere rilevanti: stessa logica di getMilestoneThresholds
             var topThreshold  = Math.floor(startW) - 1;  // es. startW=79 → 78
             var botThreshold  = Math.ceil(endW);          // es. 71
 
-            // Raccogli tutte le soglie T tali che preSmileWeight >= T > newMin
+            // Raccogli tutte le soglie T tali che preSmileWeight > T >= newMin
             var crossed = [];
             for (var t = topThreshold; t >= botThreshold; t--) {
-                if (preSmileWeight >= t && newMin < t) {
+                if (preSmileWeight > t && newMin <= t) {
                     crossed.push(t);
                 }
             }
