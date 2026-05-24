@@ -217,7 +217,8 @@ class MainActivity : AppCompatActivity() {
                     view: WebView?,
                     request: WebResourceRequest?
                 ): Boolean {
-                    val url = request?.url?.toString() ?: return false
+                    val uri = request?.url ?: return false
+                    val url = uri.toString()
 
                     if (url.contains("supabase.co/auth/v1/authorize") &&
                         url.contains("provider=google")
@@ -225,7 +226,18 @@ class MainActivity : AppCompatActivity() {
                         CustomTabsIntent.Builder()
                             .setShowTitle(true)
                             .build()
-                            .launchUrl(this@MainActivity, request.url)
+                            .launchUrl(this@MainActivity, uri)
+                        return true
+                    }
+
+                    // Il WebView non gestisce intent:// e market:// — li passiamo al sistema
+                    if (uri.scheme == "intent" || uri.scheme == "market") {
+                        try {
+                            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            Log.w("MainActivity", "Intent non avviabile: $url")
+                        }
                         return true
                     }
 
