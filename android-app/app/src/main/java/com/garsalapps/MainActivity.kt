@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var requestHcPermissions: ActivityResultLauncher<Set<String>>
 
     // Flag nativo: true se l'utente ha aperto Renpho e deve tornare
+    @Volatile
     private var renphoLaunched = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         if (renphoLaunched) {
             renphoLaunched = false
             Log.d("MainActivity", "onResume: ritorno da Renpho — chiamo onAndroidResume()")
-            webView.evaluateJavascript("if(typeof onAndroidResume==='function')onAndroidResume();", null)
+            webView.evaluateJavascript("try{onAndroidResume();}catch(e){console.warn('onAndroidResume:'+e);}", null)
         }
     }
 
