@@ -92,6 +92,11 @@ class MainActivity : AppCompatActivity() {
      * Caso normale: app in background, Chrome Custom Tabs completa l'OAuth.
      * Android chiama onNewIntent con garsalapps://oauth#access_token=...
      */
+    override fun onResume() {
+        super.onResume()
+        webView.evaluateJavascript("if(typeof onAndroidResume==='function')onAndroidResume();", null)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent) // aggiorna getIntent() per future chiamate
