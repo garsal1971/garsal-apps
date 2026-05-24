@@ -128,6 +128,12 @@ class MainActivity : AppCompatActivity() {
     inner class AndroidBridge {
         @android.webkit.JavascriptInterface
         fun isNativeApp(): Boolean = true
+
+        @android.webkit.JavascriptInterface
+        fun openApp(packageName: String) {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) startActivity(intent)
+        }
     }
 
     /**
