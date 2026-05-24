@@ -254,7 +254,14 @@ class MainActivity : AppCompatActivity() {
                             val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
                             startActivity(intent)
                         } catch (e: Exception) {
-                            Log.w("MainActivity", "Intent non avviabile: $url")
+                            Log.w("MainActivity", "Intent.parseUri fallito: $e")
+                            // Fallback: estrai package name e lancia direttamente
+                            val pkg = url.substringAfter("package=").substringBefore(";").trim()
+                            if (pkg.isNotEmpty()) {
+                                val launchIntent = packageManager.getLaunchIntentForPackage(pkg)
+                                if (launchIntent != null) startActivity(launchIntent)
+                                else Log.w("MainActivity", "Pacchetto non trovato: $pkg")
+                            }
                         }
                         return true
                     }
