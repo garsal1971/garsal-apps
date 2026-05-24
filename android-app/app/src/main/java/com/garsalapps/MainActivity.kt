@@ -53,6 +53,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var requestHcPermissions: ActivityResultLauncher<Set<String>>
 
+    // Flag nativo: true se l'utente ha aperto Renpho e deve tornare
+    private var renphoLaunched = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -94,7 +97,11 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
-        webView.evaluateJavascript("if(typeof onAndroidResume==='function')onAndroidResume();", null)
+        if (renphoLaunched) {
+            renphoLaunched = false
+            Log.d("MainActivity", "onResume: ritorno da Renpho — chiamo onAndroidResume()")
+            webView.evaluateJavascript("if(typeof onAndroidResume==='function')onAndroidResume();", null)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -139,7 +146,8 @@ class MainActivity : AppCompatActivity() {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
             if (intent != null) {
                 Log.d("MainActivity", "openApp: avvio $packageName")
-                startActivity(intent)
+                renphoLaunched = true
+                runOnUiThread { startActivity(intent) }
             } else {
                 Log.w("MainActivity", "openApp: pacchetto non trovato — $packageName")
             }
