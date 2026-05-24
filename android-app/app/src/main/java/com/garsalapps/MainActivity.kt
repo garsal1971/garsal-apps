@@ -132,7 +132,12 @@ class MainActivity : AppCompatActivity() {
         @android.webkit.JavascriptInterface
         fun openApp(packageName: String) {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
-            if (intent != null) startActivity(intent)
+            if (intent != null) {
+                Log.d("MainActivity", "openApp: avvio $packageName")
+                startActivity(intent)
+            } else {
+                Log.w("MainActivity", "openApp: pacchetto non trovato — $packageName")
+            }
         }
     }
 
