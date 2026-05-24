@@ -243,6 +243,15 @@
         /* Empty state */
         .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); }
         .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+        /* Audio mode */
+        .audio-mode-wrap { display: none; }
+        .audio-mode-wrap .video-wrapper img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #111; }
+        #html5Audio { width: 100%; margin-top: 0.5rem; }
+        .audio-badge { font-size: 0.7rem; padding: 0.1rem 0.35rem; font-weight: 700; border-radius: 3px; flex-shrink: 0; }
+        .audio-badge.ready      { background: rgba(0,184,148,0.15); color: var(--success); border: 1px solid var(--success); }
+        .audio-badge.pending    { background: rgba(243,156,18,0.15); color: var(--warning); border: 1px solid var(--warning); }
+        .audio-badge.processing { background: rgba(243,156,18,0.15); color: var(--warning); border: 1px solid var(--warning); }
+        .audio-badge.error      { background: rgba(231,76,60,0.1);   color: var(--danger);  border: 1px solid var(--danger); }
         /* Toast */
         #toast {
             position: fixed; bottom: 1.5rem; left: 50%;
@@ -298,6 +307,7 @@
             <div class="nav-item" onclick="showPage('playlistPage',this)" data-text="Playlist">📋</div>
             <div class="nav-item" onclick="showPage('archivioPage',this)" data-text="Archivio">📚</div>
             <div class="nav-item" onclick="showPage('cronologiaPage',this)" data-text="Cronologia">📊</div>
+            <div class="nav-item" onclick="showPage('settingsPage',this)" data-text="Impostazioni">⚙️</div>
         </nav>
         <div class="score-widget">
             <div class="score-value" id="totalWatched">0</div>
@@ -322,12 +332,25 @@
             <div id="playerContent" style="display:none;">
                 <div class="player-layout">
                     <div>
-                        <div class="video-wrapper">
-                            <div id="yt-player-div"></div>
-                            <div class="video-placeholder" id="videoPlaceholder">
-                                <div style="font-size:3.5rem;">▶️</div>
-                                <div style="font-size:0.9rem;">Seleziona un video dalla coda</div>
+                        <!-- YouTube mode -->
+                        <div id="ytModeWrap">
+                            <div class="video-wrapper">
+                                <div id="yt-player-div"></div>
+                                <div class="video-placeholder" id="videoPlaceholder">
+                                    <div style="font-size:3.5rem;">▶️</div>
+                                    <div style="font-size:0.9rem;">Seleziona un video dalla coda</div>
+                                </div>
                             </div>
+                        </div>
+                        <!-- Audio mode (file da Supabase Storage) -->
+                        <div id="audioModeWrap" class="audio-mode-wrap">
+                            <div class="video-wrapper">
+                                <img id="audioThumb" src="" alt="">
+                                <div style="position:absolute;bottom:0;left:0;right:0;padding:0.5rem;background:linear-gradient(transparent,rgba(0,0,0,0.7));display:flex;align-items:center;gap:0.5rem;">
+                                    <span style="color:#fff;font-size:0.75rem;font-family:'Space Mono',monospace;background:var(--success);padding:2px 6px;">🎵 AUDIO</span>
+                                </div>
+                            </div>
+                            <audio id="html5Audio" controls></audio>
                         </div>
                         <div class="video-info">
                             <div class="video-title" id="curTitle">—</div>
@@ -395,6 +418,45 @@
             </div>
             <div id="cronList">
                 <div class="empty"><div class="empty-icon">📊</div><p>Nessun ascolto registrato</p></div>
+            </div>
+        </div>
+
+        <!-- SETTINGS PAGE -->
+        <div class="page" id="settingsPage">
+            <div class="page-header">
+                <div class="page-title">Impostazioni</div>
+            </div>
+            <div class="card">
+                <h3 style="margin-bottom:1.25rem;font-size:1.1rem;">🔑 GitHub — Download Audio</h3>
+                <div class="form-group">
+                    <label class="form-label">GitHub Personal Access Token</label>
+                    <input type="password" class="form-input" id="settGhToken" placeholder="ghp_xxxxxxxxxxxx">
+                    <div class="form-hint">Settings → Developer settings → Personal access tokens → Fine-grained. Permesso necessario: <strong>Actions: Read &amp; Write</strong> sul repository.</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Repository GitHub</label>
+                    <input type="text" class="form-input" id="settGhRepo" placeholder="username/garsal-apps">
+                    <div class="form-hint">Il repo dove si trova il workflow (es. garsal1971/garsal-apps)</div>
+                </div>
+                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                    <button class="btn btn-accent" onclick="saveSettingsForm()">💾 Salva</button>
+                    <button class="btn btn-ghost" onclick="testGhToken()">🔌 Test connessione</button>
+                </div>
+            </div>
+            <div class="card" style="margin-top:1rem;">
+                <h3 style="margin-bottom:1rem;font-size:1.1rem;">📦 Setup Supabase Storage</h3>
+                <p style="font-size:0.88rem;color:var(--muted);line-height:1.7;">
+                    Crea il bucket per i file audio:<br>
+                    1. Supabase → Storage → <strong>New Bucket</strong><br>
+                    2. Nome: <code style="background:#f3f4f6;padding:1px 5px;">ytp-audio</code> &nbsp; Abilita <strong>Public bucket</strong><br><br>
+                    Aggiungi i GitHub Secrets al repository:<br>
+                    • <code style="background:#f3f4f6;padding:1px 5px;">SUPABASE_URL</code> → URL del progetto Supabase<br>
+                    • <code style="background:#f3f4f6;padding:1px 5px;">SUPABASE_SERVICE_KEY</code> → service_role key (Supabase → Settings → API)
+                </p>
+            </div>
+            <div class="card" style="margin-top:1rem;">
+                <h3 style="margin-bottom:0.5rem;font-size:1.1rem;">ℹ️ Versione</h3>
+                <p style="font-size:0.85rem;color:var(--muted);">YouTube Playlist Player <span id="settVersion"></span> — build: <span id="settBuild"></span></p>
             </div>
         </div>
 
@@ -538,6 +600,12 @@ let histMap       = {}; // { ytId: { last_position_seconds, total_duration_secon
 let progInterval  = null;
 let uiInterval    = null;
 let csvRows       = [];
+let pollInterval  = null;
+let isAudioMode   = false;
+
+const YTP_SETT_KEY = 'ytp_settings';
+function getSettings() { try { return JSON.parse(localStorage.getItem(YTP_SETT_KEY)||'{}'); } catch { return {}; } }
+function saveSett(s)   { localStorage.setItem(YTP_SETT_KEY, JSON.stringify(s)); }
 
 // ==========================================
 // UTILS
@@ -596,6 +664,7 @@ function showPage(pid, nav) {
     if (pid === 'playlistPage')   renderPlaylistPage();
     if (pid === 'archivioPage')   renderArchivio();
     if (pid === 'cronologiaPage') loadHistory();
+    if (pid === 'settingsPage')   renderSettingsPage();
 }
 
 // ==========================================
@@ -677,6 +746,7 @@ function onYTReady() {
 }
 
 function onYTStateChange(e) {
+    if (isAudioMode) return;
     if (e.data === YT.PlayerState.PLAYING) {
         startTracking();
     } else if (e.data === YT.PlayerState.PAUSED) {
@@ -715,6 +785,8 @@ function startTracking() {
 function stopTracking() {
     if (progInterval) { clearInterval(progInterval); progInterval = null; }
     if (uiInterval)   { clearInterval(uiInterval);   uiInterval   = null; }
+    const a = document.getElementById('html5Audio');
+    if (a) { a.onended = null; a.ontimeupdate = null; a.onpause = null; }
 }
 
 async function onEnded() {
@@ -736,23 +808,60 @@ async function onEnded() {
 
 async function playAt(idx) {
     if (!curItems[idx]) return;
+    stopTracking();
     curIdx = idx;
     const v = curItems[idx];
-    let startAt = 0;
     const h = histMap[v.youtube_id];
+    let startAt = 0;
     if (h && h.last_position_seconds > 10) {
         const tot = h.total_duration_seconds;
         if (!tot || h.last_position_seconds < tot - 15) startAt = Math.floor(h.last_position_seconds);
     }
+    document.getElementById('curTitle').textContent = v.title || v.youtube_id;
+    document.getElementById('curId').textContent    = v.youtube_id;
+    document.getElementById('curCount').textContent = (curIdx+1) + ' / ' + curItems.length;
+
+    if (v.audio_status === 'ready' && v.audio_url) {
+        switchToAudioMode(v, startAt);
+    } else {
+        switchToYtMode(v, startAt);
+    }
+    await savePlayerState();
+    renderQueue();
+}
+
+function switchToAudioMode(v, startAt) {
+    isAudioMode = true;
+    document.getElementById('ytModeWrap').style.display       = 'none';
+    document.getElementById('audioModeWrap').style.display    = 'block';
+    document.getElementById('videoPlaceholder').style.display = 'none';
+    document.getElementById('audioThumb').src = thumb(v.youtube_id);
+    const audio = document.getElementById('html5Audio');
+    audio.src = v.audio_url;
+    if (startAt > 0) audio.currentTime = startAt;
+    audio.play().catch(() => {});
+    audio.ontimeupdate = () => {
+        document.getElementById('curTime').textContent = fmt(audio.currentTime);
+        document.getElementById('curDur').textContent  = fmt(audio.duration||0);
+        if (audio.duration > 0) document.getElementById('progFill').style.width = ((audio.currentTime/audio.duration)*100).toFixed(1)+'%';
+    };
+    audio.onpause = () => { if (v) saveProgress(v.youtube_id, audio.currentTime, audio.duration||null); };
+    audio.onended = onEnded;
+    if (progInterval) clearInterval(progInterval);
+    progInterval = setInterval(() => {
+        if (!audio.paused && audio.currentTime > 0)
+            saveProgress(v.youtube_id, audio.currentTime, audio.duration||null);
+    }, 5000);
+}
+
+function switchToYtMode(v, startAt) {
+    isAudioMode = false;
+    document.getElementById('audioModeWrap').style.display = 'none';
+    document.getElementById('ytModeWrap').style.display    = 'block';
     if (ytPlayer && ytApiReady) {
         document.getElementById('videoPlaceholder').style.display = 'none';
         ytPlayer.loadVideoById({ videoId: v.youtube_id, startSeconds: startAt });
     }
-    document.getElementById('curTitle').textContent = v.title || v.youtube_id;
-    document.getElementById('curId').textContent    = v.youtube_id;
-    document.getElementById('curCount').textContent = (curIdx+1) + ' / ' + curItems.length;
-    await savePlayerState();
-    renderQueue();
 }
 
 function playPrev() {
@@ -840,10 +949,14 @@ function renderQueue() {
         const h = histMap[v.youtube_id];
         const active = ri === curIdx;
         const done   = !active && h && h.completed;
+        const audioBadge = v.audio_status === 'ready' ? '<span class="audio-badge ready">🎵</span>'
+            : (v.audio_status === 'pending' || v.audio_status === 'processing') ? '<span class="audio-badge pending">⏳</span>'
+            : v.audio_status === 'error' ? '<span class="audio-badge error">⚠️</span>' : '';
         return `<div class="q-item${active?' active':''}${done?' done':''}" onclick="playAt(${ri})" title="${v.title||v.youtube_id}">
             <span class="q-num">${qi+1}</span>
             <img src="${thumb(v.youtube_id)}" width="38" height="22" style="flex-shrink:0;object-fit:cover;" loading="lazy" onerror="this.style.display='none'">
             <span class="q-title">${v.title || v.youtube_id}</span>
+            ${audioBadge}
             <span class="q-status">${active ? '▶' : done ? '✅' : ''}</span>
         </div>`;
     }).join('');
@@ -867,16 +980,26 @@ function renderPlaylistPage() {
         list.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>Nessun video</p></div>';
         return;
     }
-    list.innerHTML = curItems.map((v,i) => `
-        <div class="pl-item">
+    list.innerHTML = curItems.map((v,i) => {
+        const st = v.audio_status;
+        const dlBtn = st === 'ready'
+            ? `<button class="btn btn-small" style="background:var(--success);color:white;" onclick="triggerDownload('${v.id}')" title="Audio pronto — riscaricare?">🎵</button>`
+            : st === 'pending' || st === 'processing'
+            ? `<button class="btn btn-small btn-ghost" disabled title="${st}">⏳</button>`
+            : st === 'error'
+            ? `<button class="btn btn-small btn-danger" onclick="triggerDownload('${v.id}')" title="Riprova download">❌</button>`
+            : `<button class="btn btn-small btn-ghost" onclick="triggerDownload('${v.id}')" title="Scarica audio">⬇</button>`;
+        return `<div class="pl-item">
             <span class="pl-num">${i+1}</span>
             <img class="pl-thumb" src="${thumb(v.youtube_id)}" loading="lazy" onerror="this.style.visibility='hidden'">
             <span class="pl-title">${v.title || v.youtube_id}</span>
             <span class="pl-id">${v.youtube_id}</span>
+            ${dlBtn}
             <button class="btn btn-small btn-ghost" onclick="moveItem(${i},-1)" ${i===0?'disabled':''}>↑</button>
             <button class="btn btn-small btn-ghost" onclick="moveItem(${i},1)"  ${i===curItems.length-1?'disabled':''}>↓</button>
             <button class="btn btn-small btn-danger" onclick="removeItem('${v.id}',${i})">✕</button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 function renderArchivio() {
@@ -1125,6 +1248,105 @@ async function importCsv() {
     closeModal('modalCsv');
     await loadPlaylists();
     renderArchivio();
+}
+
+// ==========================================
+// SETTINGS
+// ==========================================
+function renderSettingsPage() {
+    const s = getSettings();
+    document.getElementById('settGhToken').value = s.gh_token || '';
+    document.getElementById('settGhRepo').value  = s.gh_repo  || 'garsal1971/garsal-apps';
+    document.getElementById('settVersion').textContent = APP_VERSION;
+    document.getElementById('settBuild').textContent   = BUILD_TIME;
+}
+
+function saveSettingsForm() {
+    saveSett({ gh_token: document.getElementById('settGhToken').value.trim(),
+               gh_repo:  document.getElementById('settGhRepo').value.trim() });
+    showToast('✅ Impostazioni salvate');
+}
+
+async function testGhToken() {
+    const s = getSettings();
+    if (!s.gh_token) { showToast('⚠️ Inserisci prima il token'); return; }
+    showToast('🔌 Test in corso...');
+    try {
+        const r = await fetch('https://api.github.com/user', {
+            headers: { 'Authorization': 'Bearer ' + s.gh_token, 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (r.ok) { const u = await r.json(); showToast('✅ Connesso come: ' + u.login, 3000); }
+        else       { showToast('❌ Token non valido (HTTP ' + r.status + ')'); }
+    } catch(e) { showToast('❌ Errore di rete'); }
+}
+
+// ==========================================
+// DOWNLOAD AUDIO VIA GITHUB ACTIONS
+// ==========================================
+async function triggerDownload(itemId) {
+    const s = getSettings();
+    if (!s.gh_token || !s.gh_repo) {
+        showToast('⚙️ Configura GitHub Token in Impostazioni');
+        showPage('settingsPage', document.querySelectorAll('.nav-item')[4]);
+        return;
+    }
+    const item = curItems.find(v => v.id === itemId);
+    if (!item) return;
+
+    const { error } = await sb.from('ytp_playlist_items').update({ audio_status: 'pending' }).eq('id', itemId);
+    if (error) { showToast('❌ ' + error.message); return; }
+    item.audio_status = 'pending';
+    renderPlaylistPage(); renderQueue();
+
+    const [owner, repo] = s.gh_repo.split('/');
+    try {
+        const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/dispatches`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + s.gh_token,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                event_type: 'ytp-download-audio',
+                client_payload: { youtube_id: item.youtube_id, item_id: item.id }
+            })
+        });
+        if (r.ok || r.status === 204) {
+            showToast('⏳ Download avviato — ci vorranno 2-3 minuti');
+            startPolling();
+        } else {
+            await sb.from('ytp_playlist_items').update({ audio_status: null }).eq('id', itemId);
+            item.audio_status = null;
+            renderPlaylistPage(); renderQueue();
+            showToast('❌ Errore GitHub (HTTP ' + r.status + '): verifica token e permessi');
+        }
+    } catch(e) {
+        showToast('❌ Errore di rete: ' + e.message);
+    }
+}
+
+function startPolling() {
+    if (pollInterval) return;
+    pollInterval = setInterval(async () => {
+        const waiting = curItems.filter(v => v.audio_status === 'pending' || v.audio_status === 'processing');
+        if (!waiting.length) { clearInterval(pollInterval); pollInterval = null; return; }
+        const ids = waiting.map(v => v.id);
+        const { data } = await sb.from('ytp_playlist_items').select('id,audio_url,audio_status').in('id', ids);
+        if (!data) return;
+        let changed = false;
+        data.forEach(upd => {
+            const item = curItems.find(v => v.id === upd.id);
+            if (item && item.audio_status !== upd.audio_status) {
+                item.audio_url    = upd.audio_url;
+                item.audio_status = upd.audio_status;
+                changed = true;
+                if (upd.audio_status === 'ready')
+                    showToast('🎵 Audio pronto: ' + (item.title || item.youtube_id), 4000);
+            }
+        });
+        if (changed) { renderPlaylistPage(); renderQueue(); }
+    }, 10000);
 }
 
 // ==========================================
