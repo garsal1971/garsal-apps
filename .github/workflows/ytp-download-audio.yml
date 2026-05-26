@@ -6,14 +6,14 @@ on:
 
 jobs:
   download:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Verifica yt-dlp e ffmpeg
+      - name: Installa yt-dlp e ffmpeg
         run: |
-          yt-dlp --version
-          ffmpeg -version | head -1
+          pip install yt-dlp
+          sudo apt-get install -y ffmpeg
 
       - name: Segna come "processing"
         run: |
@@ -24,18 +24,22 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"audio_status":"processing"}'
 
+      - name: Decodifica token OAuth2 YouTube
+        run: |
+          echo "${{ secrets.YT_OAUTH_COOKIES_B64 }}" | base64 -d > /tmp/yt_oauth.txt
+
       - name: Download audio (MP3)
         run: |
           YTID="${{ github.event.client_payload.youtube_id }}"
           yt-dlp \
             -x --audio-format mp3 --audio-quality 5 \
             --no-playlist \
-            --cookies "$HOME/yt_oauth_cookies.txt" \
+            --cookies /tmp/yt_oauth.txt \
             --extractor-retries 3 \
             --fragment-retries 3 \
-            -o "$RUNNER_TEMP/dl.%(ext)s" \
+            -o "/tmp/dl.%(ext)s" \
             "https://www.youtube.com/watch?v=${YTID}"
-          ls -lh "$RUNNER_TEMP/dl.mp3"
+          ls -lh /tmp/dl.mp3
 
       - name: Upload su Supabase Storage
         run: |
@@ -45,13 +49,12 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -H "Content-Type: audio/mpeg" \
             -H "x-upsert: true" \
-            --data-binary @"$RUNNER_TEMP/dl.mp3"
+            --data-binary @"/tmp/dl.mp3"
 
       - name: Aggiorna DB — ready
         run: |
           YTID="${{ github.event.client_payload.youtube_id }}"
           AUDIO_URL="${{ secrets.SUPABASE_URL }}/storage/v1/object/public/ytp-audio/${YTID}.mp3"
-          # Aggiorna tutti gli item con questo youtube_id
           curl -s -X PATCH \
             "${{ secrets.SUPABASE_URL }}/rest/v1/ytp_playlist_items?youtube_id=eq.${YTID}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
