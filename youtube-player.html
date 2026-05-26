@@ -624,8 +624,8 @@
 // ==========================================
 // VERSION
 // ==========================================
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-05-23T12:00:00Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-05-26T20:00:00Z';
 console.log('%c YT Playlist Player ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#FF0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1053,7 +1053,7 @@ function renderPlaylistPage() {
         const dlBtn = st === 'ready'
             ? `<button class="btn btn-small" style="background:var(--success);color:white;" onclick="triggerDownload('${v.id}')" title="Audio pronto — riscaricare?">🎵</button>`
             : st === 'pending' || st === 'processing'
-            ? `<button class="btn btn-small btn-ghost" disabled title="${st}">⏳</button>`
+            ? `<button class="btn btn-small btn-ghost" onclick="cancelDownload('${v.id}')" title="In corso — clicca per annullare e riprovare">⏳</button>`
             : st === 'error'
             ? `<button class="btn btn-small btn-danger" onclick="triggerDownload('${v.id}')" title="Riprova download">❌</button>`
             : `<button class="btn btn-small btn-ghost" onclick="triggerDownload('${v.id}')" title="Scarica audio">⬇</button>`;
@@ -1401,6 +1401,17 @@ async function triggerDownload(itemId) {
     } catch(e) {
         showToast('❌ Errore di rete: ' + e.message);
     }
+}
+
+async function cancelDownload(itemId) {
+    const item = curItems.find(v => v.id === itemId);
+    if (!item) return;
+    const { error } = await sb.from('ytp_playlist_items').update({ audio_status: null, audio_url: null }).eq('id', itemId);
+    if (error) { showToast('❌ ' + error.message); return; }
+    item.audio_status = null;
+    item.audio_url = null;
+    renderPlaylistPage(); renderQueue();
+    showToast('🔄 Download annullato — puoi rilanciarlo con ⬇');
 }
 
 function startPolling() {
