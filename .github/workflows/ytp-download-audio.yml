@@ -27,11 +27,25 @@ jobs:
       - name: Download audio (MP3)
         run: |
           YTID="${{ github.event.client_payload.youtube_id }}"
+
+          # Scrivi i cookie YouTube se disponibili
+          if [ -n "${{ secrets.YT_COOKIES }}" ]; then
+            echo "${{ secrets.YT_COOKIES }}" > /tmp/yt_cookies.txt
+            COOKIE_ARG="--cookies /tmp/yt_cookies.txt"
+          else
+            COOKIE_ARG=""
+          fi
+
           yt-dlp \
             -x --audio-format mp3 --audio-quality 5 \
             --no-playlist \
+            --extractor-retries 3 \
+            --fragment-retries 3 \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36" \
+            $COOKIE_ARG \
             -o "/tmp/dl.%(ext)s" \
             "https://www.youtube.com/watch?v=${YTID}"
+
           ls -lh /tmp/dl.mp3
 
       - name: Upload su Supabase Storage
