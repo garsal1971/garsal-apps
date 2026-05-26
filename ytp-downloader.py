@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-YTP Downloader v2.0 — Supabase Realtime
-Riceve notifiche istantanee quando un video viene messo in coda,
-scarica l'audio con yt-dlp e carica l'MP3 su Supabase Storage.
+YTP Downloader v2.1 — Supabase Realtime via websockets puro
+Nessuna dipendenza C++. Requisiti: pip install websockets yt-dlp
 
-Requisiti:  pip install supabase yt-dlp
-Avvio:      python ytp-downloader.py
-            (oppure doppio clic su ytp-downloader.bat su Windows)
+Avvio: python ytp-downloader.py  (oppure doppio clic su ytp-downloader.bat)
 """
 import asyncio, json, os, subprocess, sys, tempfile, time, platform
-import urllib.request
+import urllib.request, urllib.error
 
 # ── Configurazione ────────────────────────────────────────────────────────────
 SUPABASE_URL         = "https://jajlmmdsjlvzgcxiiypk.supabase.co"
@@ -19,10 +16,14 @@ BUCKET  = "ytp-audio"
 BROWSER = "chrome"   # "chrome" | "firefox" | "edge" | "brave" | "chromium"
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Ricava il project ref dall'URL  (es. "jajlmmdsjlvzgcxiiypk")
+_REF = SUPABASE_URL.replace("https://", "").replace(".supabase.co", "")
+WS_URL = f"wss://{_REF}.supabase.co/realtime/v1/websocket?apikey={SUPABASE_SERVICE_KEY}&vsn=1.0.0"
+
 def ts():
     return time.strftime('%H:%M:%S')
 
-# ── REST helpers (stdlib, nessuna dipendenza extra) ───────────────────────────
+# ── REST helpers ──────────────────────────────────────────────────────────────
 def _h():
     return {"Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
             "apikey": SUPABASE_SERVICE_KEY, "Accept": "application/json"}
@@ -50,7 +51,7 @@ def rest_upload(obj_path, file_path):
 
 # ── Download ──────────────────────────────────────────────────────────────────
 def download_item(item):
-    # Se il payload Realtime ha solo l'id, recupera il record completo
+    # Se il payload ha solo l'id, recupera il record completo
     if not item.get("youtube_id") and item.get("id"):
         rows = rest_get("ytp_playlist_items",
                         f"id=eq.{item['id']}&select=id,youtube_id,title,audio_status")
@@ -109,52 +110,99 @@ def flush_pending():
     except Exception as e:
         print(f"[{ts()}] Errore verifica arretrati: {e}")
 
-# ── Realtime ──────────────────────────────────────────────────────────────────
-async def main():
+# ── Supabase Realtime (Phoenix protocol) ──────────────────────────────────────
+async def realtime_loop():
     try:
-        from supabase import acreate_client
+        import websockets
     except ImportError:
-        print("ERRORE: installa le dipendenze con:\n  pip install supabase yt-dlp")
+        print("ERRORE: installa websockets con:\n  pip install websockets")
         sys.exit(1)
 
+    _ref_counter = 0
+
+    def next_ref():
+        nonlocal _ref_counter
+        _ref_counter += 1
+        return str(_ref_counter)
+
+    while True:
+        try:
+            print(f"[{ts()}] Connessione a Supabase Realtime…")
+            async with websockets.connect(WS_URL, ping_interval=None) as ws:
+                # Join channel postgres_changes
+                await ws.send(json.dumps([
+                    "1", next_ref(),
+                    "realtime:public:ytp_playlist_items",
+                    "phx_join",
+                    {
+                        "config": {
+                            "broadcast":       {"ack": False, "self": False},
+                            "presence":        {"key": ""},
+                            "postgres_changes": [
+                                {"event": "*", "schema": "public",
+                                 "table": "ytp_playlist_items"}
+                            ]
+                        },
+                        "access_token": SUPABASE_SERVICE_KEY
+                    }
+                ]))
+
+                # Heartbeat ogni 25s (timeout server è 60s)
+                async def heartbeat():
+                    while True:
+                        await asyncio.sleep(25)
+                        try:
+                            await ws.send(json.dumps(
+                                [None, next_ref(), "phoenix", "heartbeat", {}]))
+                        except Exception:
+                            break
+
+                hb_task = asyncio.create_task(heartbeat())
+
+                print(f"[{ts()}] ✅ In ascolto su Realtime — nessun polling, zero consumo\n")
+
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    # Phoenix frame: [join_ref, ref, topic, event, payload]
+                    if len(msg) < 5:
+                        continue
+                    event   = msg[3]
+                    payload = msg[4]
+
+                    if event == "phx_reply" and payload.get("status") == "ok":
+                        continue  # join confermato
+                    if event == "postgres_changes":
+                        change = payload.get("data", {})
+                        record = change.get("record", {})
+                        if record.get("audio_status") == "pending":
+                            print(f"[{ts()}] ▼ Realtime: nuovo download!")
+                            try:
+                                download_item(record)
+                            except Exception as e:
+                                print(f"  ✗  {e}")
+
+                hb_task.cancel()
+
+        except Exception as e:
+            print(f"[{ts()}] Connessione persa: {e}")
+            print(f"[{ts()}] Riconnessione in 5s…")
+            flush_pending()   # recupera eventuali pending persi durante la disconnessione
+            await asyncio.sleep(5)
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+async def main():
     if not SUPABASE_SERVICE_KEY:
         print("ERRORE: inserisci SUPABASE_SERVICE_KEY nello script.")
         sys.exit(1)
 
     print("=" * 55)
-    print(" YTP Downloader v2.0  —  Supabase Realtime")
+    print(" YTP Downloader v2.1  —  Supabase Realtime")
     print(f" Browser: {BROWSER}   OS: {platform.system()}")
     print(" Ctrl+C per uscire")
     print("=" * 55)
 
-    # Processa eventuali pending accumulati prima dell'avvio
     flush_pending()
-
-    client = await acreate_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-
-    def on_change(payload):
-        new = payload.get("new") or {}
-        if new.get("audio_status") == "pending":
-            print(f"\n[{ts()}] ▼ Realtime: nuovo download!")
-            try:
-                download_item(new)
-            except Exception as e:
-                print(f"  ✗  {e}")
-
-    channel = client.realtime.channel("ytp-downloads")
-    channel.on_postgres_changes(
-        event="UPDATE", schema="public",
-        table="ytp_playlist_items", callback=on_change)
-    channel.on_postgres_changes(
-        event="INSERT", schema="public",
-        table="ytp_playlist_items", callback=on_change)
-
-    await channel.subscribe()
-    print(f"[{ts()}] ✅ In ascolto su Realtime — nessun polling, zero consumo\n")
-
-    # Tieni vivo il loop; la riconnessione è gestita automaticamente dal client
-    while True:
-        await asyncio.sleep(3600)
+    await realtime_loop()
 
 if __name__ == "__main__":
     try:
