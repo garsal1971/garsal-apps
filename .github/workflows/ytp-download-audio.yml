@@ -10,10 +10,10 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Installa yt-dlp e ffmpeg
+      - name: Installa ffmpeg e yt-dlp (fallback)
         run: |
-          pip install -U yt-dlp
           sudo apt-get install -y ffmpeg
+          pip install -U yt-dlp
 
       - name: Segna come "processing"
         run: |
@@ -24,17 +24,58 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"audio_status":"processing"}'
 
-      - name: Download audio (MP3)
+      - name: Download audio via Piped API
         run: |
           YTID="${{ github.event.client_payload.youtube_id }}"
-          yt-dlp \
-            -x --audio-format mp3 --audio-quality 5 \
-            --no-playlist \
-            --extractor-args "youtube:player_client=ios,web" \
-            --extractor-retries 5 \
-            --fragment-retries 5 \
-            -o "/tmp/dl.%(ext)s" \
-            "https://www.youtube.com/watch?v=${YTID}"
+
+          # Prova più istanze Piped in ordine — la prima che risponde vince
+          INSTANCES=(
+            "https://pipedapi.kavin.rocks"
+            "https://api.piped.yt"
+            "https://pipedapi.moomoo.me"
+            "https://piped-api.garudalinux.org"
+          )
+
+          AUDIO_URL=""
+          for INSTANCE in "${INSTANCES[@]}"; do
+            echo "→ Provo $INSTANCE ..."
+            RESP=$(curl -sf --max-time 15 "$INSTANCE/streams/$YTID" 2>/dev/null || true)
+            if [ -n "$RESP" ]; then
+              URL=$(echo "$RESP" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          streams = d.get('audioStreams', [])
+          if not streams:
+              sys.exit(1)
+          best = max(streams, key=lambda s: s.get('bitrate', 0))
+          print(best['url'])
+          " 2>/dev/null || true)
+              if [ -n "$URL" ]; then
+                AUDIO_URL="$URL"
+                echo "✅ URL ottenuto da $INSTANCE"
+                break
+              fi
+            fi
+            echo "  ✗ non disponibile"
+          done
+
+          if [ -n "$AUDIO_URL" ]; then
+            echo "→ Download diretto..."
+            curl -L --max-time 300 -o /tmp/dl_raw "$AUDIO_URL"
+            echo "→ Conversione in MP3..."
+            ffmpeg -i /tmp/dl_raw -codec:a libmp3lame -qscale:a 5 -y /tmp/dl.mp3
+          else
+            echo "→ Tutti i server Piped non disponibili, uso yt-dlp come fallback..."
+            yt-dlp \
+              -x --audio-format mp3 --audio-quality 5 \
+              --no-playlist \
+              --extractor-args "youtube:player_client=tv_embedded,ios" \
+              --extractor-retries 5 \
+              --fragment-retries 5 \
+              -o "/tmp/dl.%(ext)s" \
+              "https://www.youtube.com/watch?v=${YTID}"
+          fi
+
           ls -lh /tmp/dl.mp3
 
       - name: Upload su Supabase Storage
