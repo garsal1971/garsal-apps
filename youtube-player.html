@@ -431,11 +431,11 @@
             <div class="card" style="border-left:4px solid var(--accent);">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--accent);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Installa yt-dlp sul tuo PC (una volta sola)</h3>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Installa le dipendenze sul tuo PC (una volta sola)</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
                     <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
-                        <div>pip install yt-dlp</div>
+                        <div>pip install supabase yt-dlp</div>
                     </div>
                     <p style="margin-top:0.5rem;">Assicurati che Chrome (o Edge/Firefox) sia installato e che tu sia <strong>loggato su YouTube</strong>.</p>
                 </div>
@@ -448,12 +448,13 @@
                     <h3 style="font-size:1.05rem;font-weight:700;">Crea il bucket Supabase Storage (una volta sola)</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p>Su <strong>supabase.com → progetto → Storage → New Bucket</strong>:</p>
+                    <p style="margin-bottom:0.5rem;">Su <strong>supabase.com → progetto → Storage → New Bucket</strong>:</p>
                     <ul style="padding-left:1.25rem;margin-top:0.25rem;">
                         <li>Nome: <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-audio</code></li>
                         <li>Abilita <strong>Public bucket</strong> ✓</li>
                         <li>Clicca Create</li>
                     </ul>
+                    <p style="margin-top:0.75rem;">Poi vai su <strong>Database → Replication</strong> e verifica che <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp_playlist_items</code> sia nella pubblicazione <em>supabase_realtime</em> (la migration lo fa in automatico).</p>
                 </div>
             </div>
 
@@ -464,17 +465,20 @@
                     <h3 style="font-size:1.05rem;font-weight:700;">Configura e avvia ytp-downloader.py</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p style="margin-bottom:0.5rem;">Il file <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> è nella cartella del repository (scaricalo da <strong>garsal-apps</strong> su GitHub).</p>
-                    <p style="margin-bottom:0.5rem;">Aprilo con un editor di testo e inserisci la <strong>service_role key</strong> di Supabase nella riga:</p>
+                    <p style="margin-bottom:0.5rem;">Scarica <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> dalla cartella del repository su GitHub. Aprilo con Notepad e inserisci la <strong>service_role key</strong>:</p>
                     <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;margin-bottom:0.75rem;overflow-x:auto;">
-                        <div>SUPABASE_SERVICE_KEY = <span style="color:#fcd34d;">"incolla-qui-la-service-role-key"</span></div>
+                        <div>SUPABASE_SERVICE_KEY = <span style="color:#fcd34d;">"incolla-qui-la-chiave"</span></div>
                     </div>
-                    <p style="margin-bottom:0.5rem;">La service_role key si trova su <strong>supabase.com → progetto → Settings → API → service_role (secret)</strong>.</p>
-                    <p style="margin-bottom:0.5rem;">Poi avvialo — su Windows fai doppio clic su <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.bat</code>, oppure dal terminale:</p>
+                    <p style="margin-bottom:0.5rem;">La chiave si trova su <strong>supabase.com → Settings → API → service_role (secret)</strong>.</p>
+                    <p style="margin-bottom:0.5rem;">Avvialo — su Windows doppio clic su <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.bat</code>, altrimenti:</p>
                     <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
                         <div>python ytp-downloader.py</div>
                     </div>
-                    <p style="margin-top:0.5rem; color:var(--success);font-weight:600;">✅ Funzionamento: clicchi ⬇ nell'app → lo script scarica sul tuo PC con Chrome loggato → carica l'MP3 su Supabase → l'icona diventa 🎵. Nessun cookie da gestire, non scade mai.</p>
+                    <div style="margin-top:0.75rem;padding:0.75rem;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;">
+                        <strong style="color:var(--success);">Come funziona:</strong><br>
+                        Lo script apre una connessione <strong>WebSocket verso Supabase</strong> e resta in ascolto — nessun polling, zero consumo. Quando clicchi ⬇ nell'app (da qualsiasi dispositivo), Supabase notifica istantaneamente lo script sul tuo PC. Lo script scarica con yt-dlp usando Chrome già loggato, carica l'MP3 su Supabase e aggiorna l'icona a 🎵.<br><br>
+                        <strong>Nessun IP statico, nessuna porta aperta, non scade mai.</strong>
+                    </div>
                 </div>
             </div>
 
@@ -580,8 +584,8 @@
 // ==========================================
 // VERSION
 // ==========================================
-var APP_VERSION = 'v1.1.0';
-var BUILD_TIME  = '2026-05-26T21:00:00Z';
+var APP_VERSION = 'v1.2.0';
+var BUILD_TIME  = '2026-05-26T22:00:00Z';
 console.log('%c YT Playlist Player ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#FF0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
