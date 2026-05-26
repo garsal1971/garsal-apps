@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YTP Downloader v2.2 — Supabase Realtime via websockets puro
+YTP Downloader v2.3 — Supabase Realtime via websockets puro
 Nessuna dipendenza C++. Requisiti: pip install websockets yt-dlp
 
 Avvio: python ytp-downloader.py  (oppure doppio clic su ytp-downloader.bat)
@@ -138,9 +138,10 @@ async def realtime_loop():
         try:
             log("Connessione a Supabase Realtime…")
             async with websockets.connect(WS_URL, ping_interval=None) as ws:
+                join_ref = next_ref()
                 await ws.send(json.dumps([
-                    "1", next_ref(),
-                    "realtime:public:ytp_playlist_items",
+                    join_ref, next_ref(),
+                    "realtime:ytp-downloads",
                     "phx_join",
                     {
                         "config": {
@@ -175,7 +176,15 @@ async def realtime_loop():
                     event   = msg[3]
                     payload = msg[4]
 
-                    if event == "phx_reply" and payload.get("status") == "ok":
+                    if event == "phx_reply":
+                        status = payload.get("status", "?")
+                        if status != "ok":
+                            log(f"⚠ phx_reply {status}: {payload.get('response', '')}")
+                        else:
+                            log(f"  canale confermato (subscription ok)")
+                        continue
+                    if event == "system":
+                        log(f"  system: {payload}")
                         continue
                     if event == "postgres_changes":
                         change = payload.get("data", {})
@@ -202,12 +211,12 @@ async def main():
         sys.exit(1)
 
     print("=" * 55)
-    print(" YTP Downloader v2.2  —  Supabase Realtime")
+    print(" YTP Downloader v2.3  —  Supabase Realtime")
     print(f" Browser: {BROWSER}   OS: {platform.system()}")
     print(f" Log: {LOG_FILE}")
     print(" Ctrl+C per uscire")
     print("=" * 55)
-    log("=== Avvio YTP Downloader v2.2 ===")
+    log("=== Avvio YTP Downloader v2.3 ===")
 
     flush_pending()
     await realtime_loop()
