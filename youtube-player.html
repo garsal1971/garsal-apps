@@ -431,24 +431,13 @@
             <div class="card" style="border-left:4px solid var(--accent);">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--accent);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Genera token OAuth2 YouTube (sul tuo PC)</h3>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Installa yt-dlp sul tuo PC (una volta sola)</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p style="margin-bottom:0.75rem;">Apri il terminale del tuo PC ed esegui questi comandi:</p>
-                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;margin-bottom:0.75rem;overflow-x:auto;">
-                        <div style="color:#6ee7b7;"># 1. Installa yt-dlp se non ce l'hai</div>
+                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
                         <div>pip install yt-dlp</div>
-                        <br>
-                        <div style="color:#6ee7b7;"># 2. Genera il token OAuth2 (ti chiede di autorizzare su Google)</div>
-                        <div>yt-dlp --username oauth2 --password "" --cookies yt_oauth.txt "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</div>
-                        <br>
-                        <div style="color:#6ee7b7;"># 3a. Codifica in base64 (Mac / Linux)</div>
-                        <div>base64 yt_oauth.txt</div>
-                        <br>
-                        <div style="color:#6ee7b7;"># 3b. Codifica in base64 (Windows — PowerShell)</div>
-                        <div>[Convert]::ToBase64String([IO.File]::ReadAllBytes("yt_oauth.txt"))</div>
                     </div>
-                    <p>Al passo 2 yt-dlp mostra un link tipo <strong>google.com/device</strong> e un codice — vai lì, inserisci il codice e autorizza con il tuo account Google. Poi copia tutto il testo base64 prodotto al passo 3.</p>
+                    <p style="margin-top:0.5rem;">Assicurati che Chrome (o Edge/Firefox) sia installato e che tu sia <strong>loggato su YouTube</strong>.</p>
                 </div>
             </div>
 
@@ -456,32 +445,7 @@
             <div class="card" style="border-left:4px solid var(--secondary);margin-top:1rem;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--secondary);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Aggiungi i GitHub Secrets</h3>
-                </div>
-                <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p style="margin-bottom:0.75rem;">Vai su <strong>github.com → garsal-apps → Settings → Secrets and variables → Actions → New repository secret</strong> e aggiungi questi 3 secrets:</p>
-                    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-                        <tr style="background:var(--input-bg);">
-                            <td style="padding:0.5rem 0.75rem;border:1px solid var(--border);font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap;">YT_OAUTH_COOKIES_B64</td>
-                            <td style="padding:0.5rem 0.75rem;border:1px solid var(--border);">Il testo base64 copiato al passo 1</td>
-                        </tr>
-                        <tr>
-                            <td style="padding:0.5rem 0.75rem;border:1px solid var(--border);font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap;">SUPABASE_URL</td>
-                            <td style="padding:0.5rem 0.75rem;border:1px solid var(--border);font-family:'Space Mono',monospace;font-size:0.75rem;">https://jajlmmdsjlvzgcxiiypk.supabase.co</td>
-                        </tr>
-                        <tr style="background:var(--input-bg);">
-                            <td style="padding:0.5rem 0.75rem;border:1px solid var(--border);font-family:'Space Mono',monospace;font-weight:700;white-space:nowrap;">SUPABASE_SERVICE_KEY</td>
-                            <td style="padding:0.5rem 0.75rem;border:1px solid var(--border);">La <strong>service_role</strong> key → Supabase → Settings → API → <em>service_role (secret)</em></td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-
-            <!-- STEP 3 -->
-            <div class="card" style="border-left:4px solid var(--success);margin-top:1rem;">
-                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
-                    <div style="background:var(--success);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Crea il bucket Supabase Storage</h3>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Crea il bucket Supabase Storage (una volta sola)</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
                     <p>Su <strong>supabase.com → progetto → Storage → New Bucket</strong>:</p>
@@ -493,32 +457,24 @@
                 </div>
             </div>
 
-            <!-- STEP 4 -->
-            <div class="card" style="border-left:4px solid var(--warning);margin-top:1rem;">
+            <!-- STEP 3 -->
+            <div class="card" style="border-left:4px solid var(--success);margin-top:1rem;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
-                    <div style="background:var(--warning);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">4</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Configura l'app qui sotto</h3>
+                    <div style="background:var(--success);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Configura e avvia ytp-downloader.py</h3>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">GitHub Personal Access Token</label>
-                    <input type="password" class="form-input" id="settGhToken" placeholder="ghp_xxxxxxxxxxxx">
-                    <div class="form-hint">github.com → Settings → Developer settings → Personal access tokens → <strong>Classic</strong> → New token → spunta il scope <strong>repo</strong> (oppure solo <strong>workflow</strong>) → Genera e copia qui.<br><em style="color:var(--muted);">Fine-grained PAT: permessi Contents <strong>Read &amp; Write</strong> + Actions <strong>Read &amp; Write</strong> su garsal-apps.</em></div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Repository GitHub</label>
-                    <input type="text" class="form-input" id="settGhRepo" placeholder="garsal1971/garsal-apps">
-                </div>
-                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-                    <button class="btn btn-accent" onclick="saveSettingsForm()">💾 Salva</button>
-                    <button class="btn btn-ghost" onclick="testGhToken()">🔌 Test connessione GitHub</button>
-                </div>
-            </div>
-
-            <!-- STATO SETUP -->
-            <div class="card" style="margin-top:1rem;background:var(--input-bg);">
-                <h3 style="font-size:1rem;margin-bottom:0.75rem;">✅ Checklist setup</h3>
-                <div id="setupChecklist" style="font-size:0.88rem;line-height:2;color:var(--muted);">
-                    Salva il token GitHub per vedere lo stato.
+                <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
+                    <p style="margin-bottom:0.5rem;">Il file <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> è nella cartella del repository (scaricalo da <strong>garsal-apps</strong> su GitHub).</p>
+                    <p style="margin-bottom:0.5rem;">Aprilo con un editor di testo e inserisci la <strong>service_role key</strong> di Supabase nella riga:</p>
+                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;margin-bottom:0.75rem;overflow-x:auto;">
+                        <div>SUPABASE_SERVICE_KEY = <span style="color:#fcd34d;">"incolla-qui-la-service-role-key"</span></div>
+                    </div>
+                    <p style="margin-bottom:0.5rem;">La service_role key si trova su <strong>supabase.com → progetto → Settings → API → service_role (secret)</strong>.</p>
+                    <p style="margin-bottom:0.5rem;">Poi avvialo — su Windows fai doppio clic su <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.bat</code>, oppure dal terminale:</p>
+                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
+                        <div>python ytp-downloader.py</div>
+                    </div>
+                    <p style="margin-top:0.5rem; color:var(--success);font-weight:600;">✅ Funzionamento: clicchi ⬇ nell'app → lo script scarica sul tuo PC con Chrome loggato → carica l'MP3 su Supabase → l'icona diventa 🎵. Nessun cookie da gestire, non scade mai.</p>
                 </div>
             </div>
 
@@ -624,8 +580,8 @@
 // ==========================================
 // VERSION
 // ==========================================
-var APP_VERSION = 'v1.0.2';
-var BUILD_TIME  = '2026-05-26T20:30:00Z';
+var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-05-26T21:00:00Z';
 console.log('%c YT Playlist Player ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#FF0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1322,96 +1278,22 @@ async function importCsv() {
 // SETTINGS
 // ==========================================
 function renderSettingsPage() {
-    const s = getSettings();
-    document.getElementById('settGhToken').value = s.gh_token || '';
-    document.getElementById('settGhRepo').value  = s.gh_repo  || 'garsal1971/garsal-apps';
     document.getElementById('settVersion').textContent = APP_VERSION;
     document.getElementById('settBuild').textContent   = BUILD_TIME;
-    const hasToken = !!(s.gh_token);
-    const hasRepo  = !!(s.gh_repo);
-    document.getElementById('setupChecklist').innerHTML = [
-        hasToken ? '✅' : '⬜', ' Step 4 — GitHub Token inserito<br>',
-        hasRepo  ? '✅' : '⬜', ' Step 4 — Repository configurato<br>',
-        '⬜ Step 1 — Token OAuth2 generato (verifica su GitHub Secrets)<br>',
-        '⬜ Step 2 — Secrets aggiunti su GitHub<br>',
-        '⬜ Step 3 — Bucket <code style="background:#f3f4f6;padding:0 4px;">ytp-audio</code> creato su Supabase',
-    ].join('');
-}
-
-function saveSettingsForm() {
-    saveSett({ gh_token: document.getElementById('settGhToken').value.trim(),
-               gh_repo:  document.getElementById('settGhRepo').value.trim() });
-    showToast('✅ Impostazioni salvate');
-}
-
-async function testGhToken() {
-    const s = getSettings();
-    if (!s.gh_token) { showToast('⚠️ Inserisci prima il token'); return; }
-    if (!s.gh_repo)  { showToast('⚠️ Inserisci prima il repository (es. garsal1971/garsal-apps)'); return; }
-    showToast('🔌 Test in corso...');
-    const headers = { 'Authorization': 'Bearer ' + s.gh_token, 'Accept': 'application/vnd.github.v3+json' };
-    try {
-        const rUser = await fetch('https://api.github.com/user', { headers });
-        if (!rUser.ok) { showToast('❌ Token non valido (HTTP ' + rUser.status + ')'); return; }
-        const u = await rUser.json();
-
-        const [owner, repo] = s.gh_repo.split('/');
-        const rRepo = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
-        if (!rRepo.ok) { showToast('❌ Repository non accessibile (HTTP ' + rRepo.status + ') — verifica repo e permessi'); return; }
-        const repoData = await rRepo.json();
-        const canPush = repoData.permissions && repoData.permissions.push;
-        if (!canPush) {
-            showToast('❌ Il token non ha permesso di scrittura sul repo — usa scope "repo" o "workflow" (Classic PAT)', 5000);
-            return;
-        }
-        showToast('✅ Connesso come ' + u.login + ' — permessi OK, pronto per il dispatch!', 4000);
-    } catch(e) { showToast('❌ Errore di rete'); }
 }
 
 // ==========================================
-// DOWNLOAD AUDIO VIA GITHUB ACTIONS
+// DOWNLOAD AUDIO (via script locale)
 // ==========================================
 async function triggerDownload(itemId) {
-    const s = getSettings();
-    if (!s.gh_token || !s.gh_repo) {
-        showToast('⚙️ Configura GitHub Token in Impostazioni');
-        showPage('settingsPage', document.querySelectorAll('.nav-item')[4]);
-        return;
-    }
     const item = curItems.find(v => v.id === itemId);
     if (!item) return;
-
     const { error } = await sb.from('ytp_playlist_items').update({ audio_status: 'pending' }).eq('id', itemId);
     if (error) { showToast('❌ ' + error.message); return; }
     item.audio_status = 'pending';
     renderPlaylistPage(); renderQueue();
-
-    const [owner, repo] = s.gh_repo.split('/');
-    try {
-        const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/dispatches`, {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + s.gh_token,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                event_type: 'ytp-download-audio',
-                client_payload: { youtube_id: item.youtube_id, item_id: item.id }
-            })
-        });
-        if (r.ok || r.status === 204) {
-            showToast('⏳ Download avviato — ci vorranno 2-3 minuti');
-            startPolling();
-        } else {
-            await sb.from('ytp_playlist_items').update({ audio_status: null }).eq('id', itemId);
-            item.audio_status = null;
-            renderPlaylistPage(); renderQueue();
-            showToast('❌ Errore GitHub (HTTP ' + r.status + '): verifica token e permessi');
-        }
-    } catch(e) {
-        showToast('❌ Errore di rete: ' + e.message);
-    }
+    showToast('⏳ In coda — assicurati che ytp-downloader.py sia in esecuzione sul tuo PC');
+    startPolling();
 }
 
 async function cancelDownload(itemId) {
