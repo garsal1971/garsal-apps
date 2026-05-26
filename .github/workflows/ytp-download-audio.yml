@@ -24,52 +24,107 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"audio_status":"processing"}'
 
-      - name: Download audio via Piped API
+      - name: Download audio (Piped → Invidious → cobalt → yt-dlp)
         run: |
           YTID="${{ github.event.client_payload.youtube_id }}"
-
-          # Prova più istanze Piped in ordine — la prima che risponde vince
-          INSTANCES=(
-            "https://pipedapi.kavin.rocks"
-            "https://api.piped.yt"
-            "https://pipedapi.moomoo.me"
-            "https://piped-api.garudalinux.org"
-          )
-
           AUDIO_URL=""
-          for INSTANCE in "${INSTANCES[@]}"; do
-            echo "→ Provo $INSTANCE ..."
-            RESP=$(curl -sf --max-time 15 "$INSTANCE/streams/$YTID" 2>/dev/null || true)
-            if [ -n "$RESP" ]; then
-              URL=$(echo "$RESP" | python3 -c "
+
+          # ── Metodo 1: Piped API ──────────────────────────────────
+          echo "=== Metodo 1: Piped API ==="
+          for INSTANCE in \
+            "https://pipedapi.kavin.rocks" \
+            "https://api.piped.yt" \
+            "https://pipedapi.moomoo.me" \
+            "https://piped-api.garudalinux.org" \
+            "https://pipedapi.adminforge.de" \
+            "https://pipedapi.in.projectsegfau.lt"
+          do
+            echo "  → $INSTANCE"
+            RESP=$(curl -s --max-time 12 -H "Accept: application/json" \
+              "$INSTANCE/streams/$YTID" 2>/dev/null || true)
+            URL=$(echo "$RESP" | python3 -c "
           import sys, json
-          d = json.load(sys.stdin)
-          streams = d.get('audioStreams', [])
-          if not streams:
-              sys.exit(1)
-          best = max(streams, key=lambda s: s.get('bitrate', 0))
-          print(best['url'])
+          try:
+            d = json.load(sys.stdin)
+            s = d.get('audioStreams', [])
+            if s:
+              print(max(s, key=lambda x: x.get('bitrate',0))['url'])
+          except: pass
           " 2>/dev/null || true)
-              if [ -n "$URL" ]; then
-                AUDIO_URL="$URL"
-                echo "✅ URL ottenuto da $INSTANCE"
-                break
-              fi
+            if [ -n "$URL" ]; then
+              echo "  ✅ OK"
+              AUDIO_URL="$URL"
+              break
             fi
-            echo "  ✗ non disponibile"
           done
 
+          # ── Metodo 2: Invidious API ──────────────────────────────
+          if [ -z "$AUDIO_URL" ]; then
+            echo "=== Metodo 2: Invidious API ==="
+            for INSTANCE in \
+              "https://inv.riverside.rocks" \
+              "https://invidious.flokinet.is" \
+              "https://y.com.sb" \
+              "https://invidious.projectsegfau.lt" \
+              "https://invidious.nerdvpn.de"
+            do
+              echo "  → $INSTANCE"
+              RESP=$(curl -s --max-time 12 \
+                "$INSTANCE/api/v1/videos/$YTID?fields=adaptiveFormats" 2>/dev/null || true)
+              URL=$(echo "$RESP" | python3 -c "
+          import sys, json
+          try:
+            d = json.load(sys.stdin)
+            af = [f for f in d.get('adaptiveFormats', []) if 'audio' in f.get('type','')]
+            if af:
+              print(max(af, key=lambda x: int(x.get('bitrate',0)))['url'])
+          except: pass
+          " 2>/dev/null || true)
+              if [ -n "$URL" ]; then
+                echo "  ✅ OK"
+                AUDIO_URL="$URL"
+                break
+              fi
+            done
+          fi
+
+          # ── Metodo 3: cobalt.tools ───────────────────────────────
+          if [ -z "$AUDIO_URL" ]; then
+            echo "=== Metodo 3: cobalt.tools ==="
+            RESP=$(curl -s --max-time 20 \
+              -X POST "https://api.cobalt.tools/" \
+              -H "Accept: application/json" \
+              -H "Content-Type: application/json" \
+              -d "{\"url\":\"https://www.youtube.com/watch?v=$YTID\",\"downloadMode\":\"audio\"}" \
+              2>/dev/null || true)
+            URL=$(echo "$RESP" | python3 -c "
+          import sys, json
+          try:
+            d = json.load(sys.stdin)
+            if d.get('status') in ('tunnel','redirect','stream'):
+              print(d.get('url',''))
+          except: pass
+          " 2>/dev/null || true)
+            if [ -n "$URL" ]; then
+              echo "  ✅ cobalt OK"
+              AUDIO_URL="$URL"
+            fi
+          fi
+
+          # ── Download + conversione ───────────────────────────────
           if [ -n "$AUDIO_URL" ]; then
-            echo "→ Download diretto..."
+            echo "=== Download da URL ==="
             curl -L --max-time 300 -o /tmp/dl_raw "$AUDIO_URL"
-            echo "→ Conversione in MP3..."
+            echo "=== Conversione MP3 ==="
             ffmpeg -i /tmp/dl_raw -codec:a libmp3lame -qscale:a 5 -y /tmp/dl.mp3
+
+          # ── Fallback finale: yt-dlp ──────────────────────────────
           else
-            echo "→ Tutti i server Piped non disponibili, uso yt-dlp come fallback..."
+            echo "=== Fallback: yt-dlp ==="
             yt-dlp \
               -x --audio-format mp3 --audio-quality 5 \
               --no-playlist \
-              --extractor-args "youtube:player_client=tv_embedded,ios" \
+              --extractor-args "youtube:player_client=ios" \
               --extractor-retries 5 \
               --fragment-retries 5 \
               -o "/tmp/dl.%(ext)s" \
