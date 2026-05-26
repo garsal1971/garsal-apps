@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YTP Downloader v2.3 — Supabase Realtime via websockets puro
+YTP Downloader v2.4 — Supabase Realtime via websockets puro
 Nessuna dipendenza C++. Requisiti: pip install websockets yt-dlp
 
 Avvio: python ytp-downloader.py  (oppure doppio clic su ytp-downloader.bat)
@@ -62,7 +62,8 @@ def rest_upload(obj_path, file_path):
 
 # ── Download ──────────────────────────────────────────────────────────────────
 def download_item(item):
-    if not item.get("youtube_id") and item.get("id"):
+    # Recupera sempre il record completo per avere tutti i campi aggiornati
+    if item.get("id"):
         rows = rest_get("ytp_playlist_items",
                         f"id=eq.{item['id']}&select=id,youtube_id,title,audio_status")
         if not rows:
@@ -106,7 +107,7 @@ def download_item(item):
 def flush_pending():
     try:
         items = rest_get("ytp_playlist_items",
-                         "audio_status=eq.pending&select=id,youtube_id,title")
+                         "audio_status=eq.pending&select=id,youtube_id,title,audio_status")
         if items:
             log(f"{len(items)} download in coda (arretrati):")
             for it in items:
@@ -211,12 +212,12 @@ async def main():
         sys.exit(1)
 
     print("=" * 55)
-    print(" YTP Downloader v2.3  —  Supabase Realtime")
+    print(" YTP Downloader v2.4  —  Supabase Realtime")
     print(f" Browser: {BROWSER}   OS: {platform.system()}")
     print(f" Log: {LOG_FILE}")
     print(" Ctrl+C per uscire")
     print("=" * 55)
-    log("=== Avvio YTP Downloader v2.3 ===")
+    log("=== Avvio YTP Downloader v2.4 ===")
 
     flush_pending()
     await realtime_loop()
