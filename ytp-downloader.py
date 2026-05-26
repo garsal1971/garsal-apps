@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YTP Downloader v2.4 — Supabase Realtime via websockets puro
+YTP Downloader v2.5 — Supabase Realtime via websockets puro
 Nessuna dipendenza C++. Requisiti: pip install websockets yt-dlp
 
 Avvio: python ytp-downloader.py  (oppure doppio clic su ytp-downloader.bat)
@@ -85,6 +85,7 @@ def download_item(item):
         r = subprocess.run([
             "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "5",
             "--no-playlist", "--cookies-from-browser", BROWSER,
+            "--extractor-args", "youtube:player_client=ios,web",
             "--extractor-retries", "3",
             "-o", os.path.join(d, "dl.%(ext)s"),
             f"https://www.youtube.com/watch?v={ytid}",
@@ -212,12 +213,12 @@ async def main():
         sys.exit(1)
 
     print("=" * 55)
-    print(" YTP Downloader v2.4  —  Supabase Realtime")
+    print(" YTP Downloader v2.5  —  Supabase Realtime")
     print(f" Browser: {BROWSER}   OS: {platform.system()}")
     print(f" Log: {LOG_FILE}")
     print(" Ctrl+C per uscire")
     print("=" * 55)
-    log("=== Avvio YTP Downloader v2.4 ===")
+    log("=== Avvio YTP Downloader v2.5 ===")
 
     flush_pending()
     await realtime_loop()
