@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Installa yt-dlp e ffmpeg
         run: |
-          pip install yt-dlp
+          pip install -U yt-dlp
           sudo apt-get install -y ffmpeg
 
       - name: Segna come "processing"
@@ -24,19 +24,15 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"audio_status":"processing"}'
 
-      - name: Decodifica token OAuth2 YouTube
-        run: |
-          echo "${{ secrets.YT_OAUTH_COOKIES_B64 }}" | base64 -d > /tmp/yt_oauth.txt
-
       - name: Download audio (MP3)
         run: |
           YTID="${{ github.event.client_payload.youtube_id }}"
           yt-dlp \
             -x --audio-format mp3 --audio-quality 5 \
             --no-playlist \
-            --cookies /tmp/yt_oauth.txt \
-            --extractor-retries 3 \
-            --fragment-retries 3 \
+            --extractor-args "youtube:player_client=ios,web" \
+            --extractor-retries 5 \
+            --fragment-retries 5 \
             -o "/tmp/dl.%(ext)s" \
             "https://www.youtube.com/watch?v=${YTID}"
           ls -lh /tmp/dl.mp3
