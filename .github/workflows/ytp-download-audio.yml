@@ -12,7 +12,8 @@ jobs:
     steps:
       - name: Installa dipendenze
         run: |
-          pip install pytubefix
+          pip install yt-dlp
+          pip install https://github.com/coletdjnz/yt-dlp-youtube-oauth2/archive/refs/heads/master.zip
           sudo apt-get install -y ffmpeg
 
       - name: Segna come "processing"
@@ -24,33 +25,30 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"audio_status":"processing"}'
 
-      - name: Download audio via pytubefix
+      - name: Configura OAuth YouTube
         run: |
-          cat > /tmp/download.py << 'PYEOF'
-          import sys, subprocess, os
-          from pytubefix import YouTube
+          mkdir -p /tmp/yt-dlp-cache/youtube-oauth2
+          if [ -n "${{ secrets.YT_OAUTH_TOKEN }}" ]; then
+            echo "${{ secrets.YT_OAUTH_TOKEN }}" | base64 -d > /tmp/yt-dlp-cache/youtube-oauth2/token_data.json
+            echo "Token OAuth configurato"
+          else
+            echo "ATTENZIONE: YT_OAUTH_TOKEN non configurato — download potrebbe fallire"
+          fi
 
-          ytid = os.environ["YTID"]
-          print(f"Download: https://www.youtube.com/watch?v={ytid}")
+      - name: Download audio via yt-dlp + OAuth2
+        run: |
+          YTID="${{ github.event.client_payload.youtube_id }}"
+          echo "Download: https://www.youtube.com/watch?v=${YTID}"
 
-          yt     = YouTube(f"https://www.youtube.com/watch?v={ytid}")
-          stream = yt.streams.filter(only_audio=True).order_by("abr").last()
-          if not stream:
-              print("Nessun stream audio trovato", file=sys.stderr)
-              sys.exit(1)
+          yt-dlp \
+            --cache-dir /tmp/yt-dlp-cache \
+            --username oauth2 --password "" \
+            -x --audio-format mp3 --audio-quality 5 \
+            --no-playlist \
+            --extractor-retries 3 \
+            -o "/tmp/dl.%(ext)s" \
+            "https://www.youtube.com/watch?v=${YTID}"
 
-          print(f"Stream selezionato: {stream.abr}")
-          raw = stream.download(output_path="/tmp", filename="raw")
-          print(f"File scaricato: {raw}")
-
-          r = subprocess.run([
-              "ffmpeg", "-y", "-i", raw,
-              "-codec:a", "libmp3lame", "-qscale:a", "5",
-              "/tmp/dl.mp3"
-          ])
-          sys.exit(r.returncode)
-          PYEOF
-          YTID="${{ github.event.client_payload.youtube_id }}" python3 /tmp/download.py
           ls -lh /tmp/dl.mp3
 
       - name: Upload su Supabase Storage
