@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.20.6</title>
+    <title>Tasks v19.20.7</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2458,8 +2458,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.20.6';
-        const BUILD_TIME  = '2026-05-27T10:30:00Z';
+        const APP_VERSION = 'v19.20.7';
+        const BUILD_TIME  = '2026-05-27T14:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -6871,6 +6871,14 @@
             }
             
             if (taskId) {
+                // Chiedi se impostare created_at alla next_occurrence_date
+                if (taskData.next_occurrence_date) {
+                    const nextOccStr = isoToEu(taskData.next_occurrence_date) || taskData.next_occurrence_date;
+                    const setCreatedAt = confirm(`Vuoi impostare la data di creazione alla data della prossima occorrenza?\n(${nextOccStr})`);
+                    if (setCreatedAt) {
+                        taskData.created_at = taskData.next_occurrence_date;
+                    }
+                }
                 // UPDATE
                 const { data, error } = await sb.from('ts_tasks').update(taskData).eq('id', taskId).select();
                 if (error) {
