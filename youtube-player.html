@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Playlist Player v1.0.0</title>
+    <title>YouTube Playlist Player v1.4.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -427,21 +427,42 @@
                 <div class="page-title">Impostazioni</div>
             </div>
 
-            <!-- STEP 1 -->
+            <!-- STEP 1: OAuth token -->
             <div class="card" style="border-left:4px solid var(--accent);">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--accent);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Installa le dipendenze sul tuo PC (una volta sola)</h3>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Autorizza YouTube (una volta sola, dal tuo PC)</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
+                    <p style="margin-bottom:0.75rem;">Questo genera un <strong>token OAuth</strong> che GitHub Actions usa per scaricare senza bot-detection. Fatto una volta, dura a lungo.</p>
+
+                    <p style="font-weight:700;margin-bottom:0.25rem;">A — Installa e autorizza (terminale Windows)</p>
                     <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
-                        <div>pip install supabase yt-dlp</div>
+                        <div>pip install yt-dlp</div>
+                        <div>pip install https://github.com/coletdjnz/yt-dlp-youtube-oauth2/archive/refs/heads/master.zip</div>
+                        <div>yt-dlp --username oauth2 --password "" https://www.youtube.com/watch?v=dQw4w9WgXcQ</div>
                     </div>
-                    <p style="margin-top:0.5rem;">Assicurati che Chrome (o Edge/Firefox) sia installato e che tu sia <strong>loggato su YouTube</strong>.</p>
+                    <p style="margin-top:0.5rem;">Apri il link che appare → accedi con Google → "Consenti" → torna al terminale e attendi.</p>
+
+                    <p style="font-weight:700;margin-top:1rem;margin-bottom:0.25rem;">B — Copia il token negli appunti (PowerShell)</p>
+                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
+                        <div>$f="$env:APPDATA\yt-dlp\youtube-oauth2\token_data.json"</div>
+                        <div>[Convert]::ToBase64String([IO.File]::ReadAllBytes($f)) | Set-Clipboard</div>
+                    </div>
+
+                    <p style="font-weight:700;margin-top:1rem;margin-bottom:0.25rem;">C — Aggiungi come Secret su GitHub</p>
+                    <p>github.com → tuo repo → <strong>Settings → Secrets and variables → Actions → New repository secret</strong></p>
+                    <ul style="padding-left:1.25rem;margin-top:0.25rem;">
+                        <li>Nome: <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">YT_OAUTH_TOKEN</code></li>
+                        <li>Valore: incolla dagli appunti (stringa base64 lunga)</li>
+                    </ul>
+                    <div style="margin-top:0.75rem;padding:0.75rem;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;font-size:0.82rem;">
+                        Il token OAuth YouTube è valido a lungo — raramente serve rinnovarlo.
+                    </div>
                 </div>
             </div>
 
-            <!-- STEP 2 -->
+            <!-- STEP 2: Supabase bucket -->
             <div class="card" style="border-left:4px solid var(--secondary);margin-top:1rem;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--secondary);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
@@ -454,18 +475,17 @@
                         <li>Abilita <strong>Public bucket</strong> ✓</li>
                         <li>Clicca Create</li>
                     </ul>
-                    <p style="margin-top:0.75rem;">Poi vai su <strong>Database → Replication</strong> e verifica che <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp_playlist_items</code> sia nella pubblicazione <em>supabase_realtime</em> (la migration lo fa in automatico).</p>
                 </div>
             </div>
 
-            <!-- STEP 3 -->
+            <!-- STEP 3: GitHub PAT + repo -->
             <div class="card" style="border-left:4px solid var(--success);margin-top:1rem;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--success);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Opzione A — GitHub Actions (nessun PC necessario)</h3>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Token GitHub per avviare i download</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p style="margin-bottom:0.5rem;">Genera un <strong>Personal Access Token</strong> su GitHub con scope <strong>workflow</strong>:</p>
+                    <p style="margin-bottom:0.5rem;">Genera un <strong>Personal Access Token</strong> con scope <strong>workflow</strong>:</p>
                     <p style="margin-bottom:0.75rem;font-size:0.82rem;color:var(--muted);">github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → spunta <strong>workflow</strong></p>
                     <div class="form-group" style="margin-bottom:0.5rem;">
                         <label class="form-label">GitHub Personal Access Token</label>
@@ -477,22 +497,23 @@
                     </div>
                     <button class="btn btn-accent" onclick="saveSettingsForm()">💾 Salva</button>
                     <div style="margin-top:0.75rem;padding:0.75rem;background:#eff6ff;border-radius:6px;border:1px solid #bfdbfe;font-size:0.82rem;">
-                        Clicchi ⬇ nell'app → GitHub Actions scarica con <strong>pytubefix</strong> in cloud → MP3 caricato su Supabase → icona 🎵. Nessun PC necessario.
+                        Clicchi ⬇ nell'app → GitHub Actions scarica via <strong>yt-dlp + OAuth YouTube</strong> → MP3 su Supabase → icona 🎵. Nessun PC necessario.
                     </div>
                 </div>
             </div>
 
-            <!-- STEP 3b -->
+            <!-- STEP 4: Script locale fallback -->
             <div class="card" style="border-left:4px solid var(--warning);margin-top:1rem;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
-                    <div style="background:var(--warning);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3b</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Opzione B — Script locale (fallback se Actions non funziona)</h3>
+                    <div style="background:var(--warning);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">4</div>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Alternativa — Script locale sul tuo PC</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p>Scarica <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> + <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-config.py</code> da GitHub, inserisci la service_role key in <code>ytp-config.py</code> e avvia con doppio clic su <code>ytp-downloader.bat</code>.</p>
+                    <p>Se preferisci usare il PC come downloader: scarica <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> + <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-config.py</code> da GitHub, inserisci la service_role key in <code>ytp-config.py</code> e avvia con doppio clic su <code>ytp-downloader.bat</code>.</p>
                     <div style="background:#1F2937;color:#e5e7eb;padding:0.5rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;margin-top:0.5rem;">
-                        <div>pip install pytubefix websockets</div>
+                        <div>pip install pytubefix websockets yt-dlp</div>
                     </div>
+                    <p style="margin-top:0.5rem;font-size:0.82rem;color:var(--muted);">Lo script resta in ascolto su Supabase Realtime e scarica automaticamente i video in coda.</p>
                 </div>
             </div>
 
@@ -598,8 +619,8 @@
 // ==========================================
 // VERSION
 // ==========================================
-var APP_VERSION = 'v1.3.0';
-var BUILD_TIME  = '2026-05-27T00:00:00Z';
+var APP_VERSION = 'v1.4.0';
+var BUILD_TIME  = '2026-05-27T12:00:00Z';
 console.log('%c YT Playlist Player ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#FF0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
