@@ -462,22 +462,36 @@
             <div class="card" style="border-left:4px solid var(--success);margin-top:1rem;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
                     <div style="background:var(--success);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
-                    <h3 style="font-size:1.05rem;font-weight:700;">Configura e avvia ytp-downloader.py</h3>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Opzione A — GitHub Actions (nessun PC necessario)</h3>
                 </div>
                 <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
-                    <p style="margin-bottom:0.5rem;">Scarica <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> dalla cartella del repository su GitHub. Aprilo con Notepad e inserisci la <strong>service_role key</strong>:</p>
-                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;margin-bottom:0.75rem;overflow-x:auto;">
-                        <div>SUPABASE_SERVICE_KEY = <span style="color:#fcd34d;">"incolla-qui-la-chiave"</span></div>
+                    <p style="margin-bottom:0.5rem;">Genera un <strong>Personal Access Token</strong> su GitHub con scope <strong>workflow</strong>:</p>
+                    <p style="margin-bottom:0.75rem;font-size:0.82rem;color:var(--muted);">github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → spunta <strong>workflow</strong></p>
+                    <div class="form-group" style="margin-bottom:0.5rem;">
+                        <label class="form-label">GitHub Personal Access Token</label>
+                        <input type="password" class="form-input" id="settGhToken" placeholder="ghp_xxxxxxxxxxxx">
                     </div>
-                    <p style="margin-bottom:0.5rem;">La chiave si trova su <strong>supabase.com → Settings → API → service_role (secret)</strong>.</p>
-                    <p style="margin-bottom:0.5rem;">Avvialo — su Windows doppio clic su <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.bat</code>, altrimenti:</p>
-                    <div style="background:#1F2937;color:#e5e7eb;padding:0.75rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:1.8;overflow-x:auto;">
-                        <div>python ytp-downloader.py</div>
+                    <div class="form-group">
+                        <label class="form-label">Repository</label>
+                        <input type="text" class="form-input" id="settGhRepo" placeholder="garsal1971/garsal-apps">
                     </div>
-                    <div style="margin-top:0.75rem;padding:0.75rem;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;">
-                        <strong style="color:var(--success);">Come funziona:</strong><br>
-                        Lo script apre una connessione <strong>WebSocket verso Supabase</strong> e resta in ascolto — nessun polling, zero consumo. Quando clicchi ⬇ nell'app (da qualsiasi dispositivo), Supabase notifica istantaneamente lo script sul tuo PC. Lo script scarica con yt-dlp usando Chrome già loggato, carica l'MP3 su Supabase e aggiorna l'icona a 🎵.<br><br>
-                        <strong>Nessun IP statico, nessuna porta aperta, non scade mai.</strong>
+                    <button class="btn btn-accent" onclick="saveSettingsForm()">💾 Salva</button>
+                    <div style="margin-top:0.75rem;padding:0.75rem;background:#eff6ff;border-radius:6px;border:1px solid #bfdbfe;font-size:0.82rem;">
+                        Clicchi ⬇ nell'app → GitHub Actions scarica con <strong>pytubefix</strong> in cloud → MP3 caricato su Supabase → icona 🎵. Nessun PC necessario.
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP 3b -->
+            <div class="card" style="border-left:4px solid var(--warning);margin-top:1rem;">
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+                    <div style="background:var(--warning);color:white;font-family:'Space Mono',monospace;font-weight:700;font-size:1rem;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3b</div>
+                    <h3 style="font-size:1.05rem;font-weight:700;">Opzione B — Script locale (fallback se Actions non funziona)</h3>
+                </div>
+                <div style="font-size:0.88rem;line-height:1.9;color:var(--dark);">
+                    <p>Scarica <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-downloader.py</code> + <code style="background:#f3f4f6;padding:1px 6px;font-family:'Space Mono',monospace;">ytp-config.py</code> da GitHub, inserisci la service_role key in <code>ytp-config.py</code> e avvia con doppio clic su <code>ytp-downloader.bat</code>.</p>
+                    <div style="background:#1F2937;color:#e5e7eb;padding:0.5rem 1rem;font-family:'Space Mono',monospace;font-size:0.78rem;margin-top:0.5rem;">
+                        <div>pip install pytubefix websockets</div>
                     </div>
                 </div>
             </div>
@@ -584,8 +598,8 @@
 // ==========================================
 // VERSION
 // ==========================================
-var APP_VERSION = 'v1.2.0';
-var BUILD_TIME  = '2026-05-26T22:00:00Z';
+var APP_VERSION = 'v1.3.0';
+var BUILD_TIME  = '2026-05-27T00:00:00Z';
 console.log('%c YT Playlist Player ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#FF0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1282,12 +1296,21 @@ async function importCsv() {
 // SETTINGS
 // ==========================================
 function renderSettingsPage() {
+    const s = getSettings();
+    document.getElementById('settGhToken').value = s.gh_token || '';
+    document.getElementById('settGhRepo').value  = s.gh_repo  || 'garsal1971/garsal-apps';
     document.getElementById('settVersion').textContent = APP_VERSION;
     document.getElementById('settBuild').textContent   = BUILD_TIME;
 }
 
+function saveSettingsForm() {
+    saveSett({ gh_token: document.getElementById('settGhToken').value.trim(),
+               gh_repo:  document.getElementById('settGhRepo').value.trim() });
+    showToast('✅ Impostazioni salvate');
+}
+
 // ==========================================
-// DOWNLOAD AUDIO (via script locale)
+// DOWNLOAD AUDIO
 // ==========================================
 async function triggerDownload(itemId) {
     const item = curItems.find(v => v.id === itemId);
@@ -1296,7 +1319,31 @@ async function triggerDownload(itemId) {
     if (error) { showToast('❌ ' + error.message); return; }
     item.audio_status = 'pending';
     renderPlaylistPage(); renderQueue();
-    showToast('⏳ In coda — assicurati che ytp-downloader.py sia in esecuzione sul tuo PC');
+
+    // Se il token GitHub è configurato, triggera GitHub Actions
+    const s = getSettings();
+    if (s.gh_token && s.gh_repo) {
+        const [owner, repo] = s.gh_repo.split('/');
+        try {
+            const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/dispatches`, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + s.gh_token,
+                           'Accept': 'application/vnd.github.v3+json',
+                           'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_type: 'ytp-download-audio',
+                                       client_payload: { youtube_id: item.youtube_id, item_id: item.id } })
+            });
+            if (r.ok || r.status === 204) {
+                showToast('⏳ Download avviato su GitHub Actions (~2 min)');
+            } else {
+                showToast('⚠️ GitHub dispatch fallito (HTTP ' + r.status + ') — in coda per script locale');
+            }
+        } catch(e) {
+            showToast('⚠️ Errore rete — in coda per script locale');
+        }
+    } else {
+        showToast('⏳ In coda — avvia ytp-downloader.bat sul tuo PC');
+    }
     startPolling();
 }
 
