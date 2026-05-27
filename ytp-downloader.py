@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YTP Downloader v2.5 — Supabase Realtime via websockets puro
+YTP Downloader v2.6 — Supabase Realtime via websockets puro
 Nessuna dipendenza C++. Requisiti: pip install websockets yt-dlp
 
 Avvio: python ytp-downloader.py  (oppure doppio clic su ytp-downloader.bat)
@@ -14,7 +14,8 @@ SUPABASE_URL         = "https://jajlmmdsjlvzgcxiiypk.supabase.co"
 SUPABASE_SERVICE_KEY = ""   # ← incolla qui la service_role key di Supabase
 
 BUCKET  = "ytp-audio"
-BROWSER = "chrome"   # "chrome" | "firefox" | "edge" | "brave" | "chromium"
+# Se pytubefix fallisce, metti il file cookies.txt esportato da Firefox
+# (estensione "Get cookies.txt LOCALLY") nella stessa cartella dello script.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _REF   = SUPABASE_URL.replace("https://", "").replace(".supabase.co", "")
@@ -82,17 +83,46 @@ def download_item(item):
 
     with tempfile.TemporaryDirectory() as d:
         mp3 = os.path.join(d, "dl.mp3")
-        r = subprocess.run([
-            "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "5",
-            "--no-playlist", "--cookies-from-browser", BROWSER,
-            "--extractor-args", "youtube:player_client=ios,web",
-            "--extractor-retries", "3",
-            "-o", os.path.join(d, "dl.%(ext)s"),
-            f"https://www.youtube.com/watch?v={ytid}",
-        ], capture_output=True, text=True)
+        ok  = False
 
-        if r.returncode != 0 or not os.path.exists(mp3):
-            log(f"✗  yt-dlp error: {(r.stderr or r.stdout)[-400:]}")
+        # ── Metodo 1: pytubefix (no cookie, no challenge) ──────────────────
+        try:
+            from pytubefix import YouTube
+            yt     = YouTube(f"https://www.youtube.com/watch?v={ytid}")
+            stream = yt.streams.filter(only_audio=True).order_by("abr").last()
+            raw    = stream.download(output_path=d, filename="raw")
+            rc = subprocess.run(
+                ["ffmpeg", "-y", "-i", raw, "-codec:a", "libmp3lame", "-qscale:a", "5", mp3],
+                capture_output=True)
+            if rc.returncode == 0 and os.path.exists(mp3):
+                ok = True
+                log("  (via pytubefix)")
+        except Exception as e:
+            log(f"  pytubefix fallito: {e} — provo yt-dlp…")
+
+        # ── Metodo 2: yt-dlp con cookies.txt (fallback) ───────────────────
+        if not ok:
+            cookies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        "yt-cookies.txt")
+            cmd = [
+                "yt-dlp", "-x", "--audio-format", "mp3", "--audio-quality", "5",
+                "--no-playlist", "--extractor-args", "youtube:player_client=ios,web",
+                "--extractor-retries", "3",
+                "-o", os.path.join(d, "dl.%(ext)s"),
+                f"https://www.youtube.com/watch?v={ytid}",
+            ]
+            if os.path.exists(cookies_file):
+                cmd += ["--cookies", cookies_file]
+                log("  (yt-dlp con cookies.txt)")
+            else:
+                log("  (yt-dlp senza cookies — esporta yt-cookies.txt per video protetti)")
+            r2 = subprocess.run(cmd, capture_output=True, text=True)
+            if r2.returncode == 0 and os.path.exists(mp3):
+                ok = True
+            else:
+                log(f"✗  yt-dlp error: {(r2.stderr or r2.stdout)[-400:]}")
+
+        if not ok:
             rest_patch("ytp_playlist_items", f"id=eq.{iid}", {"audio_status": "error"})
             return
 
@@ -213,12 +243,12 @@ async def main():
         sys.exit(1)
 
     print("=" * 55)
-    print(" YTP Downloader v2.5  —  Supabase Realtime")
-    print(f" Browser: {BROWSER}   OS: {platform.system()}")
+    print(" YTP Downloader v2.6  —  Supabase Realtime")
+    print(f" OS: {platform.system()}")
     print(f" Log: {LOG_FILE}")
     print(" Ctrl+C per uscire")
     print("=" * 55)
-    log("=== Avvio YTP Downloader v2.5 ===")
+    log("=== Avvio YTP Downloader v2.6 ===")
 
     flush_pending()
     await realtime_loop()
