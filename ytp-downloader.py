@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YTP Downloader v2.6 — Supabase Realtime via websockets puro
+YTP Downloader v2.7 — Supabase Realtime via websockets puro
 Nessuna dipendenza C++. Requisiti: pip install websockets yt-dlp
 
 Avvio: python ytp-downloader.py  (oppure doppio clic su ytp-downloader.bat)
@@ -10,12 +10,19 @@ import asyncio, json, os, subprocess, sys, tempfile, time, platform
 import urllib.request, urllib.error
 
 # ── Configurazione ────────────────────────────────────────────────────────────
-SUPABASE_URL         = "https://jajlmmdsjlvzgcxiiypk.supabase.co"
-SUPABASE_SERVICE_KEY = ""   # ← incolla qui la service_role key di Supabase
+SUPABASE_URL = "https://jajlmmdsjlvzgcxiiypk.supabase.co"
+BUCKET       = "ytp-audio"
 
-BUCKET  = "ytp-audio"
-# Se pytubefix fallisce, metti il file cookies.txt esportato da Firefox
-# (estensione "Get cookies.txt LOCALLY") nella stessa cartella dello script.
+# Legge la service_role key da ytp-config.py (non va su git)
+_cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ytp-config.py")
+if not os.path.exists(_cfg_path):
+    print(f"ERRORE: file di configurazione non trovato: {_cfg_path}")
+    print("Crea ytp-config.py nella stessa cartella con:")
+    print('  SUPABASE_SERVICE_KEY = "la-tua-service-role-key"')
+    sys.exit(1)
+_cfg = {}
+exec(open(_cfg_path).read(), _cfg)
+SUPABASE_SERVICE_KEY = _cfg.get("SUPABASE_SERVICE_KEY", "")
 # ─────────────────────────────────────────────────────────────────────────────
 
 _REF   = SUPABASE_URL.replace("https://", "").replace(".supabase.co", "")
@@ -243,12 +250,12 @@ async def main():
         sys.exit(1)
 
     print("=" * 55)
-    print(" YTP Downloader v2.6  —  Supabase Realtime")
+    print(" YTP Downloader v2.7  —  Supabase Realtime")
     print(f" OS: {platform.system()}")
     print(f" Log: {LOG_FILE}")
     print(" Ctrl+C per uscire")
     print("=" * 55)
-    log("=== Avvio YTP Downloader v2.6 ===")
+    log("=== Avvio YTP Downloader v2.7 ===")
 
     flush_pending()
     await realtime_loop()
