@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.20.4</title>
+    <title>Tasks v19.20.5</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2446,8 +2446,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.20.4';
-        const BUILD_TIME  = '2026-05-23T09:30:00Z';
+        const APP_VERSION = 'v19.20.5';
+        const BUILD_TIME  = '2026-05-27T10:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -9416,6 +9416,7 @@ Per attivarle:
             const activeTasks = tasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status) && t.show_in_panoramica !== false);
             const freeRepeatTasks = activeTasks.filter(t => t.type === 'free_repeat');
             const scheduledTasks = activeTasks.filter(t => t.type !== 'free_repeat');
+            const hiddenTasks = tasks.filter(t => ['started', 'completed', 'failed', 'skipped'].includes(t.status) && t.show_in_panoramica === false);
             
             const overdueTasks = scheduledTasks.filter(t => {
                 if (t.type === 'single' && t.start_date) {
@@ -9651,9 +9652,51 @@ Per attivarle:
                 
                 html += `</div>`;
             }
-            
+
+            if (hiddenTasks.length > 0) {
+                html += `<div class="card dash-section dash-section--full" style="border-left: 4px solid var(--muted); margin-bottom: 1.5rem; opacity: 0.8;">
+                        <h2 class="dash-section-title" style="color: var(--muted); font-size: 1.4rem; font-weight: 900; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            👁️ NON IN PANORAMICA (${hiddenTasks.length})
+                        </h2>
+                `;
+
+                const hiddenByCategory = {};
+                hiddenTasks.forEach(task => {
+                    const taskCats = task.categories || [];
+                    if (taskCats.length === 0) {
+                        if (!hiddenByCategory['__no_cat__']) hiddenByCategory['__no_cat__'] = [];
+                        hiddenByCategory['__no_cat__'].push(task);
+                    } else {
+                        taskCats.forEach(catId => {
+                            if (!hiddenByCategory[catId]) hiddenByCategory[catId] = [];
+                            hiddenByCategory[catId].push(task);
+                        });
+                    }
+                });
+
+                Object.keys(hiddenByCategory).forEach(catId => {
+                    const cat = catId === '__no_cat__' ? null : categories.find(c => c.id === catId);
+                    const catTasks = hiddenByCategory[catId].sort((a, b) => a.title.localeCompare(b.title));
+                    const catName = cat ? `${cat.icon} ${cat.name}` : 'Senza categoria';
+                    const catColor = cat ? cat.color : 'var(--muted)';
+
+                    html += `
+                        <div class="dash-cat-group" style="margin-bottom: 1.5rem;">
+                            <h3 class="dash-cat-title" style="color: ${catColor}; font-size: 1.2rem; font-weight: 700; margin-bottom: 0.75rem;">
+                                ${catName} (${catTasks.length})
+                            </h3>
+                            <div class="dash-task-grid">
+                                ${catTasks.map((t, i) => renderTaskCard(t, catColor, i)).join('')}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+            }
+
             html += `</div>`; // chiude dash-sections-grid
-            
+
             container.innerHTML = html;
         }
 
