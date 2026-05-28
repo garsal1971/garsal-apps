@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.20.8</title>
+    <title>Tasks v19.20.9</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2020,6 +2020,19 @@
         </div>
     </div>
 
+    <!-- Custom Confirm Modal -->
+    <div id="customConfirmModal" class="modal" style="z-index:9999;">
+        <div class="modal-content" style="max-width:320px;border-radius:8px;">
+            <div style="padding:1.5rem;">
+                <p id="customConfirmMessage" style="margin:0 0 1.5rem;font-size:1rem;line-height:1.5;color:var(--dark);"></p>
+                <div style="display:flex;justify-content:flex-end;gap:0.75rem;">
+                    <button class="btn btn-secondary" id="customConfirmCancel" style="min-width:90px;">Annulla</button>
+                    <button class="btn btn-primary" id="customConfirmOk" style="min-width:90px;">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Task Modal (Create/Edit) -->
     <div id="taskModal" class="modal">
         <div class="modal-content">
@@ -2458,8 +2471,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.20.8';
-        const BUILD_TIME  = '2026-05-28T08:00:00Z';
+        const APP_VERSION = 'v19.20.9';
+        const BUILD_TIME  = '2026-05-28T09:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -3730,6 +3743,26 @@
         function localDateTimeStr(d) {
             const dt = d || new Date();
             return dt.toISOString();
+        }
+
+        function customConfirm(message) {
+            return new Promise(resolve => {
+                document.getElementById('customConfirmMessage').textContent = message;
+                const modal = document.getElementById('customConfirmModal');
+                modal.classList.add('active');
+                const ok     = document.getElementById('customConfirmOk');
+                const cancel = document.getElementById('customConfirmCancel');
+                function cleanup(result) {
+                    modal.classList.remove('active');
+                    ok.removeEventListener('click', onOk);
+                    cancel.removeEventListener('click', onCancel);
+                    resolve(result);
+                }
+                function onOk()     { cleanup(true); }
+                function onCancel() { cleanup(false); }
+                ok.addEventListener('click', onOk);
+                cancel.addEventListener('click', onCancel);
+            });
         }
 
         // Formatta data in formato GG-MM-AAAA HH:MM (orario italiano)
@@ -5800,7 +5833,7 @@
             // Chiedi se impostare created_at alla next_occurrence_date
             if (task.next_occurrence_date) {
                 const nextOccStr = isoToEu(task.next_occurrence_date) || task.next_occurrence_date;
-                _setCreatedAtToNextOccurrence = confirm(`Vuoi impostare la data di creazione alla data della prossima occorrenza?\n(${nextOccStr})`);
+                _setCreatedAtToNextOccurrence = await customConfirm(`Vuoi impostare la data di creazione alla data della prossima occorrenza?\n(${nextOccStr})`);
             }
 
             document.getElementById('taskModal').classList.add('active');
