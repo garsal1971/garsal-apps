@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.20.9</title>
+    <title>Tasks v19.21.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2471,8 +2471,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.20.9';
-        const BUILD_TIME  = '2026-05-28T09:00:00Z';
+        const APP_VERSION = 'v19.21.0';
+        const BUILD_TIME  = '2026-05-28T10:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -3108,7 +3108,7 @@
         }
 
         async function deletePriority(id) {
-            if (!confirm('Eliminare questa priorità?')) return;
+            if (!await customConfirm('Eliminare questa priorità?')) return;
             
             try {
                 const { error } = await sb.from('cm_priorities').delete().eq('id', id);
@@ -3286,7 +3286,7 @@
 
         // Rollback del punteggio (annulla un record storico)
         async function rollbackPoints(historyId) {
-            if (!confirm('Annullare questo punteggio? Verrà creato un record di annullamento con punti opposti.')) {
+            if (!await customConfirm('Annullare questo punteggio? Verrà creato un record di annullamento con punti opposti.')) {
                 return;
             }
             
@@ -3328,7 +3328,7 @@
         }
 
         async function deleteRollback(rollbackId) {
-            if (!confirm('Eliminare questo rollback? Il punteggio originale verrà ripristinato.')) return;
+            if (!await customConfirm('Eliminare questo rollback? Il punteggio originale verrà ripristinato.')) return;
             const { error } = await sb.from('ts_history').delete().eq('id', rollbackId);
             if (error) {
                 alert('Errore: ' + error.message);
@@ -5087,7 +5087,7 @@
         }
         
         async function completeTaskFromReminder(taskId) {
-            if (!confirm('Completare questo task?')) return;
+            if (!await customConfirm('Completare questo task?')) return;
             
             const task = tasks.find(t => t.id === taskId);
             if (!task) {
@@ -5107,7 +5107,7 @@
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
             
-            if (!confirm(`Completare "${task.title}"?\n\nQuesto completerà il task e rimuoverà tutti i suoi promemoria dalla lista.`)) {
+            if (!await customConfirm(`Completare "${task.title}"?\n\nQuesto completerà il task e rimuoverà tutti i suoi promemoria dalla lista.`)) {
                 return;
             }
             
@@ -5116,8 +5116,8 @@
             showToast('✅ Task completato! Tutti i promemoria rimossi.');
         }
         
-        function clearAllReminders() {
-            if (!confirm('Vuoi cancellare TUTTI i promemoria dalla lista?\n\nQuesto rimuoverà i promemoria scaduti e permetterà che scattino di nuovo.')) {
+        async function clearAllReminders() {
+            if (!await customConfirm('Vuoi cancellare TUTTI i promemoria dalla lista?\n\nQuesto rimuoverà i promemoria scaduti e permetterà che scattino di nuovo.')) {
                 return;
             }
             
@@ -5606,7 +5606,7 @@
         }
 
         async function archiveTask(id) {
-            if (!confirm('Archiviare questo task?')) return;
+            if (!await customConfirm('Archiviare questo task?')) return;
 
             const task = tasks.find(t => t.id === id);
             const { data, error } = await sb.from('ts_tasks')
@@ -7403,7 +7403,7 @@
                 return;
             }
             
-            if (!confirm('Segnare il workflow come completato?')) return;
+            if (!await customConfirm('Segnare il workflow come completato?')) return;
             
             const wfPts = task.workflow_points || {};
             const now = localDateTimeStr();
@@ -7436,7 +7436,7 @@
         }
         
         async function wfPopupFailTask(taskId) {
-            if (!confirm('Segnare il workflow intero come fallito?')) return;
+            if (!await customConfirm('Segnare il workflow intero come fallito?')) return;
             
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
@@ -7473,7 +7473,7 @@
         }
 
         async function completeTask(id) {
-            if (!confirm('Segnare task come completato?')) return;
+            if (!await customConfirm('Segnare task come completato?')) return;
 
             try {
                 const task = tasks.find(t => t.id === id);
@@ -7529,7 +7529,7 @@
         }
 
         async function failTask(id) {
-            if (!confirm('Segnare task come fallito?')) return;
+            if (!await customConfirm('Segnare task come fallito?')) return;
             
             const task = tasks.find(t => t.id === id);
             
@@ -7643,7 +7643,7 @@
             // Per task ricorrenti (recurring e simple_recurring), salta automaticamente alla prossima occorrenza
             if (task.type === 'simple_recurring') {
                 // Chiedi conferma
-                if (!confirm('Saltare questo task alla prossima occorrenza?')) return;
+                if (!await customConfirm('Saltare questo task alla prossima occorrenza?')) return;
                 
                 // Per ricorrenza semplice, calcola dalla next_occurrence_date + repeat_after_days
                 const baseDate = new Date(task.next_occurrence_date || task.start_date);
@@ -7653,7 +7653,7 @@
                 
             } else if (task.type === 'recurring') {
                 // Chiedi conferma
-                if (!confirm('Saltare questo task alla prossima occorrenza?')) return;
+                if (!await customConfirm('Saltare questo task alla prossima occorrenza?')) return;
                 
                 // Per ricorrenti avanzati, usa la funzione di calcolo della prossima data
                 const baseDate = task.next_occurrence_date ? new Date(task.next_occurrence_date) : new Date(task.start_date);
@@ -7667,7 +7667,7 @@
                 
             } else if (task.type === 'multiple') {
                 // Per task multipli, passa alla prossima data nella lista
-                if (!confirm('Saltare questo task alla prossima data?')) return;
+                if (!await customConfirm('Saltare questo task alla prossima data?')) return;
                 
                 // Assicurati che multiple_dates sia un array
                 let datesArray = task.multiple_dates;
@@ -7775,7 +7775,7 @@
         }
 
         async function deleteTask(id) {
-            if (!confirm('Eliminare questo task?')) return;
+            if (!await customConfirm('Eliminare questo task?')) return;
 
             await deleteNotificationRules(id);
             await sb.from('ts_tasks').delete().eq('id', id);
@@ -7786,7 +7786,7 @@
         }
 
         async function reactivateTask(id) {
-            if (!confirm('Riattivare questo task?')) return;
+            if (!await customConfirm('Riattivare questo task?')) return;
 
             const task = tasks.find(t => t.id === id);
             const { data, error } = await sb.from('ts_tasks')
@@ -8026,7 +8026,7 @@
         }
         
         async function deleteNote(id) {
-            if (!confirm('Eliminare questo appunto?')) return;
+            if (!await customConfirm('Eliminare questo appunto?')) return;
             
             await sb.from('ts_notes').delete().eq('id', id);
             notes = notes.filter(n => n.id !== id);
@@ -8071,8 +8071,8 @@
             showToast('📝 Appunto caricato nel form task!');
             
             // Opzionale: chiedi se vuoi eliminare l'appunto dopo la conversione
-            setTimeout(() => {
-                if (confirm('Vuoi eliminare l\'appunto originale dopo averlo convertito?')) {
+            setTimeout(async () => {
+                if (await customConfirm('Vuoi eliminare l\'appunto originale dopo averlo convertito?')) {
                     deleteNote(noteId);
                 }
             }, 500);
@@ -8520,7 +8520,7 @@
             }
         }
         
-        function manageNotifications() {
+        async function manageNotifications() {
             if (!('Notification' in window)) {
                 alert('Il tuo browser non supporta le notifiche browser. Prova con Chrome, Firefox o Edge.');
                 return;
@@ -8542,7 +8542,7 @@ Per attivarle:
 4. Ricarica la pagina`);
             } else if (permission === 'granted') {
                 // Già attive, mostra opzioni
-                const disable = confirm('Notifiche attive.\n\nVuoi disattivarle? (Dovrai farlo dalle impostazioni del browser)');
+                const disable = await customConfirm('Notifiche attive.\n\nVuoi disattivarle? (Dovrai farlo dalle impostazioni del browser)');
                 if (disable) {
                     alert(`Per disattivare le notifiche:
 1. Click sull'icona 🔒 nella barra indirizzi
@@ -8746,7 +8746,7 @@ Per attivarle:
                 return;
             }
             
-            if (!confirm(`Eliminare la categoria "${cat.name}"?`)) return;
+            if (!await customConfirm(`Eliminare la categoria "${cat.name}"?`)) return;
             
             await sb.from('cm_categories').delete().eq('id', id);
             categories = categories.filter(c => c.id !== id);
@@ -8954,7 +8954,7 @@ Per attivarle:
         }
 
         async function closeQueueItem(id) {
-            if (!confirm('Annullare questa notifica?')) return;
+            if (!await customConfirm('Annullare questa notifica?')) return;
             const userId = decodeJWT(sbAccessToken)?.sub;
             const authSb = getAuthSb();
             const { error } = await authSb
@@ -8968,7 +8968,7 @@ Per attivarle:
         }
 
         async function deleteQueueItem(id) {
-            if (!confirm('Eliminare definitivamente questa notifica?')) return;
+            if (!await customConfirm('Eliminare definitivamente questa notifica?')) return;
             const userId = decodeJWT(sbAccessToken)?.sub;
             const authSb = getAuthSb();
             const { error } = await authSb
