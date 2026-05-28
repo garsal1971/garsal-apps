@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.20.7</title>
+    <title>Tasks v19.20.8</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2458,8 +2458,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.20.7';
-        const BUILD_TIME  = '2026-05-27T14:00:00Z';
+        const APP_VERSION = 'v19.20.8';
+        const BUILD_TIME  = '2026-05-28T08:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2626,6 +2626,7 @@
         let sbDeviceToken = null; // Token dispositivo Android (caricato da cm_user_notification_settings)
         let notificationRulesMap = {}; // entity_id → { presetIds: number[], telegramCompleteButton: bool }
         let selectedCategories = [];
+        let _setCreatedAtToNextOccurrence = false; // impostato in editTask(), letto in saveTask()
         let currentViewTaskId = null;
         let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
@@ -5637,7 +5638,8 @@
         async function editTask(id) {
             const task = tasks.find(t => t.id === id);
             if (!task) return;
-            
+
+            _setCreatedAtToNextOccurrence = false;
             document.getElementById('editTaskId').value = id;
             document.getElementById('taskModalTitle').textContent = 'Modifica Task';
             document.getElementById('taskTitle').value = task.title;
@@ -5794,6 +5796,12 @@
             updateTaskFields();
             if (reminderPresets.length === 0) await loadReminderPresets();
             renderReminders();
+
+            // Chiedi se impostare created_at alla next_occurrence_date
+            if (task.next_occurrence_date) {
+                const nextOccStr = isoToEu(task.next_occurrence_date) || task.next_occurrence_date;
+                _setCreatedAtToNextOccurrence = confirm(`Vuoi impostare la data di creazione alla data della prossima occorrenza?\n(${nextOccStr})`);
+            }
 
             document.getElementById('taskModal').classList.add('active');
             // Scroll al primo campo
@@ -6871,13 +6879,9 @@
             }
             
             if (taskId) {
-                // Chiedi se impostare created_at alla next_occurrence_date
-                if (taskData.next_occurrence_date) {
-                    const nextOccStr = isoToEu(taskData.next_occurrence_date) || taskData.next_occurrence_date;
-                    const setCreatedAt = confirm(`Vuoi impostare la data di creazione alla data della prossima occorrenza?\n(${nextOccStr})`);
-                    if (setCreatedAt) {
-                        taskData.created_at = taskData.next_occurrence_date;
-                    }
+                // Imposta created_at se l'utente ha confermato all'apertura del form
+                if (_setCreatedAtToNextOccurrence && taskData.next_occurrence_date) {
+                    taskData.created_at = taskData.next_occurrence_date;
                 }
                 // UPDATE
                 const { data, error } = await sb.from('ts_tasks').update(taskData).eq('id', taskId).select();
