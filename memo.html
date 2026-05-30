@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memorandum v1.0.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #6C5CE7;
+            --success: #00B894;
+            --warning: #F39C12;
+            --danger: #E74C3C;
+            --dark: #1F2937;
+            --light: #FFFFFF;
+            --muted: #6B7280;
+            --accent: #2563EB;
+            --border: #E5E7EB;
+            --card-bg: #FFFFFF;
+            --input-bg: #F9FAFB;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Darker Grotesque', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        /* ── TOP BAR ── */
+        #garsal-top-bar {
+            position: fixed; top: 0; left: 0; right: 0; height: 56px;
+            background: #0081C8;
+            display: flex; align-items: center; padding: 0 20px; gap: 10px;
+            z-index: 3000;
+        }
+        #garsal-top-bar-icon {
+            width: 22px; height: 22px;
+            background: rgba(255,255,255,0.25); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: #fff;
+            font-family: 'Space Mono', monospace; flex-shrink: 0;
+        }
+        #garsal-top-bar-text {
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px;
+        }
+
+        /* ── LAYOUT ── */
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: calc(100vh - 56px);
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            background: #F3F4F6;
+            padding: 1.0rem 0.75rem;
+            border-right: 1px solid var(--border);
+            position: sticky; top: 56px; height: calc(100vh - 56px);
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.6rem; font-weight: 700; color: var(--accent);
+            margin-bottom: 2rem; text-transform: uppercase; letter-spacing: 2px;
+        }
+        .logo span { display: block; font-size: 0.7rem; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
+
+        .nav-menu { display: flex; flex-direction: column; }
+
+        .nav-item {
+            padding: 0.5rem 0.6rem; margin-bottom: 0.5rem;
+            cursor: pointer; transition: all 0.3s ease;
+            font-size: 1.1rem; font-weight: 500;
+        }
+        .nav-item:hover { background: rgba(37,99,235,0.08); transform: translateX(3px); }
+        .nav-item.active { background: var(--primary); color: white; }
+
+        @media (min-width: 769px) {
+            .sidebar { display: block !important; position: sticky !important; left: 0 !important; }
+            .nav-item::after { content: " " attr(data-text); }
+        }
+
+        .sidebar-section-label {
+            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--muted); padding: 0.4rem 0.6rem;
+            margin-top: 1.5rem; margin-bottom: 0.25rem;
+        }
+
+        .cat-filter-item {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 2px;
+            font-size: 1rem; font-weight: 500; transition: all 0.2s;
+        }
+        .cat-filter-item:hover { background: rgba(37,99,235,0.08); }
+        .cat-filter-item.active { background: rgba(37,99,235,0.15); color: var(--accent); font-weight: 700; }
+        .cat-filter-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .cat-filter-count {
+            margin-left: auto; font-family: 'Space Mono', monospace;
+            font-size: 0.75rem; color: var(--muted);
+        }
+
+        .version-info {
+            margin-top: 2rem; padding: 0.6rem;
+            font-size: 0.75rem; color: var(--muted); font-family: 'Space Mono', monospace;
+        }
+
+        /* ── MAIN ── */
+        .main-content { padding: 1.5rem; overflow-y: auto; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.5rem; gap: 1rem;
+        }
+
+        .page-title {
+            font-size: 2.5rem; font-weight: 900;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; white-space: nowrap;
+        }
+
+        /* ── SEARCH BAR ── */
+        .search-bar {
+            display: flex; align-items: center; gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .search-input-wrap {
+            flex: 1; position: relative;
+        }
+        .search-input-wrap input {
+            width: 100%; padding: 0.55rem 0.75rem 0.55rem 2.2rem;
+            border: 2px solid var(--border); background: var(--input-bg);
+            font-family: 'Darker Grotesque', sans-serif; font-size: 1.05rem;
+            transition: border-color 0.2s; color: var(--dark);
+        }
+        .search-input-wrap input:focus { outline: none; border-color: var(--accent); background: white; }
+        .search-icon {
+            position: absolute; left: 0.6rem; top: 50%; transform: translateY(-50%);
+            font-size: 1rem; color: var(--muted); pointer-events: none;
+        }
+        .search-clear {
+            position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
+            font-size: 1.1rem; color: var(--muted); cursor: pointer; display: none;
+        }
+        .search-clear:hover { color: var(--danger); }
+
+        /* ── STATS STRIP ── */
+        .stats-strip {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem; margin-bottom: 1.5rem;
+        }
+        .stat-box {
+            padding: 0.75rem; border: 1px solid var(--border); text-align: center;
+        }
+        .stat-val {
+            font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700;
+        }
+        .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+
+        /* ── CARDS GRID ── */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .memo-card {
+            border: 2px solid var(--border);
+            background: var(--card-bg);
+            transition: all 0.2s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        .memo-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); border-color: #d1d5db; }
+        .memo-card.pinned { border-color: var(--warning); }
+
+        .memo-card-color-bar { height: 5px; flex-shrink: 0; }
+
+        .memo-card-body { padding: 1rem; flex: 1; }
+
+        .memo-card-header {
+            display: flex; align-items: flex-start; gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .memo-card-title {
+            flex: 1; font-size: 1.2rem; font-weight: 700; line-height: 1.3;
+            word-break: break-word;
+        }
+        .pin-badge {
+            font-size: 0.9rem; flex-shrink: 0; opacity: 0.6;
+        }
+
+        .memo-card-excerpt {
+            font-size: 0.95rem; color: var(--muted); line-height: 1.5;
+            overflow: hidden; display: -webkit-box;
+            -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+            word-break: break-word;
+        }
+        .memo-card-excerpt img { display: none; } /* nasconde img nell'excerpt */
+
+        .memo-card-footer {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.6rem 1rem; border-top: 1px solid var(--border);
+            background: rgba(0,0,0,0.01);
+        }
+        .memo-card-date {
+            font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted);
+        }
+        .memo-card-meta { display: flex; align-items: center; gap: 0.4rem; }
+        .memo-card-img-count { font-size: 0.75rem; color: var(--muted); }
+
+        .cat-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.6rem; }
+        .cat-chip {
+            font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.4rem;
+            border-radius: 999px; color: white; text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .empty-state {
+            text-align: center; padding: 4rem 2rem; color: var(--muted);
+        }
+        .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .empty-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--dark); }
+        .empty-desc { font-size: 1rem; }
+
+        /* ── FAB ── */
+        .fab {
+            position: fixed; bottom: 2rem; right: 2rem;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: var(--primary); color: white;
+            font-size: 1.8rem; border: none; cursor: pointer;
+            box-shadow: 0 4px 16px rgba(255,51,102,0.4);
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; z-index: 100;
+        }
+        .fab:hover { transform: scale(1.1); box-shadow: 0 6px 24px rgba(255,51,102,0.5); }
+
+        /* ── BUTTONS ── */
+        .btn {
+            padding: 0.45rem 0.9rem; border: none; cursor: pointer;
+            font-family: 'Darker Grotesque', sans-serif; font-size: 1rem; font-weight: 700;
+            transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .btn:hover { transform: translateY(-2px); opacity: 0.9; }
+        .btn:active { transform: translateY(0); }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-secondary { background: var(--border); color: var(--dark); }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-accent { background: var(--accent); color: white; }
+        .btn-small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+        .btn-ghost { background: transparent; border: 2px solid var(--border); color: var(--dark); }
+        .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ── MODAL ── */
+        .modal {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
+            z-index: 2000; align-items: center; justify-content: center;
+        }
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: white; padding: 1.5rem;
+            max-width: 780px; width: 96%; max-height: 92vh;
+            overflow-y: auto; position: relative;
+        }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.25rem;
+        }
+        .modal-title { font-size: 1.7rem; font-weight: 900; color: var(--accent); }
+        .modal-close {
+            font-size: 1.8rem; cursor: pointer; color: var(--muted);
+            transition: all 0.2s; line-height: 1; background: none; border: none;
+        }
+        .modal-close:hover { color: var(--danger); transform: rotate(90deg); }
+
+        /* ── EDITOR ── */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label {
+            display: block; margin-bottom: 0.4rem; font-weight: 700;
+            font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .form-input, .form-select {
+            width: 100%; padding: 0.5rem 0.65rem;
+            border: 2px solid var(--border); background: var(--input-bg);
+            color: var(--dark); font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.05rem; transition: border-color 0.2s;
+        }
+        .form-input:focus, .form-select:focus {
+            outline: none; border-color: var(--accent); background: white;
+        }
+
+        .editor-toolbar {
+            display: flex; flex-wrap: wrap; gap: 0.25rem;
+            padding: 0.4rem; background: var(--input-bg);
+            border: 2px solid var(--border); border-bottom: none;
+        }
+        .toolbar-btn {
+            width: 32px; height: 32px; border: 1px solid var(--border);
+            background: white; cursor: pointer; font-size: 0.9rem; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s; color: var(--dark); font-family: serif;
+        }
+        .toolbar-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+        .toolbar-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .toolbar-separator { width: 1px; background: var(--border); margin: 0 0.2rem; align-self: stretch; }
+
+        .editor-area {
+            min-height: 220px; max-height: 400px; overflow-y: auto;
+            padding: 0.75rem; border: 2px solid var(--border);
+            background: white; font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.05rem; line-height: 1.65; color: var(--dark);
+            outline: none;
+        }
+        .editor-area:focus { border-color: var(--accent); }
+        .editor-area[data-placeholder]:empty::before {
+            content: attr(data-placeholder); color: #9CA3AF; pointer-events: none;
+        }
+        .editor-area h1 { font-size: 1.6rem; font-weight: 900; margin: 0.5rem 0; }
+        .editor-area h2 { font-size: 1.3rem; font-weight: 700; margin: 0.4rem 0; }
+        .editor-area ul, .editor-area ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+        .editor-area li { margin-bottom: 0.2rem; }
+        .editor-area hr { border: none; border-top: 2px solid var(--border); margin: 0.75rem 0; }
+        .editor-area img {
+            max-width: 100%; height: auto; display: block; margin: 0.5rem 0;
+            border: 1px solid var(--border);
+        }
+        .editor-area a { color: var(--accent); text-decoration: underline; }
+
+        /* ── CATEGORY MULTI-SELECT ── */
+        .cat-multi {
+            display: flex; flex-wrap: wrap; gap: 0.4rem;
+            padding: 0.4rem; border: 2px solid var(--border);
+            background: var(--input-bg); min-height: 44px; cursor: pointer;
+        }
+        .cat-multi-chip {
+            display: flex; align-items: center; gap: 0.3rem;
+            padding: 0.2rem 0.5rem; color: white;
+            font-size: 0.8rem; font-weight: 700; border-radius: 2px;
+        }
+        .cat-multi-chip .remove { cursor: pointer; opacity: 0.7; font-size: 0.9rem; }
+        .cat-multi-chip .remove:hover { opacity: 1; }
+        .cat-multi-placeholder { color: #9CA3AF; font-size: 0.95rem; }
+
+        .cat-dropdown {
+            border: 2px solid var(--border); border-top: none;
+            background: white; max-height: 200px; overflow-y: auto; display: none;
+        }
+        .cat-dropdown.open { display: block; }
+        .cat-dropdown-item {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.45rem 0.75rem; cursor: pointer; font-size: 0.95rem;
+            transition: background 0.15s;
+        }
+        .cat-dropdown-item:hover { background: var(--input-bg); }
+        .cat-dropdown-item.selected { background: rgba(37,99,235,0.07); font-weight: 700; }
+        .cat-dropdown-item .check { font-size: 0.8rem; color: var(--success); opacity: 0; width: 14px; }
+        .cat-dropdown-item.selected .check { opacity: 1; }
+
+        /* ── IMAGE UPLOAD ── */
+        .images-section { margin-top: 0.25rem; }
+        .img-upload-zone {
+            border: 2px dashed var(--border); padding: 1.25rem;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+            background: var(--input-bg);
+        }
+        .img-upload-zone:hover, .img-upload-zone.drag-over {
+            border-color: var(--accent); background: rgba(37,99,235,0.04);
+        }
+        .img-upload-zone input[type="file"] { display: none; }
+        .img-upload-label {
+            font-size: 0.9rem; color: var(--muted); cursor: pointer;
+        }
+        .img-upload-label span { color: var(--accent); font-weight: 700; }
+
+        .images-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 0.5rem; margin-top: 0.75rem;
+        }
+        .img-thumb {
+            position: relative; aspect-ratio: 1;
+            overflow: hidden; border: 1px solid var(--border); background: var(--input-bg);
+        }
+        .img-thumb img {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        .img-thumb-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.45);
+            display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+            opacity: 0; transition: opacity 0.2s;
+        }
+        .img-thumb:hover .img-thumb-overlay { opacity: 1; }
+        .img-action-btn {
+            width: 28px; height: 28px; border-radius: 50%; border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; font-weight: 700; transition: all 0.15s;
+        }
+        .img-del-btn { background: var(--danger); color: white; }
+        .img-del-btn:hover { background: #c0392b; }
+        .img-ins-btn { background: var(--accent); color: white; }
+        .img-ins-btn:hover { background: #1d4ed8; }
+        .img-loading { display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+
+        /* ── COLOR PICKER ROW ── */
+        .color-row {
+            display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+        }
+        .color-swatch {
+            width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+            border: 3px solid transparent; transition: all 0.15s;
+        }
+        .color-swatch:hover { transform: scale(1.2); }
+        .color-swatch.selected { border-color: var(--dark); transform: scale(1.15); }
+        .color-custom { width: 28px; height: 28px; cursor: pointer; border: none; padding: 0; }
+
+        /* ── CONFIRM DIALOG ── */
+        #confirmDialog {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            z-index: 4000; align-items: center; justify-content: center;
+        }
+        #confirmDialog.active { display: flex; }
+        .confirm-box {
+            background: white; padding: 2rem; max-width: 380px; width: 90%;
+        }
+        .confirm-msg { font-size: 1.1rem; margin-bottom: 1.5rem; }
+        .confirm-btns { display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+        /* ── AUTH OVERLAY ── */
+        #authOverlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.85); z-index: 5000;
+            align-items: center; justify-content: center; text-align: center; color: white;
+        }
+        .auth-box { max-width: 340px; }
+        .auth-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .auth-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .auth-desc { font-size: 0.95rem; opacity: 0.7; }
+
+        /* ── TOAST ── */
+        #toast {
+            position: fixed; bottom: 5.5rem; right: 2rem;
+            background: var(--dark); color: white;
+            padding: 0.6rem 1.2rem; font-size: 0.95rem; font-weight: 700;
+            z-index: 9999; display: none; pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        /* ── MOBILE ── */
+        .hamburger {
+            display: none; position: fixed; top: 12px; left: 16px;
+            background: none; border: none; color: white; font-size: 1.5rem;
+            cursor: pointer; z-index: 3100;
+        }
+        @media (max-width: 768px) {
+            .hamburger { display: block; }
+            .app-container { grid-template-columns: 1fr; }
+            .sidebar {
+                display: none; position: fixed; top: 56px; left: 0;
+                width: 280px; height: calc(100vh - 56px); z-index: 2500;
+                box-shadow: 4px 0 20px rgba(0,0,0,0.2);
+            }
+            .sidebar.open { display: block; }
+            .cards-grid { grid-template-columns: 1fr; }
+            .stats-strip { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="garsal-top-bar">
+    <div id="garsal-top-bar-icon">G</div>
+    <div id="garsal-top-bar-text">Garsal Apps</div>
+</div>
+
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
+
+<!-- AUTH OVERLAY -->
+<div id="authOverlay" style="display:flex;">
+    <div class="auth-box">
+        <div class="auth-icon">📋</div>
+        <div class="auth-title">Memorandum</div>
+        <div class="auth-desc">Apri questa app da AppSphere per accedere.</div>
+    </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div id="confirmDialog">
+    <div class="confirm-box">
+        <div class="confirm-msg" id="confirmMsg"></div>
+        <div class="confirm-btns">
+            <button class="btn btn-secondary" id="confirmNo">Annulla</button>
+            <button class="btn btn-danger" id="confirmYes">Elimina</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MAIN APP -->
+<div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="logo">📋 Memo<span id="sidebarVersion">v1.0.0</span></div>
+
+        <nav class="nav-menu">
+            <div class="nav-item active" data-text="Tutte le schede" data-section="schede"
+                 onclick="showPage('schede'); setNavActive(this)">📄</div>
+            <div class="nav-item" data-text="Fissa" data-section="pinned"
+                 onclick="showPage('pinned'); setNavActive(this)">📌</div>
+            <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
+                 onclick="showPage('impostazioni'); setNavActive(this)">⚙️</div>
+        </nav>
+
+        <div class="sidebar-section-label">Categorie</div>
+        <div id="catFilterList"></div>
+
+        <div class="version-info" id="versionInfo"></div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <!-- PAGE: SCHEDE -->
+        <section class="page active" id="page-schede">
+            <div class="page-header">
+                <div class="page-title">Schede</div>
+                <button class="btn btn-primary" onclick="openCardModal(null)">+ Nuova</button>
+            </div>
+
+            <div class="stats-strip">
+                <div class="stat-box">
+                    <div class="stat-val" id="statTotal">—</div>
+                    <div class="stat-label">Totale</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="statPinned">—</div>
+                    <div class="stat-label">In evidenza</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="statImages">—</div>
+                    <div class="stat-label">Immagini</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-val" id="statCats">—</div>
+                    <div class="stat-label">Categorie usate</div>
+                </div>
+            </div>
+
+            <div class="search-bar">
+                <div class="search-input-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Cerca nelle schede…"
+                           oninput="onSearch(this.value)">
+                    <span class="search-clear" id="searchClear" onclick="clearSearch()">✕</span>
+                </div>
+                <select id="sortSelect" class="form-input" style="width:auto;padding:0.5rem;"
+                        onchange="renderCards()">
+                    <option value="updated">Recenti</option>
+                    <option value="created">Creazione</option>
+                    <option value="title">Titolo</option>
+                </select>
+            </div>
+
+            <div id="cardsGrid" class="cards-grid"></div>
+        </section>
+
+        <!-- PAGE: PINNED -->
+        <section class="page" id="page-pinned">
+            <div class="page-header">
+                <div class="page-title">In evidenza</div>
+            </div>
+            <div id="pinnedGrid" class="cards-grid"></div>
+        </section>
+
+        <!-- PAGE: IMPOSTAZIONI -->
+        <section class="page" id="page-impostazioni">
+            <div class="page-header">
+                <div class="page-title">Impostazioni</div>
+            </div>
+            <div style="max-width:520px;">
+                <div class="card" style="border:1px solid var(--border);padding:1.25rem;margin-bottom:1rem;">
+                    <div style="font-size:1.2rem;font-weight:700;margin-bottom:0.5rem;">Informazioni</div>
+                    <table style="width:100%;font-size:0.95rem;border-collapse:collapse;">
+                        <tr>
+                            <td style="padding:0.3rem 0;color:var(--muted);">Versione</td>
+                            <td style="font-family:'Space Mono',monospace;" id="infoVersion">—</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.3rem 0;color:var(--muted);">Build</td>
+                            <td style="font-family:'Space Mono',monospace;font-size:0.8rem;" id="infoBuild">—</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0.3rem 0;color:var(--muted);">Ambiente</td>
+                            <td id="infoEnv">—</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="card" style="border:1px solid var(--border);padding:1.25rem;">
+                    <div style="font-size:1.2rem;font-weight:700;margin-bottom:0.75rem;">SQL migrazioni</div>
+                    <p style="font-size:0.9rem;color:var(--muted);margin-bottom:0.75rem;">
+                        Esegui questo SQL nel tuo progetto Supabase per creare le tabelle necessarie.
+                    </p>
+                    <pre id="sqlMigrations" style="font-size:0.7rem;background:#f3f4f6;padding:0.75rem;overflow-x:auto;line-height:1.5;color:#374151;border:1px solid var(--border);"></pre>
+                    <button class="btn btn-secondary btn-small" style="margin-top:0.5rem;" onclick="copySql()">Copia SQL</button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- FAB -->
+<button class="fab" onclick="openCardModal(null)" title="Nuova scheda">+</button>
+
+<!-- ========================================================= -->
+<!-- MODAL: CARD EDITOR                                        -->
+<!-- ========================================================= -->
+<div class="modal" id="cardModal">
+    <div class="modal-content" style="max-width:820px;">
+        <div class="modal-header">
+            <div class="modal-title" id="cardModalTitle">Nuova scheda</div>
+            <button class="modal-close" onclick="closeCardModal()">✕</button>
+        </div>
+
+        <!-- TITOLO -->
+        <div class="form-group">
+            <label class="form-label">Titolo</label>
+            <input type="text" class="form-input" id="cardTitle" placeholder="Titolo della scheda…" maxlength="200">
+        </div>
+
+        <!-- EDITOR TESTO -->
+        <div class="form-group">
+            <label class="form-label">Contenuto</label>
+            <div class="editor-toolbar" id="editorToolbar">
+                <button class="toolbar-btn" onclick="execCmd('bold')" title="Grassetto" data-cmd="bold"><b>B</b></button>
+                <button class="toolbar-btn" onclick="execCmd('italic')" title="Corsivo" data-cmd="italic"><i>I</i></button>
+                <button class="toolbar-btn" onclick="execCmd('underline')" title="Sottolineato" data-cmd="underline"><u>U</u></button>
+                <button class="toolbar-btn" onclick="execCmd('strikeThrough')" title="Barrato" data-cmd="strikeThrough"><s>S</s></button>
+                <div class="toolbar-separator"></div>
+                <button class="toolbar-btn" onclick="insertHeading(1)" title="Titolo 1" style="font-size:0.75rem;font-family:sans-serif;">H1</button>
+                <button class="toolbar-btn" onclick="insertHeading(2)" title="Titolo 2" style="font-size:0.75rem;font-family:sans-serif;">H2</button>
+                <div class="toolbar-separator"></div>
+                <button class="toolbar-btn" onclick="execCmd('insertUnorderedList')" title="Elenco puntato" data-cmd="insertUnorderedList">☰</button>
+                <button class="toolbar-btn" onclick="execCmd('insertOrderedList')" title="Elenco numerato" data-cmd="insertOrderedList">①</button>
+                <div class="toolbar-separator"></div>
+                <button class="toolbar-btn" onclick="execCmd('createLink', prompt('URL:'))" title="Link">🔗</button>
+                <button class="toolbar-btn" onclick="execCmd('insertHorizontalRule')" title="Linea separatore">—</button>
+                <div class="toolbar-separator"></div>
+                <button class="toolbar-btn" onclick="execCmd('removeFormat')" title="Rimuovi formattazione" style="font-family:sans-serif;font-size:0.7rem;">✕F</button>
+            </div>
+            <div class="editor-area" id="editorArea" contenteditable="true"
+                 data-placeholder="Scrivi qui il contenuto della scheda…"
+                 onkeyup="updateToolbarState()" onmouseup="updateToolbarState()"
+                 onfocus="updateToolbarState()">
+            </div>
+        </div>
+
+        <!-- CATEGORIE -->
+        <div class="form-group">
+            <label class="form-label">Categorie</label>
+            <div class="cat-multi" id="catMulti" onclick="toggleCatDropdown(event)">
+                <span class="cat-multi-placeholder" id="catMultiPlaceholder">Seleziona categorie…</span>
+            </div>
+            <div class="cat-dropdown" id="catDropdown"></div>
+        </div>
+
+        <!-- COLORE + PIN -->
+        <div class="form-group">
+            <label class="form-label">Colore scheda</label>
+            <div class="color-row" id="colorRow">
+                <div class="color-swatch selected" data-color="#FFFFFF" style="background:#FFFFFF;border:3px solid #d1d5db;" onclick="selectColor('#FFFFFF', this)" title="Bianco"></div>
+                <div class="color-swatch" data-color="#FEF9C3" style="background:#FEF9C3;" onclick="selectColor('#FEF9C3', this)" title="Giallo"></div>
+                <div class="color-swatch" data-color="#DCFCE7" style="background:#DCFCE7;" onclick="selectColor('#DCFCE7', this)" title="Verde"></div>
+                <div class="color-swatch" data-color="#DBEAFE" style="background:#DBEAFE;" onclick="selectColor('#DBEAFE', this)" title="Blu"></div>
+                <div class="color-swatch" data-color="#FAE8FF" style="background:#FAE8FF;" onclick="selectColor('#FAE8FF', this)" title="Viola"></div>
+                <div class="color-swatch" data-color="#FFE4E6" style="background:#FFE4E6;" onclick="selectColor('#FFE4E6', this)" title="Rosa"></div>
+                <div class="color-swatch" data-color="#FED7AA" style="background:#FED7AA;" onclick="selectColor('#FED7AA', this)" title="Arancione"></div>
+                <input type="color" class="color-custom" id="colorCustom" value="#FFFFFF" onchange="selectColor(this.value, null, true)" title="Colore personalizzato">
+            </div>
+        </div>
+
+        <!-- IMMAGINI -->
+        <div class="form-group">
+            <label class="form-label">Immagini <span style="font-weight:400;text-transform:none;color:var(--muted)">(max 5 MB ciascuna)</span></label>
+            <div class="images-section">
+                <div class="img-upload-zone" id="imgUploadZone"
+                     ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)"
+                     onclick="document.getElementById('imgFileInput').click()">
+                    <input type="file" id="imgFileInput" accept="image/*" multiple onchange="handleFileSelect(event)">
+                    <div class="img-upload-label">
+                        📎 <span>Clicca per caricare</span> o trascina qui<br>
+                        <small>PNG, JPG, GIF, WebP — max 5 MB</small>
+                    </div>
+                </div>
+                <div class="images-grid" id="imagesGrid"></div>
+            </div>
+        </div>
+
+        <!-- PIN -->
+        <div class="form-group" style="display:flex;align-items:center;gap:0.75rem;">
+            <input type="checkbox" id="cardPinned" style="width:18px;height:18px;cursor:pointer;">
+            <label for="cardPinned" style="cursor:pointer;font-weight:700;font-size:1rem;">
+                📌 In evidenza
+            </label>
+        </div>
+
+        <!-- AZIONI MODAL -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;gap:0.75rem;">
+            <button class="btn btn-danger" id="deletCardBtn" onclick="deleteCurrentCard()" style="display:none;">
+                Elimina scheda
+            </button>
+            <div style="display:flex;gap:0.75rem;margin-left:auto;">
+                <button class="btn btn-secondary" onclick="closeCardModal()">Annulla</button>
+                <button class="btn btn-primary" onclick="saveCard()">💾 Salva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- IMAGE VIEWER MODAL                                        -->
+<!-- ========================================================= -->
+<div class="modal" id="imgViewerModal" onclick="this.classList.remove('active')">
+    <div style="max-width:90vw;max-height:90vh;display:flex;align-items:center;justify-content:center;">
+        <img id="imgViewerImg" src="" style="max-width:88vw;max-height:88vh;object-fit:contain;border:3px solid white;">
+    </div>
+</div>
+
+<script>
+// ============================================================
+// VERSIONE
+// ============================================================
+var APP_VERSION = 'v1.0.0';
+var BUILD_TIME  = '2026-05-30T12:52:56Z';
+console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+// ============================================================
+// SUPABASE — inizializzato dopo auth
+// ============================================================
+const _DEV_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0'];
+const _IS_DEV = _DEV_HOSTS.includes(window.location.hostname)
+             || (window.location.hostname.endsWith('.netlify.app')
+                && window.location.hostname.startsWith('dev--'));
+
+const SUPABASE_URL = _IS_DEV
+    ? 'https://hcmmywitrbmcsmytjbaf.supabase.co'
+    : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_KEY = _IS_DEV
+    ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbW15d2l0cmJtY3NteXRqYmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3ODE1NDUsImV4cCI6MjA4OTM1NzU0NX0.pAtj6THjWXibrMulU1IVGH-BFx4YkjkNT_x07lNUfWE'
+    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+let sb            = null;
+let sbAccessToken = null;
+let currentUserId = null;
+
+// ============================================================
+// DATA STORE
+// ============================================================
+let cards       = [];   // mm_cards rows (con categories, images_count)
+let categories  = [];   // cm_categories rows
+let imagesMeta  = {};   // { cardId: [mm_images rows + signedUrl] }
+
+// stato editor
+let editingCardId   = null;
+let selectedCatIds  = [];
+let selectedColor   = '#FFFFFF';
+let pendingImages   = [];   // { file, previewUrl, tempId } — non ancora caricate
+let existingImages  = [];   // { id, storage_path, file_name, signedUrl } — già su Storage
+let currentCatFilter = null; // id categoria filtro sidebar
+
+// stato ricerca
+let searchQuery = '';
+
+// ============================================================
+// AUTH
+// ============================================================
+function initWithToken(token) {
+    if (sb) return;
+    sbAccessToken = token;
+    localStorage.setItem('sb_token', token);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth:   { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: 'Bearer ' + token } }
+    });
+    const payload = decodeJWT(token);
+    currentUserId = payload?.sub || null;
+    console.log('✅ Supabase autenticato (Memorandum ' + APP_VERSION + ')');
+    document.getElementById('authOverlay').style.display = 'none';
+    startApp();
+}
+
+function handleAuthError(error) {
+    if (!error) return false;
+    const msg = (error.message || '').toLowerCase();
+    const isAuth = error.status === 401
+        || msg.includes('jwt expired') || msg.includes('invalid jwt')
+        || msg.includes('not authenticated') || msg.includes('pgjwt');
+    if (!isAuth) return false;
+    sb = null; sbAccessToken = null;
+    localStorage.removeItem('sb_token');
+    document.getElementById('authOverlay').style.display = 'flex';
+    return true;
+}
+
+function decodeJWT(token) {
+    try { return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }
+    catch(e) { return null; }
+}
+
+window.addEventListener('message', (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'SB_TOKEN' && e.data.token) {
+        console.log('✅ SB_TOKEN ricevuto dal launcher (Memorandum)');
+        initWithToken(e.data.token);
+    }
+});
+
+const _authChannel = new BroadcastChannel('appsphere_auth');
+_authChannel.onmessage = (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'LOGOUT') {
+        sb = null; sbAccessToken = null;
+        localStorage.removeItem('sb_token');
+        document.getElementById('authOverlay').style.display = 'flex';
+    } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+        const t = e.data.sbToken;
+        localStorage.setItem('sb_token', t); sbAccessToken = t;
+        if (sb) {
+            sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + t } }
+            });
+        }
+    }
+};
+
+window.addEventListener('load', () => {
+    const stored = localStorage.getItem('sb_token');
+    if (stored) initWithToken(stored);
+    else document.getElementById('authOverlay').style.display = 'flex';
+});
+
+// ============================================================
+// START
+// ============================================================
+function startApp() {
+    document.getElementById('infoVersion').textContent = APP_VERSION;
+    document.getElementById('infoBuild').textContent   = BUILD_TIME;
+    document.getElementById('infoEnv').textContent     = _IS_DEV ? '🧪 Development' : '🚀 Production';
+    document.getElementById('sidebarVersion').textContent = APP_VERSION;
+    document.getElementById('versionInfo').textContent = APP_VERSION + '\n' + BUILD_TIME;
+    document.getElementById('sqlMigrations').textContent = SQL_MIGRATIONS;
+
+    log('===========================================');
+    log('MEMORANDUM ' + APP_VERSION + ' — build: ' + BUILD_TIME);
+    log('===========================================');
+
+    Promise.all([loadCategories(), loadCards()]).then(() => {
+        renderCatFilters();
+        renderCards();
+        renderPinned();
+        updateStats();
+    });
+}
+
+function log(msg) { console.log('%c[MEMO]%c ' + msg, 'color:#2563EB;font-weight:bold', 'color:inherit'); }
+
+// ============================================================
+// LOAD DATA
+// ============================================================
+async function loadCategories() {
+    const { data, error } = await sb.from('cm_categories').select('*').order('name');
+    if (error) { if (handleAuthError(error)) return; console.error('loadCategories:', error); return; }
+    categories = data || [];
+}
+
+async function loadCards() {
+    const { data, error } = await sb
+        .from('mm_cards')
+        .select(`
+            *,
+            mm_card_categories(category_id),
+            mm_images(id)
+        `)
+        .order('pinned', { ascending: false })
+        .order('updated_at', { ascending: false });
+
+    if (error) { if (handleAuthError(error)) return; console.error('loadCards:', error); return; }
+
+    cards = (data || []).map(c => ({
+        ...c,
+        categoryIds: (c.mm_card_categories || []).map(r => r.category_id),
+        imagesCount: (c.mm_images || []).length
+    }));
+}
+
+async function loadCardImages(cardId) {
+    const { data, error } = await sb.from('mm_images').select('*').eq('card_id', cardId).order('created_at');
+    if (error) { console.error('loadCardImages:', error); return []; }
+
+    const imgs = await Promise.all((data || []).map(async (img) => {
+        const { data: urlData } = await sb.storage
+            .from('mm-images')
+            .createSignedUrl(img.storage_path, 7200);
+        return { ...img, signedUrl: urlData?.signedUrl || '' };
+    }));
+    return imgs;
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + name)?.classList.add('active');
+    if (name === 'pinned') renderPinned();
+    closeSidebar();
+}
+
+function setNavActive(el) {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function getFilteredCards() {
+    let list = [...cards];
+
+    if (currentCatFilter) {
+        list = list.filter(c => c.categoryIds.includes(currentCatFilter));
+    }
+
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        list = list.filter(c =>
+            c.title.toLowerCase().includes(q) ||
+            stripHtml(c.content).toLowerCase().includes(q)
+        );
+    }
+
+    const sort = document.getElementById('sortSelect')?.value || 'updated';
+    if (sort === 'created') list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    else if (sort === 'title') list.sort((a,b) => a.title.localeCompare(b.title));
+    // 'updated' already sorted by DB, but respect pin
+
+    return list;
+}
+
+function renderCards() {
+    const grid = document.getElementById('cardsGrid');
+    const list = getFilteredCards();
+    if (!list.length) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">${searchQuery ? 'Nessun risultato' : 'Nessuna scheda'}</div>
+            <div class="empty-desc">${searchQuery ? 'Prova con un altro termine.' : 'Crea la prima scheda con il pulsante + in alto.'}</div>
+        </div>`;
+        return;
+    }
+    grid.innerHTML = list.map(renderCardTile).join('');
+}
+
+function renderPinned() {
+    const grid = document.getElementById('pinnedGrid');
+    const list = cards.filter(c => c.pinned);
+    if (!list.length) {
+        grid.innerHTML = `<div class="empty-state"><div class="empty-icon">📌</div><div class="empty-title">Nessuna scheda in evidenza</div><div class="empty-desc">Fissa una scheda per vederla qui.</div></div>`;
+        return;
+    }
+    grid.innerHTML = list.map(renderCardTile).join('');
+}
+
+function renderCardTile(c) {
+    const cats = c.categoryIds.map(cid => {
+        const cat = categories.find(x => x.id === cid);
+        return cat ? `<span class="cat-chip" style="background:${cat.color||'#6B7280'}">${escHtml(cat.icon||'')} ${escHtml(cat.name)}</span>` : '';
+    }).join('');
+
+    const barColor = c.color && c.color !== '#FFFFFF' ? c.color : 'transparent';
+    const dateStr  = fmtDate(c.updated_at);
+    const excerpt  = stripHtml(c.content).slice(0, 280);
+    const pin      = c.pinned ? '<span class="pin-badge">📌</span>' : '';
+    const imgBadge = c.imagesCount > 0 ? `<span class="memo-card-img-count">📷 ${c.imagesCount}</span>` : '';
+
+    return `<div class="memo-card${c.pinned?' pinned':''}" onclick="openCardModal('${c.id}')">
+        <div class="memo-card-color-bar" style="background:${barColor}"></div>
+        <div class="memo-card-body">
+            <div class="memo-card-header">
+                <div class="memo-card-title">${escHtml(c.title) || '<em style="opacity:0.4">Senza titolo</em>'}</div>
+                ${pin}
+            </div>
+            <div class="memo-card-excerpt">${escHtml(excerpt)}</div>
+            ${cats ? `<div class="cat-chips">${cats}</div>` : ''}
+        </div>
+        <div class="memo-card-footer">
+            <span class="memo-card-date">${dateStr}</span>
+            <div class="memo-card-meta">${imgBadge}</div>
+        </div>
+    </div>`;
+}
+
+function renderCatFilters() {
+    const list = document.getElementById('catFilterList');
+    if (!categories.length) { list.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:0.3rem 0.6rem;">Nessuna categoria</div>'; return; }
+
+    const countByCat = {};
+    cards.forEach(c => c.categoryIds.forEach(cid => { countByCat[cid] = (countByCat[cid]||0)+1; }));
+
+    // "Tutte" entry
+    let html = `<div class="cat-filter-item${!currentCatFilter?' active':''}" onclick="setCatFilter(null)">
+        <span class="cat-filter-dot" style="background:#6B7280"></span> Tutte
+        <span class="cat-filter-count">${cards.length}</span>
+    </div>`;
+
+    categories.forEach(cat => {
+        const cnt = countByCat[cat.id] || 0;
+        html += `<div class="cat-filter-item${currentCatFilter===cat.id?' active':''}" onclick="setCatFilter('${cat.id}')">
+            <span class="cat-filter-dot" style="background:${cat.color||'#6B7280'}"></span>
+            ${escHtml(cat.icon||'')} ${escHtml(cat.name)}
+            <span class="cat-filter-count">${cnt}</span>
+        </div>`;
+    });
+    list.innerHTML = html;
+}
+
+function setCatFilter(catId) {
+    currentCatFilter = catId;
+    renderCatFilters();
+    renderCards();
+    // attiva tab Schede se non attivo
+    showPage('schede');
+    document.querySelectorAll('.nav-item').forEach(n => {
+        n.classList.toggle('active', n.dataset.section === 'schede');
+    });
+}
+
+function updateStats() {
+    document.getElementById('statTotal').textContent   = cards.length;
+    document.getElementById('statPinned').textContent  = cards.filter(c=>c.pinned).length;
+    document.getElementById('statImages').textContent  = cards.reduce((s,c)=>s+c.imagesCount,0);
+    const usedCats = new Set(cards.flatMap(c=>c.categoryIds));
+    document.getElementById('statCats').textContent    = usedCats.size;
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+let searchTimer = null;
+function onSearch(val) {
+    searchQuery = val.trim();
+    document.getElementById('searchClear').style.display = searchQuery ? 'block' : 'none';
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderCards, 250);
+}
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    onSearch('');
+}
+
+// ============================================================
+// CARD MODAL — OPEN
+// ============================================================
+async function openCardModal(cardId) {
+    editingCardId  = cardId;
+    selectedCatIds = [];
+    selectedColor  = '#FFFFFF';
+    pendingImages  = [];
+    existingImages = [];
+
+    document.getElementById('cardTitle').value   = '';
+    document.getElementById('editorArea').innerHTML = '';
+    document.getElementById('cardPinned').checked  = false;
+    document.getElementById('deletCardBtn').style.display = 'none';
+    document.getElementById('imagesGrid').innerHTML = '';
+    renderCatMulti();
+    renderCatDropdownList();
+    selectColor('#FFFFFF', document.querySelector('.color-swatch[data-color="#FFFFFF"]'));
+
+    if (cardId) {
+        document.getElementById('cardModalTitle').textContent = 'Modifica scheda';
+        document.getElementById('deletCardBtn').style.display = 'block';
+        const card = cards.find(c => c.id === cardId);
+        if (card) {
+            document.getElementById('cardTitle').value      = card.title;
+            document.getElementById('editorArea').innerHTML = card.content;
+            document.getElementById('cardPinned').checked   = card.pinned;
+            selectedCatIds = [...(card.categoryIds || [])];
+            selectedColor  = card.color || '#FFFFFF';
+            selectColor(selectedColor, null, true);
+            renderCatMulti();
+            renderCatDropdownList();
+
+            // carica immagini
+            showToast('Caricamento immagini…');
+            existingImages = await loadCardImages(cardId);
+            renderImagesGrid();
+        }
+    } else {
+        document.getElementById('cardModalTitle').textContent = 'Nuova scheda';
+    }
+
+    document.getElementById('cardModal').classList.add('active');
+    document.getElementById('cardTitle').focus();
+}
+
+function closeCardModal() {
+    document.getElementById('cardModal').classList.remove('active');
+    document.getElementById('catDropdown').classList.remove('open');
+    editingCardId  = null;
+    pendingImages  = [];
+    existingImages = [];
+}
+
+// ============================================================
+// CARD MODAL — SAVE
+// ============================================================
+async function saveCard() {
+    const title   = document.getElementById('cardTitle').value.trim();
+    const content = document.getElementById('editorArea').innerHTML.trim();
+    const pinned  = document.getElementById('cardPinned').checked;
+
+    if (!title && !content) { showToast('Inserisci almeno un titolo o del contenuto.'); return; }
+
+    const btn = document.querySelector('#cardModal .btn-primary');
+    btn.disabled = true; btn.textContent = 'Salvataggio…';
+
+    try {
+        const payload = {
+            title, content, pinned, color: selectedColor,
+            updated_at: new Date().toISOString(),
+            user_id: currentUserId
+        };
+
+        let cardId = editingCardId;
+
+        if (cardId) {
+            const { error } = await sb.from('mm_cards').update(payload).eq('id', cardId);
+            if (error) { if (handleAuthError(error)) return; throw error; }
+        } else {
+            payload.created_at = new Date().toISOString();
+            const { data, error } = await sb.from('mm_cards').insert(payload).select('id').single();
+            if (error) { if (handleAuthError(error)) return; throw error; }
+            cardId = data.id;
+        }
+
+        // sync categorie
+        await sb.from('mm_card_categories').delete().eq('card_id', cardId);
+        if (selectedCatIds.length) {
+            const rows = selectedCatIds.map(cid => ({ card_id: cardId, category_id: cid }));
+            const { error } = await sb.from('mm_card_categories').insert(rows);
+            if (error) console.error('Errore categorie:', error);
+        }
+
+        // carica immagini pendenti
+        for (const pi of pendingImages) {
+            await uploadImage(cardId, pi.file);
+        }
+
+        await loadCards();
+        renderCards();
+        renderPinned();
+        renderCatFilters();
+        updateStats();
+        closeCardModal();
+        showToast('✅ Scheda salvata');
+    } catch (err) {
+        console.error('saveCard:', err);
+        alert('Errore nel salvataggio: ' + (err.message || err));
+    } finally {
+        btn.disabled = false; btn.textContent = '💾 Salva';
+    }
+}
+
+// ============================================================
+// DELETE CARD
+// ============================================================
+async function deleteCurrentCard() {
+    if (!editingCardId) return;
+    const card = cards.find(c => c.id === editingCardId);
+    const name = card?.title || 'questa scheda';
+    const ok = await customConfirm(`Eliminare "${name}"? Anche le immagini verranno eliminate.`);
+    if (!ok) return;
+
+    // elimina immagini da Storage
+    const imgs = await loadCardImages(editingCardId);
+    for (const img of imgs) {
+        await sb.storage.from('mm-images').remove([img.storage_path]);
+    }
+
+    const { error } = await sb.from('mm_cards').delete().eq('id', editingCardId);
+    if (error) { console.error('deleteCard:', error); alert('Errore: ' + error.message); return; }
+
+    await loadCards();
+    renderCards();
+    renderPinned();
+    renderCatFilters();
+    updateStats();
+    closeCardModal();
+    showToast('🗑 Scheda eliminata');
+}
+
+// ============================================================
+// EDITOR — TOOLBAR
+// ============================================================
+function execCmd(cmd, val) {
+    document.getElementById('editorArea').focus();
+    document.execCommand(cmd, false, val || null);
+    updateToolbarState();
+}
+
+function insertHeading(level) {
+    document.getElementById('editorArea').focus();
+    document.execCommand('formatBlock', false, 'h' + level);
+    updateToolbarState();
+}
+
+function updateToolbarState() {
+    const cmds = ['bold','italic','underline','strikeThrough','insertUnorderedList','insertOrderedList'];
+    cmds.forEach(cmd => {
+        const btn = document.querySelector(`.toolbar-btn[data-cmd="${cmd}"]`);
+        if (btn) btn.classList.toggle('active', document.queryCommandState(cmd));
+    });
+}
+
+// ============================================================
+// CATEGORIES MULTI-SELECT
+// ============================================================
+function toggleCatDropdown(e) {
+    if (e.target.classList.contains('remove')) return;
+    document.getElementById('catDropdown').classList.toggle('open');
+}
+
+document.addEventListener('click', (e) => {
+    const multi    = document.getElementById('catMulti');
+    const dropdown = document.getElementById('catDropdown');
+    if (!multi?.contains(e.target) && !dropdown?.contains(e.target)) {
+        dropdown?.classList.remove('open');
+    }
+});
+
+function toggleCatSelection(catId) {
+    const idx = selectedCatIds.indexOf(catId);
+    if (idx === -1) selectedCatIds.push(catId);
+    else selectedCatIds.splice(idx, 1);
+    renderCatMulti();
+    renderCatDropdownList();
+}
+
+function removeCat(catId, e) {
+    e.stopPropagation();
+    selectedCatIds = selectedCatIds.filter(id => id !== catId);
+    renderCatMulti();
+    renderCatDropdownList();
+}
+
+function renderCatMulti() {
+    const multi = document.getElementById('catMulti');
+    const placeholder = document.getElementById('catMultiPlaceholder');
+    if (!selectedCatIds.length) {
+        placeholder.style.display = 'block';
+        // rimuovi chip esistenti
+        multi.querySelectorAll('.cat-multi-chip').forEach(el => el.remove());
+        return;
+    }
+    placeholder.style.display = 'none';
+    multi.querySelectorAll('.cat-multi-chip').forEach(el => el.remove());
+    selectedCatIds.forEach(cid => {
+        const cat = categories.find(c => c.id === cid);
+        if (!cat) return;
+        const chip = document.createElement('div');
+        chip.className = 'cat-multi-chip';
+        chip.style.background = cat.color || '#6B7280';
+        chip.innerHTML = `${escHtml(cat.icon||'')} ${escHtml(cat.name)} <span class="remove" onclick="removeCat('${cid}',event)">✕</span>`;
+        multi.insertBefore(chip, placeholder);
+    });
+}
+
+function renderCatDropdownList() {
+    const dropdown = document.getElementById('catDropdown');
+    if (!categories.length) {
+        dropdown.innerHTML = '<div style="padding:0.5rem 0.75rem;color:var(--muted);font-size:0.9rem;">Nessuna categoria disponibile</div>';
+        return;
+    }
+    dropdown.innerHTML = categories.map(cat => {
+        const sel = selectedCatIds.includes(cat.id);
+        return `<div class="cat-dropdown-item${sel?' selected':''}" onclick="toggleCatSelection('${cat.id}')">
+            <span style="width:12px;height:12px;border-radius:50%;background:${cat.color||'#6B7280'};flex-shrink:0;display:inline-block;"></span>
+            ${escHtml(cat.icon||'')} ${escHtml(cat.name)}
+            <span class="check">✓</span>
+        </div>`;
+    }).join('');
+}
+
+// ============================================================
+// COLOR PICKER
+// ============================================================
+function selectColor(color, swatchEl, fromCustom) {
+    selectedColor = color;
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    if (swatchEl) {
+        swatchEl.classList.add('selected');
+    } else if (!fromCustom) {
+        const matching = document.querySelector(`.color-swatch[data-color="${CSS.escape(color)}"]`);
+        if (matching) matching.classList.add('selected');
+    }
+    if (fromCustom) {
+        document.getElementById('colorCustom').value = color;
+    }
+}
+
+// ============================================================
+// IMAGE UPLOAD
+// ============================================================
+function handleDragOver(e)  { e.preventDefault(); document.getElementById('imgUploadZone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('imgUploadZone').classList.remove('drag-over'); }
+function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('imgUploadZone').classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    files.forEach(addPendingImage);
+}
+function handleFileSelect(e) {
+    Array.from(e.target.files).forEach(addPendingImage);
+    e.target.value = ''; // reset
+}
+
+function addPendingImage(file) {
+    if (file.size > 5 * 1024 * 1024) { showToast('❌ File troppo grande: ' + file.name); return; }
+    const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const previewUrl = URL.createObjectURL(file);
+    pendingImages.push({ file, previewUrl, tempId });
+    renderImagesGrid();
+}
+
+function renderImagesGrid() {
+    const grid = document.getElementById('imagesGrid');
+    let html = '';
+
+    existingImages.forEach(img => {
+        html += `<div class="img-thumb" id="imgthumb_${img.id}">
+            <img src="${escAttr(img.signedUrl)}" alt="${escAttr(img.file_name)}"
+                 onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23eee%22 width=%22100%22 height=%22100%22/><text x=%2250%%22 y=%2250%%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22>?</text></svg>'"
+                 onclick="viewImage('${escAttr(img.signedUrl)}')">
+            <div class="img-thumb-overlay">
+                <button class="img-action-btn img-ins-btn" onclick="insertImageInEditor('${escAttr(img.signedUrl)}',event)" title="Inserisci nel testo">✎</button>
+                <button class="img-action-btn img-del-btn" onclick="deleteExistingImage('${img.id}',event)" title="Elimina">✕</button>
+            </div>
+        </div>`;
+    });
+
+    pendingImages.forEach(pi => {
+        html += `<div class="img-thumb" id="imgthumb_${pi.tempId}">
+            <img src="${escAttr(pi.previewUrl)}" alt="In attesa di upload">
+            <div class="img-thumb-overlay">
+                <button class="img-action-btn img-del-btn" onclick="removePendingImage('${pi.tempId}',event)" title="Rimuovi">✕</button>
+            </div>
+            <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.5);color:white;font-size:0.6rem;padding:2px;text-align:center;">In attesa</div>
+        </div>`;
+    });
+
+    grid.innerHTML = html || '';
+}
+
+async function uploadImage(cardId, file) {
+    const ext   = file.name.split('.').pop().toLowerCase();
+    const fname = Date.now() + '_' + Math.random().toString(36).slice(2) + '.' + ext;
+    const path  = currentUserId + '/' + cardId + '/' + fname;
+
+    const { error: upErr } = await sb.storage.from('mm-images').upload(path, file, { contentType: file.type });
+    if (upErr) { console.error('uploadImage storage:', upErr); showToast('❌ Errore upload: ' + file.name); return; }
+
+    const { error: dbErr } = await sb.from('mm_images').insert({
+        card_id: cardId, user_id: currentUserId,
+        storage_path: path, file_name: file.name, mime_type: file.type
+    });
+    if (dbErr) { console.error('uploadImage db:', dbErr); }
+}
+
+async function deleteExistingImage(imgId, e) {
+    e.stopPropagation();
+    const img = existingImages.find(i => i.id === imgId);
+    if (!img) return;
+    const ok = await customConfirm('Eliminare questa immagine?');
+    if (!ok) return;
+
+    await sb.storage.from('mm-images').remove([img.storage_path]);
+    const { error } = await sb.from('mm_images').delete().eq('id', imgId);
+    if (error) { console.error('deleteExistingImage:', error); return; }
+
+    existingImages = existingImages.filter(i => i.id !== imgId);
+    renderImagesGrid();
+    showToast('🗑 Immagine eliminata');
+}
+
+function removePendingImage(tempId, e) {
+    e.stopPropagation();
+    const pi = pendingImages.find(p => p.tempId === tempId);
+    if (pi) URL.revokeObjectURL(pi.previewUrl);
+    pendingImages = pendingImages.filter(p => p.tempId !== tempId);
+    renderImagesGrid();
+}
+
+function insertImageInEditor(url, e) {
+    e.stopPropagation();
+    document.getElementById('editorArea').focus();
+    document.execCommand('insertHTML', false, `<img src="${escAttr(url)}" alt="immagine"><br>`);
+}
+
+function viewImage(url) {
+    document.getElementById('imgViewerImg').src = url;
+    document.getElementById('imgViewerModal').classList.add('active');
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function escHtml(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+    return String(str||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function stripHtml(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+}
+function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2,'0');
+    return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
+         + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+let toastTimer = null;
+function showToast(msg, ms) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.style.display = 'none'; }, ms || 2800);
+}
+
+function customConfirm(msg) {
+    return new Promise(resolve => {
+        document.getElementById('confirmMsg').textContent = msg;
+        document.getElementById('confirmDialog').classList.add('active');
+        const yes = document.getElementById('confirmYes');
+        const no  = document.getElementById('confirmNo');
+        const cleanup = () => {
+            document.getElementById('confirmDialog').classList.remove('active');
+            yes.onclick = null; no.onclick = null;
+        };
+        yes.onclick = () => { cleanup(); resolve(true); };
+        no.onclick  = () => { cleanup(); resolve(false); };
+    });
+}
+
+function copySql() {
+    navigator.clipboard.writeText(SQL_MIGRATIONS).then(() => showToast('📋 SQL copiato!'));
+}
+
+// ============================================================
+// SQL MIGRATIONS (mostrato in impostazioni)
+// ============================================================
+const SQL_MIGRATIONS = `-- ============================================================
+-- MEMORANDUM — Migrazioni Supabase
+-- Eseguire nel SQL Editor del progetto Supabase
+-- ============================================================
+
+-- 1. Schede
+CREATE TABLE IF NOT EXISTS mm_cards (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  title       text NOT NULL DEFAULT '',
+  content     text NOT NULL DEFAULT '',
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  pinned      boolean NOT NULL DEFAULT false,
+  color       text NOT NULL DEFAULT '#FFFFFF'
+);
+ALTER TABLE mm_cards ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "mm_cards: utente vede solo le sue" ON mm_cards
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE INDEX IF NOT EXISTS mm_cards_fts
+  ON mm_cards USING gin(to_tsvector('italian', coalesce(title,'') || ' ' || coalesce(content,'')));
+
+-- 2. Associazione schede ↔ categorie condivise
+CREATE TABLE IF NOT EXISTS mm_card_categories (
+  card_id     uuid REFERENCES mm_cards(id) ON DELETE CASCADE,
+  category_id uuid REFERENCES cm_categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (card_id, category_id)
+);
+ALTER TABLE mm_card_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "mm_card_categories: utente vede solo le sue" ON mm_card_categories
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM mm_cards WHERE id = card_id AND user_id = auth.uid())
+  );
+
+-- 3. Metadati immagini
+CREATE TABLE IF NOT EXISTS mm_images (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id      uuid REFERENCES mm_cards(id) ON DELETE CASCADE,
+  user_id      uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  storage_path text NOT NULL,
+  file_name    text NOT NULL,
+  mime_type    text,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE mm_images ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "mm_images: utente vede solo le sue" ON mm_images
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- 4. Storage bucket (eseguire come service_role o nella dashboard)
+-- INSERT INTO storage.buckets (id, name, public)
+--   VALUES ('mm-images', 'mm-images', false)
+--   ON CONFLICT (id) DO NOTHING;
+--
+-- CREATE POLICY "mm-images upload" ON storage.objects FOR INSERT
+--   WITH CHECK (bucket_id = 'mm-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+-- CREATE POLICY "mm-images read" ON storage.objects FOR SELECT
+--   USING (bucket_id = 'mm-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+-- CREATE POLICY "mm-images delete" ON storage.objects FOR DELETE
+--   USING (bucket_id = 'mm-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- 5. Registro app in AppSphere
+INSERT INTO cm_apps (title, description, html_file, score_query, active)
+VALUES (
+  'Memorandum',
+  'Schede con note, immagini e categorie',
+  'memo.html',
+  'SELECT COUNT(*)::int FROM mm_cards WHERE user_id = auth.uid()',
+  true
+) ON CONFLICT DO NOTHING;
+`;
+
+</script>
+</body>
+</html>
