@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.1</title>
+    <title>Memorandum v1.0.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -384,8 +384,15 @@
         .img-upload-zone:hover, .img-upload-zone.drag-over {
             border-color: var(--accent); background: rgba(37,99,235,0.04);
         }
-        .img-upload-zone input[type="file"] { display: none; }
-        .img-upload-zone label { cursor: pointer; display: block; }
+        .img-upload-zone label {
+            cursor: pointer; display: block; position: relative;
+        }
+        .img-upload-zone input[type="file"] {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            opacity: 0; cursor: pointer; z-index: 1;
+        }
+        .img-upload-zone .img-upload-label { position: relative; z-index: 0; }
         .img-upload-label {
             font-size: 0.9rem; color: var(--muted); cursor: pointer;
         }
@@ -754,8 +761,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.1';
-var BUILD_TIME  = '2026-05-31T00:00:00Z';
+var APP_VERSION = 'v1.0.2';
+var BUILD_TIME  = '2026-05-31T12:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
