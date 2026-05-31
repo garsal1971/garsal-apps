@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.JsResult
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -14,6 +15,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -52,6 +54,15 @@ class MainActivity : AppCompatActivity() {
     )
 
     private lateinit var requestHcPermissions: ActivityResultLauncher<Set<String>>
+
+    // File chooser per input[type=file] nel WebView
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        fileChooserCallback?.onReceiveValue(uris.toTypedArray())
+        fileChooserCallback = null
+    }
 
     // Flag nativo: true se l'utente ha aperto Renpho e deve tornare
     @Volatile
@@ -281,6 +292,19 @@ class MainActivity : AppCompatActivity() {
                         .setPositiveButton("OK") { _, _ -> result?.confirm() }
                         .setOnCancelListener { result?.cancel() }
                         .show()
+                    return true
+                }
+
+                // Senza questo override input[type=file] è silenziosamente ignorato nel WebView
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    callback: ValueCallback<Array<Uri>>?,
+                    params: FileChooserParams?
+                ): Boolean {
+                    fileChooserCallback?.onReceiveValue(null) // annulla eventuale precedente
+                    fileChooserCallback = callback
+                    val accept = params?.acceptTypes?.firstOrNull() ?: "image/*"
+                    fileChooserLauncher.launch(accept.ifEmpty { "image/*" })
                     return true
                 }
             }
