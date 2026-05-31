@@ -17,6 +17,9 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -68,6 +71,10 @@ class MainActivity : AppCompatActivity() {
     @Volatile
     private var renphoLaunched = false
 
+    // OCR da condivisione screenshot
+    private var pendingOcrText: String? = null  // testo estratto, in attesa che memo.html carichi
+    private val MEMO_URL = "https://garsal.netlify.app/memo.html"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -92,6 +99,11 @@ class MainActivity : AppCompatActivity() {
         // Caso: app uccisa da Android mentre Chrome Custom Tabs era aperto.
         // Il deep link torna via onCreate invece di onNewIntent.
         intent?.data?.oauthFragment()?.let { saveTokensToPending(it) }
+
+        // Condivisione screenshot → OCR → memo
+        if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
+            handleSharedImage(intent)
+        }
 
         showBiometricPrompt()
 
@@ -118,11 +130,52 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        setIntent(intent) // aggiorna getIntent() per future chiamate
+        setIntent(intent)
+
+        // Condivisione screenshot con app già aperta
+        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
+            handleSharedImage(intent)
+            return
+        }
+
         val fragment = intent.data?.oauthFragment() ?: return
         saveTokensToPending(fragment)
-        // Ricarica la pagina: onPageFinished inietterà i token
         webView.loadUrl(APP_URL)
+    }
+
+    /**
+     * Riceve un'immagine condivisa (es. screenshot WhatsApp), esegue OCR con ML Kit
+     * e apre Memorandum con il testo estratto pre-compilato nel campo contenuto.
+     */
+    private fun handleSharedImage(intent: Intent) {
+        @Suppress("DEPRECATION")
+        val imageUri: Uri = intent.getParcelableExtra(Intent.EXTRA_STREAM) ?: run {
+            Log.w("MainActivity", "handleSharedImage: nessun URI nell'intent")
+            return
+        }
+
+        Log.d("MainActivity", "OCR avviato su: $imageUri")
+
+        val image = try {
+            InputImage.fromFilePath(this, imageUri)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "InputImage.fromFilePath fallito: $e")
+            return
+        }
+
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        recognizer.process(image)
+            .addOnSuccessListener { result ->
+                val text = result.text.trim()
+                Log.d("MainActivity", "OCR completato: ${text.length} caratteri")
+                pendingOcrText = text.ifEmpty { "—" }
+                runOnUiThread { webView.loadUrl(MEMO_URL) }
+            }
+            .addOnFailureListener { e ->
+                Log.e("MainActivity", "OCR fallito: $e")
+                pendingOcrText = ""
+                runOnUiThread { webView.loadUrl(MEMO_URL) }
+            }
     }
 
     /**
@@ -214,6 +267,17 @@ class MainActivity : AppCompatActivity() {
                         })();
                     """.trimIndent(), null)
                     if (url?.contains("garsal.netlify.app") != true) return
+
+                    // Inietta testo OCR in memo.html se disponibile
+                    val ocrText = pendingOcrText
+                    if (ocrText != null && url?.contains("memo.html") == true) {
+                        pendingOcrText = null
+                        val escaped = ocrText.jsEscape()
+                        view?.evaluateJavascript(
+                            "setTimeout(function(){ if(typeof openMemoFromOcr==='function') openMemoFromOcr('$escaped'); }, 800);",
+                            null
+                        )
+                    }
 
                     val prefs = getSharedPreferences(PREFS_OAUTH, MODE_PRIVATE)
                     val at = prefs.getString("access_token", "") ?: ""
