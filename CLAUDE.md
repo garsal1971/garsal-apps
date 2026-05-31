@@ -12,6 +12,17 @@ The suite is branded **AppSphere** and the UI language is **Italian**.
 
 ---
 
+## Client supportati
+
+Le app sono progettate per funzionare su:
+
+- **App Android** (`android-app/`) — WebView nativa con `AndroidBridge` JavascriptInterface. Supporta OCR via ML Kit, biometria, camera, condivisione immagini da altre app.
+- **Browser desktop** (Chrome/Firefox/Safari su PC/Mac) — funzionalità complete incluso OCR via Tesseract.js.
+
+**Non supportato**: browser mobile (Chrome/Safari su smartphone/tablet). Tesseract.js causa problemi di rete su WebView mobile e browser mobile in generale. Su mobile usare esclusivamente l'app Android.
+
+---
+
 ## Repository Structure
 
 ```
