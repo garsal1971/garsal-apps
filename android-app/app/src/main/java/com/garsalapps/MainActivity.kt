@@ -40,6 +40,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -286,12 +287,14 @@ class MainActivity : AppCompatActivity() {
                 TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
                     .process(InputImage.fromBitmap(bitmap, 0))
                     .addOnSuccessListener { result ->
-                        val text = result.text.trim()
-                            .replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
-                        runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','$text');", null) }
+                        val textJson = JSONObject.quote(result.text.trim())
+                        val idJson   = JSONObject.quote(callbackId)
+                        runOnUiThread { webView.evaluateJavascript("ocrCallback($idJson,$textJson);", null) }
                     }
-                    .addOnFailureListener {
-                        runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','');", null) }
+                    .addOnFailureListener { e ->
+                        Log.e("MainActivity", "OCR failure: $e")
+                        val idJson = JSONObject.quote(callbackId)
+                        runOnUiThread { webView.evaluateJavascript("ocrCallback($idJson,'');", null) }
                     }
             } catch (e: Exception) {
                 Log.e("MainActivity", "performOcr: $e")
@@ -353,9 +356,9 @@ class MainActivity : AppCompatActivity() {
                     val ocrText = pendingOcrText
                     if (ocrText != null && url?.contains("memo.html") == true) {
                         pendingOcrText = null
-                        val escaped = ocrText.jsEscape()
+                        val textJson = JSONObject.quote(ocrText)
                         view?.evaluateJavascript(
-                            "setTimeout(function(){ if(typeof openMemoFromOcr==='function') openMemoFromOcr('$escaped'); }, 800);",
+                            "setTimeout(function(){ if(typeof openMemoFromOcr==='function') openMemoFromOcr($textJson); }, 800);",
                             null
                         )
                     }
