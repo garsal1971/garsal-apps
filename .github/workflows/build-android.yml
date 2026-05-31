@@ -68,22 +68,7 @@ jobs:
             echo "$KS_PASS" > /tmp/keystore-setup/KEYSTORE_PASSWORD.txt
             echo "garsal"   > /tmp/keystore-setup/KEY_ALIAS.txt
             echo "$KS_PASS" > /tmp/keystore-setup/KEY_PASSWORD.txt
-            cat > /tmp/keystore-setup/ISTRUZIONI.txt << 'EOF'
-======================================================
-KEYSTORE GENERATO — AZIONE RICHIESTA (una volta sola)
-======================================================
-Aggiungi questi 4 secrets su GitHub:
-→ github.com/garsal1971/garsal-apps/settings/secrets/actions
-
-1. KEYSTORE_BASE64   = contenuto di KEYSTORE_BASE64.txt
-2. KEYSTORE_PASSWORD = contenuto di KEYSTORE_PASSWORD.txt
-3. KEY_ALIAS         = contenuto di KEY_ALIAS.txt
-4. KEY_PASSWORD      = contenuto di KEY_PASSWORD.txt
-
-Dopo aver aggiunto i secrets, ogni aggiornamento APK
-si installerà senza disinstallare la versione precedente.
-======================================================
-EOF
+            printf 'KEYSTORE GENERATO - AZIONE RICHIESTA (una volta sola)\n\nAggiungi questi 4 secrets su GitHub:\ngithub.com/garsal1971/garsal-apps/settings/secrets/actions\n\n1. KEYSTORE_BASE64   = contenuto di KEYSTORE_BASE64.txt\n2. KEYSTORE_PASSWORD = contenuto di KEYSTORE_PASSWORD.txt\n3. KEY_ALIAS         = contenuto di KEY_ALIAS.txt\n4. KEY_PASSWORD      = contenuto di KEY_PASSWORD.txt\n\nDopo aver aggiunto i secrets, ogni aggiornamento APK\nsi installera senza disinstallare la versione precedente.\n' > /tmp/keystore-setup/ISTRUZIONI.txt
             echo "⚠️  Keystore generato — scarica artifact 'keystore-setup' e aggiungi i 4 secrets"
           fi
 
