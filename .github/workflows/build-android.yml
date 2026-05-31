@@ -1,5 +1,5 @@
 name: Build Android APK
-# v6 — genera keystore automaticamente se KEYSTORE_BASE64 non è configurato
+# v7 — genera keystore automaticamente se KEYSTORE_BASE64 non configurato
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
           SDKMANAGER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools" \
             -name "sdkmanager" -type f 2>/dev/null | sort | tail -1)
           if [ -z "$SDKMANAGER" ]; then
-            echo "WARNING: sdkmanager non trovato, continuo senza accettazione licenze"
+            echo "WARNING: sdkmanager non trovato"
           else
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
             "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" 2>&1 || true
@@ -43,67 +43,71 @@ jobs:
       - name: Prepara keystore
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            # Usa il keystore dai secrets
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-app/garsal.keystore
             echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"                  >> $GITHUB_ENV
             echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"            >> $GITHUB_ENV
-            echo "BUILD_TYPE=release"                                   >> $GITHUB_ENV
-            echo "✅ Keystore caricato dai secrets — build release"
+            echo "✅ Keystore dai secrets — build release con firma fissa"
           else
-            # Genera un nuovo keystore con password fissa
             KS_PASS="GarsalApps2026"
             keytool -genkeypair -v \
               -keystore android-app/garsal.keystore \
               -alias garsal \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass "$KS_PASS" -keypass "$KS_PASS" \
-              -dname "CN=GarsalApps, O=Garsal, C=IT" \
-              2>&1
+              -dname "CN=GarsalApps, O=Garsal, C=IT"
             echo "KEYSTORE_PASSWORD=$KS_PASS" >> $GITHUB_ENV
             echo "KEY_ALIAS=garsal"           >> $GITHUB_ENV
             echo "KEY_PASSWORD=$KS_PASS"      >> $GITHUB_ENV
-            echo "BUILD_TYPE=release"         >> $GITHUB_ENV
 
-            # Salva il base64 in un file artifact per l'utente
+            # Prepara l'artifact con le istruzioni per configurare i secrets
             mkdir -p /tmp/keystore-setup
             base64 -w 0 android-app/garsal.keystore > /tmp/keystore-setup/KEYSTORE_BASE64.txt
-            echo "$KS_PASS"  > /tmp/keystore-setup/KEYSTORE_PASSWORD.txt
-            echo "garsal"    > /tmp/keystore-setup/KEY_ALIAS.txt
-            echo "$KS_PASS"  > /tmp/keystore-setup/KEY_PASSWORD.txt
+            echo "$KS_PASS" > /tmp/keystore-setup/KEYSTORE_PASSWORD.txt
+            echo "garsal"   > /tmp/keystore-setup/KEY_ALIAS.txt
+            echo "$KS_PASS" > /tmp/keystore-setup/KEY_PASSWORD.txt
             cat > /tmp/keystore-setup/ISTRUZIONI.txt << 'EOF'
 ======================================================
-KEYSTORE GENERATO AUTOMATICAMENTE — AZIONE RICHIESTA
+KEYSTORE GENERATO — AZIONE RICHIESTA (una volta sola)
 ======================================================
+Aggiungi questi 4 secrets su GitHub:
+→ github.com/garsal1971/garsal-apps/settings/secrets/actions
 
-Per evitare di dover disinstallare l'app ad ogni aggiornamento,
-aggiungi questi 4 GitHub Secrets al tuo repository:
+1. KEYSTORE_BASE64   = contenuto di KEYSTORE_BASE64.txt
+2. KEYSTORE_PASSWORD = contenuto di KEYSTORE_PASSWORD.txt
+3. KEY_ALIAS         = contenuto di KEY_ALIAS.txt
+4. KEY_PASSWORD      = contenuto di KEY_PASSWORD.txt
 
-GitHub → Settings → Secrets → Actions → New repository secret
-
-1. KEYSTORE_BASE64   = contenuto del file KEYSTORE_BASE64.txt
-2. KEYSTORE_PASSWORD = contenuto del file KEYSTORE_PASSWORD.txt
-3. KEY_ALIAS         = contenuto del file KEY_ALIAS.txt
-4. KEY_PASSWORD      = contenuto del file KEY_PASSWORD.txt
-
-Dopo aver aggiunto i secrets, triggera una nuova build
-(es. fai un piccolo commit). Da quel momento ogni
-aggiornamento si installa senza disinstallare.
+Dopo aver aggiunto i secrets, ogni aggiornamento APK
+si installerà senza disinstallare la versione precedente.
 ======================================================
 EOF
-            echo "⚠️  Keystore generato — scarica l'artifact 'keystore-setup' e aggiungi i secrets"
+            echo "⚠️  Keystore generato — scarica artifact 'keystore-setup' e aggiungi i 4 secrets"
           fi
 
       - name: Make gradlew executable
         run: chmod +x android-app/gradlew
 
-      - name: Build APK release firmato
+      - name: Build APK release
         working-directory: android-app
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/android-app/garsal.keystore
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Salva istruzioni keystore (solo se generato ora)
+      - name: Salva APK in /tmp prima del checkout
+        run: |
+          VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          cp android-app/app/build/outputs/apk/release/app-release.apk /tmp/GarsalApps-latest.apk
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GarsalApps-v${{ env.VERSION }}
+          path: /tmp/GarsalApps-latest.apk
+          retention-days: 30
+
+      - name: Upload keystore-setup artifact (solo primo avvio)
         if: ${{ secrets.KEYSTORE_BASE64 == '' }}
         uses: actions/upload-artifact@v4
         with:
@@ -111,33 +115,20 @@ EOF
           path: /tmp/keystore-setup/
           retention-days: 7
 
-      - name: Upload APK as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: GarsalApps
-          path: android-app/app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
-
-      - name: Pubblica APK su master (scaricabile via Netlify)
+      - name: Pubblica APK su master
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
 
           git fetch origin master
           git checkout master
           git reset --hard origin/master
 
           mkdir -p releases
-          cp android-app/app/build/outputs/apk/release/app-release.apk releases/GarsalApps-latest.apk || \
-          cp /tmp/GarsalApps-latest.apk releases/GarsalApps-latest.apk 2>/dev/null || true
-
-          # Copia dall'output corretto
-          find . -name "app-release.apk" | head -1 | xargs -I{} cp {} releases/GarsalApps-latest.apk 2>/dev/null || true
+          cp /tmp/GarsalApps-latest.apk releases/GarsalApps-latest.apk
 
           git add releases/GarsalApps-latest.apk
           git diff --staged --quiet && echo "APK non cambiato, skip commit" && exit 0
 
-          git commit -m "chore: aggiorna APK GarsalApps v${VERSION} [skip actions]"
+          git commit -m "chore: aggiorna APK GarsalApps v${{ env.VERSION }} [skip actions]"
           git push origin master
