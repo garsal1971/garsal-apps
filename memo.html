@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.8</title>
+    <title>Memorandum v1.0.9</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -847,8 +847,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.8';
-var BUILD_TIME  = '2026-05-31T18:00:00Z';
+var APP_VERSION = 'v1.0.9';
+var BUILD_TIME  = '2026-05-31T20:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1481,12 +1481,21 @@ async function runOcrOnFiles(files) {
             const text = await ocrFromFile(file);
             if (text) {
                 const area = document.getElementById('editorArea');
-                // Appende il testo estratto con separatore se c'è già contenuto
-                if (area.innerText.trim()) {
-                    document.execCommand('insertHTML', false, '<br><hr><p>' + escHtml(text) + '</p>');
+                area.focus();
+                const escaped = escHtml(text).replace(/\n/g, '<br>');
+                const existing = area.innerHTML.trim();
+                if (existing) {
+                    area.innerHTML = existing + '<br><hr><p>' + escaped + '</p>';
                 } else {
-                    area.innerText = text;
+                    area.innerHTML = '<p>' + escaped + '</p>';
                 }
+                // Sposta cursore alla fine
+                const range = document.createRange();
+                range.selectNodeContents(area);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
                 showToast('✅ Testo estratto (' + text.length + ' caratteri)');
             } else {
                 showToast('⚠️ Nessun testo trovato nell\'immagine');
@@ -1535,7 +1544,7 @@ function ocrFromFile(file) {
 
 async function doOcrTesseract(file, resolve, reject) {
     try {
-        const worker = await Tesseract.createWorker('ita+eng');
+        const worker = await Tesseract.createWorker('eng');
         const url = URL.createObjectURL(file);
         const { data } = await worker.recognize(url);
         URL.revokeObjectURL(url);
