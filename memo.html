@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.15</title>
+    <title>Memorandum v1.0.16</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -875,8 +875,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.15';
-var BUILD_TIME  = '2026-05-31T23:00:00Z';
+var APP_VERSION = 'v1.0.16';
+var BUILD_TIME  = '2026-05-31T23:30:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1574,8 +1574,15 @@ function ocrFromFile(file) {
             reader.onerror = () => fail(new Error('Lettura file fallita'));
             reader.readAsDataURL(file);
         } else {
+            // Su mobile browser Tesseract causa problemi di rete post-elaborazione
+            const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.warn('[OCR] mobile browser senza AndroidBridge — OCR non disponibile');
+                fail(new Error('OCR disponibile solo nell\'app Android su mobile'));
+                return;
+            }
             // Fallback desktop: Tesseract.js caricato in modo lazy
-            console.log('[OCR] percorso browser/Tesseract');
+            console.log('[OCR] percorso browser/Tesseract desktop');
             const runTesseract = () => {
                 console.log('[OCR] Tesseract caricato, avvio doOcrTesseract');
                 doOcrTesseract(file, done, fail);
