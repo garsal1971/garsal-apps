@@ -79,6 +79,17 @@
             android:name="health_privacy_policy_url"
             android:value="https://garsal.netlify.app/" />
 
+        <!-- FileProvider per URI camera (TakePicture) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_provider_paths" />
+        </provider>
+
         <!-- WorkManager per notifiche schedulate -->
         <provider
             android:name="androidx.startup.InitializationProvider"
