@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.13</title>
+    <title>Memorandum v1.0.14</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -845,8 +845,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.13';
-var BUILD_TIME  = '2026-05-31T22:00:00Z';
+var APP_VERSION = 'v1.0.14';
+var BUILD_TIME  = '2026-05-31T22:30:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1569,9 +1569,9 @@ async function doOcrTesseract(file, resolve, reject) {
         console.log('[OCR] createWorker...');
         const worker = await Tesseract.createWorker('eng');
         console.log('[OCR] worker pronto, recognize...');
-        const url = URL.createObjectURL(file);
-        const { data } = await worker.recognize(url);
-        URL.revokeObjectURL(url);
+        // Usa ArrayBuffer per evitare conflitti con blob URL del preview
+        const buf = await file.arrayBuffer();
+        const { data } = await worker.recognize(new Uint8Array(buf));
         await worker.terminate();
         console.log('[OCR] testo estratto:', data.text.length, 'caratteri');
         resolve(data.text.trim());
@@ -1632,18 +1632,23 @@ function renderImagesGrid() {
 }
 
 async function uploadImage(cardId, file) {
-    const ext   = file.name.split('.').pop().toLowerCase();
+    const nameParts = (file.name || 'image.jpg').split('.');
+    const ext   = nameParts.length > 1 ? nameParts.pop().toLowerCase() : (file.type.split('/')[1] || 'jpg');
     const fname = Date.now() + '_' + Math.random().toString(36).slice(2) + '.' + ext;
     const path  = currentUserId + '/' + cardId + '/' + fname;
 
-    const { error: upErr } = await sb.storage.from('mm-images').upload(path, file, { contentType: file.type });
-    if (upErr) { console.error('uploadImage storage:', upErr); showToast('❌ Errore upload: ' + file.name); return; }
+    const { error: upErr } = await sb.storage.from('mm-images').upload(path, file, { contentType: file.type || 'image/jpeg' });
+    if (upErr) {
+        console.error('uploadImage storage:', upErr);
+        showToast('❌ Upload fallito: ' + (upErr.message || JSON.stringify(upErr)));
+        return;
+    }
 
     const { error: dbErr } = await sb.from('mm_images').insert({
         card_id: cardId, user_id: currentUserId,
-        storage_path: path, file_name: file.name, mime_type: file.type
+        storage_path: path, file_name: fname, mime_type: file.type || 'image/jpeg'
     });
-    if (dbErr) { console.error('uploadImage db:', dbErr); }
+    if (dbErr) { console.error('uploadImage db:', dbErr); showToast('❌ DB errore: ' + dbErr.message); }
 }
 
 async function deleteExistingImage(imgId, e) {
