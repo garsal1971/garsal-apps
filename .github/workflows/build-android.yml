@@ -90,9 +90,12 @@ EOF
 
       - name: Build APK release
         working-directory: android-app
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/android-app/garsal.keystore
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="${{ github.workspace }}/android-app/garsal.keystore" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
       - name: Salva APK in /tmp prima del checkout
         run: |
