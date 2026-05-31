@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.12</title>
+    <title>Memorandum v1.0.13</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -761,11 +761,9 @@
             <div class="images-section">
                 <!-- Input nascosti -->
                 <input type="file" id="imgFileInput" accept="image/*" multiple
-                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
-                       onchange="handleFileSelect(event)">
+                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
                 <input type="file" id="imgCameraInput" accept="image/*" capture="environment"
-                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
-                       onchange="handleFileSelect(event)">
+                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
 
                 <!-- Bottone unico -->
                 <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
@@ -847,8 +845,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.12';
-var BUILD_TIME  = '2026-05-31T21:00:00Z';
+var APP_VERSION = 'v1.0.13';
+var BUILD_TIME  = '2026-05-31T22:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1464,11 +1462,10 @@ function imgPopupAction(source) {
         const files = Array.from(e.target.files || []);
         console.log('[OCR] change event files=' + files.length + ' ocrMode=' + ocrMode);
         if (!files.length) return;
-        if (ocrMode) {
-            runOcrOnFiles(files);
-        } else {
-            files.forEach(addPendingImage);
-        }
+        // Aggiunge sempre le immagini al pending (anteprima)
+        files.forEach(addPendingImage);
+        // Se OCR attivo, estrae anche il testo
+        if (ocrMode) runOcrOnFiles(files);
         input.value = '';
     };
     input.addEventListener('change', handler);
