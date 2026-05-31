@@ -3,6 +3,7 @@ package com.garsalapps
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
@@ -17,9 +18,11 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.io.File
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -60,11 +63,26 @@ class MainActivity : AppCompatActivity() {
 
     // File chooser per input[type=file] nel WebView
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var cameraImageUri: Uri? = null
+
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris ->
         fileChooserCallback?.onReceiveValue(uris.toTypedArray())
         fileChooserCallback = null
+    }
+
+    private val cameraLauncher = registerForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        val uri = cameraImageUri
+        if (success && uri != null) {
+            fileChooserCallback?.onReceiveValue(arrayOf(uri))
+        } else {
+            fileChooserCallback?.onReceiveValue(null)
+        }
+        fileChooserCallback = null
+        cameraImageUri = null
     }
 
     // Flag nativo: true se l'utente ha aperto Renpho e deve tornare
@@ -401,10 +419,30 @@ class MainActivity : AppCompatActivity() {
                     callback: ValueCallback<Array<Uri>>?,
                     params: FileChooserParams?
                 ): Boolean {
-                    fileChooserCallback?.onReceiveValue(null) // annulla eventuale precedente
+                    fileChooserCallback?.onReceiveValue(null)
                     fileChooserCallback = callback
-                    val accept = params?.acceptTypes?.firstOrNull() ?: "image/*"
-                    fileChooserLauncher.launch(accept.ifEmpty { "image/*" })
+
+                    if (params?.isCaptureEnabled == true) {
+                        // capture="environment" — apre direttamente la fotocamera
+                        try {
+                            val imgFile = File.createTempFile("cam_", ".jpg",
+                                getExternalFilesDir(Environment.DIRECTORY_PICTURES))
+                            val uri = FileProvider.getUriForFile(
+                                this@MainActivity,
+                                "${packageName}.fileprovider",
+                                imgFile
+                            )
+                            cameraImageUri = uri
+                            cameraLauncher.launch(uri)
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Camera launch fallita: $e")
+                            fileChooserCallback?.onReceiveValue(null)
+                            fileChooserCallback = null
+                        }
+                    } else {
+                        val accept = params?.acceptTypes?.firstOrNull() ?: "image/*"
+                        fileChooserLauncher.launch(accept.ifEmpty { "image/*" })
+                    }
                     return true
                 }
             }
