@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.3</title>
+    <title>Memorandum v1.0.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -767,8 +767,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.3';
-var BUILD_TIME  = '2026-05-31T13:00:00Z';
+var APP_VERSION = 'v1.0.4';
+var BUILD_TIME  = '2026-05-31T14:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1506,6 +1506,19 @@ function customConfirm(msg) {
 
 function copySql() {
     navigator.clipboard.writeText(SQL_MIGRATIONS).then(() => showToast('📋 SQL copiato!'));
+}
+
+// ============================================================
+// OCR DA ANDROID — chiamato da MainActivity dopo condivisione screenshot
+// ============================================================
+function openMemoFromOcr(text) {
+    log('OCR ricevuto da Android: ' + text.length + ' caratteri');
+    openCardModal(null);
+    setTimeout(() => {
+        document.getElementById('cardTitle').value = 'Da screenshot — ' + new Date().toLocaleDateString('it-IT');
+        document.getElementById('editorArea').innerText = text;
+        document.getElementById('cardTitle').select();
+    }, 150);
 }
 
 // ============================================================
