@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.9</title>
+    <title>Memorandum v1.0.10</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -847,8 +847,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.9';
-var BUILD_TIME  = '2026-05-31T20:00:00Z';
+var APP_VERSION = 'v1.0.10';
+var BUILD_TIME  = '2026-05-31T20:30:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1475,16 +1475,17 @@ function imgPopupAction(source) {
 }
 
 async function runOcrOnFiles(files) {
-    showToast('🔍 OCR in corso…', 8000);
+    const toastEl = showToast('🔍 OCR in corso… (può richiedere 20-30 sec)', 60000);
     for (const file of files) {
         try {
             const text = await ocrFromFile(file);
-            if (text) {
+            if (toastEl && toastEl.remove) toastEl.remove();
+            if (text && text.trim()) {
                 const area = document.getElementById('editorArea');
                 area.focus();
-                const escaped = escHtml(text).replace(/\n/g, '<br>');
+                const escaped = escHtml(text.trim()).replace(/\n/g, '<br>');
                 const existing = area.innerHTML.trim();
-                if (existing) {
+                if (existing && existing !== '<br>') {
                     area.innerHTML = existing + '<br><hr><p>' + escaped + '</p>';
                 } else {
                     area.innerHTML = '<p>' + escaped + '</p>';
@@ -1496,13 +1497,18 @@ async function runOcrOnFiles(files) {
                 const sel = window.getSelection();
                 sel.removeAllRanges();
                 sel.addRange(range);
-                showToast('✅ Testo estratto (' + text.length + ' caratteri)');
+                showToast('✅ Testo estratto (' + text.trim().length + ' caratteri)');
             } else {
                 showToast('⚠️ Nessun testo trovato nell\'immagine');
             }
         } catch(err) {
-            console.error('OCR locale fallito:', err);
-            showToast('❌ OCR non disponibile in questo browser');
+            if (toastEl && toastEl.remove) toastEl.remove();
+            console.error('OCR fallito:', err);
+            if (err.message === 'OCR timeout') {
+                showToast('⏱ OCR timeout — riprova con un\'immagine più piccola');
+            } else {
+                showToast('❌ OCR non riuscito: ' + (err.message || 'errore sconosciuto'));
+            }
         }
     }
 }
@@ -1510,33 +1516,45 @@ async function runOcrOnFiles(files) {
 // Mappa callback OCR: { callbackId → resolve }
 const _ocrCallbacks = {};
 function ocrCallback(id, text) {
-    _ocrCallbacks[id]?.(text);
-    delete _ocrCallbacks[id];
+    if (_ocrCallbacks[id]) {
+        _ocrCallbacks[id](text || '');
+        delete _ocrCallbacks[id];
+    }
 }
 
 function ocrFromFile(file) {
     return new Promise((resolve, reject) => {
+        // Timeout globale 40 secondi
+        const timer = setTimeout(() => {
+            reject(new Error('OCR timeout'));
+        }, 40000);
+        const done = (text) => { clearTimeout(timer); resolve(text); };
+        const fail = (e)    => { clearTimeout(timer); reject(e); };
+
         if (window.AndroidBridge) {
             // Usa ML Kit via AndroidBridge (più veloce e affidabile)
             const id = 'ocr_' + Date.now();
-            _ocrCallbacks[id] = resolve;
+            _ocrCallbacks[id] = done;
             const reader = new FileReader();
             reader.onload = (e) => {
-                const b64 = e.target.result.split(',')[1];
-                AndroidBridge.performOcr(b64, file.type, id);
+                try {
+                    const b64 = e.target.result.split(',')[1];
+                    AndroidBridge.performOcr(b64, file.type, id);
+                } catch(ex) { fail(ex); }
             };
-            reader.onerror = () => reject(new Error('Lettura file fallita'));
+            reader.onerror = () => fail(new Error('Lettura file fallita'));
             reader.readAsDataURL(file);
         } else {
             // Fallback desktop: Tesseract.js caricato in modo lazy
+            const runTesseract = () => doOcrTesseract(file, done, fail);
             if (typeof Tesseract === 'undefined') {
                 const s = document.createElement('script');
                 s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-                s.onload  = () => doOcrTesseract(file, resolve, reject);
-                s.onerror = () => reject(new Error('Tesseract.js non disponibile'));
+                s.onload  = runTesseract;
+                s.onerror = () => fail(new Error('Tesseract.js non disponibile'));
                 document.head.appendChild(s);
             } else {
-                doOcrTesseract(file, resolve, reject);
+                runTesseract();
             }
         }
     });
@@ -1681,6 +1699,8 @@ function showToast(msg, ms) {
     t.textContent = msg; t.style.display = 'block';
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.style.display = 'none'; }, ms || 2800);
+    t.remove = () => { clearTimeout(toastTimer); t.style.display = 'none'; };
+    return t;
 }
 
 function customConfirm(msg) {
