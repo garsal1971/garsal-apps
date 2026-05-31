@@ -271,6 +271,33 @@ class MainActivity : AppCompatActivity() {
             pendingOcrImageBase64 = ""
             pendingOcrImageMime = "image/jpeg"
         }
+
+        // OCR su immagine base64 — chiamato dal popup immagini di memo.html
+        // Quando finisce chiama ocrCallback(callbackId, testo) nel WebView
+        @android.webkit.JavascriptInterface
+        fun performOcr(base64: String, mime: String, callbackId: String) {
+            try {
+                val bytes  = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    ?: run {
+                        runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','');", null) }
+                        return
+                    }
+                TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                    .process(InputImage.fromBitmap(bitmap, 0))
+                    .addOnSuccessListener { result ->
+                        val text = result.text.trim()
+                            .replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+                        runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','$text');", null) }
+                    }
+                    .addOnFailureListener {
+                        runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','');", null) }
+                    }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "performOcr: $e")
+                runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','');", null) }
+            }
+        }
     }
 
     /**
