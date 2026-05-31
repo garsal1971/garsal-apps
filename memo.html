@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.17</title>
+    <title>Memorandum v1.0.18</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -875,8 +875,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.17';
-var BUILD_TIME  = '2026-06-01T00:00:00Z';
+var APP_VERSION = 'v1.0.18';
+var BUILD_TIME  = '2026-06-01T07:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1674,21 +1674,38 @@ async function uploadImage(cardId, file) {
     const ext   = nameParts.length > 1 ? nameParts.pop().toLowerCase() : (mime.split('/')[1] || 'jpg');
     const fname = Date.now() + '_' + Math.random().toString(36).slice(2) + '.' + ext;
     const path  = currentUserId + '/' + cardId + '/' + fname;
+    const url   = SUPABASE_URL + '/storage/v1/object/mm-images/' + path;
 
-    // Converti in ArrayBuffer + Blob per compatibilità con Android WebView
-    let uploadData;
-    try {
-        const buf = await file.arrayBuffer();
-        uploadData = new Blob([buf], { type: mime });
-    } catch(e) {
-        console.warn('uploadImage: arrayBuffer fallito, uso file diretto', e);
-        uploadData = file;
-    }
+    // Usa XHR invece di fetch — più affidabile in Android WebView per upload binari
+    const upErr = await new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + sbAccessToken);
+        xhr.setRequestHeader('Content-Type', mime);
+        xhr.setRequestHeader('x-upsert', 'false');
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(null);
+            } else {
+                let msg = xhr.statusText;
+                try { msg = JSON.parse(xhr.responseText).message || msg; } catch(e) {}
+                console.error('uploadImage XHR status:', xhr.status, xhr.responseText);
+                resolve(new Error('HTTP ' + xhr.status + ': ' + msg));
+            }
+        };
+        xhr.onerror = () => {
+            console.error('uploadImage XHR network error');
+            resolve(new Error('Errore di rete (XHR)'));
+        };
+        // Legge il file con FileReader (supportato in tutti i WebView)
+        const reader = new FileReader();
+        reader.onload = (e) => xhr.send(e.target.result);
+        reader.onerror = () => resolve(new Error('Lettura file fallita'));
+        reader.readAsArrayBuffer(file);
+    });
 
-    const { error: upErr } = await sb.storage.from('mm-images').upload(path, uploadData, { contentType: mime });
     if (upErr) {
-        console.error('uploadImage storage:', upErr);
-        showToast('❌ Upload fallito: ' + (upErr.message || JSON.stringify(upErr)), 10000);
+        showToast('❌ Upload fallito: ' + upErr.message, 10000);
         return;
     }
 
