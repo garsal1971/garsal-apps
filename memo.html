@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.18</title>
+    <title>Memorandum v1.0.19</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -684,7 +684,10 @@
                 <div class="card" style="border:1px solid var(--border);padding:1.25rem;margin-bottom:1rem;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
                         <div style="font-size:1.1rem;font-weight:700;">🪲 Log di debug</div>
-                        <button class="btn btn-secondary btn-small" onclick="document.getElementById('debugLog').textContent='';_debugLines=[];">Svuota</button>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn btn-secondary btn-small" onclick="navigator.clipboard.writeText(_debugLines.join('\n')).then(()=>showToast('📋 Log copiato!'))">Copia</button>
+                            <button class="btn btn-secondary btn-small" onclick="document.getElementById('debugLog').textContent='';_debugLines=[];">Svuota</button>
+                        </div>
                     </div>
                     <pre id="debugLog" style="font-size:0.7rem;background:#1a1a2e;color:#00ff88;padding:0.75rem;overflow:auto;max-height:300px;border-radius:6px;line-height:1.5;white-space:pre-wrap;word-break:break-all;">— nessun log —</pre>
                 </div>
@@ -875,8 +878,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.18';
-var BUILD_TIME  = '2026-06-01T07:00:00Z';
+var APP_VERSION = 'v1.0.19';
+var BUILD_TIME  = '2026-06-01T07:30:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
