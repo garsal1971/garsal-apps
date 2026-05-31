@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.4</title>
+    <title>Memorandum v1.0.5</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -767,8 +767,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.4';
-var BUILD_TIME  = '2026-05-31T14:00:00Z';
+var APP_VERSION = 'v1.0.5';
+var BUILD_TIME  = '2026-05-31T15:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1509,14 +1509,37 @@ function copySql() {
 }
 
 // ============================================================
-// OCR DA ANDROID — chiamato da MainActivity dopo condivisione screenshot
+// OCR DA ANDROID — chiamato da MainActivity dopo condivisione screenshot/immagine
 // ============================================================
 function openMemoFromOcr(text) {
     log('OCR ricevuto da Android: ' + text.length + ' caratteri');
     openCardModal(null);
     setTimeout(() => {
         document.getElementById('cardTitle').value = 'Da screenshot — ' + new Date().toLocaleDateString('it-IT');
-        document.getElementById('editorArea').innerText = text;
+        if (text) document.getElementById('editorArea').innerText = text;
+
+        // Recupera l'immagine originale dall'AndroidBridge
+        if (window.AndroidBridge) {
+            try {
+                const b64  = AndroidBridge.getPendingImageBase64();
+                const mime = AndroidBridge.getPendingImageMime() || 'image/jpeg';
+                AndroidBridge.clearPendingImage();
+
+                if (b64) {
+                    const byteStr = atob(b64);
+                    const ab = new ArrayBuffer(byteStr.length);
+                    const ia = new Uint8Array(ab);
+                    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+                    const ext  = mime.split('/')[1] || 'jpg';
+                    const file = new File([new Blob([ab], { type: mime })], 'screenshot.' + ext, { type: mime });
+                    addPendingImage(file);
+                    log('Immagine aggiunta ai pending: ' + Math.round(file.size/1024) + ' KB');
+                }
+            } catch(e) {
+                console.error('openMemoFromOcr: errore recupero immagine:', e);
+            }
+        }
+
         document.getElementById('cardTitle').select();
     }, 150);
 }
