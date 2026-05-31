@@ -1,5 +1,5 @@
 name: Build Android APK
-# v7 — genera keystore automaticamente se KEYSTORE_BASE64 non configurato
+# v8 — genera keystore automaticamente se KEYSTORE_BASE64 non configurato
 
 on:
   push:
@@ -41,12 +41,14 @@ jobs:
           fi
 
       - name: Prepara keystore
+        id: keystore
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-app/garsal.keystore
             echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"                  >> $GITHUB_ENV
             echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"            >> $GITHUB_ENV
+            echo "generated=false" >> $GITHUB_OUTPUT
             echo "✅ Keystore dai secrets — build release con firma fissa"
           else
             KS_PASS="GarsalApps2026"
@@ -59,8 +61,8 @@ jobs:
             echo "KEYSTORE_PASSWORD=$KS_PASS" >> $GITHUB_ENV
             echo "KEY_ALIAS=garsal"           >> $GITHUB_ENV
             echo "KEY_PASSWORD=$KS_PASS"      >> $GITHUB_ENV
+            echo "generated=true" >> $GITHUB_OUTPUT
 
-            # Prepara l'artifact con le istruzioni per configurare i secrets
             mkdir -p /tmp/keystore-setup
             base64 -w 0 android-app/garsal.keystore > /tmp/keystore-setup/KEYSTORE_BASE64.txt
             echo "$KS_PASS" > /tmp/keystore-setup/KEYSTORE_PASSWORD.txt
@@ -97,7 +99,7 @@ EOF
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
-      - name: Salva APK in /tmp prima del checkout
+      - name: Salva APK e versione
         run: |
           VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
           cp android-app/app/build/outputs/apk/release/app-release.apk /tmp/GarsalApps-latest.apk
@@ -110,8 +112,8 @@ EOF
           path: /tmp/GarsalApps-latest.apk
           retention-days: 30
 
-      - name: Upload keystore-setup artifact (solo primo avvio)
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+      - name: Upload keystore-setup artifact
+        if: steps.keystore.outputs.generated == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: keystore-setup
