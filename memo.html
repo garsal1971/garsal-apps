@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.0</title>
+    <title>Memorandum v1.0.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -385,6 +385,7 @@
             border-color: var(--accent); background: rgba(37,99,235,0.04);
         }
         .img-upload-zone input[type="file"] { display: none; }
+        .img-upload-zone label { cursor: pointer; display: block; }
         .img-upload-label {
             font-size: 0.9rem; color: var(--muted); cursor: pointer;
         }
@@ -706,13 +707,14 @@
             <label class="form-label">Immagini <span style="font-weight:400;text-transform:none;color:var(--muted)">(max 5 MB ciascuna)</span></label>
             <div class="images-section">
                 <div class="img-upload-zone" id="imgUploadZone"
-                     ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)"
-                     onclick="document.getElementById('imgFileInput').click()">
-                    <input type="file" id="imgFileInput" accept="image/*" multiple onchange="handleFileSelect(event)">
-                    <div class="img-upload-label">
-                        📎 <span>Clicca per caricare</span> o trascina qui<br>
-                        <small>PNG, JPG, GIF, WebP — max 5 MB</small>
-                    </div>
+                     ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                    <label for="imgFileInput">
+                        <input type="file" id="imgFileInput" accept="image/*" multiple onchange="handleFileSelect(event)">
+                        <div class="img-upload-label">
+                            📎 <span>Clicca per caricare</span> o trascina qui<br>
+                            <small>PNG, JPG, GIF, WebP — max 5 MB</small>
+                        </div>
+                    </label>
                 </div>
                 <div class="images-grid" id="imagesGrid"></div>
             </div>
@@ -752,8 +754,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-05-30T12:52:56Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-05-31T00:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
