@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.6</title>
+    <title>Memorandum v1.0.7</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -376,6 +376,61 @@
 
         /* ── IMAGE UPLOAD ── */
         .images-section { margin-top: 0.25rem; }
+
+        /* ── IMG POPUP ── */
+        .img-popup-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 3500;
+            align-items: flex-end; justify-content: center;
+        }
+        .img-popup-overlay.active { display: flex; }
+        .img-popup {
+            background: white; width: 100%; max-width: 480px;
+            padding: 1.5rem; border-radius: 12px 12px 0 0;
+            animation: slideUp 0.2s ease;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .img-popup-title {
+            font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem;
+            text-align: center; color: var(--dark);
+        }
+        .ocr-switch-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.75rem; background: var(--input-bg);
+            border: 2px solid var(--border); margin-bottom: 1rem;
+        }
+        .ocr-switch-label { font-weight: 700; font-size: 1rem; }
+        .ocr-switch-desc { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+        .toggle-switch { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; inset: 0; background: #ccc;
+            border-radius: 26px; cursor: pointer; transition: 0.3s;
+        }
+        .toggle-slider:before {
+            content: ''; position: absolute;
+            width: 20px; height: 20px; left: 3px; bottom: 3px;
+            background: white; border-radius: 50%; transition: 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--success); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+        .img-popup-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+        .img-popup-btn {
+            padding: 1rem; border: 2px solid var(--border); background: white;
+            cursor: pointer; font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1rem; font-weight: 700; text-align: center;
+            transition: all 0.15s; display: flex; flex-direction: column;
+            align-items: center; gap: 0.4rem;
+        }
+        .img-popup-btn:hover { border-color: var(--accent); background: rgba(37,99,235,0.04); }
+        .img-popup-btn .btn-icon { font-size: 1.8rem; }
+        .img-popup-cancel {
+            width: 100%; margin-top: 0.75rem; padding: 0.65rem;
+            background: none; border: none; font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1rem; color: var(--muted); cursor: pointer; font-weight: 700;
+        }
+        .img-popup-cancel:hover { color: var(--danger); }
+
         .img-upload-zone-desktop {
             display: none;
             border: 2px dashed var(--border); padding: 0.5rem 1rem;
@@ -712,15 +767,10 @@
                        style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
                        onchange="handleFileSelect(event)">
 
-                <!-- Bottoni upload -->
-                <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
-                    <button type="button" class="btn btn-accent"
-                            onclick="document.getElementById('imgFileInput').click()">
-                        🖼 Galleria
-                    </button>
-                    <button type="button" class="btn btn-secondary"
-                            onclick="document.getElementById('imgCameraInput').click()">
-                        📷 Fotocamera
+                <!-- Bottone unico -->
+                <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-accent" onclick="openImgPopup()">
+                        📎 Aggiungi immagine
                     </button>
                     <!-- Zona drag-drop solo desktop -->
                     <div class="img-upload-zone-desktop" id="imgUploadZone"
@@ -757,6 +807,36 @@
 <!-- ========================================================= -->
 <!-- IMAGE VIEWER MODAL                                        -->
 <!-- ========================================================= -->
+<!-- ── IMG POPUP ── -->
+<div class="img-popup-overlay" id="imgPopupOverlay" onclick="closeImgPopup(event)">
+    <div class="img-popup" onclick="event.stopPropagation()">
+        <div class="img-popup-title">Aggiungi immagine</div>
+
+        <div class="ocr-switch-row">
+            <div>
+                <div class="ocr-switch-label">🔍 Modalità OCR</div>
+                <div class="ocr-switch-desc">Estrae il testo dall'immagine nel contenuto</div>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="ocrModeSwitch">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="img-popup-btns">
+            <button type="button" class="img-popup-btn" onclick="imgPopupAction('gallery')">
+                <span class="btn-icon">🖼</span>
+                Galleria
+            </button>
+            <button type="button" class="img-popup-btn" onclick="imgPopupAction('camera')">
+                <span class="btn-icon">📷</span>
+                Fotocamera
+            </button>
+        </div>
+        <button type="button" class="img-popup-cancel" onclick="closeImgPopup()">Annulla</button>
+    </div>
+</div>
+
 <div class="modal" id="imgViewerModal" onclick="this.classList.remove('active')">
     <div style="max-width:90vw;max-height:90vh;display:flex;align-items:center;justify-content:center;">
         <img id="imgViewerImg" src="" style="max-width:88vw;max-height:88vh;object-fit:contain;border:3px solid white;">
@@ -767,8 +847,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.6';
-var BUILD_TIME  = '2026-05-31T16:00:00Z';
+var APP_VERSION = 'v1.0.7';
+var BUILD_TIME  = '2026-05-31T17:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1363,6 +1443,88 @@ function selectColor(color, swatchEl, fromCustom) {
 // ============================================================
 // IMAGE UPLOAD
 // ============================================================
+// ── IMG POPUP ──────────────────────────────────────────────
+function openImgPopup() {
+    document.getElementById('imgPopupOverlay').classList.add('active');
+}
+function closeImgPopup(e) {
+    if (e && e.target !== document.getElementById('imgPopupOverlay')) return;
+    document.getElementById('imgPopupOverlay').classList.remove('active');
+}
+function imgPopupAction(source) {
+    const ocrMode = document.getElementById('ocrModeSwitch').checked;
+    document.getElementById('imgPopupOverlay').classList.remove('active');
+
+    // Setta l'input corretto e ascolta il change una sola volta
+    const inputId = source === 'camera' ? 'imgCameraInput' : 'imgFileInput';
+    const input   = document.getElementById(inputId);
+
+    const handler = (e) => {
+        input.removeEventListener('change', handler);
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        if (ocrMode) {
+            runOcrOnFiles(files);
+        } else {
+            files.forEach(addPendingImage);
+        }
+        input.value = '';
+    };
+    input.addEventListener('change', handler);
+    input.click();
+}
+
+async function runOcrOnFiles(files) {
+    showToast('🔍 OCR in corso…', 8000);
+    for (const file of files) {
+        try {
+            const text = await ocrFromFile(file);
+            if (text) {
+                const area = document.getElementById('editorArea');
+                // Appende il testo estratto con separatore se c'è già contenuto
+                if (area.innerText.trim()) {
+                    document.execCommand('insertHTML', false, '<br><hr><p>' + escHtml(text) + '</p>');
+                } else {
+                    area.innerText = text;
+                }
+                showToast('✅ Testo estratto (' + text.length + ' caratteri)');
+            } else {
+                showToast('⚠️ Nessun testo trovato nell\'immagine');
+            }
+        } catch(err) {
+            console.error('OCR locale fallito:', err);
+            showToast('❌ OCR non disponibile in questo browser');
+        }
+    }
+}
+
+function ocrFromFile(file) {
+    // Usa Tesseract.js se disponibile (caricato lazy), altrimenti errore
+    return new Promise((resolve, reject) => {
+        if (typeof Tesseract === 'undefined') {
+            // Carica Tesseract.js in modo lazy
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            s.onload  = () => doOcr(file, resolve, reject);
+            s.onerror = () => reject(new Error('Tesseract.js non caricato'));
+            document.head.appendChild(s);
+        } else {
+            doOcr(file, resolve, reject);
+        }
+    });
+}
+
+async function doOcr(file, resolve, reject) {
+    try {
+        const worker = await Tesseract.createWorker('ita+eng');
+        const url    = URL.createObjectURL(file);
+        const { data } = await worker.recognize(url);
+        URL.revokeObjectURL(url);
+        await worker.terminate();
+        resolve(data.text.trim());
+    } catch(e) { reject(e); }
+}
+
 function handleDragOver(e)  { e.preventDefault(); document.getElementById('imgUploadZone').classList.add('drag-over'); }
 function handleDragLeave(e) { document.getElementById('imgUploadZone').classList.remove('drag-over'); }
 function handleDrop(e) {
