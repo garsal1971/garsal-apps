@@ -1,5 +1,5 @@
 name: Build Android APK
-# v4 — AGP 8.9.1 / Kotlin 2.0.21 / Gradle 8.11.1 / compileSdk 36
+# v5 — firma con keystore fisso da GitHub Secrets (aggiornamento senza disinstallare)
 
 on:
   push:
@@ -31,7 +31,6 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          # Trova sdkmanager dinamicamente (il path può variare tra versioni del runner)
           SDKMANAGER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools" \
             -name "sdkmanager" -type f 2>/dev/null | sort | tail -1)
           if [ -z "$SDKMANAGER" ]; then
@@ -39,23 +38,45 @@ jobs:
           else
             echo "Usando sdkmanager: $SDKMANAGER"
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-            # platforms;android-34 e build-tools;34.0.0 sono pre-installati su ubuntu-latest
-            # L'installazione esplicita causa errore se già presenti; usiamo || true
             "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" 2>&1 || true
           fi
 
       - name: Make gradlew executable
         run: chmod +x android-app/gradlew
 
-      - name: Build debug APK
+      - name: Decodifica keystore da secret
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-app/garsal.keystore
+            echo "KEYSTORE_PRESENTE=true" >> $GITHUB_ENV
+          else
+            echo "⚠️  KEYSTORE_BASE64 non configurato — uso debug build"
+            echo "KEYSTORE_PRESENTE=false" >> $GITHUB_ENV
+          fi
+
+      - name: Build APK (release firmato o debug)
         working-directory: android-app
-        run: ./gradlew assembleDebug --no-daemon
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/android-app/garsal.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ "$KEYSTORE_PRESENTE" = "true" ]; then
+            echo "✅ Build release firmata"
+            ./gradlew assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk /tmp/GarsalApps-latest.apk
+          else
+            echo "⚠️  Build debug (firma temporanea)"
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk /tmp/GarsalApps-latest.apk
+          fi
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GarsalApps-debug
-          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          name: GarsalApps
+          path: /tmp/GarsalApps-latest.apk
           retention-days: 30
 
       - name: Pubblica APK su master (scaricabile via Netlify)
@@ -63,12 +84,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Leggi versione e salva APK in /tmp PRIMA di switchare branch
-          # (git checkout master fallisce se releases/ esiste come file untracked)
           VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk /tmp/GarsalApps-latest.apk
 
-          # Switch su master aggiornato
           git fetch origin master
           git checkout master
           git reset --hard origin/master
