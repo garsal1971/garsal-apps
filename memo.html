@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.19</title>
+    <title>Memorandum v1.0.20</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -157,17 +157,6 @@
         .search-clear:hover { color: var(--danger); }
 
         /* ── STATS STRIP ── */
-        .stats-strip {
-            display: grid; grid-template-columns: repeat(4, 1fr);
-            gap: 0.75rem; margin-bottom: 1.5rem;
-        }
-        .stat-box {
-            padding: 0.75rem; border: 1px solid var(--border); text-align: center;
-        }
-        .stat-val {
-            font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700;
-        }
-        .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
 
         /* ── CARDS GRID ── */
         .cards-grid {
@@ -533,7 +522,6 @@
             }
             .sidebar.open { display: block; }
             .cards-grid { grid-template-columns: 1fr; }
-            .stats-strip { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -600,25 +588,6 @@
             <div class="page-header">
                 <div class="page-title">Schede</div>
                 <button class="btn btn-primary" onclick="openCardModal(null)">+ Nuova</button>
-            </div>
-
-            <div class="stats-strip">
-                <div class="stat-box">
-                    <div class="stat-val" id="statTotal">—</div>
-                    <div class="stat-label">Totale</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-val" id="statPinned">—</div>
-                    <div class="stat-label">In evidenza</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-val" id="statImages">—</div>
-                    <div class="stat-label">Immagini</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-val" id="statCats">—</div>
-                    <div class="stat-label">Categorie usate</div>
-                </div>
             </div>
 
             <div class="search-bar">
@@ -878,8 +847,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.19';
-var BUILD_TIME  = '2026-06-01T07:30:00Z';
+var APP_VERSION = 'v1.0.20';
+var BUILD_TIME  = '2026-06-01T08:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1193,13 +1162,7 @@ function setCatFilter(catId) {
     });
 }
 
-function updateStats() {
-    document.getElementById('statTotal').textContent   = cards.length;
-    document.getElementById('statPinned').textContent  = cards.filter(c=>c.pinned).length;
-    document.getElementById('statImages').textContent  = cards.reduce((s,c)=>s+c.imagesCount,0);
-    const usedCats = new Set(cards.flatMap(c=>c.categoryIds));
-    document.getElementById('statCats').textContent    = usedCats.size;
-}
+function updateStats() {}
 
 // ============================================================
 // SEARCH
