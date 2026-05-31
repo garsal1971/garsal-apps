@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.10</title>
+    <title>Memorandum v1.0.11</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -847,8 +847,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.10';
-var BUILD_TIME  = '2026-05-31T20:30:00Z';
+var APP_VERSION = 'v1.0.11';
+var BUILD_TIME  = '2026-05-31T20:45:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1497,6 +1497,7 @@ async function runOcrOnFiles(files) {
                 const sel = window.getSelection();
                 sel.removeAllRanges();
                 sel.addRange(range);
+                area.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 showToast('✅ Testo estratto (' + text.trim().length + ' caratteri)');
             } else {
                 showToast('⚠️ Nessun testo trovato nell\'immagine');
