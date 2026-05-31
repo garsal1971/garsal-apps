@@ -72,7 +72,9 @@ class MainActivity : AppCompatActivity() {
     private var renphoLaunched = false
 
     // OCR da condivisione screenshot
-    private var pendingOcrText: String? = null  // testo estratto, in attesa che memo.html carichi
+    private var pendingOcrText: String? = null
+    private var pendingOcrImageBase64: String = ""
+    private var pendingOcrImageMime: String = "image/jpeg"
     private val MEMO_URL = "https://garsal.netlify.app/memo.html"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -144,8 +146,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Riceve un'immagine condivisa (es. screenshot WhatsApp), esegue OCR con ML Kit
-     * e apre Memorandum con il testo estratto pre-compilato nel campo contenuto.
+     * Riceve un'immagine condivisa (es. screenshot WhatsApp), esegue OCR con ML Kit,
+     * salva l'immagine come base64 e apre Memorandum con testo e immagine pre-compilati.
      */
     private fun handleSharedImage(intent: Intent) {
         @Suppress("DEPRECATION")
@@ -154,12 +156,27 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        Log.d("MainActivity", "OCR avviato su: $imageUri")
+        Log.d("MainActivity", "Condivisione immagine ricevuta: $imageUri")
+
+        // Legge i byte dell'immagine e li salva come base64 per il JS
+        try {
+            val mime = contentResolver.getType(imageUri) ?: "image/jpeg"
+            val bytes = contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+            if (bytes != null) {
+                pendingOcrImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                pendingOcrImageMime = mime
+                Log.d("MainActivity", "Immagine letta: ${bytes.size} byte, mime=$mime")
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Lettura immagine fallita: $e")
+        }
 
         val image = try {
             InputImage.fromFilePath(this, imageUri)
         } catch (e: Exception) {
             Log.e("MainActivity", "InputImage.fromFilePath fallito: $e")
+            pendingOcrText = ""
+            runOnUiThread { webView.loadUrl(MEMO_URL) }
             return
         }
 
@@ -168,7 +185,7 @@ class MainActivity : AppCompatActivity() {
             .addOnSuccessListener { result ->
                 val text = result.text.trim()
                 Log.d("MainActivity", "OCR completato: ${text.length} caratteri")
-                pendingOcrText = text.ifEmpty { "—" }
+                pendingOcrText = text
                 runOnUiThread { webView.loadUrl(MEMO_URL) }
             }
             .addOnFailureListener { e ->
@@ -216,6 +233,20 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Log.w("MainActivity", "openApp: pacchetto non trovato — $packageName")
             }
+        }
+
+        // Restituisce l'immagine condivisa come base64 — chiamato da memo.html dopo openMemoFromOcr()
+        @android.webkit.JavascriptInterface
+        fun getPendingImageBase64(): String = pendingOcrImageBase64
+
+        @android.webkit.JavascriptInterface
+        fun getPendingImageMime(): String = pendingOcrImageMime
+
+        // JS chiama questo dopo aver consumato l'immagine
+        @android.webkit.JavascriptInterface
+        fun clearPendingImage() {
+            pendingOcrImageBase64 = ""
+            pendingOcrImageMime = "image/jpeg"
         }
     }
 
