@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingOcrText: String? = null
     private var pendingOcrImageBase64: String = ""
     private var pendingOcrImageMime: String = "image/jpeg"
+    private var openMemoAfterAuth: Boolean = false  // apri memo.html invece del launcher dopo biometrica
     private val MEMO_URL = "https://garsal.netlify.app/memo.html"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,6 +105,7 @@ class MainActivity : AppCompatActivity() {
 
         // Condivisione screenshot → OCR → memo
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
+            openMemoAfterAuth = true
             handleSharedImage(intent)
         }
 
@@ -136,6 +138,7 @@ class MainActivity : AppCompatActivity() {
 
         // Condivisione screenshot con app già aperta
         if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
+            openMemoAfterAuth = true
             handleSharedImage(intent)
             return
         }
@@ -186,11 +189,13 @@ class MainActivity : AppCompatActivity() {
                 val text = result.text.trim()
                 Log.d("MainActivity", "OCR completato: ${text.length} caratteri")
                 pendingOcrText = text
+                openMemoAfterAuth = false
                 runOnUiThread { webView.loadUrl(MEMO_URL) }
             }
             .addOnFailureListener { e ->
                 Log.e("MainActivity", "OCR fallito: $e")
                 pendingOcrText = ""
+                openMemoAfterAuth = false
                 runOnUiThread { webView.loadUrl(MEMO_URL) }
             }
     }
@@ -469,7 +474,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun showApp() {
         webView.visibility = View.VISIBLE
-        webView.loadUrl(APP_URL)
+        if (openMemoAfterAuth) {
+            // Non resettare il flag qui — handleSharedImage chiamerà loadUrl(MEMO_URL)
+            // quando l'OCR sarà pronto. Se l'OCR è già terminato, carichiamo subito.
+            if (pendingOcrText != null) {
+                openMemoAfterAuth = false
+                webView.loadUrl(MEMO_URL)
+            }
+            // altrimenti il loadUrl(MEMO_URL) arriva dal callback OCR
+        } else {
+            webView.loadUrl(APP_URL)
+        }
     }
 
     private fun scheduleNotifications() {
