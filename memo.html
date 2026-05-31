@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.11</title>
+    <title>Memorandum v1.0.12</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -847,8 +847,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.11';
-var BUILD_TIME  = '2026-05-31T20:45:00Z';
+var APP_VERSION = 'v1.0.12';
+var BUILD_TIME  = '2026-05-31T21:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1453,15 +1453,16 @@ function closeImgPopup(e) {
 }
 function imgPopupAction(source) {
     const ocrMode = document.getElementById('ocrModeSwitch').checked;
+    console.log('[OCR] imgPopupAction source=' + source + ' ocrMode=' + ocrMode);
     document.getElementById('imgPopupOverlay').classList.remove('active');
 
-    // Setta l'input corretto e ascolta il change una sola volta
     const inputId = source === 'camera' ? 'imgCameraInput' : 'imgFileInput';
     const input   = document.getElementById(inputId);
 
     const handler = (e) => {
         input.removeEventListener('change', handler);
         const files = Array.from(e.target.files || []);
+        console.log('[OCR] change event files=' + files.length + ' ocrMode=' + ocrMode);
         if (!files.length) return;
         if (ocrMode) {
             runOcrOnFiles(files);
@@ -1547,12 +1548,17 @@ function ocrFromFile(file) {
             reader.readAsDataURL(file);
         } else {
             // Fallback desktop: Tesseract.js caricato in modo lazy
-            const runTesseract = () => doOcrTesseract(file, done, fail);
+            console.log('[OCR] percorso browser/Tesseract');
+            const runTesseract = () => {
+                console.log('[OCR] Tesseract caricato, avvio doOcrTesseract');
+                doOcrTesseract(file, done, fail);
+            };
             if (typeof Tesseract === 'undefined') {
+                console.log('[OCR] caricamento Tesseract.js dal CDN...');
                 const s = document.createElement('script');
                 s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
                 s.onload  = runTesseract;
-                s.onerror = () => fail(new Error('Tesseract.js non disponibile'));
+                s.onerror = () => { console.error('[OCR] Tesseract CDN fallito'); fail(new Error('Tesseract.js non disponibile')); };
                 document.head.appendChild(s);
             } else {
                 runTesseract();
@@ -1563,13 +1569,19 @@ function ocrFromFile(file) {
 
 async function doOcrTesseract(file, resolve, reject) {
     try {
+        console.log('[OCR] createWorker...');
         const worker = await Tesseract.createWorker('eng');
+        console.log('[OCR] worker pronto, recognize...');
         const url = URL.createObjectURL(file);
         const { data } = await worker.recognize(url);
         URL.revokeObjectURL(url);
         await worker.terminate();
+        console.log('[OCR] testo estratto:', data.text.length, 'caratteri');
         resolve(data.text.trim());
-    } catch(e) { reject(e); }
+    } catch(e) {
+        console.error('[OCR] doOcrTesseract errore:', e);
+        reject(e);
+    }
 }
 
 function handleDragOver(e)  { e.preventDefault(); document.getElementById('imgUploadZone').classList.add('drag-over'); }
