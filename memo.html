@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.2</title>
+    <title>Memorandum v1.0.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -376,27 +376,18 @@
 
         /* ── IMAGE UPLOAD ── */
         .images-section { margin-top: 0.25rem; }
-        .img-upload-zone {
-            border: 2px dashed var(--border); padding: 1.25rem;
-            text-align: center; cursor: pointer; transition: all 0.2s;
-            background: var(--input-bg);
+        .img-upload-zone-desktop {
+            display: none;
+            border: 2px dashed var(--border); padding: 0.5rem 1rem;
+            text-align: center; cursor: default; transition: all 0.2s;
+            background: var(--input-bg); align-items: center; justify-content: center;
         }
-        .img-upload-zone:hover, .img-upload-zone.drag-over {
-            border-color: var(--accent); background: rgba(37,99,235,0.04);
+        .img-upload-zone-desktop.drag-over {
+            border-color: var(--accent); background: rgba(37,99,235,0.08);
         }
-        .img-upload-zone label {
-            cursor: pointer; display: block; position: relative;
+        @media (pointer: fine) {
+            .img-upload-zone-desktop { display: flex; }
         }
-        .img-upload-zone input[type="file"] {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%;
-            opacity: 0; cursor: pointer; z-index: 1;
-        }
-        .img-upload-zone .img-upload-label { position: relative; z-index: 0; }
-        .img-upload-label {
-            font-size: 0.9rem; color: var(--muted); cursor: pointer;
-        }
-        .img-upload-label span { color: var(--accent); font-weight: 700; }
 
         .images-grid {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -713,16 +704,31 @@
         <div class="form-group">
             <label class="form-label">Immagini <span style="font-weight:400;text-transform:none;color:var(--muted)">(max 5 MB ciascuna)</span></label>
             <div class="images-section">
-                <div class="img-upload-zone" id="imgUploadZone"
-                     ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
-                    <label for="imgFileInput">
-                        <input type="file" id="imgFileInput" accept="image/*" multiple onchange="handleFileSelect(event)">
-                        <div class="img-upload-label">
-                            📎 <span>Clicca per caricare</span> o trascina qui<br>
-                            <small>PNG, JPG, GIF, WebP — max 5 MB</small>
-                        </div>
-                    </label>
+                <!-- Input nascosti -->
+                <input type="file" id="imgFileInput" accept="image/*" multiple
+                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
+                       onchange="handleFileSelect(event)">
+                <input type="file" id="imgCameraInput" accept="image/*" capture="environment"
+                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
+                       onchange="handleFileSelect(event)">
+
+                <!-- Bottoni upload -->
+                <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-accent"
+                            onclick="document.getElementById('imgFileInput').click()">
+                        🖼 Galleria
+                    </button>
+                    <button type="button" class="btn btn-secondary"
+                            onclick="document.getElementById('imgCameraInput').click()">
+                        📷 Fotocamera
+                    </button>
+                    <!-- Zona drag-drop solo desktop -->
+                    <div class="img-upload-zone-desktop" id="imgUploadZone"
+                         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                        <span style="font-size:0.85rem;color:var(--muted);">o trascina qui</span>
+                    </div>
                 </div>
+
                 <div class="images-grid" id="imagesGrid"></div>
             </div>
         </div>
@@ -761,8 +767,8 @@
 // ============================================================
 // VERSIONE
 // ============================================================
-var APP_VERSION = 'v1.0.2';
-var BUILD_TIME  = '2026-05-31T12:00:00Z';
+var APP_VERSION = 'v1.0.3';
+var BUILD_TIME  = '2026-05-31T13:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
