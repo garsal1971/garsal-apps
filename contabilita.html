@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conto Cointestato</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f6fb;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-primary:   #4f46e5;
+      --c-primary-h: #4338ca;
+      --c-teresa:    #dc2626;
+      --c-salvatore: #16a34a;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; }
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .pos    { color: var(--c-success); }
+    .neg    { color: var(--c-danger); }
+    .text-muted { color: var(--c-muted); }
+    .text-sm    { font-size: .82rem; }
+    .text-lg    { font-size: 1.05rem; }
+    .fw-600  { font-weight: 600; }
+    .fw-700  { font-weight: 700; }
+    .text-right  { text-align: right; }
+    .flex-1  { flex: 1; }
+    .hstack  { display: flex; align-items: center; }
+    .gap-4   { gap: 4px; }
+    .gap-8   { gap: 8px; }
+    .gap-12  { gap: 12px; }
+    .mt-2    { margin-top: 2px; }
+    .mt-8    { margin-top: 8px; }
+    .mt-12   { margin-top: 12px; }
+    .mb-16   { margin-bottom: 16px; }
+    #loading-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--c-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #screen-app { display: none; flex-direction: column; min-height: 100dvh; }
+    .topbar { position: sticky; top: 0; z-index: 100; background: var(--c-surface); border-bottom: 1px solid var(--c-border); padding: 0 22px; display: flex; align-items: center; gap: 14px; height: 56px; }
+    .topbar-brand { font-weight: 700; font-size: 1.02rem; color: var(--c-primary); letter-spacing: -.02em; display: flex; align-items: center; gap: 8px; }
+    .topbar-brand .logo-dot { width: 27px; height: 27px; background: var(--c-primary); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .topbar-spacer { flex: 1; }
+    .topbar-user { display: flex; align-items: center; gap: 10px; font-size: .86rem; color: var(--c-muted); }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--c-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 600; overflow: hidden; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .btn-logout { background: none; border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 4px 11px; font-family: var(--font-sans); font-size: .8rem; color: var(--c-muted); cursor: pointer; transition: border-color .15s, color .15s; }
+    .btn-logout:hover { border-color: var(--c-danger); color: var(--c-danger); }
+    .app-layout { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 200px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #eef2ff; color: var(--c-primary); }
+    .nav-label { font-size: .68rem; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .08em; padding: 14px 11px 6px; }
+    .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .page-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+    .page-sub { color: var(--c-muted); font-size: .84rem; margin-top: 2px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; font-weight: 500; cursor: pointer; border: none; transition: background .15s, color .15s, border-color .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: var(--c-surface); color: var(--c-text); border: 1.5px solid var(--c-border); }
+    .btn-outline:hover { border-color: #aab0bc; background: #f8f9fb; }
+    .btn-danger { background: #fee2e2; color: var(--c-danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 6px 12px; font-size: .82rem; }
+    .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--c-muted); font-size: .9rem; line-height: 1; transition: background .12s, color .12s; }
+    .btn-icon:hover { background: var(--c-bg); color: var(--c-text); }
+    .btn-icon-danger:hover { background: #fee2e2; color: var(--c-danger); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; text-align: right; }
+    .kpi-value.teresa { color: var(--c-teresa); }
+    .kpi-value.salvatore { color: var(--c-salvatore); }
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+    .card-title { font-size: .96rem; font-weight: 600; margin-bottom: 14px; }
+    .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+    .card-header-row .card-title { margin-bottom: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
+    .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); white-space: nowrap; }
+    .table tbody tr:hover td { background: #fafbfd; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-teresa  { background: #fee2e2; color: #991b1b; }
+    .badge-salvatore { background: #dcfce7; color: #166534; }
+    .badge-bonifico { background: #eef2ff; color: #3730a3; }
+    .badge-altro { background: #fef3c7; color: #92400e; }
+    .badge-mensa { background: #f0f9ff; color: #0369a1; }
+    .badge-impianto { background: #f3e8ff; color: #6b21a8; }
+    .badge-importato { background: #e0f2fe; color: #075985; }
+    .badge-manuale { background: #f1f5f9; color: #475569; }
+    .chart-wrap { height: 200px; display: flex; align-items: center; justify-content: center; }
+    .chart-wrap canvas { max-height: 200px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: .82rem; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+    .form-input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .9rem; color: var(--c-text); outline: none; transition: border-color .15s; background: var(--c-surface); }
+    .form-input:focus { border-color: var(--c-primary); }
+    .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+    #modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 540px; max-height: 90dvh; overflow-y: auto; }
+    #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--c-border); }
+    #modal-title { font-size: 1rem; font-weight: 700; }
+    #modal-close { background: none; border: none; cursor: pointer; color: var(--c-muted); font-size: 1.2rem; padding: 2px 6px; border-radius: var(--radius-sm); transition: background .12s; }
+    #modal-close:hover { background: var(--c-bg); }
+    #modal-body { padding: 18px 22px 22px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--c-muted); }
+    .empty-icon { font-size: 2.4rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .88rem; line-height: 1.6; }
+    .summary-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--c-border); font-size: .9rem; }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-total { font-weight: 700; font-size: 1rem; border-top: 2px solid var(--c-text); margin-top: 4px; padding-top: 8px; }
+    .year-select { padding: 7px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; color: var(--c-text); outline: none; background: var(--c-surface); cursor: pointer; }
+    .year-select:focus { border-color: var(--c-primary); }
+    .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
+    .btn-hamburger { display: none; background: none; border: none; padding: 6px 8px; cursor: pointer; color: var(--c-text); border-radius: var(--radius-sm); line-height: 0; }
+    .btn-hamburger:hover { background: var(--c-bg); }
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; display: flex; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+      .app-main { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+      .kpi-card { padding: 10px 12px; }
+      .kpi-label { font-size: .62rem; margin-bottom: 3px; }
+      .kpi-value { font-size: 1rem; }
+      .form-row-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <span class="text-muted text-sm">Caricamento…</span>
+</div>
+
+<div id="screen-app">
+  <header class="topbar">
+    <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="topbar-brand">
+      <div class="logo-dot">💰</div>Conto Cointestato
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-user">
+      <div class="avatar" id="user-avatar"></div>
+      <span id="user-name"></span>
+      <button class="btn-logout" id="btn-logout">Esci</button>
+    </div>
+  </header>
+  <div id="mobile-nav-overlay"></div>
+  <div class="app-layout">
+    <nav class="sidebar" id="sidebar">
+      <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
+      <div class="nav-label">Movimenti</div>
+      <button class="nav-item" data-action="nav" data-view="bonifici">💳 Bonifici</button>
+      <button class="nav-item" data-action="nav" data-view="spese">🧾 Altre Spese</button>
+      <button class="nav-item" data-action="nav" data-view="revolut">📥 Import Revolut</button>
+      <div class="nav-label">Report</div>
+      <button class="nav-item" data-action="nav" data-view="report">📈 Report Annuali</button>
+      <div class="nav-label">Gestione</div>
+      <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
+    </nav>
+    <main class="app-main">
+      <div id="view-dashboard" class="view active"></div>
+      <div id="view-bonifici" class="view"></div>
+      <div id="view-spese" class="view"></div>
+      <div id="view-report" class="view"></div>
+      <div id="view-revolut" class="view"></div>
+      <div id="view-impostazioni" class="view"></div>
+    </main>
+  </div>
+  <footer class="version-bar">
+    Conto Cointestato · <span class="mono">v1.0</span>
+    <span class="topbar-spacer"></span>
+    <span id="footer-info"></span>
+  </footer>
+</div>
+
+<div id="modal-overlay" class="hidden">
+  <div id="modal-card">
+    <div id="modal-header">
+      <h3 id="modal-title"></h3>
+      <button id="modal-close" data-action="close-modal">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+const S = { session: null, view: 'dashboard', transactions: [], charts: {}, selectedYear: null };
+
+const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+function sbH(extra = {}) {
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json', ...extra };
+}
+async function sbQ(table, params = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbIns(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return (await r.json())[0];
+}
+async function sbUpd(table, filter, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbDel(table, filter) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+}
+
+const loadSession = () => { try { return JSON.parse(localStorage.getItem('garsal_session')); } catch { return null; } };
+async function refreshSession(session) {
+  if (!session?.refresh_token) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    localStorage.setItem('garsal_session', JSON.stringify(ns));
+    return ns;
+  } catch { return null; }
+}
+async function logout() {
+  location.href = '/';
+}
+
+const fmtEUR = n => { if (n == null) return '—'; const v = Math.round(n); return (v < 0 ? '-' : '') + Math.abs(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €'; };
+const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+
+const $ = id => document.getElementById(id);
+const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+
+const badgePersona = p => p === 'TERESA' ? '<span class="badge badge-teresa">Teresa</span>' : '<span class="badge badge-salvatore">Salvatore</span>';
+const badgeTipo = t => t === 'BONIFICO' ? '<span class="badge badge-bonifico">Bonifico</span>' : t === 'MENSA' ? '<span class="badge badge-mensa">Mensa</span>' : '<span class="badge badge-altro">Altro</span>';
+const badgeProvenienza = p => p === 'IMPIANTO' ? '<span class="badge badge-impianto">Impianto</span>' : p === 'IMPORTATO' ? '<span class="badge badge-importato">Importato</span>' : '<span class="badge badge-manuale">Manuale</span>';
+const kpi = (label, value, cls = 'neutral') => `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value mono ${cls}">${value}</div></div>`;
+
+async function loadData() {
+  S.transactions = await sbQ('acct_transactions', 'select=*&order=data.desc,created_at.desc');
+}
+
+function calcolaQuote(anno) {
+  const txs = S.transactions.filter(t => t.anno === anno);
+  const bonTeresa = txs.filter(t => t.tipo === 'BONIFICO' && t.persona === 'TERESA').reduce((s, t) => s + +t.importo, 0);
+  const bonSalva = txs.filter(t => t.tipo === 'BONIFICO' && t.persona === 'SALVATORE').reduce((s, t) => s + +t.importo, 0);
+  const altTeresa = txs.filter(t => t.tipo === 'ALTRO' && t.persona === 'TERESA').reduce((s, t) => s + +t.importo, 0);
+  const altSalva = txs.filter(t => t.tipo === 'ALTRO' && t.persona === 'SALVATORE').reduce((s, t) => s + +t.importo, 0);
+  const mensa = txs.filter(t => t.tipo === 'MENSA').reduce((s, t) => s + +t.importo, 0);
+  const versatoTeresa = bonTeresa + altTeresa;
+  const versatoSalva = bonSalva + altSalva + mensa;
+  const totaleSpeso = versatoTeresa + versatoSalva;
+  const quotaTeresa = anno <= 2023 ? totaleSpeso * 2 / 5 : totaleSpeso / 3;
+  const quotaSalva = totaleSpeso - quotaTeresa;
+  const diffTeresa = versatoTeresa - quotaTeresa;
+  const diffSalva = versatoSalva - quotaSalva;
+  return { anno, bonTeresa, bonSalva, altTeresa, altSalva, mensa, versatoTeresa, versatoSalva, totaleSpeso, quotaTeresa, quotaSalva, diffTeresa, diffSalva };
+}
+
+function calcolaTotaliGenerali() {
+  const anni = getAnni();
+  const initTot = () => ({ bonTeresa:0, bonSalva:0, altTeresa:0, altSalva:0, mensa:0, versatoTeresa:0, versatoSalva:0, totaleSpeso:0, quotaTeresa:0, quotaSalva:0, diffTeresa:0, diffSalva:0 });
+  const p1 = initTot(); // Periodo <= 2023
+  const p2 = initTot(); // Periodo >= 2024
+  const tot = initTot(); // Gran totale
+  
+  for (const a of anni) {
+    const q = calcolaQuote(a);
+    const target = a <= 2023 ? p1 : p2;
+    
+    [target, tot].forEach(t => {
+      t.bonTeresa += q.bonTeresa;
+      t.bonSalva += q.bonSalva;
+      t.altTeresa += q.altTeresa;
+      t.altSalva += q.altSalva;
+      t.mensa += q.mensa;
+      t.versatoTeresa += q.versatoTeresa;
+      t.versatoSalva += q.versatoSalva;
+      t.totaleSpeso += q.totaleSpeso;
+      t.quotaTeresa += q.quotaTeresa;
+      t.quotaSalva += q.quotaSalva;
+      t.diffTeresa += q.diffTeresa;
+      t.diffSalva += q.diffSalva;
+    });
+  }
+  return { p1, p2, tot };
+}
+
+function getAnni() {
+  return [...new Set(S.transactions.map(t => t.anno))].sort((a, b) => b - a);
+}
+
+function drawChart(id, labels, data, colors) {
+  if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
+  const canvas = document.getElementById(id);
+  if (!canvas || !data.some(v => v > 0)) return;
+  const PALETTE = ['#4f46e5','#16a34a','#d97706','#dc2626','#0891b2'];
+  S.charts[id] = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: (colors || PALETTE).slice(0, data.length), borderWidth: 2, borderColor: '#fff' }] },
+    options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 12 } } }, animation: { duration: 400 } },
+  });
+}
+
+// ══════════ RENDERERS ══════════
+
+function renderDashboard() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0] || new Date().getFullYear();
+  const annoSel = S.selectedYear;
+  const q = calcolaQuote(annoSel);
+  const tot = calcolaTotaliGenerali();
+  
+  setHtml('view-dashboard', `
+    <div class="view-header">
+      <h2 class="page-title">Dashboard</h2>
+      <div class="hstack gap-8">
+        <button class="btn btn-primary btn-sm" data-action="new-transaction">+ Movimento</button>
+      </div>
+    </div>
+
+    <!-- ── TOTALI GENERALI ── -->
+    <div class="kpi-grid">
+      ${kpi('Versato Teresa (TOT)', fmtEUR(tot.tot.versatoTeresa), 'teresa')}
+      ${kpi('Versato Salva (TOT)',  fmtEUR(tot.tot.versatoSalva), 'salvatore')}
+      ${kpi('Totale Speso (TOT)',   fmtEUR(tot.tot.totaleSpeso))}
+      ${kpi(tot.tot.diffTeresa >= 0 ? 'Salvatore Debito' : 'Teresa Debito', fmtEUR(Math.abs(tot.tot.diffTeresa)), tot.tot.diffTeresa >= 0 ? 'pos' : 'neg')}
+    </div>
+
+    <div class="card mb-16">
+      <div class="card-title">Riepilogo Storico per Periodi</div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Periodo</th>
+              <th class="text-right">Versato Teresa</th>
+              <th class="text-right">Versato Salva</th>
+              <th class="text-right">Totale Speso</th>
+              <th class="text-right">Quota Teresa</th>
+              <th class="text-right">Quota Salva</th>
+              <th class="text-right">Saldo Teresa</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Fino al 2023</strong> <span class="text-muted text-sm">(40/60)</span></td>
+              <td class="text-right mono">${fmtEUR(tot.p1.versatoTeresa)}</td>
+              <td class="text-right mono">${fmtEUR(tot.p1.versatoSalva)}</td>
+              <td class="text-right mono">${fmtEUR(tot.p1.totaleSpeso)}</td>
+              <td class="text-right mono teresa">${fmtEUR(tot.p1.quotaTeresa)}</td>
+              <td class="text-right mono salvatore">${fmtEUR(tot.p1.quotaSalva)}</td>
+              <td class="text-right mono ${tot.p1.diffTeresa >= 0 ? 'pos' : 'neg'}">${tot.p1.diffTeresa >= 0 ? '+' : ''}${fmtEUR(tot.p1.diffTeresa)}</td>
+            </tr>
+            <tr>
+              <td><strong>Dal 2024</strong> <span class="text-muted text-sm">(1/3-2/3)</span></td>
+              <td class="text-right mono">${fmtEUR(tot.p2.versatoTeresa)}</td>
+              <td class="text-right mono">${fmtEUR(tot.p2.versatoSalva)}</td>
+              <td class="text-right mono">${fmtEUR(tot.p2.totaleSpeso)}</td>
+              <td class="text-right mono teresa">${fmtEUR(tot.p2.quotaTeresa)}</td>
+              <td class="text-right mono salvatore">${fmtEUR(tot.p2.quotaSalva)}</td>
+              <td class="text-right mono ${tot.p2.diffTeresa >= 0 ? 'pos' : 'neg'}">${tot.p2.diffTeresa >= 0 ? '+' : ''}${fmtEUR(tot.p2.diffTeresa)}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>GRAN TOTALE</th>
+              <th class="text-right mono">${fmtEUR(tot.tot.versatoTeresa)}</th>
+              <th class="text-right mono">${fmtEUR(tot.tot.versatoSalva)}</th>
+              <th class="text-right mono">${fmtEUR(tot.tot.totaleSpeso)}</th>
+              <th class="text-right mono teresa">${fmtEUR(tot.tot.quotaTeresa)}</th>
+              <th class="text-right mono salvatore">${fmtEUR(tot.tot.quotaSalva)}</th>
+              <th class="text-right mono ${tot.tot.diffTeresa >= 0 ? 'pos' : 'neg'}">${tot.tot.diffTeresa >= 0 ? '+' : ''}${fmtEUR(tot.tot.diffTeresa)}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PROSPETTO ANNUALE ── -->
+    <div class="view-header" style="margin-top: 32px; border-top: 1px solid var(--c-border); padding-top: 24px;">
+      <div>
+        <h2 class="page-title">Prospetto Annuale</h2>
+        <p class="page-sub">Dettaglio per l'anno <strong>${annoSel}</strong></p>
+      </div>
+      <select class="year-select" data-action="year-filter" data-target="dashboard">
+        ${anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('')}
+      </select>
+    </div>
+
+    <div class="kpi-grid">
+      ${kpi('Versato Teresa', fmtEUR(q.versatoTeresa), 'teresa')}
+      ${kpi('Versato Salva',  fmtEUR(q.versatoSalva), 'salvatore')}
+      ${kpi('Speso ' + annoSel, fmtEUR(q.totaleSpeso))}
+      ${kpi(q.diffTeresa >= 0 ? 'Salvatore Debito' : 'Teresa Debito', fmtEUR(Math.abs(q.diffTeresa)), q.diffTeresa >= 0 ? 'pos' : 'neg')}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Dettaglio per Categoria (${annoSel})</div>
+        <div class="summary-row"><span>Bonifici Teresa</span><span class="mono fw-600">${fmtEUR(q.bonTeresa)}</span></div>
+        <div class="summary-row"><span>Bonifici Salvatore</span><span class="mono fw-600">${fmtEUR(q.bonSalva)}</span></div>
+        <div class="summary-row"><span>Altro Teresa</span><span class="mono fw-600">${fmtEUR(q.altTeresa)}</span></div>
+        <div class="summary-row"><span>Altro Salvatore</span><span class="mono fw-600">${fmtEUR(q.altSalva)}</span></div>
+        <div class="summary-row"><span>Mensa Salvatore</span><span class="mono fw-600">${fmtEUR(q.mensa)}</span></div>
+        <div class="summary-row summary-total"><span>Totale</span><span class="mono">${fmtEUR(q.totaleSpeso)}</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Divisione Quote (${annoSel})</div>
+        <div class="summary-row"><span>Divisione</span><span class="text-muted text-sm">${annoSel <= 2023 ? 'Teresa 2/5 · Salvatore 3/5' : 'Teresa 1/3 · Salvatore 2/3'}</span></div>
+        <div class="summary-row"><span>Quota Teresa (${annoSel <= 2023 ? '40%' : '33%'})</span><span class="mono teresa fw-600">${fmtEUR(q.quotaTeresa)}</span></div>
+        <div class="summary-row"><span>Quota Salvatore (${annoSel <= 2023 ? '60%' : '67%'})</span><span class="mono salvatore fw-600">${fmtEUR(q.quotaSalva)}</span></div>
+        <div class="summary-row" style="border-top:2px solid var(--c-border);margin-top:4px;padding-top:8px">
+          <span>Differenza Teresa</span>
+          <span class="mono ${q.diffTeresa >= 0 ? 'pos' : 'neg'} fw-600">${q.diffTeresa >= 0 ? '+' : ''}${fmtEUR(q.diffTeresa)}</span>
+        </div>
+        <div class="summary-row">
+          <span>Differenza Salvatore</span>
+          <span class="mono ${q.diffSalva >= 0 ? 'pos' : 'neg'} fw-600">${q.diffSalva >= 0 ? '+' : ''}${fmtEUR(q.diffSalva)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Distribuzione Spese (${annoSel})</div>
+        <div class="chart-wrap"><canvas id="chart-dash-spese"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Confronto Persone (${annoSel})</div>
+        <div class="chart-wrap"><canvas id="chart-dash-persone"></canvas></div>
+      </div>
+    </div>
+  `);
+
+  requestAnimationFrame(() => {
+    drawChart('chart-dash-spese', ['Bonifici Teresa', 'Bonifici Salvatore', 'Altro Teresa', 'Altro Salvatore', 'Mensa'], [q.bonTeresa, q.bonSalva, q.altTeresa, q.altSalva, q.mensa]);
+    drawChart('chart-dash-persone', ['Versato Teresa', 'Versato Salvatore'], [q.versatoTeresa, q.versatoSalva], ['#dc2626', '#16a34a']);
+  });
+}
+
+function renderBonifici() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0] || new Date().getFullYear();
+  const annoSel = S.selectedYear;
+  const txs = S.transactions.filter(t => t.tipo === 'BONIFICO' && t.anno === annoSel);
+
+  setHtml('view-bonifici', `
+    <div class="view-header">
+      <div><h2 class="page-title">Bonifici</h2><p class="page-sub">Elenco bonifici effettuati</p></div>
+      <div class="hstack gap-8">
+        <select class="year-select" data-action="year-filter" data-target="bonifici">
+          ${anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary btn-sm" data-action="new-transaction" data-tipo="BONIFICO">+ Bonifico</button>
+      </div>
+    </div>
+    ${txs.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">💳</div><p>Nessun bonifico per ${annoSel}.</p></div>`
+      : `<div class="card"><div class="table-wrap"><table class="table">
+        <thead><tr><th>Da</th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Provenienza</th><th></th></tr></thead>
+        <tbody>${txs.map(t => `<tr>
+          <td>${badgePersona(t.persona)}</td>
+          <td class="mono text-sm">${fmtDate(t.data)}</td>
+          <td class="mono fw-600">${fmtEUR(t.importo)}</td>
+          <td class="text-muted text-sm">${t.descrizione || '—'}</td>
+          <td>${badgeProvenienza(t.provenienza)}</td>
+          <td>
+            <button class="btn-icon" data-action="edit-tx" data-id="${t.id}" title="Modifica">✎</button>
+            <button class="btn-icon btn-icon-danger" data-action="del-tx" data-id="${t.id}" title="Elimina">✕</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table></div></div>`
+    }
+  `);
+}
+
+function renderSpese() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0] || new Date().getFullYear();
+  const annoSel = S.selectedYear;
+  const txs = S.transactions.filter(t => t.tipo !== 'BONIFICO' && t.anno === annoSel);
+
+  setHtml('view-spese', `
+    <div class="view-header">
+      <div><h2 class="page-title">Altre Spese</h2><p class="page-sub">Altro e buoni mensa</p></div>
+      <div class="hstack gap-8">
+        <select class="year-select" data-action="year-filter" data-target="spese">
+          ${anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary btn-sm" data-action="new-transaction">+ Spesa</button>
+      </div>
+    </div>
+    ${txs.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🧾</div><p>Nessuna spesa per ${annoSel}.</p></div>`
+      : `<div class="card"><div class="table-wrap"><table class="table">
+        <thead><tr><th>Persona</th><th>Tipo</th><th>Data</th><th>Importo</th><th>Causale</th><th>Descrizione</th><th>Provenienza</th><th></th></tr></thead>
+        <tbody>${txs.map(t => `<tr>
+          <td>${badgePersona(t.persona)}</td>
+          <td>${badgeTipo(t.tipo)}</td>
+          <td class="mono text-sm">${fmtDate(t.data)}</td>
+          <td class="mono fw-600">${fmtEUR(t.importo)}</td>
+          <td class="text-muted text-sm">${t.causale || '—'}</td>
+          <td class="text-muted text-sm">${t.descrizione || '—'}</td>
+          <td>${badgeProvenienza(t.provenienza)}</td>
+          <td>
+            <button class="btn-icon" data-action="edit-tx" data-id="${t.id}">✎</button>
+            <button class="btn-icon btn-icon-danger" data-action="del-tx" data-id="${t.id}">✕</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table></div></div>`
+    }
+  `);
+}
+
+function renderReport() {
+  const anni = getAnni();
+  const quote = anni.map(calcolaQuote);
+
+  setHtml('view-report', `
+    <div class="view-header">
+      <div><h2 class="page-title">Report Annuali</h2><p class="page-sub">Confronto completo anno per anno</p></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Riepilogo Annuale</div>
+      <div class="table-wrap"><table class="table">
+        <thead><tr>
+          <th>Anno</th><th class="text-right">Bon. Teresa</th><th class="text-right">Bon. Salvatore</th>
+          <th class="text-right">Altro Teresa</th><th class="text-right">Altro Salvatore</th><th class="text-right">Mensa</th>
+          <th class="text-right">Totale Speso</th><th class="text-right">Quota Teresa</th><th class="text-right">Quota Salvatore</th><th class="text-right">Diff. Teresa</th>
+        </tr></thead>
+        <tbody>${quote.map(q => `<tr>
+          <td class="fw-600">${q.anno}</td>
+          <td class="mono text-right">${fmtEUR(q.bonTeresa)}</td>
+          <td class="mono text-right">${fmtEUR(q.bonSalva)}</td>
+          <td class="mono text-right">${fmtEUR(q.altTeresa)}</td>
+          <td class="mono text-right">${fmtEUR(q.altSalva)}</td>
+          <td class="mono text-right">${fmtEUR(q.mensa)}</td>
+          <td class="mono text-right fw-600">${fmtEUR(q.totaleSpeso)}</td>
+          <td class="mono text-right teresa fw-600">${fmtEUR(q.quotaTeresa)}</td>
+          <td class="mono text-right salvatore fw-600">${fmtEUR(q.quotaSalva)}</td>
+          <td class="mono text-right ${q.diffTeresa >= 0 ? 'pos' : 'neg'} fw-600">${q.diffTeresa >= 0 ? '+' : ''}${fmtEUR(q.diffTeresa)}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Andamento Spese Annuali</div>
+        <div class="chart-wrap" style="height:250px"><canvas id="chart-report-bar"></canvas></div>
+      </div>
+    </div>
+  `);
+
+  if (quote.length) {
+    requestAnimationFrame(() => {
+      const labels = quote.map(q => q.anno);
+      const ctx = document.getElementById('chart-report-bar')?.getContext('2d');
+      if (ctx) {
+        if (S.charts['report-bar']) S.charts['report-bar'].destroy();
+        S.charts['report-bar'] = new Chart(ctx, {
+          type: 'bar', data: {
+            labels,
+            datasets: [
+              { label: 'Teresa', data: quote.map(q => q.versatoTeresa), backgroundColor: '#dc262680', borderColor: '#dc2626', borderWidth: 2 },
+              { label: 'Salvatore', data: quote.map(q => q.versatoSalva), backgroundColor: '#16a34a80', borderColor: '#16a34a', borderWidth: 2 },
+            ],
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { font: { family: "'DM Sans'", size: 11 } } } }, scales: { y: { ticks: { callback: v => '€' + v.toLocaleString('it-IT') } } } },
+        });
+      }
+    });
+  }
+}
+
+function renderRevolut() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0] || new Date().getFullYear();
+  const annoSel = S.selectedYear;
+  const imported = S.transactions.filter(t => t.causale === 'Importato da Revolut' && t.anno === annoSel);
+
+  setHtml('view-revolut', `
+    <div class="view-header">
+      <div><h2 class="page-title">Importa da Revolut</h2><p class="page-sub">Carica un file CSV esportato da Revolut</p></div>
+      <select class="year-select" data-action="year-filter" data-target="revolut">
+        ${anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('')}
+      </select>
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Carica CSV</div>
+        <label class="btn btn-primary btn-sm" style="cursor:pointer">
+          📥 Scegli file CSV
+          <input type="file" id="revolut-csv-input" accept=".csv" style="display:none" />
+        </label>
+      </div>
+      <p class="text-muted text-sm">Il file deve contenere le colonne: Tipo, Data, Importo, Descrizione. Verranno importati solo i bonifici entranti (righe con "Ricarica" nel campo Tipo).</p>
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Importati da Revolut (${annoSel})</div>
+        ${imported.length > 0 ? `<button class="btn btn-danger btn-sm" data-action="del-revolut-all">🗑️ Cancella tutti</button>` : ''}
+      </div>
+      ${imported.length === 0
+        ? `<div class="empty-state"><div class="empty-icon">📥</div><p>Nessuna transazione importata da Revolut per ${annoSel}.</p></div>`
+        : `<div class="table-wrap"><table class="table">
+          <thead><tr><th>Persona</th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Provenienza</th><th></th></tr></thead>
+          <tbody>${imported.map(t => `<tr>
+            <td>${badgePersona(t.persona)}</td>
+            <td class="mono text-sm">${fmtDate(t.data)}</td>
+            <td class="mono fw-600">${fmtEUR(t.importo)}</td>
+            <td class="text-muted text-sm" style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${t.descrizione || '—'}</td>
+            <td>${badgeProvenienza(t.provenienza)}</td>
+            <td>
+              <button class="btn-icon" data-action="edit-tx" data-id="${t.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-tx" data-id="${t.id}" title="Elimina">✕</button>
+            </td>
+          </tr>`).join('')}
+          </tbody></table></div>`
+      }
+    </div>
+  `);
+}
+
+function renderImpostazioni() {
+  const u = S.session.user;
+  const anni = getAnni();
+  setHtml('view-impostazioni', `
+    <div class="view-header"><h2 class="page-title">Impostazioni</h2></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Account</div>
+        <div class="fw-600">${u.user_metadata?.full_name || u.email?.split('@')[0] || 'Utente'}</div>
+        <div class="text-muted text-sm">${u.email || '—'}</div>
+        <button class="btn btn-outline btn-sm mt-12" data-action="logout">Disconnetti</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Database</div>
+        <div class="summary-row"><span>Transazioni</span><strong>${S.transactions.length}</strong></div>
+        <div class="summary-row"><span>Anni</span><strong>${anni.join(', ')}</strong></div>
+        <div class="summary-row text-sm text-muted">${SUPABASE_URL}</div>
+      </div>
+    </div>
+  `);
+}
+
+// ══════════ MODAL ══════════
+
+function openModal(title, bodyHtml) {
+  $('modal-title').textContent = title;
+  $('modal-body').innerHTML = bodyHtml;
+  $('modal-overlay').classList.remove('hidden');
+}
+function closeModal() {
+  $('modal-overlay').classList.add('hidden');
+  $('modal-body').innerHTML = '';
+}
+
+function openNewTxModal(editId = null, preTipo = null) {
+  const editTx = editId ? S.transactions.find(t => t.id === editId) : null;
+  const isEdit = !!editTx;
+  const oggi = new Date().toISOString().slice(0, 10);
+
+  openModal(isEdit ? 'Modifica movimento' : 'Nuovo movimento', `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Persona *</label>
+          <select name="persona" class="form-input form-select" required>
+            <option value="TERESA" ${editTx?.persona === 'TERESA' ? 'selected' : ''}>Teresa</option>
+            <option value="SALVATORE" ${editTx?.persona === 'SALVATORE' ? 'selected' : ''}>Salvatore</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo *</label>
+          <select name="tipo" class="form-input form-select" required>
+            <option value="BONIFICO" ${(editTx?.tipo === 'BONIFICO' || preTipo === 'BONIFICO') ? 'selected' : ''}>Bonifico</option>
+            <option value="ALTRO" ${(editTx?.tipo === 'ALTRO' || preTipo === 'ALTRO') ? 'selected' : ''}>Altro</option>
+            <option value="MENSA" ${(editTx?.tipo === 'MENSA' || preTipo === 'MENSA') ? 'selected' : ''}>Mensa</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input name="data" type="date" class="form-input" required value="${editTx?.data || oggi}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo * (€)</label>
+          <input name="importo" type="number" step="0.01" min="0" class="form-input mono" required placeholder="0.00" value="${editTx?.importo || ''}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrizione</label>
+        <input name="descrizione" class="form-input" placeholder="Descrizione" value="${editTx?.descrizione || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Causale</label>
+        <input name="causale" class="form-input" placeholder="Causale (opzionale)" value="${editTx?.causale || ''}" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Salva' : 'Aggiungi'}</button>
+      </div>
+    </form>
+  `);
+
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd);
+    const payload = {
+      persona: data.persona, tipo: data.tipo, data: data.data,
+      importo: parseFloat(data.importo), descrizione: data.descrizione || '',
+      causale: data.causale || '', tipo_versamento: '',
+      provenienza: isEdit ? undefined : 'MANUALE',
+      anno: new Date(data.data).getFullYear(),
+    };
+    try {
+      if (isEdit) {
+        await sbUpd('acct_transactions', `id=eq.${editTx.id}`, payload);
+      } else {
+        await sbIns('acct_transactions', { ...payload, user_id: S.session.user.id });
+      }
+      closeModal();
+      await reload();
+    } catch (err) {
+      alert('Errore: ' + err.message);
+    }
+  });
+}
+
+async function handleRevolutCSV(file) {
+  const text = await file.text();
+  // Rimuovi eventuali caratteri invisibili (BOM) all'inizio
+  const cleanText = text.trim().replace(/^\uFEFF/, '');
+  
+  // Rileva separatore (virgola o punto e virgola)
+  const firstLine = cleanText.split('\n')[0];
+  const sep = firstLine.includes(';') ? ';' : ',';
+  
+  const rows = cleanText.split('\n').map(r => r.split(sep).map(c => c.trim().replace(/^"|"$/g, '')));
+  if (rows.length < 2) return;
+  
+  const header = rows[0].map(h => h.toLowerCase());
+  console.log('[Revolut Import] Header rilevati:', header);
+
+  const findIdx = (names) => {
+    for (const name of names) {
+      const i = header.indexOf(name.toLowerCase());
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+
+  const idx = {
+    type:   findIdx(['Type', 'Tipo']),
+    date:   findIdx(['Started Date', 'Data di inizio', 'Completed Date', 'Data di completamento', 'Data']),
+    amount: findIdx(['Amount', 'Importo']),
+    desc:   findIdx(['Description', 'Descrizione']),
+    state:  findIdx(['State', 'Stato'])
+  };
+
+  console.log('[Revolut Import] Mappatura colonne:', idx);
+
+  if (idx.type === -1 || idx.amount === -1) {
+    console.error('[Revolut Import] Header mancanti. Type:', idx.type, 'Amount:', idx.amount);
+    alert('Formato CSV Revolut non riconosciuto.\n\nAssicurati che il file contenga le colonne: Tipo, Data, Importo, Descrizione.');
+    return;
+  }
+
+  const dataRows = rows.slice(1).filter(r => r.length >= Math.max(...Object.values(idx)));
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const r of dataRows) {
+    const status = (r[idx.state] || '').toUpperCase();
+    if (status !== 'COMPLETED' && status !== 'COMPLETATO') continue;
+    
+    const type = (r[idx.type] || '').toUpperCase();
+    const rawAmount = parseFloat(r[idx.amount]);
+    const amount = Math.abs(rawAmount);
+    const dateStr = r[idx.date].split(' ')[0]; // Prende solo la data YYYY-MM-DD
+    const desc = r[idx.desc] || '';
+    
+    // Solo bonifici entranti (ricariche sul conto)
+    if (!type.includes('RICARICA')) continue;
+    const tipo = 'BONIFICO';
+
+    // Logica di auto-assegnazione intelligente
+    let persona = 'SALVATORE'; // Default
+    const upperDesc = desc.toUpperCase();
+    if (upperDesc.includes('TERESA') || upperDesc.includes('GARSIA')) persona = 'TERESA';
+    if (upperDesc.includes('SALVATORE')) persona = 'SALVATORE';
+
+    // Controllo duplicati base (data + importo + descrizione)
+    const isDup = S.transactions.some(t => 
+      t.data === dateStr && 
+      Math.abs(parseFloat(t.importo)) === amount &&
+      t.descrizione === desc
+    );
+
+    if (isDup) {
+      skipped++;
+      continue;
+    }
+
+    const payload = {
+      user_id: S.session.user.id,
+      anno: new Date(dateStr).getFullYear(),
+      data: dateStr,
+      persona: persona,
+      tipo: tipo,
+      importo: amount,
+      descrizione: desc,
+      causale: 'Importato da Revolut',
+      provenienza: 'IMPORTATO'
+    };
+
+    await sbIns('acct_transactions', payload);
+    imported++;
+  }
+
+  alert(`Importazione completata!\n\n✅ Transazioni caricate: ${imported}\n⏭️ Saltate (già presenti): ${skipped}`);
+  await reload();
+}
+
+// ══════════ NAV / EVENTS ══════════
+
+function navigate(view) {
+  S.view = view;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const vEl = $(`view-${view}`);
+  if (vEl) vEl.classList.add('active');
+  const nEl = document.querySelector(`.nav-item[data-view="${view}"]`);
+  if (nEl) nEl.classList.add('active');
+  $('sidebar')?.classList.remove('open');
+  $('mobile-nav-overlay')?.classList.remove('open');
+  render();
+}
+
+function render() {
+  switch (S.view) {
+    case 'dashboard': renderDashboard(); break;
+    case 'bonifici': renderBonifici(); break;
+    case 'spese': renderSpese(); break;
+    case 'report': renderReport(); break;
+    case 'revolut': renderRevolut(); break;
+    case 'impostazioni': renderImpostazioni(); break;
+  }
+}
+
+async function reload() {
+  await loadData();
+  render();
+}
+
+// ══════════ EVENTS ══════════
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+
+  if (action === 'nav') {
+    navigate(btn.dataset.view);
+  } else if (action === 'close-modal') {
+    closeModal();
+  } else if (action === 'new-transaction') {
+    openNewTxModal(null, btn.dataset.tipo || null);
+  } else if (action === 'edit-tx') {
+    openNewTxModal(btn.dataset.id);
+  } else if (action === 'del-tx') {
+    if (confirm('Eliminare questo movimento?')) {
+      sbDel('acct_transactions', `id=eq.${btn.dataset.id}`).then(reload);
+    }
+  } else if (action === 'del-revolut-all') {
+    if (confirm('Eliminare TUTTE le transazioni importate da Revolut per quest\'anno?')) {
+      const ids = S.transactions.filter(t => t.causale === 'Importato da Revolut' && t.anno === S.selectedYear).map(t => t.id);
+      if (ids.length === 0) return;
+      Promise.all(ids.map(id => sbDel('acct_transactions', `id=eq.${id}`))).then(reload);
+    }
+  } else if (action === 'logout') {
+    logout();
+  }
+});
+
+document.addEventListener('change', async e => {
+  if (e.target.id === 'revolut-csv-input') {
+    const file = e.target.files[0];
+    if (file) {
+      const label = e.target.closest('label');
+      const oldText = label ? label.textContent : '';
+      if (label) { label.textContent = '⌛ Elaborazione...'; label.style.pointerEvents = 'none'; }
+      try {
+        await handleRevolutCSV(file);
+      } finally {
+        if (label) { label.textContent = oldText; label.style.pointerEvents = ''; }
+        e.target.value = '';
+      }
+    }
+  }
+  if (e.target.matches('[data-action="year-filter"]')) {
+    S.selectedYear = parseInt(e.target.value);
+    render();
+  }
+});
+
+document.getElementById('btn-hamburger').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('mobile-nav-overlay').classList.toggle('open');
+});
+document.getElementById('mobile-nav-overlay').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('mobile-nav-overlay').classList.remove('open');
+});
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+async function init() {
+  let session = loadSession();
+  if (session && session.expires_at < Date.now()) {
+    session = await refreshSession(session);
+  }
+  if (!session) {
+    location.href = '/';
+    return;
+  }
+  S.session = session;
+  const u = session.user;
+  $('user-name').textContent = u.user_metadata?.full_name || u.email?.split('@')[0] || 'Utente';
+  if (u.user_metadata?.avatar_url) {
+    $('user-avatar').innerHTML = `<img src="${u.user_metadata.avatar_url}" alt="" />`;
+  } else {
+    $('user-avatar').textContent = (u.user_metadata?.full_name || u.email || 'U')[0].toUpperCase();
+  }
+
+  try {
+    await loadData();
+  } catch (err) {
+    console.error('Errore caricamento dati:', err);
+  }
+
+  $('screen-app').classList.remove('hidden');
+  $('screen-app').style.display = 'flex';
+  $('loading-overlay').classList.add('hidden');
+
+  const anni = getAnni();
+  $('footer-info').textContent = `${S.transactions.length} transazioni · ${anni.length} anni`;
+
+  navigate('dashboard');
+}
+
+init();
+</script>
+</body>
+</html>

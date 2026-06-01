@@ -1,0 +1,3050 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GarsalFinanza</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    /* ── Reset ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f6fb;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-primary:   #4f46e5;
+      --c-primary-h: #4338ca;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+    /* ── Utilities ───────────────────────────────────────────── */
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .pos    { color: var(--c-success); }
+    .neg    { color: var(--c-danger); }
+    .text-muted { color: var(--c-muted); }
+    .text-sm    { font-size: .82rem; }
+    .text-lg    { font-size: 1.05rem; }
+    .fw-600  { font-weight: 600; }
+    .fw-700  { font-weight: 700; }
+    .text-right  { text-align: right; }
+    .flex-1  { flex: 1; }
+    .hstack  { display: flex; align-items: center; }
+    .gap-4   { gap: 4px; }
+    .gap-8   { gap: 8px; }
+    .mt-2    { margin-top: 2px; }
+    .mt-12   { margin-top: 12px; }
+    .mb-16   { margin-bottom: 16px; }
+    /* ── Loading ──────────────────────────────────────────────── */
+    #loading-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--c-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* ── Env badge ────────────────────────────────────────────── */
+    .badge-env { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .badge-dev  { background: #fef3c7; color: #92400e; }
+    .badge-prod { background: #dcfce7; color: #166534; }
+    /* ── Login ────────────────────────────────────────────────── */
+    #screen-login { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100dvh; padding: 24px; }
+    .login-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 48px 40px; width: 100%; max-width: 400px; text-align: center; }
+    .login-logo { width: 54px; height: 54px; background: var(--c-primary); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; font-size: 26px; }
+    .login-card h1 { font-size: 1.55rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: 5px; }
+    .login-card .subtitle { color: var(--c-muted); font-size: .9rem; margin-bottom: 30px; }
+    .btn-google { display: flex; align-items: center; justify-content: center; gap: 11px; width: 100%; padding: 12px 18px; background: var(--c-surface); border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .92rem; font-weight: 500; color: var(--c-text); cursor: pointer; transition: border-color .15s, background .15s; }
+    .btn-google:hover { border-color: #aab0bc; background: #fafbfc; }
+    .login-divider { display: flex; align-items: center; gap: 10px; margin: 14px 0; color: var(--c-muted); font-size: .8rem; }
+    .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--c-border); }
+    .magic-input { width: 100%; padding: 11px 13px; margin-bottom: 9px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .92rem; color: var(--c-text); outline: none; transition: border-color .15s; }
+    .magic-input:focus { border-color: var(--c-primary); }
+    .btn-magic { width: 100%; padding: 12px; background: var(--c-primary); color: #fff; border: none; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .92rem; font-weight: 500; cursor: pointer; transition: background .15s; }
+    .btn-magic:hover { background: var(--c-primary-h); }
+    .btn-magic:disabled { opacity: .6; cursor: not-allowed; }
+    .login-error   { margin-top: 14px; padding: 10px 13px; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-sm); color: var(--c-danger); font-size: .86rem; display: none; }
+    .login-success { margin-top: 14px; padding: 10px 13px; background: #f0fdf4; border: 1px solid #86efac; border-radius: var(--radius-sm); color: var(--c-success); font-size: .86rem; display: none; }
+    .login-footer  { margin-top: 24px; color: var(--c-muted); font-size: .75rem; }
+    .btn-android { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px 18px; background: #16a34a; color: #fff; border: none; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; font-weight: 500; cursor: pointer; text-decoration: none; transition: background .15s; }
+    .btn-android:hover { background: #15803d; }
+    .btn-android svg { flex-shrink: 0; }
+    /* ── App shell ────────────────────────────────────────────── */
+    #screen-app { display: none; flex-direction: column; min-height: 100dvh; }
+    .topbar { position: sticky; top: 0; z-index: 100; background: var(--c-surface); border-bottom: 1px solid var(--c-border); padding: 0 22px; display: flex; align-items: center; gap: 14px; height: 56px; }
+    .topbar-brand { font-weight: 700; font-size: 1.02rem; color: var(--c-primary); letter-spacing: -.02em; display: flex; align-items: center; gap: 8px; }
+    .topbar-brand .logo-dot { width: 27px; height: 27px; background: var(--c-primary); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    .topbar-spacer { flex: 1; }
+    .topbar-user { display: flex; align-items: center; gap: 10px; font-size: .86rem; color: var(--c-muted); }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--c-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 600; overflow: hidden; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .btn-logout { background: none; border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 4px 11px; font-family: var(--font-sans); font-size: .8rem; color: var(--c-muted); cursor: pointer; transition: border-color .15s, color .15s; }
+    .btn-logout:hover { border-color: var(--c-danger); color: var(--c-danger); }
+    .topbar-user { display: none !important; }
+    #env-badge { display: none !important; }
+    .app-layout { display: flex; flex: 1; overflow: hidden; }
+    /* ── Sidebar ──────────────────────────────────────────────── */
+    .sidebar { width: 210px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #eef2ff; color: var(--c-primary); }
+    .nav-label { font-size: .68rem; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .08em; padding: 14px 11px 6px; }
+    .nav-sep { height: 1px; background: var(--c-border); margin: 6px 4px; }
+    /* ── Main ─────────────────────────────────────────────────── */
+    .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
+    .view { display: none; }
+    .view.active { display: block; }
+    /* ── View header ─────────────────────────────────────────── */
+    .view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+    .page-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+    .page-sub   { color: var(--c-muted); font-size: .84rem; margin-top: 2px; }
+    /* ── Buttons ─────────────────────────────────────────────── */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; font-weight: 500; cursor: pointer; border: none; transition: background .15s, color .15s, border-color .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: var(--c-surface); color: var(--c-text); border: 1.5px solid var(--c-border); }
+    .btn-outline:hover { border-color: #aab0bc; background: #f8f9fb; }
+    .btn-danger { background: #fee2e2; color: var(--c-danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 6px 12px; font-size: .82rem; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--c-muted); font-size: .9rem; line-height: 1; transition: background .12s, color .12s; }
+    .btn-icon:hover { background: var(--c-bg); color: var(--c-text); }
+    .btn-icon-danger:hover { background: #fee2e2; color: var(--c-danger); }
+    /* ── KPI cards ────────────────────────────────────────────── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; text-align: right; }
+    .kpi-value.neutral { color: var(--c-text); }
+    /* ── Cards ────────────────────────────────────────────────── */
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+    .card-title { font-size: .96rem; font-weight: 600; margin-bottom: 14px; }
+    .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .card-header-row .card-title { margin-bottom: 0; }
+    /* ── Grids ────────────────────────────────────────────────── */
+    .grid-2    { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    /* ── Portfolio cards ─────────────────────────────────────── */
+    .portfolio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .portfolio-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .portfolio-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+    .portfolio-card-stats { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .portfolio-card-value { font-size: 1.35rem; font-weight: 700; letter-spacing: -.03em; }
+    .portfolio-card-change { font-size: .92rem; font-weight: 600; }
+    .portfolio-row { display: flex; align-items: center; gap: 12px; padding: 9px 6px; border-radius: var(--radius-sm); cursor: pointer; transition: background .12s; }
+    .portfolio-row:hover { background: var(--c-bg); }
+    .portfolio-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    /* ── Table ────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
+.table th.th-has-filter { color: var(--c-primary); }
+.col-filter-sel { display: block; margin-top: 4px; width: 100%; min-width: 78px; font-size: .68rem; padding: 2px 18px 2px 5px; border: 1px solid var(--c-border); border-radius: 3px; background: var(--c-surface); color: var(--c-text); cursor: pointer; font-family: var(--font-sans); text-transform: none; letter-spacing: 0; font-weight: 400; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%2364748b' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 4px center; }
+.col-filter-sel:focus { outline: 1px solid var(--c-primary); border-color: var(--c-primary); }
+.col-filter-sel.has-filter { border-color: var(--c-primary); color: var(--c-primary); font-weight: 600; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%234f8ef7' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+    .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); white-space: nowrap; }
+    .table tbody tr:hover td { background: #fafbfd; }
+    /* ── Badges ───────────────────────────────────────────────── */
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-buy  { background: #dcfce7; color: #166534; }
+    .badge-sell { background: #fee2e2; color: #991b1b; }
+    .badge-pos  { background: #dcfce7; color: #166534; }
+    .badge-neg  { background: #fee2e2; color: #991b1b; }
+    .tag-r-alto   { background: #fee2e2; color: #991b1b; }
+    .tag-r-medio  { background: #fef3c7; color: #92400e; }
+    .tag-r-basso  { background: #dcfce7; color: #166534; }
+    .tag-stock    { background: #eef2ff; color: #3730a3; }
+    .tag-etf      { background: #ecfeff; color: #155e75; }
+    .tag-bond     { background: #f1f5f9; color: #475569; }
+    .tag-crypto   { background: #fff7ed; color: #9a3412; }
+    .tag-fund     { background: #f5f3ff; color: #5b21b6; }
+    .tag-strumento { background: #f0f9ff; color: #0369a1; }
+    .tag-default  { background: #f1f5f9; color: #475569; }
+    .tags-cell { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tags-row  { display: flex; gap: 6px; flex-wrap: wrap; }
+    /* ── Chart ────────────────────────────────────────────────── */
+    .chart-wrap { height: 200px; display: flex; align-items: center; justify-content: center; }
+    .chart-wrap canvas { max-height: 200px; }
+    /* ── Patrimonio SVG chart ─────────────────────────────────── */
+    .pnetto-chart-wrap { margin-bottom: 20px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 16px 18px 10px; box-shadow: var(--shadow-sm); }
+    .pnetto-chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+    .pnetto-chart-title { font-size: .88rem; font-weight: 600; }
+    .pnetto-svg { width: 100%; height: 200px; display: block; overflow: visible; }
+    .pnetto-svg .chart-dot { cursor: pointer; transition: r .1s; }
+    .pnetto-svg .chart-dot:hover { r: 6; }
+    .pnetto-svg .chart-axis { stroke: var(--c-border); stroke-width: 1; }
+    .pnetto-svg .chart-label { font-family: var(--font-mono); font-size: 9px; fill: var(--c-muted); }
+    /* Serie switches */
+    .chart-series-switches { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .series-toggle { display: flex; align-items: center; gap: 4px; padding: 3px 10px 3px 7px; border: 1.5px solid var(--sc, #888); border-radius: 20px; background: none; cursor: pointer; font-size: .78rem; font-family: var(--font-sans); color: var(--c-muted); transition: all .15s; opacity: .45; }
+    .series-toggle.active { opacity: 1; background: color-mix(in srgb, var(--sc) 12%, transparent); color: var(--c-text); }
+    .series-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc, #888); flex-shrink: 0; }
+    /* Timeframe selector */
+    .tf-select { padding: 4px 28px 4px 10px; border: 1.5px solid var(--c-border); border-radius: 20px; background: var(--c-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center; appearance: none; cursor: pointer; font-size: .78rem; font-family: var(--font-mono); color: var(--c-text); outline: none; transition: border-color .15s; }
+    .tf-select:hover, .tf-select:focus { border-color: var(--c-primary); }
+    .tf-btn { padding: 3px 9px; border: 1.5px solid var(--c-border); border-radius: 20px; background: none; cursor: pointer; font-size: .75rem; font-family: var(--font-mono); color: var(--c-muted); transition: all .15s; line-height: 1.4; }
+    .tf-btn:hover { border-color: var(--c-primary); color: var(--c-primary); }
+    .tf-btn.active { border-color: var(--c-primary); background: #eef2ff; color: var(--c-primary); font-weight: 600; }
+    .chart-controls-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .chart-split-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin-top: 4px; }
+    .chart-split-item { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 10px 14px 4px; }
+    .chart-split-label { font-size: .78rem; font-weight: 600; margin-bottom: 3px; display: flex; align-items: center; gap: 5px; }
+    #pnetto-tooltip { position: fixed; pointer-events: none; z-index: 200; background: var(--c-text); color: #fff; padding: 5px 9px; border-radius: var(--radius-sm); font-size: .78rem; font-family: var(--font-mono); white-space: nowrap; display: none; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .delta-pct { font-family: var(--font-mono); font-size: .75rem; font-weight: 600; margin-left: 6px; }
+    /* ── Modal storico (più largo del modal standard) ─────────── */
+    #hist-modal-overlay { position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto; backdrop-filter: blur(2px); }
+    #hist-modal-overlay.hidden { display: none !important; }
+    #hist-modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 900px; margin: auto; }
+    #hist-modal-hdr { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px 14px; border-bottom: 1px solid var(--c-border); position: sticky; top: 0; background: var(--c-surface); z-index: 1; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+    #hist-modal-title { font-size: 1rem; font-weight: 700; }
+    #hist-modal-close { background: none; border: none; cursor: pointer; color: var(--c-muted); font-size: 1.2rem; padding: 2px 6px; border-radius: var(--radius-sm); }
+    #hist-modal-body { padding: 18px 22px 22px; }
+    /* ── Forms ────────────────────────────────────────────────── */
+    .form-group  { margin-bottom: 14px; }
+    .form-label  { display: block; font-size: .82rem; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+    .form-input  { width: 100%; padding: 9px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .9rem; color: var(--c-text); outline: none; transition: border-color .15s; background: var(--c-surface); }
+    .form-input:focus { border-color: var(--c-primary); }
+    .form-input[readonly] { background: var(--c-bg); color: var(--c-muted); cursor: default; }
+    .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .form-divider { font-size: .78rem; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .07em; border-top: 1px solid var(--c-border); padding-top: 14px; margin: 6px 0 14px; }
+    /* BUY/SELL toggle */
+    .type-toggle { display: flex; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); overflow: hidden; }
+    .type-toggle label { flex: 1; cursor: pointer; }
+    .type-toggle label input { position: absolute; opacity: 0; pointer-events: none; }
+    .type-toggle label span { display: block; padding: 9px; text-align: center; font-size: .88rem; font-weight: 500; color: var(--c-muted); transition: background .15s, color .15s; }
+    .type-toggle label:has(input[value="BUY"]:checked) span  { background: #dcfce7; color: #166534; font-weight: 700; }
+    .type-toggle label:has(input[value="SELL"]:checked) span { background: #fee2e2; color: #991b1b; font-weight: 700; }
+    /* Color picker */
+    .color-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+    .color-opt input { position: absolute; opacity: 0; pointer-events: none; }
+    .color-opt span { display: block; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+    .color-opt:has(input:checked) span { transform: scale(1.2); box-shadow: 0 0 0 3px #fff, 0 0 0 5px #4f46e5; }
+    /* ── Modal ────────────────────────────────────────────────── */
+    #modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+    #modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 540px; max-height: 90dvh; overflow-y: auto; }
+    #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--c-border); }
+    #modal-title { font-size: 1rem; font-weight: 700; }
+    #modal-close { background: none; border: none; cursor: pointer; color: var(--c-muted); font-size: 1.2rem; padding: 2px 6px; border-radius: var(--radius-sm); transition: background .12s; }
+    #modal-close:hover { background: var(--c-bg); }
+    #modal-body { padding: 18px 22px 22px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
+    /* ── Empty states ─────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--c-muted); }
+    .empty-icon  { font-size: 2.4rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .88rem; line-height: 1.6; }
+    .empty-sm { text-align: center; padding: 24px; color: var(--c-muted); font-size: .88rem; }
+    .summary-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--c-border); font-size: .9rem; }
+    .summary-row:last-child { border-bottom: none; }
+    /* ── Settings ─────────────────────────────────────────────── */
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+    .settings-row { padding: 4px 0; font-size: .88rem; }
+    /* ── Version bar ──────────────────────────────────────────── */
+    .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
+    /* ── Hamburger button ─────────────────────────────────────── */
+    .year-select { padding: 7px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; color: var(--c-text); outline: none; background: var(--c-surface); cursor: pointer; }
+    .year-select:focus { border-color: var(--c-primary); }
+    .btn-hamburger { display: none; background: none; border: none; padding: 6px 8px; cursor: pointer; color: var(--c-text); border-radius: var(--radius-sm); line-height: 0; }
+    .btn-hamburger:hover { background: var(--c-bg); }
+    /* ── Mobile nav overlay ───────────────────────────────────── */
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; display: flex; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+      .app-main { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      /* Posizioni: mostra Simbolo(1) Qtà(4) Valore(8) P&L%(10) */
+      .table-posizioni tr > :nth-child(2),.table-posizioni tr > :nth-child(3),
+      .table-posizioni tr > :nth-child(5),.table-posizioni tr > :nth-child(6),
+      .table-posizioni tr > :nth-child(7),.table-posizioni tr > :nth-child(9),
+      .table-posizioni tr > :nth-child(n+11) { display: none; }
+      /* Storico portafoglio: mostra Data(1) Tipo(2) Simbolo(3) Controv.(6) */
+      .table-storico tr > :nth-child(4),.table-storico tr > :nth-child(5),
+      .table-storico tr > :nth-child(7),.table-storico tr > :nth-child(8),
+      .table-storico tr > :nth-child(9) { display: none; }
+      /* Transazioni: mostra Data(1) Tipo(4) Simbolo(5) Controv.(9) */
+      .table-transazioni tr > :nth-child(2),.table-transazioni tr > :nth-child(3),
+      .table-transazioni tr > :nth-child(6),.table-transazioni tr > :nth-child(7),
+      .table-transazioni tr > :nth-child(8),.table-transazioni tr > :nth-child(10),
+      .table-transazioni tr > :nth-child(11),.table-transazioni tr > :nth-child(12) { display: none; }
+      /* Prodotti: mostra Simbolo(1) Nome(3) Tipo(4) Prezzo(7) */
+      .table-prodotti tr > :nth-child(2),.table-prodotti tr > :nth-child(5),
+      .table-prodotti tr > :nth-child(6),.table-prodotti tr > :nth-child(8),
+      .table-prodotti tr > :nth-child(n+9) { display: none; }
+      /* Prezzi: mostra Simbolo(1) Prezzo(4) Stato(6) */
+      .table-prezzi tr > :nth-child(2),.table-prezzi tr > :nth-child(3),
+      .table-prezzi tr > :nth-child(5) { display: none; }
+      /* Modal transazioni: mostra Data(1) Tipo(2) Qtà(3) Controv.(5) */
+      .table-modal-tx tr > :nth-child(4),.table-modal-tx tr > :nth-child(6),
+      .table-modal-tx tr > :nth-child(7),.table-modal-tx tr > :nth-child(8) { display: none; }
+    }
+    @media (max-width: 480px) {
+      .app-main { padding: 12px; max-width: 100vw; }
+      .view-header { flex-wrap: wrap; gap: 8px; }
+      .view-header .btn { font-size: .78rem; padding: 6px 10px; }
+      .kpi-grid { grid-template-columns: 1fr; }
+      .kpi-value { font-size: 1.25rem; }
+      .page-title { font-size: 1.1rem; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .card { max-width: 100%; box-sizing: border-box; }
+      .card-header-row { flex-wrap: wrap; gap: 6px; }
+      .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .table { font-size: .75rem; }
+      .table th, .table td { padding: 6px 5px; }
+      .table-2col { table-layout: fixed; width: 100%; }
+      .table-2col th:first-child,.table-2col td:first-child { width: 50%; word-break: break-word; }
+      .table-2col th:last-child, .table-2col td:last-child  { width: 50%; white-space: nowrap; }
+      .topbar { padding: 0 14px; }
+      .topbar-user span { display: none; }
+      .portfolio-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<!-- ── Loading ────────────────────────────────────────────────── -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <span class="text-muted text-sm">Caricamento…</span>
+</div>
+<!-- ── Login ──────────────────────────────────────────────────── -->
+<div id="screen-login" class="hidden">
+  <div class="login-card">
+    <div class="login-logo">💰</div>
+    <h1>GarsalFinanza</h1>
+    <p class="subtitle">Gestione portafogli finanziari</p>
+    <button class="btn-google" id="btn-login-google">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Accedi con Google
+    </button>
+    <div class="login-divider" style="display:none">oppure</div>
+    <input class="magic-input" type="email" id="magic-email" placeholder="La tua email" autocomplete="email" style="display:none" />
+    <button class="btn-magic" id="btn-login-magic" style="display:none">Invia Magic Link</button>
+    <div class="login-error"   id="login-error"></div>
+    <div class="login-success" id="login-success" style="display:none">✅ Controlla la tua email: ti abbiamo inviato il link.</div>
+    <p class="login-footer">I tuoi dati sono protetti con Supabase.</p>
+    <a class="btn-android" href="/releases/GarsalFinanza-latest.apk" download="GarsalFinanza.apk" id="btn-dl-android">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zm7-18l-5 5h3v4h4V7h3l-5-5z"/></svg>
+      Scarica app Android
+    </a>
+  </div>
+</div>
+<!-- ── App ────────────────────────────────────────────────────── -->
+<div id="screen-app" class="hidden">
+  <header class="topbar">
+    <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <div class="topbar-brand">
+      <div class="logo-dot">💰</div>GarsalFinanza
+    </div>
+    <div class="topbar-spacer"></div>
+    <div id="env-badge"></div>
+    <div class="topbar-user">
+      <div class="avatar" id="user-avatar"></div>
+      <span id="user-name"></span>
+      <button class="btn-logout" id="btn-logout">Esci</button>
+    </div>
+  </header>
+  <div id="mobile-nav-overlay"></div>
+  <div class="app-layout">
+    <nav class="sidebar">
+      <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-item"        data-action="nav" data-view="progressione">📈 Sviluppo</button>
+
+      <div class="nav-label">Finanza</div>
+      <button class="nav-item"        data-action="nav" data-view="portafogli">💼 Portafogli</button>
+      <button class="nav-item"        data-action="nav" data-view="transazioni">💳 Transazioni</button>
+      <button class="nav-item"        data-action="nav" data-view="dossiers">📁 Dossier</button>
+      <button class="nav-item"        data-action="nav" data-view="prodotti">📋 Prodotti</button>
+      <button class="nav-item"        data-action="nav" data-view="prezzi">🏷️ Prezzi</button>
+
+      <div class="nav-label">Patrimonio</div>
+      <button class="nav-item"        data-action="nav" data-view="loans">🏠 Prestiti</button>
+      <button class="nav-item"        data-action="nav" data-view="other-assets">💎 Altri Asset</button>
+      
+      <div class="nav-label">Configurazione</div>
+      <button class="nav-item"        data-action="nav" data-view="tag-config">🏷️ Tag</button>
+      
+      <div class="nav-sep"></div>
+      <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
+      
+      <div class="nav-label">Altro</div>
+      <a class="nav-item" href="casarosa/" style="text-decoration:none">🏠 Casa Rosa</a>
+      <a class="nav-item" href="contabilita/" style="text-decoration:none">💰 Conto Cointestato</a>
+      <a class="nav-item" id="nav-dl-android" href="/releases/GarsalFinanza-latest.apk" download="GarsalFinanza.apk" style="text-decoration:none">📱 App Android</a>
+    </nav>
+    <main class="app-main">
+      <div id="view-dashboard"          class="view active"></div>
+      <div id="view-portafogli"         class="view"></div>
+      <div id="view-portafoglio-detail" class="view"></div>
+      <div id="view-transazioni"        class="view"></div>
+      <div id="view-dossiers"           class="view"></div>
+      <div id="view-progressione"        class="view"></div>
+      <div id="view-loans"              class="view"></div>
+      <div id="view-other-assets"       class="view"></div>
+      <div id="view-prodotti"           class="view"></div>
+      <div id="view-prezzi"             class="view"></div>
+      <div id="view-tag-config"         class="view"></div>
+      <div id="view-impostazioni"       class="view"></div>
+    </main>
+  </div>
+  <footer class="version-bar">
+    GarsalFinanza Prova · <span class="mono">${APP_VERSION}</span> · <span class="mono">${APP_BUILD}</span>
+    <span class="topbar-spacer"></span>
+    <span id="footer-env-badge"></span>
+  </footer>
+</div>
+<!-- ── Modal ──────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="hidden">
+  <div id="modal-card">
+    <div id="modal-header">
+      <h3 id="modal-title"></h3>
+      <button id="modal-close" data-action="close-modal">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<!-- ── Modal storico dashboard ─────────────────────────────────── -->
+<div id="hist-modal-overlay" class="hidden">
+  <div id="hist-modal-card">
+    <div id="hist-modal-hdr">
+      <h3 id="hist-modal-title"></h3>
+      <button id="hist-modal-close">✕</button>
+    </div>
+    <div id="hist-modal-body"></div>
+  </div>
+</div>
+<div id="pnetto-tooltip"></div>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   GarsalFinanza — ${APP_VERSION} — ${APP_BUILD}
+   Single-file SPA · Supabase REST (no SDK) · No build step
+   ═══════════════════════════════════════════════════════════════ */
+'use strict';
+/* ── Config ─────────────────────────────────────────────────── */
+const APP_VERSION = 'v1.0.22';
+const APP_BUILD   = '2026-05-28T00:00:00Z';
+const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+const PRICES_FN = `${SUPABASE_URL}/functions/v1/get-prices`;
+/* ── State ──────────────────────────────────────────────────── */
+const S = {
+  session: null,
+  view: 'dashboard',
+  portfolioId: null,
+  portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [],
+  otherAssets: [], otherAssetTypes: [],
+  dashboardSnapshots: [],
+  prevSnapshot: null,
+  chartSeries: { totale: true, portafogli: true, asset: true, debiti: true },
+  chartTimeframe: 'all',
+  chartPctView: false,
+  chartSplitView: false,
+  prices: {},
+  priceHistory: [],
+  priceTimer: null,
+  modalAction: null,
+  charts: {},
+  ptfFilters: {},
+  ptfPnlMode: 'total',
+};
+/* ── Supabase REST helpers ───────────────────────────────────── */
+const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+function sbH(extra = {}) {
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json', ...extra };
+}
+async function sbQ(table, params = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbIns(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return (await r.json())[0];
+}
+async function sbUpd(table, filter, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbDel(table, filter) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+}
+async function sbUpsert(table, body, onConflict = '') {
+  const qs = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : '';
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}${qs}`, {
+    method: 'POST',
+    headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return (await r.json())[0];
+}
+/* ── Session / Auth ─────────────────────────────────────────── */
+const SESSION_KEY  = 'garsal_session';
+const saveSession  = s => localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+const loadSession  = () => { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; } };
+const clearSession = () => localStorage.removeItem(SESSION_KEY);
+function loginWithGoogle() {
+  location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(location.origin + location.pathname)}`;
+}
+async function sendMagicLink(email) {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/magiclink`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, options: { emailRedirectTo: location.origin + location.pathname } }),
+  });
+  if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
+}
+async function handleOAuthCallback() {
+  const p = new URLSearchParams(location.hash.substring(1));
+  const at = p.get('access_token');
+  if (!at) return null;
+  const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${at}` },
+  })).json();
+  const session = { access_token: at, refresh_token: p.get('refresh_token'), expires_at: Date.now() + parseInt(p.get('expires_in'), 10) * 1000, user };
+  saveSession(session);
+  history.replaceState(null, '', location.pathname);
+  return session;
+}
+async function refreshSession(session) {
+  if (!session?.refresh_token) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    saveSession(ns);
+    return ns;
+  } catch { return null; }
+}
+async function logout() {
+  try { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method: 'POST', headers: sbH() }); } catch {}
+  clearSession();
+  location.reload();
+}
+/* ── Default tag categories ──────────────────────────────────── */
+const DEFAULT_TAG_CATS = [
+  { name: 'RISCHIO',    options: ['ALTO', 'MEDIO', 'BASSO'] },
+  { name: 'TASSAZIONE', options: ['CAP. GAIN 26%', 'PIR', 'AGEVOLATA 12.5%', 'ESENTE', 'ALTRO'] },
+  { name: 'STRUMENTO',  options: ['AZIONE', 'ETF', 'OBBLIGAZIONE', 'CRYPTO', 'FONDO', 'CERTIFICATO', 'ALTRO'] },
+];
+/* ── Data loaders ────────────────────────────────────────────── */
+async function loadAll() {
+  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes] = await Promise.all([
+    sbQ('portfolios',     'select=*&order=created_at.asc'),
+    sbQ('transactions',   'select=*&order=date.desc,created_at.desc'),
+    sbQ('products',       'select=*&order=name.asc'),
+    sbQ('tag_categories', 'select=*&order=name.asc'),
+    sbQ('dossiers',       'select=*&order=created_at.asc'),
+    sbQ('loans',          'select=*&order=created_at.asc'),
+    sbQ('other_assets',   'select=*&order=valuation_date.desc'),
+    sbQ('other_asset_types','select=*&order=name.asc'),
+  ]);
+  S.portfolios   = portfolios;
+  S.transactions = transactions;
+  S.products     = products;
+  S.tagCats      = tagCats;
+  S.dossiers     = dossiers;
+  S.loans        = loans;
+  S.otherAssets  = otherAssets;
+  S.otherAssetTypes = otherAssetTypes;
+  if (tagCats.length === 0) {
+    await Promise.all(DEFAULT_TAG_CATS.map(tc => sbIns('tag_categories', { ...tc, user_id: S.session.user.id })));
+    S.tagCats = await sbQ('tag_categories', 'select=*&order=name.asc');
+  }
+  await loadPricesFromCache();
+  S.priceHistory = await sbQ('price_history', 'select=*&order=price_date.desc');
+  computePricesFromHistory();
+  S.dashboardSnapshots = await sbQ(
+    'dashboard_snapshots',
+    'select=snapshot_date,patrimonio_netto,portafogli_totali,asset_totali,debiti_totali&order=snapshot_date.asc'
+  );
+  { const _t = new Date().toISOString().slice(0,10);
+    const _p = await sbQ('dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
+    S.prevSnapshot = _p[0] || null; }
+}
+async function reload() {
+  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes] = await Promise.all([
+    sbQ('portfolios',     'select=*&order=created_at.asc'),
+    sbQ('transactions',   'select=*&order=date.desc,created_at.desc'),
+    sbQ('products',       'select=*&order=name.asc'),
+    sbQ('tag_categories', 'select=*&order=name.asc'),
+    sbQ('dossiers',       'select=*&order=created_at.asc'),
+    sbQ('loans',          'select=*&order=created_at.asc'),
+    sbQ('other_assets',   'select=*&order=valuation_date.desc'),
+    sbQ('other_asset_types','select=*&order=name.asc'),
+  ]);
+  S.portfolios   = portfolios;
+  S.transactions = transactions;
+  S.products     = products;
+  S.tagCats      = tagCats;
+  S.dossiers     = dossiers;
+  S.loans        = loans;
+  S.otherAssets  = otherAssets;
+  S.otherAssetTypes = otherAssetTypes;
+  await loadPricesFromCache();
+  S.priceHistory = await sbQ('price_history', 'select=*&order=price_date.desc');
+  computePricesFromHistory();
+  S.dashboardSnapshots = await sbQ(
+    'dashboard_snapshots',
+    'select=snapshot_date,patrimonio_netto,portafogli_totali,asset_totali,debiti_totali&order=snapshot_date.asc'
+  );
+  { const _t = new Date().toISOString().slice(0,10);
+    const _p = await sbQ('dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
+    S.prevSnapshot = _p[0] || null; }
+  render();
+}
+/* ── Business logic — costo medio ponderato ──────────────────── */
+function computeHoldings(portfolioId = null) {
+  const txs = (portfolioId
+    ? S.transactions.filter(t => t.portfolio_id === portfolioId)
+    : S.transactions
+  ).slice().sort((a, b) => (a.date + a.created_at).localeCompare(b.date + b.created_at));
+  const map = new Map(); // productId → { qty, costBasis }
+  for (const tx of txs) {
+    if (!map.has(tx.product_id)) map.set(tx.product_id, { qty: 0, costBasis: 0 });
+    const h   = map.get(tx.product_id);
+    const qty = parseFloat(tx.quantity);
+    const prc = parseFloat(tx.price);
+    const com = parseFloat(tx.commission || 0);
+    if (tx.type === 'BUY') {
+      h.costBasis += qty * prc + com;
+      h.qty += qty;
+    } else {
+      if (h.qty > 0) h.costBasis -= (h.costBasis / h.qty) * qty;
+      h.qty -= qty;
+    }
+  }
+  return Array.from(map.entries())
+    .filter(([, h]) => h.qty > 0.000001)
+    .map(([productId, h]) => {
+      const product = S.products.find(p => p.id === productId);
+      if (!product) return null;
+      const avgCost     = h.qty > 0 ? h.costBasis / h.qty : 0;
+      const pd          = S.prices[product.symbol] || null;
+      const currentPrice = pd?.price ?? null;
+      const currentValue = currentPrice != null ? h.qty * currentPrice : null;
+      const pnl          = currentValue != null ? currentValue - h.costBasis : null;
+      const pnlPct       = h.costBasis > 0 && pnl != null ? (pnl / h.costBasis) * 100 : null;
+      return { product, qty: h.qty, avgCost, costBasis: h.costBasis, currentPrice, currentValue, pnl, pnlPct, pd };
+    }).filter(Boolean);
+}
+function portfolioStats() {
+  return S.portfolios.map(p => {
+    const own = (parseFloat(p.ownership_percentage) || 100) / 100;
+    const h   = computeHoldings(p.id);
+    const tot = h.reduce((s, x) => s + (x.currentValue ?? x.costBasis), 0) * own;
+    const cost = h.reduce((s, x) => s + x.costBasis, 0) * own;
+    const pnl  = tot - cost;
+    const previousCloseValue = h.reduce((s, x) => {
+      const prevClose = x.pd?.prev_close ?? null;
+      return s + (prevClose != null ? x.qty * prevClose : (x.currentValue ?? x.costBasis));
+    }, 0) * own;
+    const dailyChangePct = previousCloseValue > 0
+      ? ((tot - previousCloseValue) / previousCloseValue) * 100
+      : null;
+    return {
+      portfolio: p,
+      holdings: h,
+      totalValue: tot,
+      totalCost: cost,
+      pnl,
+      pnlPct: cost > 0 ? (pnl / cost) * 100 : 0,
+      previousCloseValue,
+      dailyChangePct,
+    };
+  });
+}
+function computeDossierValue(dossierId) {
+  const txs = S.transactions
+    .filter(t => t.dossier_id === dossierId)
+    .slice()
+    .sort((a, b) => (a.date + a.created_at).localeCompare(b.date + b.created_at));
+  const map = new Map(); // productId -> qty
+  for (const tx of txs) {
+    const qty = parseFloat(tx.quantity);
+    const cur = map.get(tx.product_id) || 0;
+    map.set(tx.product_id, tx.type === 'BUY' ? cur + qty : cur - qty);
+  }
+  let total = 0;
+  let hasMissingPrice = false;
+  for (const [productId, qty] of map.entries()) {
+    if (qty <= 0.000001) continue;
+    const product = S.products.find(p => p.id === productId);
+    if (!product) continue;
+    const pd = S.prices[product.symbol] || null;
+    const price = pd?.price ?? null;
+    if (price == null) { hasMissingPrice = true; continue; }
+    total += qty * price;
+  }
+  return { total, hasMissingPrice };
+}
+/* ── Business logic — loans ──────────────────────────────────── */
+function computeLoanValue(loan) {
+  const today = new Date();
+  const own = (parseFloat(loan.ownership_percentage) || 100) / 100;
+
+  if (loan.type === 'MUTUO') {
+    const capitale = parseFloat(loan.capitale);
+    const rata = parseFloat(loan.rata);
+    const totaleRate = parseInt(loan.totale_rate);
+    const start = new Date(loan.giorno_prima_rata);
+    
+    let mesiPagati = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+    mesiPagati = Math.max(0, Math.min(mesiPagati, totaleRate));
+
+    const calculateRate = (n, pmt, pv) => {
+      let rate = 0.01;
+      let tol = 1e-7;
+      for (let i = 0; i < 1000; i++) {
+        let f = pmt * (1 - Math.pow(1 + rate, -n)) / rate - pv;
+        let df = (-pmt * (1 - Math.pow(1 + rate, -n)) / (rate * rate)) + (pmt * n * Math.pow(1 + rate, -n - 1) / rate);
+        let newRate = rate - f / df;
+        if (Math.abs(newRate - rate) < tol) return newRate;
+        rate = newRate;
+      }
+      return rate;
+    };
+
+    const rate = calculateRate(totaleRate, rata, capitale);
+    let value;
+    if (Math.abs(rate) < 1e-8) {
+      value = (capitale - rata * mesiPagati) * own;
+    } else {
+      value = (capitale * Math.pow(1 + rate, mesiPagati) - rata * (Math.pow(1 + rate, mesiPagati) - 1) / rate) * own;
+    }
+    return { value, paymentsMade: mesiPagati, paymentsRemaining: totaleRate - mesiPagati };
+  } else {
+    const C = parseFloat(loan.capitale);
+    const i = parseFloat(loan.interesse) / 100;
+    const D = new Date(loan.data_inizio_prestito);
+    const t = (today - D) / (1000 * 60 * 60 * 24 * 365.25);
+    const value = C * Math.pow(1 + i, t) * own;
+    return { value, t };
+  }
+}
+/* ── Price fetching ─────────────────────────────────────────── */
+function computePricesFromHistory() {
+  S.prices = {};
+  const grouped = {};
+  for (const h of S.priceHistory) {
+    if (!grouped[h.symbol]) grouped[h.symbol] = [];
+    grouped[h.symbol].push(h);
+  }
+  for (const [symbol, entries] of Object.entries(grouped)) {
+    entries.sort((a, b) => a.id.localeCompare(b.id));
+    entries.sort((a, b) => a.price_date.localeCompare(b.price_date));
+    const last = entries[entries.length - 1];
+    if (!last) continue;
+    const prev = entries.length > 1 ? entries[entries.length - 2] : null;
+    const price = parseFloat(last.price);
+    const prevClose = prev ? parseFloat(prev.price) : null;
+    const changeAmt = prevClose != null ? price - prevClose : null;
+    const changePct = prevClose != null && prevClose !== 0 ? (changeAmt / prevClose) * 100 : null;
+    S.prices[symbol] = {
+      symbol, price, prev_close: prevClose,
+      change_amt: changeAmt, change_pct: changePct,
+      currency: 'EUR', updated_at: last.created_at,
+    };
+  }
+  console.log('[prices] calcolati da history:', Object.keys(S.prices).length, 'simboli');
+}
+/* ── Dashboard snapshot ─────────────────────────────────────── */
+function buildSnapshotPayload() {
+  const stats      = portfolioStats();
+  const grandValue = stats.reduce((s, x) => s + x.totalValue, 0);
+  const totalLoans = S.loans.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
+  const totalOther = S.otherAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+
+  const portfolios = stats.map(({ portfolio: p, holdings: h, totalValue, totalCost, pnl, pnlPct }) => {
+    const own = (parseFloat(p.ownership_percentage) || 100) / 100;
+    return {
+      id: p.id, name: p.name, color: p.color,
+      ownership_pct: parseFloat(p.ownership_percentage) || 100,
+      total_value: totalValue,
+      total_value_full: own > 0 ? totalValue / own : totalValue,
+      total_cost: totalCost, pnl, pnl_pct: pnlPct,
+      holdings: h.map(hh => ({
+        symbol: hh.product.symbol, name: hh.product.name, asset_type: hh.product.asset_type,
+        qty: hh.qty, avg_cost: hh.avgCost, cost_basis: hh.costBasis,
+        current_price: hh.currentPrice, current_value: hh.currentValue,
+        current_value_quota: hh.currentValue != null ? hh.currentValue * own : null,
+        pnl: hh.pnl, pnl_pct: hh.pnlPct,
+      })),
+    };
+  });
+
+  const loans = S.loans.map(l => {
+    const { value } = computeLoanValue(l);
+    const own = (parseFloat(l.ownership_percentage) || 100) / 100;
+    return {
+      id: l.id, type: l.type, name: l.name || (l.type === 'MUTUO' ? 'Mutuo' : 'Prestito'),
+      ownership_pct: parseFloat(l.ownership_percentage) || 100,
+      residual_value: value,
+      residual_value_full: own > 0 ? value / own : value,
+    };
+  });
+
+  const other_assets = S.otherAssets.map(a => {
+    const own = (parseFloat(a.ownership_percentage) || 100) / 100;
+    return {
+      id: a.id, title: a.title, asset_type: a.asset_type,
+      value: parseFloat(a.value),
+      ownership_pct: parseFloat(a.ownership_percentage) || 100,
+      ownership_value: parseFloat(a.value) * own,
+      valuation_date: a.valuation_date,
+    };
+  });
+
+  return {
+    topLevel: {
+      patrimonio_netto:  grandValue + totalOther - totalLoans,
+      portafogli_totali: grandValue,
+      asset_totali:      grandValue + totalOther,
+      debiti_totali:     totalLoans,
+    },
+    details: { portfolios, loans, other_assets },
+  };
+}
+
+async function saveSnapshot() {
+  const { topLevel, details } = buildSnapshotPayload();
+  const today = new Date().toISOString().slice(0, 10);
+  await sbUpsert('dashboard_snapshots', {
+    user_id:           S.session.user.id,
+    snapshot_date:     today,
+    patrimonio_netto:  topLevel.patrimonio_netto,
+    portafogli_totali: topLevel.portafogli_totali,
+    asset_totali:      topLevel.asset_totali,
+    debiti_totali:     topLevel.debiti_totali,
+    details,
+    updated_at:        new Date().toISOString(),
+  }, 'user_id,snapshot_date');
+}
+
+async function autoSaveSnapshot() {
+  const today = new Date().toISOString().slice(0, 10);
+  if (S.dashboardSnapshots.some(s => s.snapshot_date === today)) return;
+  try {
+    await saveSnapshot();
+    const { topLevel } = buildSnapshotPayload();
+    S.dashboardSnapshots.push({ snapshot_date: today, ...topLevel });
+    S.dashboardSnapshots.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+  } catch(e) { console.warn('[snapshot] auto-save fallito:', e.message); }
+}
+async function loadPricesFromCache() {
+  const rows = await sbQ('price_cache', `select=*&currency=eq.EUR`);
+  if (rows?.length) {
+    for (const r of rows) S.prices[r.symbol] = r;
+    console.log('[prices] cache letta:', rows.length, 'simboli');
+  }
+}
+async function refreshPrices() {
+  // La Edge Function legge i prodotti direttamente dal DB — nessun parametro necessario
+  console.log('[prices] avvio aggiornamento prezzi...');
+  try {
+    const r = await fetch(PRICES_FN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${tok()}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({}),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      console.log('[prices] v' + data.version, 'aggiornati', data.updated + '/' + data.total);
+      await loadPricesFromCache();
+    } else {
+      const errBody = await r.text();
+      console.error('[prices] HTTP', r.status, errBody);
+      alert('Aggiornamento prezzi fallito (HTTP ' + r.status + '):\n' + errBody);
+    }
+  } catch (e) {
+    console.error('[prices] fetch error:', e.message);
+    alert('Aggiornamento prezzi fallito: ' + e.message);
+  }
+}
+/* ── Formatters ─────────────────────────────────────────────── */
+const fmtEURc = n => n == null ? '—' : new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n);
+const fmtEUR  = n => { if (n == null) return '—'; const v = Math.round(n); return (v < 0 ? '-' : '') + Math.abs(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €'; };
+const fmtEUR0 = fmtEUR;
+const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: 6 }).format(n);
+const fmtPct = n => n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+const pnlCls = n => n == null ? '' : n >= 0 ? 'pos' : 'neg';
+function tagBadge(cat, val) {
+  if (!val) return '';
+  const c = cat === 'RISCHIO' ? (val === 'ALTO' ? 'tag-r-alto' : val === 'MEDIO' ? 'tag-r-medio' : 'tag-r-basso')
+          : cat === 'STRUMENTO' ? 'tag-strumento' : 'tag-default';
+  return `<span class="badge ${c}">${val}</span>`;
+}
+const ASSET_MAP = { stock: ['Azione','tag-stock'], etf: ['ETF','tag-etf'], bond: ['Obbl.','tag-bond'], crypto: ['Crypto','tag-crypto'], fund: ['Fondo','tag-fund'], other: ['Altro','tag-default'] };
+const assetBadge = t => { const [l, c] = ASSET_MAP[t] || ['—','tag-default']; return `<span class="badge ${c}">${l}</span>`; };
+/* ── Charts ──────────────────────────────────────────────────── */
+const PALETTE = ['#4f46e5','#0891b2','#16a34a','#d97706','#dc2626','#7c3aed','#0d9488','#b45309','#be185d'];
+function drawChart(id, labels, data, colors) {
+  if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
+  const canvas = document.getElementById(id);
+  if (!canvas || !data.some(v => v > 0)) return;
+  S.charts[id] = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: (colors || PALETTE).slice(0, data.length), borderWidth: 2, borderColor: '#fff' }] },
+    options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 12 } } }, animation: { duration: 400 } },
+  });
+}
+/* ── DOM helpers ─────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+
+function txLog(message, data = {}) {
+  console.log('[TX PRODUCT FILTER]', message, {
+    timestamp: new Date().toISOString(),
+    ...data,
+  });
+}
+
+function txWarn(message, data = {}) {
+  console.warn('[TX PRODUCT FILTER]', message, {
+    timestamp: new Date().toISOString(),
+    ...data,
+  });
+}
+/* ── KPI card ────────────────────────────────────────────────── */
+const kpi = (label, value, cls = 'neutral', delta = '') =>
+  `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-value mono ${cls}">${value}${delta}</div></div>`;
+function deltaHtml(current, prev) {
+  if (prev == null || isNaN(prev) || prev === 0) return '';
+  const pct = (current - prev) / Math.abs(prev) * 100;
+  const cls = pct >= 0 ? 'pos' : 'neg';
+  return `<span class="delta-pct ${cls}">${pct >= 0 ? '+' : ''}${pct.toFixed(2).replace('.', ',')}%</span>`;
+}
+/* ── Grafico multi-serie progressione patrimoniale ───────────── */
+const TIMEFRAME_OPTS = [
+  { tf: '1w',  label: '1 Settimana' },
+  { tf: '1m',  label: '1 Mese' },
+  { tf: '3m',  label: '3 Mesi' },
+  { tf: '6m',  label: '6 Mesi' },
+  { tf: '1y',  label: '1 Anno' },
+  { tf: '2y',  label: '2 Anni' },
+  { tf: 'all', label: 'Da inizio' },
+];
+function filterSnapshotsByTimeframe(snapshots, tf) {
+  if (tf === 'all') return snapshots;
+  const daysMap = { '1w': 7, '1m': 30, '3m': 91, '6m': 183, '1y': 365, '2y': 730 };
+  const days = daysMap[tf];
+  if (!days) return snapshots;
+  const cutoff = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  return snapshots.filter(s => s.snapshot_date >= cutoff);
+}
+const CHART_SERIES_DEF = [
+  { key: 'totale',     label: 'Totale',     field: 'patrimonio_netto',  color: '#4f46e5' },
+  { key: 'portafogli', label: 'Portafogli', field: 'portafogli_totali', color: '#f59e0b' },
+  { key: 'asset',      label: 'Asset',      field: 'asset_totali',      color: '#10b981' },
+  { key: 'debiti',     label: 'Debiti',     field: 'debiti_totali',     color: '#ef4444' },
+];
+function _buildSingleSeriesSvg(s, data, usePct, toPlot, W, H, PAD) {
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+  const xScale = i => PAD.left + (i / (data.length - 1 || 1)) * innerW;
+  let minV = Infinity, maxV = -Infinity;
+  for (const d of data) {
+    const raw = parseFloat(d[s.field]);
+    if (isNaN(raw)) continue;
+    const v = toPlot(s, raw);
+    if (v === null) continue;
+    minV = Math.min(minV, v); maxV = Math.max(maxV, v);
+  }
+  if (minV === Infinity) return '';
+  if (usePct) { minV = Math.min(minV, 0); maxV = Math.max(maxV, 0); }
+  if (minV === maxV) { minV -= 1; maxV += 1; }
+  const yPad = (maxV - minV) * 0.1;
+  const yMin = minV - yPad, yMax = maxV + yPad;
+  const yScale = v => PAD.top + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
+  let yTicks;
+  if (usePct) {
+    const range = yMax - yMin;
+    const rawStep = range / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep || 1)));
+    const step = [1, 2, 5, 10, 25, 50, 100].map(m => m * mag).find(st => st >= rawStep) || mag;
+    const start = Math.ceil(yMin / step) * step;
+    yTicks = [];
+    for (let v = start; v <= yMax + 1e-9; v += step)
+      yTicks.push({ y: yScale(v), label: (v >= 0 ? '+' : '') + v.toFixed(v % 1 ? 1 : 0) + '%', isZero: Math.abs(v) < 1e-9 });
+  } else {
+    yTicks = [0, 0.33, 0.67, 1].map(f => ({ y: yScale(yMin + f * (yMax - yMin)), label: fmtEUR(yMin + f * (yMax - yMin)), isZero: false }));
+  }
+  const maxLbl = Math.min(5, data.length);
+  const xLabels = Array.from({ length: maxLbl }, (_, i) => {
+    const idx = Math.round(i * (data.length - 1) / (maxLbl - 1 || 1));
+    return { x: xScale(idx), label: fmtDate(data[idx].snapshot_date) };
+  });
+  const pts = data.map((d, i) => {
+    const raw = parseFloat(d[s.field]);
+    if (isNaN(raw)) return null;
+    const v = toPlot(s, raw);
+    if (v === null) return null;
+    return { x: xScale(i), y: yScale(v), d };
+  });
+  let paths = [], buf = '';
+  pts.forEach((p, i) => {
+    if (!p) { if (buf) { paths.push(buf); buf = ''; } return; }
+    buf += buf ? ` L${p.x.toFixed(1)},${p.y.toFixed(1)}` : `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    if (i === pts.length - 1 && buf) { paths.push(buf); buf = ''; }
+  });
+  const dotsHtml = pts.filter(Boolean).map(p =>
+    `<circle class="chart-dot" r="3.5" fill="${s.color}" stroke="var(--c-surface)" stroke-width="1.5"
+      cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}"
+      data-action="snap-detail" data-snap-date="${p.d.snapshot_date}"
+      data-value="${p.d.patrimonio_netto}" />`
+  ).join('');
+  return yTicks.map(t =>
+    `<line class="chart-axis" x1="${PAD.left}" y1="${t.y.toFixed(1)}"
+           x2="${W - PAD.right}" y2="${t.y.toFixed(1)}"
+           stroke-dasharray="${t.isZero ? 'none' : '3,4'}"
+           ${t.isZero ? 'stroke="#94a3b8" stroke-width="1.5"' : ''}/>
+     <text class="chart-label" x="${PAD.left - 4}" y="${(t.y + 3).toFixed(1)}"
+           text-anchor="end"${t.isZero ? ' font-weight="600" fill="#64748b"' : ''}>${t.label}</text>`
+  ).join('') +
+  paths.map(d => `<path fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" d="${d}" />`).join('') +
+  dotsHtml +
+  xLabels.map(l =>
+    `<text class="chart-label" x="${l.x.toFixed(1)}" y="${(PAD.top + innerH + 16).toFixed(1)}"
+           text-anchor="middle">${l.label}</text>`
+  ).join('');
+}
+function renderPatrimonioChart() {
+  const allData = S.dashboardSnapshots;
+
+  const timeframeSelectHtml = `<select class="tf-select" data-action="set-chart-timeframe">
+    ${TIMEFRAME_OPTS.map(o =>
+      `<option value="${o.tf}"${S.chartTimeframe === o.tf ? ' selected' : ''}>${o.label}</option>`
+    ).join('')}
+  </select>`;
+
+  const active = S.chartSeries;
+  const activeSeries = CHART_SERIES_DEF.filter(s => active[s.key]);
+  const switchesHtml = CHART_SERIES_DEF.map(s =>
+    `<button class="series-toggle ${active[s.key] ? 'active' : ''}"
+       data-action="toggle-series" data-series="${s.key}"
+       style="--sc:${s.color}">
+      <span class="series-dot"></span>${s.label}
+    </button>`
+  ).join('');
+
+  const pctBtnHtml   = `<button class="tf-btn${S.chartPctView   ? ' active' : ''}" data-action="toggle-pct-view"   title="Variazione % rispetto all'inizio del periodo">%</button>`;
+  const splitBtnHtml = `<button class="tf-btn${S.chartSplitView ? ' active' : ''}" data-action="toggle-split-view" title="Grafici separati per serie">⊞</button>`;
+
+  const headerHtml = `
+    <div class="chart-controls-row">
+      ${timeframeSelectHtml}
+      <div style="display:flex;align-items:center;gap:4px">${pctBtnHtml}${splitBtnHtml}</div>
+    </div>
+    <div class="chart-series-switches" style="margin-bottom:4px">${switchesHtml}</div>`;
+
+  if (!allData.length) {
+    return `<div class="pnetto-chart-wrap">
+      <div class="pnetto-chart-header" style="flex-direction:column;align-items:stretch">
+        ${headerHtml}
+      </div>
+      <div style="height:140px;display:flex;align-items:center;justify-content:center;color:var(--c-muted);font-size:.85rem">
+        Nessuno snapshot salvato. Usa il pulsante qui sopra per salvarne uno.
+      </div>
+    </div>`;
+  }
+
+  const data = filterSnapshotsByTimeframe(allData, S.chartTimeframe);
+
+  if (!activeSeries.length || !data.length) {
+    return `<div class="pnetto-chart-wrap">
+      <div class="pnetto-chart-header" style="flex-direction:column;align-items:stretch">
+        ${headerHtml}
+      </div>
+      <div style="height:140px;display:flex;align-items:center;justify-content:center;color:var(--c-muted);font-size:.85rem">
+        ${!activeSeries.length ? 'Seleziona almeno una serie per visualizzare il grafico' : 'Nessun dato nel periodo selezionato'}
+      </div>
+    </div>`;
+  }
+
+  const usePct = S.chartPctView;
+
+  // Base per modalità %
+  const seriesBase = {};
+  if (usePct) {
+    for (const s of activeSeries) {
+      const first = data.find(d => !isNaN(parseFloat(d[s.field])));
+      seriesBase[s.key] = first ? parseFloat(first[s.field]) : null;
+    }
+  }
+  const toPlot = (s, v) => {
+    if (usePct) {
+      const base = seriesBase[s.key];
+      if (base === null || base === 0) return null;
+      return (v - base) / Math.abs(base) * 100;
+    }
+    return v;
+  };
+
+  // ── Vista separata: un grafico per serie con scala ottimale ──
+  if (S.chartSplitView) {
+    const SW = 500, SH = 145, SPAD = { top: 12, right: 14, bottom: 26, left: 68 };
+    const splitHtml = activeSeries.map(s => {
+      const svgContent = _buildSingleSeriesSvg(s, data, usePct, toPlot, SW, SH, SPAD);
+      if (!svgContent) return '';
+      return `<div class="chart-split-item">
+        <div class="chart-split-label">
+          <span style="width:9px;height:9px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
+          ${s.label}${usePct ? '<span style="color:var(--c-muted);font-weight:400;font-size:.7rem;margin-left:3px">var. %</span>' : ''}
+        </div>
+        <svg class="pnetto-svg" style="height:125px" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none">${svgContent}</svg>
+      </div>`;
+    }).filter(Boolean).join('');
+    return `<div class="pnetto-chart-wrap">
+      <div class="pnetto-chart-header" style="flex-direction:column;align-items:stretch">
+        ${headerHtml}
+      </div>
+      <div class="chart-split-grid">${splitHtml}</div>
+    </div>`;
+  }
+
+  // ── Vista unificata ──
+  const W = 800, H = 170;
+  const PAD = { top: 14, right: 20, bottom: 30, left: 76 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top  - PAD.bottom;
+  const xScale = i => PAD.left + (i / (data.length - 1 || 1)) * innerW;
+
+  // Range Y globale su tutte le serie attive (sui valori trasformati)
+  let minV = Infinity, maxV = -Infinity;
+  for (const s of activeSeries) {
+    for (const d of data) {
+      const raw = parseFloat(d[s.field]);
+      if (isNaN(raw)) continue;
+      const v = toPlot(s, raw);
+      if (v === null) continue;
+      minV = Math.min(minV, v); maxV = Math.max(maxV, v);
+    }
+  }
+  if (minV === Infinity) return '';
+  // In modalità % forziamo sempre lo zero nel range visibile
+  if (usePct) { minV = Math.min(minV, 0); maxV = Math.max(maxV, 0); }
+  if (minV === maxV) { minV -= 1; maxV += 1; }
+
+  const yPad = (maxV - minV) * 0.1;
+  const yMin = minV - yPad, yMax = maxV + yPad;
+  const yScale = v => PAD.top + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
+
+  // Tick Y
+  let yTicks;
+  if (usePct) {
+    // Sceglie un passo round (1, 2, 5, 10, 25, 50, …) per avere ~5 tick
+    const range = yMax - yMin;
+    const rawStep = range / 5;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const step = [1, 2, 5, 10, 25, 50, 100].map(m => m * mag).find(s => s >= rawStep) || mag;
+    const start = Math.ceil(yMin / step) * step;
+    yTicks = [];
+    for (let v = start; v <= yMax + 1e-9; v += step) {
+      yTicks.push({ v, y: yScale(v), label: (v >= 0 ? '+' : '') + v.toFixed(v % 1 ? 1 : 0) + '%', isZero: Math.abs(v) < 1e-9 });
+    }
+  } else {
+    yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => {
+      const v = yMin + f * (yMax - yMin);
+      return { y: yScale(v), label: fmtEUR(v), isZero: false };
+    });
+  }
+
+  // Etichette X (max 8)
+  const maxLabels = Math.min(8, data.length);
+  const xLabels = Array.from({ length: maxLabels }, (_, i) => {
+    const idx = Math.round(i * (data.length - 1) / (maxLabels - 1 || 1));
+    return { x: xScale(idx), label: fmtDate(data[idx].snapshot_date) };
+  });
+
+  // Una polyline + dots per ogni serie attiva
+  const seriesSvg = activeSeries.map(s => {
+    const pts = data.map((d, i) => {
+      const raw = parseFloat(d[s.field]);
+      if (isNaN(raw)) return null;
+      const v = toPlot(s, raw);
+      if (v === null) return null;
+      return { x: xScale(i), y: yScale(v), d, pct: usePct ? v : null };
+    });
+
+    let paths = [], buf = '';
+    pts.forEach((p, i) => {
+      if (!p) { if (buf) { paths.push(buf); buf = ''; } return; }
+      buf += buf ? ` L${p.x.toFixed(1)},${p.y.toFixed(1)}` : `M${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      if (i === pts.length - 1 && buf) { paths.push(buf); buf = ''; }
+    });
+
+    const dotsHtml = pts.filter(Boolean).map(p =>
+      `<circle class="chart-dot" r="4" fill="${s.color}" stroke="var(--c-surface)" stroke-width="1.5"
+        cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}"
+        data-action="snap-detail" data-snap-date="${p.d.snapshot_date}"
+        data-value="${p.d.patrimonio_netto}" />`
+    ).join('');
+
+    return paths.map(d =>
+      `<path fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" d="${d}" />`
+    ).join('') + dotsHtml;
+  }).join('');
+
+  // Linea dello zero in modalità % (evidenziata)
+  const zeroLineY = usePct ? yScale(0).toFixed(1) : null;
+
+  return `
+    <div class="pnetto-chart-wrap">
+      <div class="pnetto-chart-header" style="flex-direction:column;align-items:stretch">
+        ${headerHtml}
+      </div>
+      <svg class="pnetto-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+           role="img" aria-label="Grafico progressione patrimoniale">
+        ${yTicks.map(t =>
+          `<line class="chart-axis" x1="${PAD.left}" y1="${t.y.toFixed(1)}"
+                 x2="${W - PAD.right}" y2="${t.y.toFixed(1)}"
+                 stroke-dasharray="${t.isZero ? 'none' : '3,4'}"
+                 ${t.isZero ? 'stroke="#94a3b8" stroke-width="1.5"' : ''}/>
+           <text class="chart-label" x="${PAD.left - 4}" y="${(t.y + 3).toFixed(1)}"
+                 text-anchor="end"${t.isZero ? ' font-weight="600" fill="#64748b"' : ''}>${t.label}</text>`
+        ).join('')}
+        ${seriesSvg}
+        ${xLabels.map(l =>
+          `<text class="chart-label" x="${l.x.toFixed(1)}" y="${(PAD.top + innerH + 18).toFixed(1)}"
+                 text-anchor="middle">${l.label}</text>`
+        ).join('')}
+        ${usePct ? `<text font-family="var(--font-mono)" font-size="9" fill="#4f46e5" opacity="0.6"
+                 x="${W - PAD.right}" y="${PAD.top + 2}" text-anchor="end">var. % da inizio periodo</text>` : ''}
+      </svg>
+    </div>`;
+}
+/* ══════════════ RENDERERS ══════════════════════════════════════ */
+function renderProgressione() {
+  const snaps = S.dashboardSnapshots.slice().sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
+  const tableRows = snaps.length === 0
+    ? `<tr><td colspan="5" class="text-muted text-sm" style="padding:16px;text-align:center">
+        Nessuno snapshot salvato. Torna alla Dashboard o salva uno snapshot manualmente.
+       </td></tr>`
+    : snaps.map(s => `
+      <tr style="cursor:pointer" data-action="snap-detail" data-snap-date="${s.snapshot_date}">
+        <td class="mono fw-600">${fmtDate(s.snapshot_date)}</td>
+        <td class="text-right mono ${parseFloat(s.patrimonio_netto) >= 0 ? 'pos' : 'neg'} fw-600">${fmtEUR(parseFloat(s.patrimonio_netto))}</td>
+        <td class="text-right mono">${s.portafogli_totali != null ? fmtEUR(parseFloat(s.portafogli_totali)) : '—'}</td>
+        <td class="text-right mono">${fmtEUR(parseFloat(s.asset_totali))}</td>
+        <td class="text-right mono neg">${fmtEUR(parseFloat(s.debiti_totali))}</td>
+        <td class="text-right"><span class="text-muted text-sm">→</span></td>
+      </tr>`).join('');
+
+  setHtml('view-progressione', `
+    <div class="view-header">
+      <div>
+        <h2 class="page-title">Sviluppo</h2>
+        <p class="page-sub">Storico del patrimonio nel tempo</p>
+      </div>
+      <button class="btn btn-sm btn-outline" data-action="save-snapshot">💾 Salva snapshot</button>
+    </div>
+
+    ${renderPatrimonioChart()}
+
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Snapshot salvati</div>
+        <span class="text-muted text-sm">${snaps.length} voce${snaps.length !== 1 ? 'i' : ''}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th class="text-right">Patrimonio Netto</th>
+              <th class="text-right">Portafogli</th>
+              <th class="text-right">Asset Totali</th>
+              <th class="text-right">Debiti Totali</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>
+  `);
+}
+function renderDashboard() {
+  const stats      = portfolioStats();
+  const grandValue = stats.reduce((s, x) => s + x.totalValue, 0);
+  const grandCost  = stats.reduce((s, x) => s + x.totalCost, 0);
+  const grandPnl   = grandValue - grandCost;
+  const grandPct   = grandCost > 0 ? (grandPnl / grandCost) * 100 : 0;
+  
+  const grandFullValue = stats.reduce((s, x) => s + (x.totalValue / ((parseFloat(x.portfolio.ownership_percentage) || 100) / 100)), 0);
+
+  const totalLoans = S.loans.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
+  const totalOther = S.otherAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+
+  const prev = S.prevSnapshot;
+  const prevPtfMap = {};
+  if (prev?.details?.portfolios) {
+    for (const p of prev.details.portfolios) prevPtfMap[p.id] = p.total_value;
+  }
+
+  const ts         = Object.values(S.prices)[0]?.updated_at;
+  const priceInfo  = ts ? `Prezzi: ${new Date(ts).toLocaleTimeString('it-IT')}` : 'Prezzi non caricati';
+  
+  setHtml('view-dashboard', `
+    <div class="view-header">
+      <div><h2 class="page-title">Dashboard</h2><p class="page-sub">${priceInfo}</p></div>
+      <div class="hstack gap-8">
+        <button class="btn btn-sm btn-outline" data-action="refresh-prices">⟳ Aggiorna prezzi</button>
+        <button class="btn btn-sm btn-primary" data-action="new-transaction">+ Transazione</button>
+      </div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Patrimonio Netto</div><div class="kpi-value mono neutral">${deltaHtml(grandValue + totalOther - totalLoans, prev ? parseFloat(prev.patrimonio_netto) : null)} ${fmtEUR(grandValue + totalOther - totalLoans)}</div></div>
+      ${kpi('Asset Totali',     fmtEUR(grandValue + totalOther), 'neutral')}
+      ${kpi('Debiti Totali',    fmtEUR(totalLoans), 'neg')}
+    </div>
+
+    <div class="grid-2">
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-header-row">
+          <div class="card-title">Portafogli</div>
+          <button class="btn btn-outline btn-sm" data-action="nav" data-view="portafogli">Dettaglio →</button>
+        </div>
+        <div class="mb-16">
+          <div class="kpi-label">Valore totale quota</div>
+          <div class="mono text-lg fw-700 pos text-right">${deltaHtml(grandValue, prev ? parseFloat(prev.portafogli_totali) : null)} ${fmtEUR0(grandValue)}</div>
+        </div>
+        <div class="table-wrap">
+          <table class="table table-2col" style="table-layout:fixed;width:100%">
+            <thead>
+              <tr>
+                <th style="width:55%">Portafoglio</th>
+                <th class="text-right" style="width:45%">Valore Quota</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${stats.length === 0
+                ? `<tr><td colspan="2" class="empty-sm">Nessun portafoglio ancora.</td></tr>`
+                : stats.map(({ portfolio: p, totalValue: tv, pnl, pnlPct, holdings: h }) => {
+                    const prevTv = prevPtfMap[p.id] != null ? parseFloat(prevPtfMap[p.id]) : null;
+                    const d = deltaHtml(tv, prevTv);
+                    return `
+                    <tr data-action="view-portfolio" data-id="${p.id}" style="cursor:pointer">
+                      <td style="overflow:hidden">
+                        <div class="hstack gap-8" style="overflow:hidden">
+                          <span class="portfolio-dot" style="background:${p.color};flex-shrink:0"></span>
+                          <span class="fw-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</span>
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <span class="mono fw-600" style="font-size:.85rem">${fmtEUR0(tv)}</span>${d ? `<br><span style="font-size:.72rem">${d}</span>` : ''}
+                      </td>
+                    </tr>`;
+                  }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-header-row">
+          <div class="card-title">Prestiti e Mutui</div>
+          <button class="btn btn-outline btn-sm" data-action="nav" data-view="loans">Dettaglio →</button>
+        </div>
+        <div class="kpi-label">Debito residuo totale (quota)</div>
+        <div class="mono text-lg fw-700 neg mb-16 text-right">${fmtEUR(totalLoans)}</div>
+        <div class="table-wrap">
+          <table class="table table-2col">
+            <thead>
+              <tr>
+                <th>Prestito</th>
+                <th class="text-right">Debito Residuo</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${S.loans.length === 0
+                ? `<tr><td colspan="2" class="empty-sm">Nessun prestito inserito.</td></tr>`
+                : S.loans.map(l => {
+                    const val = computeLoanValue(l).value;
+                    return `<tr style="cursor:pointer" data-action="nav" data-view="loans">
+                      <td class="fw-600">${l.name}</td>
+                      <td class="text-right mono fw-600 neg">${fmtEUR(val)}</td>
+                    </tr>`;
+                  }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-header-row">
+          <div class="card-title">Altri Asset</div>
+          <button class="btn btn-outline btn-sm" data-action="nav" data-view="other-assets">Dettaglio →</button>
+        </div>
+        <div class="kpi-label">Valore stimato totale (quota)</div>
+        <div class="mono text-lg fw-700 pos mb-16 text-right">${fmtEUR(totalOther)}</div>
+        <div class="table-wrap">
+          <table class="table table-2col">
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th class="text-right">Valore</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${S.otherAssets.length === 0
+                ? `<tr><td colspan="2" class="empty-sm">Nessun altro asset inserito.</td></tr>`
+                : S.otherAssets.map(a => {
+                    const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
+                    return `<tr style="cursor:pointer" data-action="nav" data-view="other-assets">
+                      <td class="fw-600">${a.title}</td>
+                      <td class="text-right mono fw-600 pos">${fmtEUR(val)}</td>
+                    </tr>`;
+                  }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+    </div>
+  `);
+}
+function renderPortafogli() {
+  const stats = portfolioStats();
+  setHtml('view-portafogli', `
+    <div class="view-header">
+      <div><h2 class="page-title">Portafogli</h2><p class="page-sub">Crea e gestisci i tuoi portafogli</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-portfolio">+ Nuovo portafoglio</button>
+    </div>
+    ${S.portfolios.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">💼</div><p>Nessun portafoglio ancora.<br/>Creane uno per iniziare.</p></div>`
+      : `<div class="portfolio-grid">${stats.map(({ portfolio: p, totalValue: tv, dailyChangePct }) => `
+        <div class="portfolio-card" style="border-top: 4px solid ${p.color}">
+          <div class="portfolio-card-header">
+            <div>
+              <div class="fw-700 text-lg truncate" style="max-width:200px">${p.name}</div>
+              <div class="text-muted text-sm mt-2">Possesso: <strong>${p.ownership_percentage || '100'}%</strong></div>
+              ${p.description ? `<div class="text-muted text-sm mt-2">${p.description}</div>` : ''}
+            </div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-portfolio" data-id="${p.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-portfolio" data-id="${p.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="portfolio-card-stats">
+            <div>
+              <div class="kpi-label">Valore portafoglio (quota)</div>
+              <div class="mono portfolio-card-value">${fmtEUR(tv)}</div>
+            </div>
+            <div>
+              <div class="kpi-label">Var. da chiusura prec.</div>
+              <div class="mono portfolio-card-change ${pnlCls(dailyChangePct)}">${fmtPct(dailyChangePct)}</div>
+            </div>
+          </div>
+          <div class="text-sm text-muted mt-12">
+            Valore intero: <strong>${fmtEUR(tv / ((parseFloat(p.ownership_percentage) || 100) / 100))}</strong>
+          </div>
+          <button class="btn btn-outline btn-sm mt-12" data-action="view-portfolio" data-id="${p.id}">Apri →</button>
+        </div>`).join('')}
+      </div>`
+    }
+  `);
+}
+function renderPortafoglioDetail() {
+  const portfolio = S.portfolios.find(p => p.id === S.portfolioId);
+  if (!portfolio) { navigate('portafogli'); return; }
+  const own = (parseFloat(portfolio.ownership_percentage) || 100) / 100;
+  const holdings  = computeHoldings(portfolio.id);
+  const totalVal  = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0) * own;
+  const totalCost = holdings.reduce((s, h) => s + h.costBasis, 0) * own;
+  const totalPnl  = totalVal - totalCost;
+  const totalPct  = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+  const totalDailyPnl = holdings.reduce((s, h) => s + (h.pd?.change_amt != null ? h.pd.change_amt * h.qty * own : 0), 0);
+  const totalDailyPct = (totalVal - totalDailyPnl) > 0 ? (totalDailyPnl / (totalVal - totalDailyPnl)) * 100 : 0;
+  const txs       = S.transactions.filter(t => t.portfolio_id === portfolio.id);
+  const ptfFilters = S.ptfFilters || {};
+  let visibleHoldings = holdings;
+  if (ptfFilters.tipo) visibleHoldings = visibleHoldings.filter(h => h.product.asset_type === ptfFilters.tipo);
+  S.tagCats.forEach(tc => {
+    if (ptfFilters[tc.name]) visibleHoldings = visibleHoldings.filter(h => (h.product.tags?.[tc.name] ?? '') === ptfFilters[tc.name]);
+  });
+  const tipoOptions = [...new Set(holdings.map(h => h.product.asset_type).filter(Boolean))].sort();
+  setHtml('view-portafoglio-detail', `
+    <div class="view-header">
+      <div class="hstack gap-8">
+        <button class="btn btn-sm btn-outline" data-action="nav" data-view="portafogli">← Portafogli</button>
+        <div>
+          <h2 class="page-title" style="color:${portfolio.color}">${portfolio.name} <span class="text-muted text-sm" style="font-weight:400">(${portfolio.ownership_percentage || 100}%)</span></h2>
+          ${portfolio.description ? `<p class="page-sub">${portfolio.description}</p>` : ''}
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" data-action="new-transaction" data-portfolio-id="${portfolio.id}">+ Transazione</button>
+    </div>
+    <div class="kpi-grid">
+      ${kpi('Valore portafoglio (quota)', fmtEUR(totalVal),  'neutral')}
+      ${kpi('Investito (quota)',          fmtEUR(totalCost), 'neutral')}
+      ${kpi('P&amp;L (quota)',            fmtEUR(totalPnl),  pnlCls(totalPnl))}
+      <div class="kpi-card" data-action="toggle-ptf-pnl-mode" style="cursor:pointer" title="${S.ptfPnlMode === 'daily' ? 'Clicca per rendimento totale' : 'Clicca per rendimento giornaliero'}">
+        <div class="kpi-label">${S.ptfPnlMode === 'daily' ? 'Var. % 1d ⇄' : 'Rendimento ⇄'}</div>
+        <div class="kpi-value mono ${S.ptfPnlMode === 'daily' ? pnlCls(totalDailyPct) : pnlCls(totalPct)}">${S.ptfPnlMode === 'daily' ? fmtPct(totalDailyPct) : fmtPct(totalPct)}</div>
+      </div>
+    </div>
+    <div class="grid-2 mb-16">
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-header-row">
+          <div class="card-title">Posizioni aperte (quota del ${portfolio.ownership_percentage || 100}%)</div>
+          ${holdings.length > 0 ? `<div class="chart-wrap" style="height:180px;width:280px;flex-shrink:0"><canvas id="chart-ptf-alloc"></canvas></div>` : ''}
+        </div>
+        ${holdings.length === 0
+          ? `<div class="empty-sm">Nessuna posizione. Aggiungi una transazione BUY.</div>`
+          : `<div class="table-wrap"><table class="table table-posizioni">
+            <thead><tr>
+              <th>Simbolo</th><th>Nome</th>
+              <th class="${ptfFilters.tipo ? 'th-has-filter' : ''}">Tipo
+                <select class="col-filter-sel${ptfFilters.tipo ? ' has-filter' : ''}" data-action="ptf-filter" data-col="tipo">
+                  <option value="">Tutti</option>
+                  ${tipoOptions.map(v => `<option value="${v}"${ptfFilters.tipo === v ? ' selected' : ''}>${v}</option>`).join('')}
+                </select>
+              </th>
+              <th>Qtà</th>
+              <th>Costo medio</th><th>Prezzo att.</th><th>Var. %</th>
+              <th>Valore (quota)</th><th>P&amp;L (quota)</th><th style="cursor:pointer;user-select:none;white-space:nowrap" data-action="toggle-ptf-pnl-mode" title="${S.ptfPnlMode === 'daily' ? 'Clicca per rendimento totale' : 'Clicca per rendimento giornaliero'}">${S.ptfPnlMode === 'daily' ? 'Var. % 1d ⇄' : 'P&amp;L % ⇄'}</th>
+              ${S.tagCats.map(tc => {
+                const af = ptfFilters[tc.name] || '';
+                return `<th class="${af ? 'th-has-filter' : ''}">${tc.name}
+                  <select class="col-filter-sel${af ? ' has-filter' : ''}" data-action="ptf-filter" data-col="${tc.name}">
+                    <option value="">Tutti</option>
+                    ${tc.options.map(v => `<option value="${v}"${af === v ? ' selected' : ''}>${v}</option>`).join('')}
+                  </select>
+                </th>`;
+              }).join('')}
+            </tr></thead>
+            <tbody>${visibleHoldings.length === 0
+              ? `<tr><td colspan="${10 + S.tagCats.length}" style="text-align:center;padding:20px;color:var(--c-muted)">Nessuna posizione corrisponde ai filtri attivi.</td></tr>`
+              : visibleHoldings.map(h => `
+              <tr data-action="open-position-transactions" data-product-id="${h.product.id}" style="cursor:pointer">
+                <td class="mono fw-600">${h.product.symbol}</td>
+                <td><div class="truncate" style="max-width:160px">${h.product.name}</div></td>
+                <td>${assetBadge(h.product.asset_type)}</td>
+                <td class="mono">${fmtNum(h.qty)}</td>
+                <td class="mono">${fmtEURc(h.avgCost)}</td>
+                <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.currentPrice != null ? fmtEURc(h.currentPrice) : '—'}</td>
+                <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.pd ? fmtPct(h.pd.change_pct) : '—'}</td>
+                <td class="mono fw-600">${fmtEUR(h.currentValue * own)}</td>
+                <td class="mono ${pnlCls(h.pnl * own)}">${fmtEUR(h.pnl * own)}</td>
+                <td>${S.ptfPnlMode === 'daily'
+                  ? `<span class="badge ${h.pd?.change_pct != null && h.pd.change_pct >= 0 ? 'badge-pos' : 'badge-neg'}">${h.pd ? fmtPct(h.pd.change_pct) : '—'}</span>`
+                  : `<span class="badge ${h.pnlPct != null && h.pnlPct >= 0 ? 'badge-pos' : 'badge-neg'}">${fmtPct(h.pnlPct)}</span>`
+                }</td>
+                ${S.tagCats.map(tc => `<td>${tagBadge(tc.name, h.product.tags?.[tc.name])}</td>`).join('')}
+              </tr>`).join('')}
+            </tbody></table></div>`
+        }
+      </div>
+    </div>
+    ${txs.length > 0 ? `
+      <div class="card">
+        <div class="card-title">Storico transazioni</div>
+        <div class="table-wrap"><table class="table table-storico">
+          <thead><tr><th>Data</th><th>Tipo</th><th>Simbolo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th></th></tr></thead>
+          <tbody>${txs.map(t => {
+            const pr = S.products.find(p => p.id === t.product_id);
+            return `<tr>
+              <td class="mono text-sm">${fmtDate(t.date)}</td>
+              <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
+              <td class="mono fw-600">${pr?.symbol ?? '—'}</td>
+              <td class="mono">${fmtNum(t.quantity)}</td>
+              <td class="mono">${fmtEURc(t.price)}</td>
+              <td class="mono">${fmtEUR(t.quantity * t.price)}</td>
+              <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
+              <td><div class="truncate" style="max-width:120px">${t.notes || '—'}</div></td>
+              <td>
+                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
+                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </div>` : ''}
+  `);
+  if (holdings.length > 0) {
+    requestAnimationFrame(() => drawChart('chart-ptf-alloc',
+      holdings.map(h => h.product.symbol),
+      holdings.map(h => h.currentValue ?? h.costBasis)
+    ));
+  }
+}
+function renderTransazioni() {
+  setHtml('view-transazioni', `
+    <div class="view-header">
+      <div><h2 class="page-title">Transazioni</h2><p class="page-sub">Storico completo carichi e scarichi</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-transaction">+ Nuova transazione</button>
+    </div>
+    ${S.transactions.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione ancora.</p></div>`
+      : `<div class="card"><div class="table-wrap"><table class="table table-transazioni">
+        <thead><tr><th>Data</th><th>Portafoglio</th><th>Dossier</th><th>Tipo</th><th>Simbolo</th><th>Nome</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th class="text-right">Azioni</th></tr></thead>
+        <tbody>${S.transactions.map(t => {
+          const pf  = S.portfolios.find(x => x.id === t.portfolio_id);
+          const pr  = S.products.find(x => x.id === t.product_id);
+          const ds  = t.dossier_id ? S.dossiers.find(x => x.id === t.dossier_id) : null;
+          return `<tr>
+            <td class="mono text-sm">${fmtDate(t.date)}</td>
+            <td><div class="truncate" style="max-width:110px">${pf ? `<span class="hstack gap-4"><span style="width:8px;height:8px;border-radius:50%;background:${pf.color};flex-shrink:0"></span><span class="truncate">${pf.name}</span></span>` : '—'}</div></td>
+            <td><div class="truncate" style="max-width:110px">${ds ? `${ds.bank_name} — ${ds.title}` : '—'}</div></td>
+            <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
+            <td class="mono fw-600">${pr?.symbol ?? '—'}</td>
+            <td><div class="truncate" style="max-width:130px">${pr?.name ?? '—'}</div></td>
+            <td class="mono">${fmtNum(t.quantity)}</td>
+            <td class="mono">${fmtEURc(t.price)}</td>
+            <td class="mono fw-600">${fmtEUR(t.quantity * t.price)}</td>
+            <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
+            <td><div class="truncate" style="max-width:100px">${t.notes || '—'}</div></td>
+            <td class="hstack gap-4 justify-end">
+              <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div></div>`
+    }
+  `);
+}
+function renderProdotti() {
+  setHtml('view-prodotti', `
+    <div class="view-header">
+      <div><h2 class="page-title">Prodotti</h2><p class="page-sub">Catalogo strumenti finanziari — usa simboli Twelve Data (es. ENI.MI, AAPL, VWCE.DE) o inserisci l'ISIN come fallback</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-product">+ Nuovo prodotto</button>
+    </div>
+    ${S.products.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">📋</div><p>Aggiungi i tuoi strumenti finanziari.<br/>Usa i simboli Yahoo Finance.</p></div>`
+      : `<div class="card"><div class="table-wrap"><table class="table table-prodotti">
+        <thead><tr>
+          <th>Simbolo</th><th>ISIN</th><th>Nome</th><th>Tipo</th><th>Borsa</th><th>Valuta</th>
+          <th>Prezzo</th><th>Var. %</th>
+          ${S.tagCats.map(tc => `<th>${tc.name}</th>`).join('')}
+          <th></th>
+        </tr></thead>
+        <tbody>${S.products.map(p => {
+          const pd = S.prices[p.symbol] || null;
+          return `<tr>
+            <td class="mono fw-600">${p.symbol}</td>
+            <td class="mono text-sm text-muted">${p.isin || '—'}</td>
+            <td>${p.name}</td>
+            <td>${assetBadge(p.asset_type)}</td>
+            <td class="text-muted text-sm">${p.exchange || '—'}</td>
+            <td class="mono text-sm">${p.currency}</td>
+            <td class="mono ${pnlCls(pd?.change_pct ?? null)}">${pd ? fmtEURc(pd.price) : '—'}</td>
+            <td class="mono ${pnlCls(pd?.change_pct ?? null)}">${pd ? fmtPct(pd.change_pct) : '—'}</td>
+            ${S.tagCats.map(tc => `<td>${tagBadge(tc.name, p.tags?.[tc.name])}</td>`).join('')}
+            <td><div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-product" data-id="${p.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-product" data-id="${p.id}" title="Elimina">✕</button>
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div></div>`
+    }
+  `);
+}
+function renderTagConfig() {
+  setHtml('view-tag-config', `
+    <div class="view-header">
+      <div><h2 class="page-title">Configurazione Tag</h2><p class="page-sub">Categorie e opzioni dei tag assegnabili ai prodotti</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-tagcat">+ Nuova categoria</button>
+    </div>
+    ${S.tagCats.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessuna categoria tag.</p></div>`
+      : `<div class="grid-auto">${S.tagCats.map(tc => `
+        <div class="card">
+          <div class="card-header-row">
+            <div class="card-title">${tc.name}</div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-tagcat" data-id="${tc.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-tagcat" data-id="${tc.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="tags-row">${tc.options.map(o => `<span class="badge tag-default">${o}</span>`).join('')}</div>
+        </div>`).join('')}</div>`
+    }
+  `);
+}
+function renderDossiers() {
+  setHtml('view-dossiers', `
+    <div class="view-header">
+      <div><h2 class="page-title">Dossier Titoli</h2><p class="page-sub">Gestione dossier titoli per portafoglio</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-dossier">+ Nuovo Dossier</button>
+    </div>
+    ${S.dossiers.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">📁</div><p>Nessun dossier ancora.</p></div>`
+      : `<div class="grid-auto">${S.dossiers.map(d => {
+          const { total: dossierValue, hasMissingPrice } = computeDossierValue(d.id);
+          return `
+        <div class="card">
+          <div class="card-header-row">
+            <div class="card-title">${d.bank_name} — ${d.title}</div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-dossier" data-id="${d.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-dossier" data-id="${d.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="settings-row text-sm">Numero: <strong>${d.number}</strong></div>
+          <div class="portfolio-card-stats">
+            <div>
+              <div class="kpi-label">Valore Dossier${hasMissingPrice ? ' <span class="text-muted text-sm">(parziale)</span>' : ''}</div>
+              <div class="mono portfolio-card-value">${fmtEUR(dossierValue)}</div>
+            </div>
+          </div>
+          ${d.notes ? `<div class="settings-row text-muted text-sm">${d.notes}</div>` : ''}
+        </div>`;
+        }).join('')}</div>`
+    }
+  `);
+}
+function renderPrestiti() {
+  setHtml('view-loans', `
+    <div class="view-header">
+      <div><h2 class="page-title">Prestiti</h2><p class="page-sub">Gestione mutui e prestiti personali</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-loan">+ Nuovo prestito</button>
+    </div>
+    ${S.loans.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🏠</div><p>Nessun prestito ancora.</p></div>`
+      : `<div class="grid-auto">${S.loans.map(l => {
+          const stats = computeLoanValue(l);
+          return `
+        <div class="card">
+          <div class="card-header-row">
+            <div class="card-title truncate" style="max-width:200px">${l.name || (l.type === 'MUTUO' ? 'Mutuo' : 'Prestito')}</div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-loan" data-id="${l.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-loan" data-id="${l.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="settings-row text-sm">Tipo: <strong>${l.type}</strong> · Possesso: <strong>${l.ownership_percentage || '100'}%</strong></div>
+          <div class="portfolio-card-stats">
+            <div>
+              <div class="kpi-label">${l.type === 'MUTUO' ? 'Capitale Residuo (quota)' : 'Debito Attuale (quota)'}</div>
+              <div class="mono portfolio-card-value">${stats.value != null ? fmtEUR(stats.value) : '—'}</div>
+            </div>
+          </div>
+          <div class="settings-row text-sm mt-12">
+            ${l.type === 'MUTUO' 
+              ? `Rata: ${fmtEURc(l.rata)} · Rate pagate: ${stats.paymentsMade}/${l.totale_rate}`
+              : `Inizio: ${fmtDate(l.data_inizio_prestito)} · Interesse: ${l.interesse}%`}
+          </div>
+          <div class="text-sm text-muted mt-8">
+            Valore intero: <strong>${fmtEUR(stats.value / ((parseFloat(l.ownership_percentage) || 100) / 100))}</strong>
+          </div>
+          ${l.notes ? `<div class="settings-row text-muted text-sm mt-4">${l.notes}</div>` : ''}
+        </div>`;
+        }).join('')}</div>`
+    }
+  `);
+}
+function renderOtherAssets() {
+  setHtml('view-other-assets', `
+    <div class="view-header">
+      <div><h2 class="page-title">Altri Asset</h2><p class="page-sub">Gestione immobili, beni di valore e altri investimenti</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-other-asset">+ Nuovo Asset</button>
+    </div>
+    ${S.otherAssets.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">💎</div><p>Nessun asset ancora.</p></div>`
+      : `<div class="grid-auto">${S.otherAssets.map(a => {
+          const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
+          return `
+        <div class="card">
+          <div class="card-header-row">
+            <div class="card-title truncate" style="max-width:200px">${a.title}</div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-other-asset" data-id="${a.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-other-asset" data-id="${a.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="settings-row text-sm">Tipo: <strong>${a.asset_type}</strong></div>
+          <div class="portfolio-card-stats">
+            <div>
+              <div class="kpi-label">Valore Stimato (quota)</div>
+              <div class="mono portfolio-card-value">${fmtEUR(val)}</div>
+            </div>
+          </div>
+          <div class="settings-row text-sm mt-12">
+            Possesso: <strong>${a.ownership_percentage}%</strong> · Valore intero: ${fmtEUR(parseFloat(a.value))}
+          </div>
+          <div class="settings-row text-sm mt-2">
+            Ultima valutazione: ${fmtDate(a.valuation_date)}
+          </div>
+          ${a.description ? `<div class="settings-row text-muted text-sm mt-4">${a.description}</div>` : ''}
+          ${a.notes ? `<div class="settings-row text-muted text-sm mt-2"><em>${a.notes}</em></div>` : ''}
+        </div>`;
+        }).join('')}</div>`
+    }
+  `);
+}
+function renderPrezzi() {
+  const oggi = new Date().toISOString().slice(0, 10);
+  const history = S.priceHistory;
+  const products = S.products;
+
+  const assetTypes = [...new Set(products.map(p => p.asset_type).filter(Boolean))].sort();
+  const filtroAsset = S.prezziFilterAssetType || '';
+  const assetLabel = { stock: 'Azioni', etf: 'ETF', bond: 'Obbligazioni', crypto: 'Crypto', fund: 'Fondi', other: 'Altro' };
+
+  const latestMap = new Map();
+  for (const h of history) {
+    if (!latestMap.has(h.symbol)) latestMap.set(h.symbol, h);
+  }
+
+  const hasPriceOggi = new Set();
+  for (const h of history) {
+    if (h.price_date === oggi) hasPriceOggi.add(h.symbol);
+  }
+
+  const productMap = new Map(products.map(p => [p.symbol, p]));
+
+  let rows = products.map(p => {
+    const l = latestMap.get(p.symbol);
+    return { symbol: p.symbol, name: p.name, currency: p.currency, asset_type: p.asset_type, latest: l, haPrezzoOggi: hasPriceOggi.has(p.symbol) };
+  });
+
+  // Aggiungi simboli in price_history ma non in products
+  for (const [sym, h] of latestMap) {
+    if (!productMap.has(sym)) {
+      rows.push({ symbol: sym, name: '', currency: '', asset_type: '', latest: h, haPrezzoOggi: hasPriceOggi.has(sym) });
+    }
+  }
+
+  if (filtroAsset) rows = rows.filter(r => r.asset_type === filtroAsset);
+  rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+  setHtml('view-prezzi', `
+    <div class="view-header">
+      <div><h2 class="page-title">Prezzi</h2><p class="page-sub">Ultimo prezzo storico per prodotto</p></div>
+      <div class="hstack gap-8">
+        <select class="year-select" data-action="filter-asset-type">
+          <option value="">Tutti i tipi</option>
+          ${assetTypes.map(at => `<option value="${at}" ${at === filtroAsset ? 'selected' : ''}>${assetLabel[at] || at}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-outline" data-action="refresh-prices">⟳ Aggiorna ora</button>
+      </div>
+    </div>
+    ${rows.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessun prezzo disponibile.</p></div>`
+      : `<div class="card"><div class="table-wrap"><table class="table table-prezzi">
+        <thead><tr>
+          <th>Simbolo</th><th>Nome</th><th>Tipo</th><th>Prezzo</th><th>Data</th><th>Stato</th>
+        </tr></thead>
+        <tbody>${rows.map(r => {
+          const missingToday = !r.haPrezzoOggi && r.latest;
+          const noPrice = !r.latest;
+          const rowClass = missingToday ? ' style="background:#fff7ed;cursor:pointer"' : noPrice ? ' style="background:#fef2f2;cursor:pointer"' : ' style="cursor:pointer"';
+          const statoBadge = !r.latest
+            ? '<span class="badge badge-neg">Mancante</span>'
+            : r.haPrezzoOggi
+              ? '<span class="badge badge-pos">OK oggi</span>'
+              : '<span class="badge badge-r-medio">Non oggi</span>';
+          return `<tr${rowClass} data-action="price-detail" data-symbol="${r.symbol}">
+            <td class="mono fw-600">${r.symbol}</td>
+            <td class="text-muted text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.name || '—'}</td>
+            <td>${r.asset_type ? assetBadge(r.asset_type) : '—'}</td>
+            <td class="mono fw-600">${r.latest ? fmtEURc(r.latest.price) : '—'}</td>
+            <td class="mono text-sm">${r.latest ? fmtDate(r.latest.price_date) : '—'}</td>
+            <td>${statoBadge}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div></div>`
+    }
+  `);
+}
+
+function openPriceDetailModal(symbol) {
+  const prices = S.priceHistory.filter(h => h.symbol === symbol).sort((a, b) => a.price_date.localeCompare(b.price_date));
+  if (prices.length === 0) { alert('Nessuno storico prezzi per ' + symbol); return; }
+  const prod = S.products.find(p => p.symbol === symbol);
+  const name = prod?.name || symbol;
+  const lastPrice = prices[prices.length - 1];
+
+  const today = new Date();
+  const startOfYear = new Date(today.getFullYear(), 0, 1);
+
+  const dateRanges = [
+    { label: '1 giorno', days: 1 },
+    { label: '1 settimana', days: 7 },
+    { label: '1 mese', days: 30 },
+    { label: '3 mesi', days: 90 },
+    { label: '6 mesi', days: 180 },
+    { label: '1 anno', days: 365 },
+    { label: 'Da inizio anno', ref: startOfYear },
+    { label: 'Dall\'inizio', ref: new Date(0) },
+  ];
+
+  const perfRows = dateRanges.map(range => {
+    const refDate = range.ref || new Date(today.getTime() - range.days * 86400000);
+    const refStr = refDate.toISOString().slice(0, 10);
+    const refPrice = prices.find(p => p.price_date >= refStr) || prices[0];
+    const gain = lastPrice.price - refPrice.price;
+    const pct = refPrice.price ? (gain / refPrice.price) * 100 : 0;
+    return `<div class="summary-row"><span>${range.label}</span><span class="mono fw-600 ${gain >= 0 ? 'pos' : 'neg'}">${gain >= 0 ? '+' : ''}${fmtEUR(gain)} (${fmtPct(pct)})</span></div>`;
+  }).join('');
+
+  openModal(`<span class="mono">${symbol}</span> — ${name}`, `
+    ${prices.length > 1 ? `<div class="chart-wrap" style="height:220px"><canvas id="chart-price-detail"></canvas></div>` : ''}
+    <div class="card-title" style="margin-top:14px">Performance</div>
+    ${perfRows}
+  `);
+
+  if (prices.length > 1) {
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById('chart-price-detail');
+      if (!canvas) return;
+      if (S.charts['price-detail']) { S.charts['price-detail'].destroy(); delete S.charts['price-detail']; }
+      const labels = prices.map(p => p.price_date);
+      const data = prices.map(p => parseFloat(p.price));
+      const ctx = canvas.getContext('2d');
+      const grad = ctx.createLinearGradient(0, 0, 0, 220);
+      grad.addColorStop(0, '#4f46e580');
+      grad.addColorStop(1, '#4f46e505');
+      S.charts['price-detail'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels, datasets: [{
+            label: symbol, data, borderColor: '#4f46e5', backgroundColor: grad, fill: true,
+            borderWidth: 2, pointRadius: 0, tension: 0.2,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } },
+            y: { ticks: { callback: v => '€' + v.toLocaleString('it-IT'), font: { size: 10 } } },
+          },
+          animation: { duration: 400 },
+        },
+      });
+    });
+  }
+}
+function renderImpostazioni() {
+  const u = S.session.user;
+  setHtml('view-impostazioni', `
+    <div class="view-header"><h2 class="page-title">Impostazioni</h2></div>
+    <div class="settings-grid">
+      <div class="card">
+        <div class="card-title">Account</div>
+        <div class="settings-row fw-600">${u.user_metadata?.full_name || u.email?.split('@')[0] || 'Utente'}</div>
+        <div class="settings-row text-muted">${u.email || '—'}</div>
+        <div class="settings-row text-sm text-muted"><span class="mono">${u.id}</span></div>
+        <button class="btn btn-outline btn-sm mt-12" data-action="logout">Disconnetti</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Ambiente</div>
+        <div class="settings-row">Modalità: <strong>${_IS_DEV ? 'development' : 'production'}</strong></div>
+        <div class="settings-row text-sm text-muted mono">${SUPABASE_URL}</div>
+        <div class="settings-row text-sm">Versione: <span class="mono">${APP_VERSION}</span></div>
+        <div class="settings-row text-sm">Build: <span class="mono">${APP_BUILD}</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Dati</div>
+        <div class="settings-row">Portafogli: <strong>${S.portfolios.length}</strong></div>
+        <div class="settings-row">Prodotti: <strong>${S.products.length}</strong></div>
+        <div class="settings-row">Transazioni: <strong>${S.transactions.length}</strong></div>
+        <div class="settings-row">Prezzi in cache: <strong>${Object.keys(S.prices).length}</strong></div>
+      </div>
+    </div>
+  `);
+}
+/* ══════════════ MODALS ═════════════════════════════════════════ */
+function openModal(title, bodyHtml, action) {
+  $('modal-title').innerHTML = title;
+  $('modal-body').innerHTML = bodyHtml;
+  S.modalAction = action;
+  $('modal-overlay').classList.remove('hidden');
+  setTimeout(() => $('modal-body').querySelector('input:not([readonly]),select')?.focus(), 50);
+}
+function closeModal() {
+  if (S.charts['price-detail']) { S.charts['price-detail'].destroy(); delete S.charts['price-detail']; }
+  $('modal-overlay').classList.add('hidden');
+  $('modal-body').innerHTML = '';
+  S.modalAction = null;
+}
+/* ── Modal storico dashboard ─────────────────────────────────── */
+function openHistModal(title, bodyHtml) {
+  $('hist-modal-title').innerHTML = title;
+  $('hist-modal-body').innerHTML  = bodyHtml;
+  $('hist-modal-overlay').classList.remove('hidden');
+}
+function closeHistModal() {
+  $('hist-modal-overlay').classList.add('hidden');
+  $('hist-modal-body').innerHTML = '';
+}
+function renderHistoricalDashboard(snap) {
+  const d    = snap.details;
+  const date = fmtDate(snap.snapshot_date);
+
+  const portfoliosHtml = (d.portfolios || []).map(p => `
+    <tr>
+      <td>
+        <div class="hstack gap-8">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0"></span>
+          <span class="fw-600">${p.name}</span>
+          <span class="text-muted text-sm">(${p.ownership_pct}%)</span>
+        </div>
+      </td>
+      <td class="text-right mono fw-600">${fmtEUR(p.total_value)}</td>
+    </tr>
+    ${(p.holdings || []).map(h => `
+      <tr style="background:var(--c-bg)">
+        <td class="text-muted text-sm" style="padding-left:28px">
+          <span class="mono fw-600">${h.symbol}</span> — ${h.name}
+          ${assetBadge(h.asset_type)}
+        </td>
+        <td class="text-right mono text-sm">
+          ${fmtEUR(h.current_value_quota)}
+          <span class="${pnlCls(h.pnl_pct)} text-sm"> ${fmtPct(h.pnl_pct)}</span>
+        </td>
+      </tr>`).join('')}
+  `).join('');
+
+  const loansHtml = (d.loans || []).length === 0
+    ? `<tr><td colspan="2" class="text-muted text-sm" style="padding:10px">Nessun prestito.</td></tr>`
+    : (d.loans || []).map(l => `
+      <tr>
+        <td class="fw-600">${l.name} <span class="text-muted text-sm">(${l.type} · ${l.ownership_pct}%)</span></td>
+        <td class="text-right mono fw-600 neg">${fmtEUR(l.residual_value)}</td>
+      </tr>`).join('');
+
+  const otherHtml = (d.other_assets || []).length === 0
+    ? `<tr><td colspan="2" class="text-muted text-sm" style="padding:10px">Nessun altro asset.</td></tr>`
+    : (d.other_assets || []).map(a => `
+      <tr>
+        <td class="fw-600">${a.title} <span class="text-muted text-sm">(${a.asset_type} · ${a.ownership_pct}%)</span></td>
+        <td class="text-right mono fw-600 pos">${fmtEUR(a.ownership_value)}</td>
+      </tr>`).join('');
+
+  openHistModal(`Dashboard al ${date}`, `
+    <div class="kpi-grid" style="margin-bottom:16px">
+      ${kpi('Patrimonio Netto', fmtEUR(snap.patrimonio_netto), 'neutral')}
+      ${kpi('Asset Totali',     fmtEUR(snap.asset_totali),     'neutral')}
+      ${kpi('Debiti Totali',    fmtEUR(snap.debiti_totali),    'neg')}
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header-row"><div class="card-title">Portafogli</div></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Portafoglio / Titolo</th><th class="text-right">Valore Quota</th></tr></thead>
+          <tbody>${portfoliosHtml}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header-row"><div class="card-title">Prestiti e Mutui</div></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Prestito</th><th class="text-right">Debito Residuo</th></tr></thead>
+          <tbody>${loansHtml}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header-row"><div class="card-title">Altri Asset</div></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Asset</th><th class="text-right">Valore</th></tr></thead>
+          <tbody>${otherHtml}</tbody>
+        </table>
+      </div>
+    </div>
+    <p class="text-muted text-sm" style="margin-top:10px;text-align:center">
+      Snapshot del ${date} — dati storici, sola lettura
+    </p>
+  `);
+}
+async function openSnapDetail(snapDate) {
+  try {
+    const rows = await sbQ('dashboard_snapshots', `snapshot_date=eq.${snapDate}&select=*&limit=1`);
+    if (!rows.length) { alert('Snapshot non trovato.'); return; }
+    renderHistoricalDashboard(rows[0]);
+  } catch(e) {
+    alert('Errore caricamento snapshot: ' + e.message);
+  }
+}
+function tagSelectsHtml(currentTags = {}) {
+  return S.tagCats.map(tc => `
+    <div class="form-group">
+      <label class="form-label">${tc.name}</label>
+      <select name="tag_${tc.name}" class="form-input form-select">
+        <option value="">— Nessuno —</option>
+        ${tc.options.map(o => `<option value="${o}" ${currentTags[tc.name] === o ? 'selected' : ''}>${o}</option>`).join('')}
+      </select>
+    </div>`).join('');
+}
+function openNewPortfolioModal(portfolioId = null) {
+  const colors = ['#4f46e5','#0891b2','#16a34a','#d97706','#dc2626','#7c3aed','#0d9488','#b45309'];
+  const ptf = portfolioId ? S.portfolios.find(p => p.id === portfolioId) : null;
+  const isEdit = !!ptf;
+  const currentColor = ptf?.color || colors[0];
+  openModal(isEdit ? 'Modifica portafoglio' : 'Nuovo portafoglio', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Lungo periodo" value="${ptf?.name ?? ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrizione</label>
+        <input name="description" class="form-input" placeholder="Opzionale" value="${ptf?.description ?? ''}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Colore</label>
+          <div class="color-grid">
+            ${colors.map(c => `
+              <label class="color-opt">
+                <input type="radio" name="color" value="${c}" ${c === currentColor ? 'checked' : ''} />
+                <span style="background:${c}"></span>
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Possesso (%) *</label>
+          <input name="ownership_percentage" type="number" step="any" min="0" max="100" class="form-input mono" required value="${ptf?.ownership_percentage || '100'}" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Salva modifiche' : 'Crea portafoglio'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      name: data.name.trim(),
+      description: data.description || '',
+      color: data.color || '#4f46e5',
+      ownership_percentage: parseFloat(data.ownership_percentage),
+    };
+    if (isEdit) {
+      await sbUpd('portfolios', `id=eq.${portfolioId}`, payload);
+    } else {
+      await sbIns('portfolios', { ...payload, user_id: S.session.user.id });
+    }
+    await reload(); closeModal();
+  });
+}
+function openNewProductModal(productId = null) {
+  const prod = productId ? S.products.find(p => p.id === productId) : null;
+
+  // Recupera i tipi di asset distinti dalla tabella products
+  const assetTypesSet = new Set(S.products.map(p => p.asset_type || 'other'));
+  const assetTypes = Array.from(assetTypesSet).sort();
+
+  // Mappa per le etichette
+  const assetTypeLabels = { stock:'Azione', etf:'ETF', bond:'Obbligazione', crypto:'Crypto', fund:'Fondo', other:'Altro' };
+
+  openModal(prod ? 'Modifica prodotto' : 'Nuovo prodotto', `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Simbolo * <span class="text-muted text-sm">(es. ENI.MI, AAPL, VWCE.DE)</span></label>
+          <input name="symbol" class="form-input mono" required placeholder="ENI.MI" value="${prod?.symbol || ''}"
+            style="text-transform:uppercase" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nome *</label>
+          <input name="name" class="form-input" required placeholder="Eni SpA" value="${prod?.name || ''}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ISIN <span class="text-muted text-sm">(opzionale — usato come fallback per ETF e obbligazioni non trovati per simbolo)</span></label>
+        <input name="isin" class="form-input mono" placeholder="IT0005092701" value="${prod?.isin || ''}"
+          style="text-transform:uppercase" maxlength="12" />
+      </div>
+      <div class="form-row-3">
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select name="asset_type" class="form-input form-select">
+            ${assetTypes.map(v => `<option value="${v}" ${(prod?.asset_type||'stock') === v ? 'selected' : ''}>${assetTypeLabels[v] || v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Borsa <span class="text-muted text-sm">(es. MIL)</span></label>
+          <input name="exchange" class="form-input mono" placeholder="MIL" value="${prod?.exchange || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valuta</label>
+          <select name="currency" class="form-input form-select">
+            ${['EUR','USD','GBP','CHF','JPY'].map(c => `<option value="${c}" ${(prod?.currency||'EUR') === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-divider">Tag</div>
+      ${tagSelectsHtml(prod?.tags || {})}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${prod ? 'Salva modifiche' : 'Aggiungi prodotto'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const tags = {};
+    for (const tc of S.tagCats) { const v = data[`tag_${tc.name}`]; if (v) tags[tc.name] = v; }
+    const payload = {
+      symbol: data.symbol.trim().toUpperCase(), name: data.name.trim(),
+      asset_type: data.asset_type, exchange: (data.exchange || '').trim().toUpperCase(),
+      currency: data.currency, tags,
+      isin: (data.isin || '').trim().toUpperCase() || null,
+    };
+    if (prod) await sbUpd('products', `id=eq.${prod.id}`, payload);
+    else      await sbIns('products', { ...payload, user_id: S.session.user.id });
+    await reload(); closeModal();
+  });
+}
+function openNewTransactionModal(prePortfolioId = null, preProductId = null) {
+  console.log('🔵 openNewTransactionModal CHIAMATA', { prePortfolioId, preProductId });
+  console.log('🔵 S.portfolios:', S.portfolios.length, 'S.products:', S.products.length);
+  if (!S.portfolios.length) { alert('Crea prima un portafoglio.'); return; }
+  if (!S.products.length)   { alert('Aggiungi prima almeno un prodotto nella sezione Prodotti.'); return; }
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Recupera i tipi di asset distinti dalla tabella products
+  const assetTypesSet = new Set(S.products.map(p => p.asset_type || 'other'));
+  const assetTypes = Array.from(assetTypesSet).sort();
+
+  // Mappa per le etichette
+  const assetTypeLabels = { stock:'Azione', etf:'ETF', bond:'Obbligazione', crypto:'Crypto', fund:'Fondo', other:'Altro' };
+
+  // Raggruppa prodotti per asset_type
+  const productsByType = {};
+  S.products.forEach(p => {
+    const type = p.asset_type || 'other';
+    if (!productsByType[type]) productsByType[type] = [];
+    productsByType[type].push(p);
+  });
+
+  openModal('Nuova transazione', `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Portafoglio *</label>
+          <select name="portfolio_id" class="form-input form-select" required>
+            ${S.portfolios.map(p => `<option value="${p.id}" ${prePortfolioId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dossier (opzionale)</label>
+          <select name="dossier_id" class="form-input form-select">
+            <option value="">— Nessun Dossier —</option>
+            ${S.dossiers.map(d => `<option value="${d.id}">${d.bank_name} — ${d.title}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Tipo prodotto *</label>
+          <select name="asset_type_filter" class="form-input form-select" required>
+            <option value="">— Seleziona tipo —</option>
+            ${assetTypes.map(v => `<option value="${v}" ${preProductId && productsByType[v]?.some(p => p.id === preProductId) ? 'selected' : ''}>${assetTypeLabels[v] || v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prodotto *</label>
+          <select name="product_id" class="form-input form-select" required disabled>
+            <option value="">— Seleziona prima il tipo —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo operazione</label>
+        <div class="type-toggle">
+          <label><input type="radio" name="type" value="BUY" checked /><span>CARICO (BUY)</span></label>
+          <label><input type="radio" name="type" value="SELL" /><span>SCARICO (SELL)</span></label>
+        </div>
+      </div>
+      <div class="form-row-3">
+        <div class="form-group">
+          <label class="form-label">Quantità *</label>
+          <input name="quantity" type="number" step="any" min="0.00000001" class="form-input mono" required placeholder="10" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prezzo unitario *</label>
+          <input name="price" type="number" step="any" min="0" class="form-input mono" required placeholder="14.56" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Commissioni</label>
+          <input name="commission" type="number" step="any" min="0" class="form-input mono" placeholder="1.95" value="0" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data *</label>
+        <input name="date" type="date" class="form-input" required value="${today}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input name="notes" class="form-input" placeholder="Opzionale" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Registra</button>
+      </div>
+    </form>
+  `, async data => {
+    const selectedProduct = S.products.find(p => p.id === data.product_id);
+    const selectedAssetType = selectedProduct?.asset_type || 'stock';
+
+    await sbIns('transactions', {
+      user_id: S.session.user.id, portfolio_id: data.portfolio_id,
+      product_id: data.product_id, type: data.type,
+      quantity: parseFloat(data.quantity), price: parseFloat(data.price),
+      commission: parseFloat(data.commission || 0), date: data.date,
+      notes: data.notes || '',
+      dossier_id: data.dossier_id || null,
+    });
+    await reload(); closeModal();
+  });
+
+  // Wiring combo "Tipo prodotto" -> "Prodotto" (eseguito qui perché i <script>
+  // iniettati via innerHTML non vengono eseguiti dal browser)
+  const assetTypeSelect = document.querySelector('#modal-body select[name="asset_type_filter"]');
+  const productSelect   = document.querySelector('#modal-body select[name="product_id"]');
+  if (assetTypeSelect && productSelect) {
+    const updateProducts = () => {
+      const selectedType = assetTypeSelect.value;
+      productSelect.innerHTML = '<option value="">— Seleziona prodotto —</option>';
+      if (!selectedType || !productsByType[selectedType]) {
+        productSelect.disabled = true;
+        return;
+      }
+      productsByType[selectedType].forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.symbol + ' — ' + p.name;
+        if (preProductId && p.id === preProductId) option.selected = true;
+        productSelect.appendChild(option);
+      });
+      productSelect.disabled = false;
+    };
+    assetTypeSelect.addEventListener('change', updateProducts);
+    updateProducts();
+  }
+}
+function openEditTransactionModal(transactionId) {
+  console.log('🟠 openEditTransactionModal CHIAMATA', { transactionId });
+  const t = S.transactions.find(x => x.id === transactionId);
+  if (!t) { console.error('🟠 Transazione non trovata!'); return; }
+  console.log('🟠 S.portfolios:', S.portfolios.length, 'S.products:', S.products.length);
+  if (!S.portfolios.length) { alert('Crea prima un portafoglio.'); return; }
+  if (!S.products.length)   { alert('Aggiungi prima almeno un prodotto nella sezione Prodotti.'); return; }
+
+  // Trova il prodotto corrente per determinare l'asset_type
+  const selectedProduct = S.products.find(p => p.id === t.product_id);
+  console.log('🟠 selectedProduct:', selectedProduct);
+  const selectedAssetType = selectedProduct?.asset_type || 'stock';
+  console.log('🟠 selectedAssetType:', selectedAssetType);
+
+  // Raggruppa prodotti per asset_type
+  const productsByType = {};
+  S.products.forEach(p => {
+    const type = p.asset_type || 'other';
+    if (!productsByType[type]) productsByType[type] = [];
+    productsByType[type].push(p);
+  });
+
+  // Recupera i tipi di asset distinti dalla tabella products
+  const assetTypesSet = new Set(S.products.map(p => p.asset_type || 'other'));
+  const assetTypes = Array.from(assetTypesSet).sort();
+
+  // Mappa per le etichette
+  const assetTypeLabels = { stock:'Azione', etf:'ETF', bond:'Obbligazione', crypto:'Crypto', fund:'Fondo', other:'Altro' };
+
+  openModal('Modifica transazione', `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Portafoglio *</label>
+          <select name="portfolio_id" class="form-input form-select" required>
+            ${S.portfolios.map(p => `<option value="${p.id}" ${t.portfolio_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dossier (opzionale)</label>
+          <select name="dossier_id" class="form-input form-select">
+            <option value="">— Nessun Dossier —</option>
+            ${S.dossiers.map(d => `<option value="${d.id}" ${t.dossier_id === d.id ? 'selected' : ''}>${d.bank_name} — ${d.title}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Tipo prodotto *</label>
+          <select name="asset_type_filter" class="form-input form-select" required>
+            <option value="">— Seleziona tipo —</option>
+            ${assetTypes.map(v => `<option value="${v}" ${selectedAssetType === v ? 'selected' : ''}>${assetTypeLabels[v] || v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prodotto *</label>
+          <select name="product_id" class="form-input form-select" required>
+            <option value="">— Seleziona prodotto —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo operazione</label>
+        <div class="type-toggle">
+          <label><input type="radio" name="type" value="BUY" ${t.type === 'BUY' ? 'checked' : ''} /><span>CARICO (BUY)</span></label>
+          <label><input type="radio" name="type" value="SELL" ${t.type === 'SELL' ? 'checked' : ''} /><span>SCARICO (SELL)</span></label>
+        </div>
+      </div>
+      <div class="form-row-3">
+        <div class="form-group">
+          <label class="form-label">Quantità *</label>
+          <input name="quantity" type="number" step="any" min="0.00000001" class="form-input mono" required placeholder="10" value="${t.quantity}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prezzo unitario *</label>
+          <input name="price" type="number" step="any" min="0" class="form-input mono" required placeholder="14.56" value="${t.price}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Commissioni</label>
+          <input name="commission" type="number" step="any" min="0" class="form-input mono" placeholder="1.95" value="${t.commission}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data *</label>
+        <input name="date" type="date" class="form-input" required value="${t.date}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input name="notes" class="form-input" placeholder="Opzionale" value="${t.notes || ''}" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva modifiche</button>
+      </div>
+    </form>
+  `, async data => {
+    await sbUpd('transactions', `id=eq.${transactionId}`, {
+      user_id: S.session.user.id, portfolio_id: data.portfolio_id,
+      product_id: data.product_id, type: data.type,
+      quantity: parseFloat(data.quantity), price: parseFloat(data.price),
+      commission: parseFloat(data.commission || 0), date: data.date,
+      notes: data.notes || '',
+      dossier_id: data.dossier_id || null,
+    });
+    await reload(); closeModal();
+  });
+
+  // Wiring combo "Tipo prodotto" -> "Prodotto" (eseguito qui perché i <script>
+  // iniettati via innerHTML non vengono eseguiti dal browser)
+  const assetTypeSelect = document.querySelector('#modal-body select[name="asset_type_filter"]');
+  const productSelect   = document.querySelector('#modal-body select[name="product_id"]');
+  if (assetTypeSelect && productSelect) {
+    const currentProductId = t.product_id;
+    const updateProducts = () => {
+      const selectedType = assetTypeSelect.value;
+      productSelect.innerHTML = '<option value="">— Seleziona prodotto —</option>';
+      if (!selectedType || !productsByType[selectedType]) {
+        productSelect.disabled = true;
+        return;
+      }
+      productsByType[selectedType].forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.symbol + ' — ' + p.name;
+        if (p.id === currentProductId) option.selected = true;
+        productSelect.appendChild(option);
+      });
+      productSelect.disabled = false;
+    };
+    assetTypeSelect.addEventListener('change', updateProducts);
+    updateProducts();
+  }
+}
+function openPositionTransactionsModal(productId) {
+  const product = S.products.find(p => p.id === productId);
+  if (!product) return;
+
+  const portfolioId = S.portfolioId;
+  const txs = S.transactions.filter(t => t.portfolio_id === portfolioId && t.product_id === productId);
+  const today = new Date().toISOString().slice(0, 10);
+
+  openModal(`Transazioni: ${product.symbol}`, `
+    <div style="margin-bottom:16px">
+      <button class="btn btn-primary btn-sm" data-action="new-transaction" data-portfolio-id="${portfolioId}" data-product-id="${productId}">+ Nuova transazione</button>
+    </div>
+    ${txs.length === 0
+      ? `<div class="empty-sm">Nessuna transazione per questo prodotto.</div>`
+      : `<div class="table-wrap"><table class="table table-modal-tx">
+          <thead><tr><th>Data</th><th>Tipo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th></th></tr></thead>
+          <tbody>${txs.map(t => {
+            return `<tr>
+              <td class="mono text-sm">${fmtDate(t.date)}</td>
+              <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
+              <td class="mono">${fmtNum(t.quantity)}</td>
+              <td class="mono">${fmtEURc(t.price)}</td>
+              <td class="mono">${fmtEUR(t.quantity * t.price)}</td>
+              <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
+              <td><div class="truncate" style="max-width:100px">${t.notes || '—'}</div></td>
+              <td>
+                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
+                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}" title="Elimina">✕</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`
+    }
+  `);
+}
+function openTagCatModal(catId = null) {
+  const cat = catId ? S.tagCats.find(c => c.id === catId) : null;
+  openModal(cat ? 'Modifica categoria tag' : 'Nuova categoria tag', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. SETTORE" value="${cat?.name || ''}"
+          ${cat ? 'readonly' : ''} style="text-transform:uppercase" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Opzioni * <span class="text-muted text-sm">(separate da virgola)</span></label>
+        <input name="options" class="form-input" required placeholder="OPZ1, OPZ2, OPZ3"
+          value="${cat ? cat.options.join(', ') : ''}" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${cat ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const options = data.options.split(',').map(o => o.trim().toUpperCase()).filter(Boolean);
+    if (cat) await sbUpd('tag_categories', `id=eq.${cat.id}`, { options });
+    else     await sbIns('tag_categories', { name: data.name.trim().toUpperCase(), options, user_id: S.session.user.id });
+    await reload(); closeModal();
+  });
+}
+function openNewDossierModal(dossierId = null) {
+  const d = dossierId ? S.dossiers.find(x => x.id === dossierId) : null;
+  openModal(d ? 'Modifica Dossier' : 'Nuovo Dossier', `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Banca *</label>
+          <input name="bank_name" class="form-input" required placeholder="es. INTESA SANPAOLO" value="${d?.bank_name || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Titolo *</label>
+          <input name="title" class="form-input" required placeholder="es. Dossier Titoli" value="${d?.title || ''}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Numero *</label>
+        <input name="number" class="form-input" required placeholder="es. 123456789" value="${d?.number || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea name="notes" class="form-input" rows="3" placeholder="Opzionale">${d?.notes || ''}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${d ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      user_id: S.session.user.id,
+      bank_name: data.bank_name.trim().toUpperCase(),
+      title: data.title.trim(),
+      number: data.number.trim(),
+      notes: data.notes || '',
+    };
+    if (d) await sbUpd('dossiers', `id=eq.${d.id}`, payload);
+    else   await sbIns('dossiers', payload);
+    await reload(); closeModal();
+  });
+}
+function openNewLoanModal(loanId = null) {
+  const l = loanId ? S.loans.find(x => x.id === loanId) : null;
+  const isEdit = !!l;
+  const type = l?.type || 'MUTUO';
+  openModal(isEdit ? 'Modifica prestito' : 'Nuovo prestito', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select name="type" class="form-input form-select" required ${isEdit ? 'disabled' : ''}>
+          <option value="MUTUO" ${type === 'MUTUO' ? 'selected' : ''}>MUTUO</option>
+          <option value="PRESTITO" ${type === 'PRESTITO' ? 'selected' : ''}>PRESTITO</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Casa al mare" value="${l?.name || ''}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Capitale iniziale *</label>
+          <input name="capitale" type="number" step="any" min="0" class="form-input mono" required value="${l?.capitale || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Possesso (%) *</label>
+          <input name="ownership_percentage" type="number" step="any" min="0" max="100" class="form-input mono" required value="${l?.ownership_percentage || '100'}" />
+        </div>
+      </div>
+      <div id="loan-fields-mutuo" class="${type === 'MUTUO' ? '' : 'hidden'}">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Rata *</label>
+            <input name="rata" type="number" step="any" min="0" class="form-input mono" ${type === 'MUTUO' ? 'required' : ''} value="${l?.rata || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Totale rate *</label>
+            <input name="totale_rate" type="number" min="1" class="form-input mono" ${type === 'MUTUO' ? 'required' : ''} value="${l?.totale_rate || ''}" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Giorno prima rata *</label>
+          <input name="giorno_prima_rata" type="date" class="form-input" ${type === 'MUTUO' ? 'required' : ''} value="${l?.giorno_prima_rata || ''}" />
+        </div>
+      </div>
+      <div id="loan-fields-prestito" class="${type === 'PRESTITO' ? '' : 'hidden'}">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Data inizio prestito *</label>
+            <input name="data_inizio_prestito" type="date" class="form-input" ${type === 'PRESTITO' ? 'required' : ''} value="${l?.data_inizio_prestito || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Interesse annuo (%) *</label>
+            <input name="interesse" type="number" step="any" class="form-input mono" ${type === 'PRESTITO' ? 'required' : ''} value="${l?.interesse || ''}" />
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${l?.notes || ''}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      user_id: S.session.user.id,
+      type: data.type || type,
+      name: data.name.trim(),
+      capitale: parseFloat(data.capitale),
+      ownership_percentage: parseFloat(data.ownership_percentage),
+      notes: data.notes || '',
+    };
+    if (payload.type === 'MUTUO') {
+      payload.rata = parseFloat(data.rata);
+      payload.totale_rate = parseInt(data.totale_rate);
+      payload.giorno_prima_rata = data.giorno_prima_rata;
+    } else {
+      payload.data_inizio_prestito = data.data_inizio_prestito;
+      payload.interesse = parseFloat(data.interesse);
+    }
+    if (isEdit) await sbUpd('loans', `id=eq.${loanId}`, payload);
+    else        await sbIns('loans', payload);
+    await reload(); closeModal();
+  });
+  const typeSelect = document.querySelector('#modal-body select[name="type"]');
+  if (typeSelect) {
+    typeSelect.addEventListener('change', () => {
+      const isMutuo = typeSelect.value === 'MUTUO';
+      $('loan-fields-mutuo').classList.toggle('hidden', !isMutuo);
+      $('loan-fields-prestito').classList.toggle('hidden', isMutuo);
+      document.querySelectorAll('#loan-fields-mutuo input').forEach(i => i.required = isMutuo);
+      document.querySelectorAll('#loan-fields-prestito input').forEach(i => i.required = !isMutuo);
+    });
+  }
+}
+function openOtherAssetModal(assetId = null) {
+  const a = assetId ? S.otherAssets.find(x => x.id === assetId) : null;
+  const isEdit = !!a;
+  const types = S.otherAssetTypes.map(t => t.name).sort();
+  
+  openModal(isEdit ? 'Modifica Asset' : 'Nuovo Asset', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Titolo *</label>
+        <input name="title" class="form-input" required placeholder="es. Appartamento Milano" value="${a?.title || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrizione</label>
+        <input name="description" class="form-input" placeholder="es. Bilocale zona centro" value="${a?.description || ''}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Tipo *</label>
+          <div class="hstack gap-4">
+            <select name="asset_type" class="form-input form-select" required>
+              <option value="">— Seleziona —</option>
+              ${types.map(t => `<option value="${t}" ${a?.asset_type === t ? 'selected' : ''}>${t}</option>`).join('')}
+              <option value="__NEW__">+ Aggiungi nuovo...</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valore Stimato *</label>
+          <input name="value" type="number" step="any" min="0" class="form-input mono" required value="${a?.value || ''}" />
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Data Valutazione *</label>
+          <input name="valuation_date" type="date" class="form-input" required value="${a?.valuation_date || new Date().toISOString().slice(0, 10)}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Possesso (%) *</label>
+          <input name="ownership_percentage" type="number" step="any" min="0" max="100" class="form-input mono" required value="${a?.ownership_percentage || '100'}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${a?.notes || ''}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    let assetType = data.asset_type;
+    if (assetType === '__NEW__') {
+      const newType = prompt('Inserisci il nome del nuovo tipo di asset:');
+      if (!newType) return;
+      const typeName = newType.trim().toUpperCase();
+      const existing = S.otherAssetTypes.find(t => t.name === typeName);
+      if (!existing) {
+        const nt = await sbIns('other_asset_types', { user_id: S.session.user.id, name: typeName });
+        S.otherAssetTypes.push(nt);
+      }
+      assetType = typeName;
+    }
+    
+    const payload = {
+      user_id: S.session.user.id,
+      title: data.title.trim(),
+      description: data.description.trim(),
+      asset_type: assetType,
+      value: parseFloat(data.value),
+      valuation_date: data.valuation_date,
+      ownership_percentage: parseFloat(data.ownership_percentage),
+      notes: data.notes.trim(),
+    };
+    
+    if (isEdit) await sbUpd('other_assets', `id=eq.${a.id}`, payload);
+    else        await sbIns('other_assets', payload);
+    await reload(); closeModal();
+  });
+}
+/* ══════════════ NAVIGATION ═════════════════════════════════════ */
+function navigate(view, param = null) {
+  if (view === 'portafoglio-detail' && param !== S.portfolioId) S.ptfFilters = {};
+  S.view = view; S.portfolioId = param;
+  render(); window.scrollTo(0, 0);
+}
+function render() {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  $(`view-${S.view}`)?.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b => {
+    const match = b.dataset.view === S.view ||
+      (S.view === 'portafoglio-detail' && b.dataset.view === 'portafogli');
+    b.classList.toggle('active', match);
+  });
+  switch (S.view) {
+    case 'dashboard':          renderDashboard();          break;
+    case 'progressione':       renderProgressione();       break;
+    case 'portafogli':         renderPortafogli();         break;
+    case 'portafoglio-detail': renderPortafoglioDetail();  break;
+    case 'transazioni':        renderTransazioni();        break;
+    case 'dossiers':           renderDossiers();           break;
+    case 'loans':              renderPrestiti();           break;
+    case 'other-assets':       renderOtherAssets();        break;
+    case 'prezzi':             renderPrezzi();             break;
+    case 'prodotti':           renderProdotti();           break;
+    case 'tag-config':         renderTagConfig();          break;
+    case 'impostazioni':       renderImpostazioni();       break;
+  }
+}
+/* ══════════════ EVENT DELEGATION ══════════════════════════════ */
+document.addEventListener('click', async e => {
+  console.log('🔴 CLICK EVENT:', e.target.tagName, e.target.className, e.target.dataset?.action);
+  const t = e.target.closest('[data-action]');
+  console.log('🔴 ELEMENT TROVATO:', t ? t.outerHTML.substring(0, 200) : 'NULL');
+  if (!t) return;
+  console.log('🔴 ACTION:', t.dataset.action);
+  switch (t.dataset.action) {
+    case 'nav':             navigate(t.dataset.view); closeMobileNav(); break;
+    case 'view-portfolio':  navigate('portafoglio-detail', t.dataset.id); break;
+    case 'new-portfolio':   openNewPortfolioModal(); break;
+    case 'edit-portfolio':  openNewPortfolioModal(t.dataset.id); break;
+    case 'new-transaction': console.log('🔴 CHIAMO openNewTransactionModal'); openNewTransactionModal(t.dataset.portfolioId || null, t.dataset.productId || null); break;
+    case 'edit-transaction': console.log('🔴 CHIAMO openEditTransactionModal'); openEditTransactionModal(t.dataset.id); break;
+    case 'open-position-transactions': openPositionTransactionsModal(t.dataset.productId); break;
+    case 'new-dossier':     openNewDossierModal(); break;
+    case 'edit-dossier':    openNewDossierModal(t.dataset.id); break;
+    case 'del-dossier':
+      if (confirm('Eliminare questo dossier?')) { await sbDel('dossiers', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'new-loan':        openNewLoanModal(); break;
+    case 'edit-loan':       openNewLoanModal(t.dataset.id); break;
+    case 'del-loan':
+      if (confirm('Eliminare questo prestito?')) { await sbDel('loans', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'new-other-asset':  openOtherAssetModal(); break;
+    case 'edit-other-asset': openOtherAssetModal(t.dataset.id); break;
+    case 'del-other-asset':
+      if (confirm('Eliminare questo asset?')) { await sbDel('other_assets', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'new-product':     openNewProductModal(); break;
+    case 'edit-product':    openNewProductModal(t.dataset.id); break;
+    case 'new-tagcat':      openTagCatModal(); break;
+    case 'edit-tagcat':     openTagCatModal(t.dataset.id); break;
+    case 'close-modal':     closeModal(); break;
+    case 'price-detail':    openPriceDetailModal(t.dataset.symbol); break;
+    case 'logout':          await logout(); break;
+    case 'toggle-series': {
+      const key = t.dataset.series;
+      S.chartSeries[key] = !S.chartSeries[key];
+      renderProgressione();
+      break;
+    }
+    case 'toggle-pct-view': {
+      S.chartPctView = !S.chartPctView;
+      renderProgressione();
+      break;
+    }
+    case 'toggle-split-view': {
+      S.chartSplitView = !S.chartSplitView;
+      renderProgressione();
+      break;
+    }
+    case 'toggle-ptf-pnl-mode': {
+      S.ptfPnlMode = S.ptfPnlMode === 'daily' ? 'total' : 'daily';
+      renderPortafoglioDetail();
+      break;
+    }
+    case 'snap-detail':
+      await openSnapDetail(t.dataset.snapDate);
+      break;
+    case 'save-snapshot': {
+      const btn = t;
+      btn.disabled = true; btn.textContent = '⏳ Salvataggio…';
+      try {
+        await saveSnapshot();
+        const today = new Date().toISOString().slice(0, 10);
+        const { topLevel } = buildSnapshotPayload();
+        const newEntry = { snapshot_date: today, ...topLevel };
+        const idx = S.dashboardSnapshots.findIndex(s => s.snapshot_date === today);
+        if (idx >= 0) S.dashboardSnapshots[idx] = newEntry;
+        else { S.dashboardSnapshots.push(newEntry); S.dashboardSnapshots.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date)); }
+        render();
+        btn.textContent = '✓ Salvato';
+        setTimeout(() => { btn.disabled = false; btn.textContent = '💾 Salva snapshot'; }, 2000);
+      } catch(e) {
+        alert('Errore salvataggio snapshot: ' + e.message);
+        btn.disabled = false; btn.textContent = '💾 Salva snapshot';
+      }
+      break;
+    }
+    case 'refresh-prices':
+      t.disabled = true; t.textContent = '⟳ Aggiornando…';
+      await refreshPrices();
+      S.priceHistory = await sbQ('price_history', 'select=*&order=price_date.desc');
+      computePricesFromHistory();
+      render();
+      break;
+    case 'del-portfolio':
+      if (confirm(`Eliminare il portafoglio e tutte le sue transazioni?`)) {
+        await sbDel('portfolios', `id=eq.${t.dataset.id}`);
+        if (S.portfolioId === t.dataset.id) navigate('portafogli');
+        else await reload();
+      }
+      break;
+    case 'del-transaction':
+      if (confirm('Eliminare questa transazione?')) { await sbDel('transactions', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'del-product':
+      if (confirm('Eliminare questo prodotto? Assicurati che non abbia transazioni collegate.')) {
+        try { await sbDel('products', `id=eq.${t.dataset.id}`); await reload(); }
+        catch { alert('Impossibile eliminare: il prodotto ha transazioni collegate.'); }
+      }
+      break;
+    case 'del-tagcat':
+      if (confirm('Eliminare questa categoria tag?')) { await sbDel('tag_categories', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+  }
+});
+document.getElementById('btn-hamburger').addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('mobile-nav-overlay').classList.toggle('open');
+});
+document.getElementById('mobile-nav-overlay').addEventListener('click', closeMobileNav);
+function closeMobileNav() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('mobile-nav-overlay').classList.remove('open');
+}
+document.addEventListener('click', e => { if (e.target === $('modal-overlay')) closeModal(); });
+document.addEventListener('click', e => { if (e.target === $('hist-modal-overlay')) closeHistModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeHistModal(); } });
+document.getElementById('hist-modal-close').addEventListener('click', closeHistModal);
+document.addEventListener('mousemove', e => {
+  const dot = e.target.closest('.chart-dot[data-action="snap-detail"]');
+  const tip = document.getElementById('pnetto-tooltip');
+  if (!tip) return;
+  if (dot) {
+    tip.textContent = `${fmtDate(dot.dataset.snapDate)} · ${fmtEUR(parseFloat(dot.dataset.value))}`;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 12) + 'px';
+    tip.style.top  = (e.clientY - 32) + 'px';
+  } else {
+    tip.style.display = 'none';
+  }
+});
+document.addEventListener('change', e => {
+  const tfSel = e.target.closest('select[data-action="set-chart-timeframe"]');
+  if (tfSel) {
+    S.chartTimeframe = tfSel.value;
+    renderProgressione();
+    return;
+  }
+  const sel = e.target.closest('select[data-action="ptf-filter"]');
+  if (sel) {
+    if (sel.value) S.ptfFilters[sel.dataset.col] = sel.value;
+    else delete S.ptfFilters[sel.dataset.col];
+    renderPortafoglioDetail();
+    return;
+  }
+  const assetFilter = e.target.closest('select[data-action="filter-asset-type"]');
+  if (assetFilter) {
+    S.prezziFilterAssetType = assetFilter.value;
+    render();
+  }
+});
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'modal-form') return;
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  const orig = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+  try {
+    await S.modalAction?.(Object.fromEntries(new FormData(e.target)));
+  } catch (err) {
+    alert('Errore: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+});
+/* ══════════════ USER UI ════════════════════════════════════════ */
+function renderUserUI(user) {
+  const name  = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utente';
+  const photo = user.user_metadata?.avatar_url;
+  $('user-name').textContent = name;
+  $('user-avatar').innerHTML = photo ? `<img src="${photo}" alt="${name}" />` : name.charAt(0).toUpperCase();
+  const badge = `<span class="badge-env ${_IS_DEV ? 'badge-dev' : 'badge-prod'}">${_IS_DEV ? 'DEV' : 'PROD'}</span>`;
+  $('env-badge').innerHTML = badge;
+  $('footer-env-badge').innerHTML = badge;
+  // Update version in footer dynamically
+  document.querySelectorAll('.version-bar .mono').forEach(el => {
+    if (el.textContent.includes('${APP_VERSION}') || el.textContent.includes('${APP_BUILD}')) {
+      el.innerHTML = el.innerHTML.replace('${APP_VERSION}', APP_VERSION).replace('${APP_BUILD}', APP_BUILD);
+    }
+  });
+}
+/* ══════════════ BOOT ═══════════════════════════════════════════ */
+async function boot() {
+  let session = null;
+  if (location.hash.includes('access_token')) {
+    try { session = await handleOAuthCallback(); } catch {}
+  }
+  if (!session) {
+    session = loadSession();
+    if (session && Date.now() > session.expires_at - 60_000) session = await refreshSession(session);
+  }
+  $('loading-overlay').classList.add('hidden');
+  if (session?.user) {
+    S.session = session;
+    const app = $('screen-app');
+    app.classList.remove('hidden');
+    app.style.display = 'flex';
+    renderUserUI(session.user);
+    $('btn-logout').addEventListener('click', logout);
+    await loadAll();
+    render();
+    autoSaveSnapshot().then(() => {
+      if (S.dashboardSnapshots.length > 0) renderDashboard();
+    });
+  } else {
+    $('screen-login').classList.remove('hidden');
+    $('btn-login-google').addEventListener('click', loginWithGoogle);
+    $('btn-login-magic').addEventListener('click', async () => {
+      const email  = $('magic-email').value.trim();
+      const errEl  = $('login-error');
+      const okEl   = $('login-success');
+      const btn    = $('btn-login-magic');
+      errEl.style.display = okEl.style.display = 'none';
+      if (!email.includes('@')) { errEl.textContent = 'Inserisci un indirizzo email valido.'; errEl.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Invio…';
+      try { await sendMagicLink(email); okEl.style.display = 'block'; }
+      catch (e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+      finally { btn.disabled = false; btn.textContent = 'Invia Magic Link'; }
+    });
+  }
+}
+const urlErr = new URLSearchParams(location.search).get('error_description');
+if (urlErr) document.addEventListener('DOMContentLoaded', () => {
+  const el = $('login-error');
+  if (el) { el.textContent = decodeURIComponent(urlErr); el.style.display = 'block'; }
+});
+document.addEventListener('DOMContentLoaded', boot);
+
+// Nascondi i link APK se si è già dentro l'app Android nativa
+if (window.AndroidBridge && window.AndroidBridge.isAndroid()) {
+  ['btn-dl-android','nav-dl-android'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+</script>
+</body>
+</html>
+
+
