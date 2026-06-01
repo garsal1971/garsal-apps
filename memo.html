@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.25</title>
+    <title>Memorandum v1.0.26</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -476,31 +476,56 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
-        /* ── TOP NAV (mobile) ── */
-        .bottom-nav {
-            display: none;
-            position: fixed; top: 56px; left: 0; right: 0;
-            height: 48px; background: #fff;
-            border-bottom: 1px solid var(--border);
-            z-index: 2500;
-            justify-content: space-around; align-items: center;
-        }
-        .bottom-nav-item {
-            flex: 1; display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            font-size: 1.4rem; cursor: pointer; padding: 0.3rem 0;
-            color: var(--muted); transition: color 0.2s;
-        }
-        .bottom-nav-item span { font-size: 0.65rem; margin-top: 2px; }
-        .bottom-nav-item.active { color: var(--primary); }
-
         /* ── MOBILE ── */
         @media (max-width: 768px) {
             .app-container { grid-template-columns: 1fr; }
-            .sidebar { display: none !important; }
-            .bottom-nav { display: flex; }
             .cards-grid { grid-template-columns: 1fr; }
-            .main-content { padding-top: 48px; }
+
+            .sidebar {
+                display: flex !important;
+                position: fixed !important;
+                top: 56px !important;
+                left: 0 !important; right: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                background: #F3F4F6 !important;
+                border-bottom: 2px solid var(--border) !important;
+                border-right: none !important;
+                padding: 0.1rem 0 !important;
+                z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+
+            .nav-menu {
+                display: flex !important;
+                flex-direction: row !important;
+                width: 100% !important;
+                justify-content: space-around !important;
+                align-items: center !important;
+                gap: 0 !important;
+                margin: 0 !important;
+            }
+
+            .nav-item {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0.15rem 0.1rem !important;
+                margin: 0 !important;
+                font-size: 2.2rem !important;
+                flex: 1 !important;
+                text-align: center !important;
+            }
+
+            .nav-item.active {
+                background: var(--primary) !important;
+                border-radius: 0;
+            }
+
+            .nav-item::after { content: none !important; display: none !important; }
+
+            .main-content { padding-top: 4.5rem !important; }
         }
     </style>
 </head>
@@ -514,19 +539,6 @@
     </a>
 </div>
 
-
-<!-- BOTTOM NAV (mobile) -->
-<nav class="bottom-nav" id="bottomNav">
-    <div class="bottom-nav-item active" id="bn-schede" onclick="showPage('schede');setNavActive(this,'schede')">
-        📄<span>Schede</span>
-    </div>
-    <div class="bottom-nav-item" id="bn-pinned" onclick="showPage('pinned');setNavActive(this,'pinned')">
-        📌<span>Fissa</span>
-    </div>
-    <div class="bottom-nav-item" id="bn-impostazioni" onclick="showPage('impostazioni');setNavActive(this,'impostazioni')">
-        ⚙️<span>Impostaz.</span>
-    </div>
-</nav>
 
 <!-- AUTH OVERLAY -->
 <div id="authOverlay" style="display:flex;">
@@ -558,11 +570,11 @@
     <aside class="sidebar" id="sidebar">
         <nav class="nav-menu">
             <div class="nav-item active" data-text="Tutte le schede" data-section="schede"
-                 onclick="showPage('schede'); setNavActive(this,'schede')">📄</div>
+                 onclick="showPage('schede'); setNavActive(this)">📄</div>
             <div class="nav-item" data-text="Fissa" data-section="pinned"
-                 onclick="showPage('pinned'); setNavActive(this,'pinned')">📌</div>
+                 onclick="showPage('pinned'); setNavActive(this)">📌</div>
             <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
-                 onclick="showPage('impostazioni'); setNavActive(this,'impostazioni')">⚙️</div>
+                 onclick="showPage('impostazioni'); setNavActive(this)">⚙️</div>
         </nav>
     </aside>
 
@@ -834,8 +846,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.25';
-var BUILD_TIME  = '2026-06-01T10:15:00Z';
+var APP_VERSION = 'v1.0.26';
+var BUILD_TIME  = '2026-06-01T10:30:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1021,14 +1033,9 @@ function showPage(name) {
     closeSidebar();
 }
 
-function setNavActive(el, section) {
+function setNavActive(el) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     el.classList.add('active');
-    // Sincronizza bottom nav
-    const sec = section || el.dataset.section;
-    document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.remove('active'));
-    const bn = document.getElementById('bn-' + sec);
-    if (bn) bn.classList.add('active');
 }
 
 function toggleSidebar() {
