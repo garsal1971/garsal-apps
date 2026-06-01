@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.23</title>
+    <title>Memorandum v1.0.24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -476,16 +476,31 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
+        /* ── BOTTOM NAV (mobile) ── */
+        .bottom-nav {
+            display: none;
+            position: fixed; bottom: 0; left: 0; right: 0;
+            height: 56px; background: #fff;
+            border-top: 1px solid var(--border);
+            z-index: 2500;
+            justify-content: space-around; align-items: center;
+        }
+        .bottom-nav-item {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            font-size: 1.4rem; cursor: pointer; padding: 0.3rem 0;
+            color: var(--muted); transition: color 0.2s;
+        }
+        .bottom-nav-item span { font-size: 0.65rem; margin-top: 2px; }
+        .bottom-nav-item.active { color: var(--primary); }
+
         /* ── MOBILE ── */
         @media (max-width: 768px) {
             .app-container { grid-template-columns: 1fr; }
-            .sidebar {
-                display: none; position: fixed; top: 56px; left: 0;
-                width: 280px; height: calc(100vh - 56px); z-index: 2500;
-                box-shadow: 4px 0 20px rgba(0,0,0,0.2);
-            }
-            .sidebar.open { display: block; }
+            .sidebar { display: none !important; }
+            .bottom-nav { display: flex; }
             .cards-grid { grid-template-columns: 1fr; }
+            .main-content { padding-bottom: 64px; }
         }
     </style>
 </head>
@@ -499,6 +514,19 @@
     </a>
 </div>
 
+
+<!-- BOTTOM NAV (mobile) -->
+<nav class="bottom-nav" id="bottomNav">
+    <div class="bottom-nav-item active" id="bn-schede" onclick="showPage('schede');setNavActive(this,'schede')">
+        📄<span>Schede</span>
+    </div>
+    <div class="bottom-nav-item" id="bn-pinned" onclick="showPage('pinned');setNavActive(this,'pinned')">
+        📌<span>Fissa</span>
+    </div>
+    <div class="bottom-nav-item" id="bn-impostazioni" onclick="showPage('impostazioni');setNavActive(this,'impostazioni')">
+        ⚙️<span>Impostaz.</span>
+    </div>
+</nav>
 
 <!-- AUTH OVERLAY -->
 <div id="authOverlay" style="display:flex;">
@@ -530,11 +558,11 @@
     <aside class="sidebar" id="sidebar">
         <nav class="nav-menu">
             <div class="nav-item active" data-text="Tutte le schede" data-section="schede"
-                 onclick="showPage('schede'); setNavActive(this)">📄</div>
+                 onclick="showPage('schede'); setNavActive(this,'schede')">📄</div>
             <div class="nav-item" data-text="Fissa" data-section="pinned"
-                 onclick="showPage('pinned'); setNavActive(this)">📌</div>
+                 onclick="showPage('pinned'); setNavActive(this,'pinned')">📌</div>
             <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
-                 onclick="showPage('impostazioni'); setNavActive(this)">⚙️</div>
+                 onclick="showPage('impostazioni'); setNavActive(this,'impostazioni')">⚙️</div>
         </nav>
     </aside>
 
@@ -806,8 +834,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.23';
-var BUILD_TIME  = '2026-06-01T09:30:00Z';
+var APP_VERSION = 'v1.0.24';
+var BUILD_TIME  = '2026-06-01T10:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -993,9 +1021,14 @@ function showPage(name) {
     closeSidebar();
 }
 
-function setNavActive(el) {
+function setNavActive(el, section) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     el.classList.add('active');
+    // Sincronizza bottom nav
+    const sec = section || el.dataset.section;
+    document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.remove('active'));
+    const bn = document.getElementById('bn-' + sec);
+    if (bn) bn.classList.add('active');
 }
 
 function toggleSidebar() {
