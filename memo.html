@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.21</title>
+    <title>Memorandum v1.0.22</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -67,13 +67,6 @@
             overflow-y: auto;
         }
 
-        .logo {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.6rem; font-weight: 700; color: var(--accent);
-            margin-bottom: 2rem; text-transform: uppercase; letter-spacing: 2px;
-        }
-        .logo span { display: block; font-size: 0.7rem; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
-
         .nav-menu { display: flex; flex-direction: column; }
 
         .nav-item {
@@ -89,29 +82,6 @@
             .nav-item::after { content: " " attr(data-text); }
         }
 
-        .sidebar-section-label {
-            font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-            letter-spacing: 1px; color: var(--muted); padding: 0.4rem 0.6rem;
-            margin-top: 1.5rem; margin-bottom: 0.25rem;
-        }
-
-        .cat-filter-item {
-            display: flex; align-items: center; gap: 0.5rem;
-            padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 2px;
-            font-size: 1rem; font-weight: 500; transition: all 0.2s;
-        }
-        .cat-filter-item:hover { background: rgba(37,99,235,0.08); }
-        .cat-filter-item.active { background: rgba(37,99,235,0.15); color: var(--accent); font-weight: 700; }
-        .cat-filter-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-        .cat-filter-count {
-            margin-left: auto; font-family: 'Space Mono', monospace;
-            font-size: 0.75rem; color: var(--muted);
-        }
-
-        .version-info {
-            margin-top: 2rem; padding: 0.6rem;
-            font-size: 0.75rem; color: var(--muted); font-family: 'Space Mono', monospace;
-        }
 
         /* ── MAIN ── */
         .main-content { padding: 1.5rem; overflow-y: auto; }
@@ -507,13 +477,7 @@
         }
 
         /* ── MOBILE ── */
-        .hamburger {
-            display: none; position: fixed; top: 12px; left: 16px;
-            background: none; border: none; color: white; font-size: 1.5rem;
-            cursor: pointer; z-index: 3100;
-        }
         @media (max-width: 768px) {
-            .hamburger { display: block; }
             .app-container { grid-template-columns: 1fr; }
             .sidebar {
                 display: none; position: fixed; top: 56px; left: 0;
@@ -535,7 +499,6 @@
     </a>
 </div>
 
-<button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
 
 <!-- AUTH OVERLAY -->
 <div id="authOverlay" style="display:flex;">
@@ -565,8 +528,6 @@
 
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
-        <div class="logo">📋 Memo<span id="sidebarVersion">v1.0.0</span></div>
-
         <nav class="nav-menu">
             <div class="nav-item active" data-text="Tutte le schede" data-section="schede"
                  onclick="showPage('schede'); setNavActive(this)">📄</div>
@@ -575,11 +536,6 @@
             <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
                  onclick="showPage('impostazioni'); setNavActive(this)">⚙️</div>
         </nav>
-
-        <div class="sidebar-section-label">Categorie</div>
-        <div id="catFilterList"></div>
-
-        <div class="version-info" id="versionInfo"></div>
     </aside>
 
     <!-- MAIN CONTENT -->
@@ -599,6 +555,12 @@
                     <option value="updated">Recenti</option>
                     <option value="created">Creazione</option>
                     <option value="title">Titolo</option>
+                </select>
+            </div>
+
+            <div style="padding:0 0 0.75rem 0;">
+                <select id="catFilterSelect" class="form-input" style="width:100%;" onchange="setCatFilter(this.value||null)">
+                    <option value="">Tutte le categorie</option>
                 </select>
             </div>
 
@@ -844,8 +806,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.21';
-var BUILD_TIME  = '2026-06-01T08:30:00Z';
+var APP_VERSION = 'v1.0.22';
+var BUILD_TIME  = '2026-06-01T09:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -963,7 +925,6 @@ function startApp() {
     document.getElementById('infoVersion').textContent = APP_VERSION;
     document.getElementById('infoBuild').textContent   = BUILD_TIME;
     document.getElementById('infoEnv').textContent     = _IS_DEV ? '🧪 Development' : '🚀 Production';
-    document.getElementById('sidebarVersion').textContent = APP_VERSION;
     document.getElementById('versionInfo').textContent = APP_VERSION + '\n' + BUILD_TIME;
     document.getElementById('sqlMigrations').textContent = SQL_MIGRATIONS;
 
@@ -1125,27 +1086,19 @@ function renderCardTile(c) {
 }
 
 function renderCatFilters() {
-    const list = document.getElementById('catFilterList');
-    if (!categories.length) { list.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:0.3rem 0.6rem;">Nessuna categoria</div>'; return; }
-
+    const sel = document.getElementById('catFilterSelect');
+    if (!sel) return;
     const countByCat = {};
     cards.forEach(c => c.categoryIds.forEach(cid => { countByCat[cid] = (countByCat[cid]||0)+1; }));
 
-    // "Tutte" entry
-    let html = `<div class="cat-filter-item${!currentCatFilter?' active':''}" onclick="setCatFilter(null)">
-        <span class="cat-filter-dot" style="background:#6B7280"></span> Tutte
-        <span class="cat-filter-count">${cards.length}</span>
-    </div>`;
-
+    let html = `<option value="">Tutte le categorie (${cards.length})</option>`;
     categories.forEach(cat => {
         const cnt = countByCat[cat.id] || 0;
-        html += `<div class="cat-filter-item${currentCatFilter===cat.id?' active':''}" onclick="setCatFilter('${cat.id}')">
-            <span class="cat-filter-dot" style="background:${cat.color||'#6B7280'}"></span>
-            ${escHtml(cat.icon||'')} ${escHtml(cat.name)}
-            <span class="cat-filter-count">${cnt}</span>
-        </div>`;
+        const sel = currentCatFilter === cat.id ? ' selected' : '';
+        html += `<option value="${cat.id}"${sel}>${escHtml((cat.icon||'') + ' ' + cat.name)} (${cnt})</option>`;
     });
-    list.innerHTML = html;
+    sel.innerHTML = html;
+    if (!currentCatFilter) sel.value = '';
 }
 
 function setCatFilter(catId) {
