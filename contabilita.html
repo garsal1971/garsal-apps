@@ -267,7 +267,7 @@ async function refreshSession(session) {
   } catch { return null; }
 }
 async function logout() {
-  location.href = '/';
+  location.href = 'index.html';
 }
 
 const fmtEUR = n => { if (n == null) return '—'; const v = Math.round(n); return (v < 0 ? '-' : '') + Math.abs(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €'; };
@@ -970,7 +970,7 @@ async function init() {
     session = await refreshSession(session);
   }
   if (!session) {
-    location.href = '/';
+    location.href = 'index.html';
     return;
   }
   S.session = session;
