@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.81</title>
+<title>AppSphere v1.5.82</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -252,10 +252,6 @@
     font-weight: 600;
     color: #fff;
     letter-spacing: 0.2px;
-  }
-  #user-name {
-    color: rgba(255,255,255,0.85);
-    font-size: 11px;
   }
   /* ── HAMBURGER BTN ── */
   #hamburger-btn {
@@ -1388,7 +1384,6 @@
     <div id="user-bar-brand-icon">G</div>
     <div id="user-bar-brand-text">Garsal Apps</div>
   </div>
-  <span id="user-name"></span>
   <button id="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
     <span></span><span></span><span></span>
   </button>
@@ -1651,8 +1646,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.81';
-const BUILD_TIME  = '2026-04-12T15:00:00Z';
+const APP_VERSION = 'v1.5.82';
+const BUILD_TIME  = '2026-06-02T18:20:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2328,7 +2323,7 @@ async function getUserInfo(token) {
 function showApp(user) {
   localStorage.setItem('was_authenticated', '1'); // flag storico, non più usato per auto-login
   const name = user?.user_metadata?.full_name || user?.email || 'Utente';
-  document.getElementById('user-name').textContent = name.split(' ')[0];
+  // (nome non mostrato)
   document.getElementById('user-bar').classList.add('visible');
   document.getElementById('score-panel').classList.add('visible');
 
