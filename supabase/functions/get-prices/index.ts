@@ -667,7 +667,7 @@ serve(async (req) => {
     // ── Load symbols, ISINs, and asset types from products table ──────────
 
     const { data: productRows, error: prodError } = await supabase
-        .from("products")
+        .from("fnz_products")
         .select("symbol, isin, asset_type");
     if (prodError) {
       log("ERROR", "Products query failed", { requestId, message: prodError.message });
@@ -699,7 +699,7 @@ serve(async (req) => {
 
     const staleThreshold = new Date(Date.now() - CACHE_TTL_MS).toISOString();
     const { data: cached, error: cacheError } = await supabase
-        .from("price_cache")
+        .from("fnz_price_cache")
         .select("*")
         .in("symbol", symbols)
         .eq("currency", TARGET_CURRENCY)
@@ -945,7 +945,7 @@ serve(async (req) => {
 
       if (rows.length > 0) {
         const { error: upsertError } = await supabase
-            .from("price_cache")
+            .from("fnz_price_cache")
             .upsert(rows, { onConflict: "symbol,currency" })
             .select();
 

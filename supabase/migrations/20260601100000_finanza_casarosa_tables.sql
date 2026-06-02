@@ -2,7 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Portafogli
-CREATE TABLE IF NOT EXISTS portfolios (
+CREATE TABLE IF NOT EXISTS fnz_portfolios (
   id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name        text          NOT NULL,
@@ -11,12 +11,12 @@ CREATE TABLE IF NOT EXISTS portfolios (
   ownership_percentage numeric(5, 2) NOT NULL DEFAULT 100,
   created_at  timestamptz   NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS portfolios_user_idx ON portfolios(user_id);
-ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "portfolios_own" ON portfolios FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_portfolios_user_idx ON fnz_portfolios(user_id);
+ALTER TABLE fnz_portfolios ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_portfolios_own" ON fnz_portfolios FOR ALL USING (user_id = auth.uid());
 
 -- Categorie tag configurabili per utente
-CREATE TABLE IF NOT EXISTS tag_categories (
+CREATE TABLE IF NOT EXISTS fnz_tag_categories (
   id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name        text          NOT NULL,
@@ -24,12 +24,12 @@ CREATE TABLE IF NOT EXISTS tag_categories (
   created_at  timestamptz   NOT NULL DEFAULT now(),
   UNIQUE(user_id, name)
 );
-CREATE INDEX IF NOT EXISTS tag_categories_user_idx ON tag_categories(user_id);
-ALTER TABLE tag_categories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "tag_categories_own" ON tag_categories FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_tag_categories_user_idx ON fnz_tag_categories(user_id);
+ALTER TABLE fnz_tag_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_tag_categories_own" ON fnz_tag_categories FOR ALL USING (user_id = auth.uid());
 
 -- Prodotti finanziari
-CREATE TABLE IF NOT EXISTS products (
+CREATE TABLE IF NOT EXISTS fnz_products (
   id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   symbol      text          NOT NULL,
@@ -42,13 +42,13 @@ CREATE TABLE IF NOT EXISTS products (
   created_at  timestamptz   NOT NULL DEFAULT now(),
   UNIQUE(user_id, symbol)
 );
-CREATE INDEX IF NOT EXISTS products_user_idx ON products(user_id);
-CREATE INDEX IF NOT EXISTS products_symbol_idx ON products(symbol);
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "products_own" ON products FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_products_user_idx ON fnz_products(user_id);
+CREATE INDEX IF NOT EXISTS fnz_products_symbol_idx ON fnz_products(symbol);
+ALTER TABLE fnz_products ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_products_own" ON fnz_products FOR ALL USING (user_id = auth.uid());
 
 -- Dossier titoli
-CREATE TABLE IF NOT EXISTS dossiers (
+CREATE TABLE IF NOT EXISTS fnz_dossiers (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   bank_name   text        NOT NULL,
@@ -58,17 +58,17 @@ CREATE TABLE IF NOT EXISTS dossiers (
   created_at  timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id, bank_name, number)
 );
-CREATE INDEX IF NOT EXISTS dossiers_user_idx ON dossiers(user_id);
-ALTER TABLE dossiers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "dossiers_own" ON dossiers FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_dossiers_user_idx ON fnz_dossiers(user_id);
+ALTER TABLE fnz_dossiers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_dossiers_own" ON fnz_dossiers FOR ALL USING (user_id = auth.uid());
 
 -- Transazioni (carico = BUY, scarico = SELL)
-CREATE TABLE IF NOT EXISTS transactions (
+CREATE TABLE IF NOT EXISTS fnz_transactions (
   id           uuid            PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      uuid            NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  portfolio_id uuid            NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
-  product_id   uuid            NOT NULL REFERENCES products(id)   ON DELETE RESTRICT,
-  dossier_id   uuid            REFERENCES dossiers(id) ON DELETE SET NULL,
+  portfolio_id uuid            NOT NULL REFERENCES fnz_portfolios(id) ON DELETE CASCADE,
+  product_id   uuid            NOT NULL REFERENCES fnz_products(id)   ON DELETE RESTRICT,
+  dossier_id   uuid            REFERENCES fnz_dossiers(id) ON DELETE SET NULL,
   type         text            NOT NULL CHECK (type IN ('BUY', 'SELL')),
   quantity     numeric(18, 8)  NOT NULL CHECK (quantity > 0),
   price        numeric(18, 4)  NOT NULL CHECK (price >= 0),
@@ -77,16 +77,16 @@ CREATE TABLE IF NOT EXISTS transactions (
   notes        text            NOT NULL DEFAULT '',
   created_at   timestamptz     NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS transactions_user_idx ON transactions(user_id);
-CREATE INDEX IF NOT EXISTS transactions_portfolio_idx ON transactions(portfolio_id);
-CREATE INDEX IF NOT EXISTS transactions_product_idx ON transactions(product_id);
-CREATE INDEX IF NOT EXISTS transactions_dossier_idx ON transactions(dossier_id);
-CREATE INDEX IF NOT EXISTS transactions_date_idx ON transactions(date DESC);
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "transactions_own" ON transactions FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_transactions_user_idx ON fnz_transactions(user_id);
+CREATE INDEX IF NOT EXISTS fnz_transactions_portfolio_idx ON fnz_transactions(portfolio_id);
+CREATE INDEX IF NOT EXISTS fnz_transactions_product_idx ON fnz_transactions(product_id);
+CREATE INDEX IF NOT EXISTS fnz_transactions_dossier_idx ON fnz_transactions(dossier_id);
+CREATE INDEX IF NOT EXISTS fnz_transactions_date_idx ON fnz_transactions(date DESC);
+ALTER TABLE fnz_transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_transactions_own" ON fnz_transactions FOR ALL USING (user_id = auth.uid());
 
 -- Cache prezzi
-CREATE TABLE IF NOT EXISTS price_cache (
+CREATE TABLE IF NOT EXISTS fnz_price_cache (
   symbol       text          PRIMARY KEY,
   price        numeric(18, 4),
   prev_close   numeric(18, 4),
@@ -96,12 +96,12 @@ CREATE TABLE IF NOT EXISTS price_cache (
   market_state text          NOT NULL DEFAULT 'REGULAR',
   updated_at   timestamptz   NOT NULL DEFAULT now()
 );
--- price_cache è condivisa, ma mettiamo RLS per sicurezza (solo lettura per autenticati)
-ALTER TABLE price_cache ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "price_cache_read" ON price_cache FOR SELECT USING (auth.role() = 'authenticated');
+-- fnz_price_cache è condivisa, ma mettiamo RLS per sicurezza (solo lettura per autenticati)
+ALTER TABLE fnz_price_cache ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_price_cache_read" ON fnz_price_cache FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Storicizzazione Prezzi
-CREATE TABLE IF NOT EXISTS price_history (
+CREATE TABLE IF NOT EXISTS fnz_price_history (
   id           uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   symbol       text          NOT NULL,
   price        numeric(18, 4) NOT NULL,
@@ -109,16 +109,16 @@ CREATE TABLE IF NOT EXISTS price_history (
   created_at   timestamptz   NOT NULL DEFAULT now(),
   UNIQUE(symbol, price_date)
 );
-CREATE INDEX IF NOT EXISTS price_history_symbol_idx ON price_history(symbol);
-CREATE INDEX IF NOT EXISTS price_history_date_idx ON price_history(price_date DESC);
-ALTER TABLE price_history ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "price_history_read" ON price_history FOR SELECT USING (auth.role() = 'authenticated');
+CREATE INDEX IF NOT EXISTS fnz_price_history_symbol_idx ON fnz_price_history(symbol);
+CREATE INDEX IF NOT EXISTS fnz_price_history_date_idx ON fnz_price_history(price_date DESC);
+ALTER TABLE fnz_price_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_price_history_read" ON fnz_price_history FOR SELECT USING (auth.role() = 'authenticated');
 
--- Trigger per sincronizzazione price_history da price_cache
+-- Trigger per sincronizzazione fnz_price_history da fnz_price_cache
 CREATE OR REPLACE FUNCTION handle_price_history_sync()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO price_history (symbol, price, price_date)
+  INSERT INTO fnz_price_history (symbol, price, price_date)
   VALUES (NEW.symbol, NEW.price, CURRENT_DATE)
   ON CONFLICT (symbol, price_date)
   DO UPDATE SET
@@ -128,9 +128,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS on_price_cache_update ON price_cache;
+DROP TRIGGER IF EXISTS on_price_cache_update ON fnz_price_cache;
 CREATE TRIGGER on_price_cache_update
-AFTER INSERT OR UPDATE ON price_cache
+AFTER INSERT OR UPDATE ON fnz_price_cache
 FOR EACH ROW EXECUTE FUNCTION handle_price_history_sync();
 
 -- Log per Edge Function
@@ -147,7 +147,7 @@ ALTER TABLE fn_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "fn_logs_select" ON fn_logs FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Prestiti / Mutui
-CREATE TABLE IF NOT EXISTS loans (
+CREATE TABLE IF NOT EXISTS fnz_loans (
   id                    uuid           PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id               uuid           NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   type                  text           NOT NULL CHECK (type IN ('MUTUO', 'PRESTITO')),
@@ -162,23 +162,23 @@ CREATE TABLE IF NOT EXISTS loans (
   ownership_percentage  numeric(5, 2)  NOT NULL DEFAULT 100,
   created_at            timestamptz    NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS loans_user_idx ON loans(user_id);
-ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "loans_own" ON loans FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_loans_user_idx ON fnz_loans(user_id);
+ALTER TABLE fnz_loans ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_loans_own" ON fnz_loans FOR ALL USING (user_id = auth.uid());
 
 -- Altri Asset
-CREATE TABLE IF NOT EXISTS other_asset_types (
+CREATE TABLE IF NOT EXISTS fnz_other_asset_types (
   id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name        text          NOT NULL,
   created_at  timestamptz   NOT NULL DEFAULT now(),
   UNIQUE(user_id, name)
 );
-CREATE INDEX IF NOT EXISTS other_asset_types_user_idx ON other_asset_types(user_id);
-ALTER TABLE other_asset_types ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "other_asset_types_own" ON other_asset_types FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_other_asset_types_user_idx ON fnz_other_asset_types(user_id);
+ALTER TABLE fnz_other_asset_types ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_other_asset_types_own" ON fnz_other_asset_types FOR ALL USING (user_id = auth.uid());
 
-CREATE TABLE IF NOT EXISTS other_assets (
+CREATE TABLE IF NOT EXISTS fnz_other_assets (
   id                    uuid           PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id               uuid           NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title                 text           NOT NULL DEFAULT '',
@@ -190,9 +190,9 @@ CREATE TABLE IF NOT EXISTS other_assets (
   notes                 text           NOT NULL DEFAULT '',
   created_at            timestamptz    NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS other_assets_user_idx ON other_assets(user_id);
-ALTER TABLE other_assets ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "other_assets_own" ON other_assets FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_other_assets_user_idx ON fnz_other_assets(user_id);
+ALTER TABLE fnz_other_assets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_other_assets_own" ON fnz_other_assets FOR ALL USING (user_id = auth.uid());
 
 -- Contabilità Cointestata
 CREATE TABLE IF NOT EXISTS acct_transactions (
@@ -230,7 +230,7 @@ ALTER TABLE bank_integrations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "bank_integrations_own" ON bank_integrations FOR ALL USING (user_id = auth.uid());
 
 -- Storicizzazione Dashboard
-CREATE TABLE IF NOT EXISTS dashboard_snapshots (
+CREATE TABLE IF NOT EXISTS fnz_dashboard_snapshots (
   id               uuid            PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          uuid            NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   snapshot_date    date            NOT NULL DEFAULT CURRENT_DATE,
@@ -243,9 +243,9 @@ CREATE TABLE IF NOT EXISTS dashboard_snapshots (
   updated_at       timestamptz     NOT NULL DEFAULT now(),
   UNIQUE(user_id, snapshot_date)
 );
-CREATE INDEX IF NOT EXISTS idx_dashboard_snapshots_user_date ON dashboard_snapshots(user_id, snapshot_date DESC);
-ALTER TABLE dashboard_snapshots ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "dashboard_snapshots_own" ON dashboard_snapshots FOR ALL USING (user_id = auth.uid());
+CREATE INDEX IF NOT EXISTS fnz_idx_dashboard_snapshots_user_date ON fnz_dashboard_snapshots(user_id, snapshot_date DESC);
+ALTER TABLE fnz_dashboard_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "fnz_dashboard_snapshots_own" ON fnz_dashboard_snapshots FOR ALL USING (user_id = auth.uid());
 
 -- CASA ROSA (prefisso cntrs_)
 CREATE TABLE IF NOT EXISTS cntrs_categories (

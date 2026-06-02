@@ -446,8 +446,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.22';
-const APP_BUILD   = '2026-05-28T00:00:00Z';
+const APP_VERSION = 'v1.0.23';
+const APP_BUILD   = '2026-06-02T16:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -567,14 +567,14 @@ const DEFAULT_TAG_CATS = [
 /* ── Data loaders ────────────────────────────────────────────── */
 async function loadAll() {
   const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes] = await Promise.all([
-    sbQ('portfolios',     'select=*&order=created_at.asc'),
-    sbQ('transactions',   'select=*&order=date.desc,created_at.desc'),
-    sbQ('products',       'select=*&order=name.asc'),
-    sbQ('tag_categories', 'select=*&order=name.asc'),
-    sbQ('dossiers',       'select=*&order=created_at.asc'),
-    sbQ('loans',          'select=*&order=created_at.asc'),
-    sbQ('other_assets',   'select=*&order=valuation_date.desc'),
-    sbQ('other_asset_types','select=*&order=name.asc'),
+    sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
+    sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
+    sbQ('fnz_products',       'select=*&order=name.asc'),
+    sbQ('fnz_tag_categories', 'select=*&order=name.asc'),
+    sbQ('fnz_dossiers',       'select=*&order=created_at.asc'),
+    sbQ('fnz_loans',          'select=*&order=created_at.asc'),
+    sbQ('fnz_other_assets',   'select=*&order=valuation_date.desc'),
+    sbQ('fnz_other_asset_types','select=*&order=name.asc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -585,30 +585,30 @@ async function loadAll() {
   S.otherAssets  = otherAssets;
   S.otherAssetTypes = otherAssetTypes;
   if (tagCats.length === 0) {
-    await Promise.all(DEFAULT_TAG_CATS.map(tc => sbIns('tag_categories', { ...tc, user_id: S.session.user.id })));
-    S.tagCats = await sbQ('tag_categories', 'select=*&order=name.asc');
+    await Promise.all(DEFAULT_TAG_CATS.map(tc => sbIns('fnz_tag_categories', { ...tc, user_id: S.session.user.id })));
+    S.tagCats = await sbQ('fnz_tag_categories', 'select=*&order=name.asc');
   }
   await loadPricesFromCache();
-  S.priceHistory = await sbQ('price_history', 'select=*&order=price_date.desc');
+  S.priceHistory = await sbQ('fnz_price_history', 'select=*&order=price_date.desc');
   computePricesFromHistory();
   S.dashboardSnapshots = await sbQ(
-    'dashboard_snapshots',
+    'fnz_dashboard_snapshots',
     'select=snapshot_date,patrimonio_netto,portafogli_totali,asset_totali,debiti_totali&order=snapshot_date.asc'
   );
   { const _t = new Date().toISOString().slice(0,10);
-    const _p = await sbQ('dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
+    const _p = await sbQ('fnz_dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
     S.prevSnapshot = _p[0] || null; }
 }
 async function reload() {
   const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes] = await Promise.all([
-    sbQ('portfolios',     'select=*&order=created_at.asc'),
-    sbQ('transactions',   'select=*&order=date.desc,created_at.desc'),
-    sbQ('products',       'select=*&order=name.asc'),
-    sbQ('tag_categories', 'select=*&order=name.asc'),
-    sbQ('dossiers',       'select=*&order=created_at.asc'),
-    sbQ('loans',          'select=*&order=created_at.asc'),
-    sbQ('other_assets',   'select=*&order=valuation_date.desc'),
-    sbQ('other_asset_types','select=*&order=name.asc'),
+    sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
+    sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
+    sbQ('fnz_products',       'select=*&order=name.asc'),
+    sbQ('fnz_tag_categories', 'select=*&order=name.asc'),
+    sbQ('fnz_dossiers',       'select=*&order=created_at.asc'),
+    sbQ('fnz_loans',          'select=*&order=created_at.asc'),
+    sbQ('fnz_other_assets',   'select=*&order=valuation_date.desc'),
+    sbQ('fnz_other_asset_types','select=*&order=name.asc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -619,14 +619,14 @@ async function reload() {
   S.otherAssets  = otherAssets;
   S.otherAssetTypes = otherAssetTypes;
   await loadPricesFromCache();
-  S.priceHistory = await sbQ('price_history', 'select=*&order=price_date.desc');
+  S.priceHistory = await sbQ('fnz_price_history', 'select=*&order=price_date.desc');
   computePricesFromHistory();
   S.dashboardSnapshots = await sbQ(
-    'dashboard_snapshots',
+    'fnz_dashboard_snapshots',
     'select=snapshot_date,patrimonio_netto,portafogli_totali,asset_totali,debiti_totali&order=snapshot_date.asc'
   );
   { const _t = new Date().toISOString().slice(0,10);
-    const _p = await sbQ('dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
+    const _p = await sbQ('fnz_dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
     S.prevSnapshot = _p[0] || null; }
   render();
 }
@@ -846,7 +846,7 @@ function buildSnapshotPayload() {
 async function saveSnapshot() {
   const { topLevel, details } = buildSnapshotPayload();
   const today = new Date().toISOString().slice(0, 10);
-  await sbUpsert('dashboard_snapshots', {
+  await sbUpsert('fnz_dashboard_snapshots', {
     user_id:           S.session.user.id,
     snapshot_date:     today,
     patrimonio_netto:  topLevel.patrimonio_netto,
@@ -869,7 +869,7 @@ async function autoSaveSnapshot() {
   } catch(e) { console.warn('[snapshot] auto-save fallito:', e.message); }
 }
 async function loadPricesFromCache() {
-  const rows = await sbQ('price_cache', `select=*&currency=eq.EUR`);
+  const rows = await sbQ('fnz_price_cache', `select=*&currency=eq.EUR`);
   if (rows?.length) {
     for (const r of rows) S.prices[r.symbol] = r;
     console.log('[prices] cache letta:', rows.length, 'simboli');
@@ -2103,7 +2103,7 @@ function renderHistoricalDashboard(snap) {
 }
 async function openSnapDetail(snapDate) {
   try {
-    const rows = await sbQ('dashboard_snapshots', `snapshot_date=eq.${snapDate}&select=*&limit=1`);
+    const rows = await sbQ('fnz_dashboard_snapshots', `snapshot_date=eq.${snapDate}&select=*&limit=1`);
     if (!rows.length) { alert('Snapshot non trovato.'); return; }
     renderHistoricalDashboard(rows[0]);
   } catch(e) {
@@ -2164,9 +2164,9 @@ function openNewPortfolioModal(portfolioId = null) {
       ownership_percentage: parseFloat(data.ownership_percentage),
     };
     if (isEdit) {
-      await sbUpd('portfolios', `id=eq.${portfolioId}`, payload);
+      await sbUpd('fnz_portfolios', `id=eq.${portfolioId}`, payload);
     } else {
-      await sbIns('portfolios', { ...payload, user_id: S.session.user.id });
+      await sbIns('fnz_portfolios', { ...payload, user_id: S.session.user.id });
     }
     await reload(); closeModal();
   });
@@ -2233,8 +2233,8 @@ function openNewProductModal(productId = null) {
       currency: data.currency, tags,
       isin: (data.isin || '').trim().toUpperCase() || null,
     };
-    if (prod) await sbUpd('products', `id=eq.${prod.id}`, payload);
-    else      await sbIns('products', { ...payload, user_id: S.session.user.id });
+    if (prod) await sbUpd('fnz_products', `id=eq.${prod.id}`, payload);
+    else      await sbIns('fnz_products', { ...payload, user_id: S.session.user.id });
     await reload(); closeModal();
   });
 }
@@ -2330,7 +2330,7 @@ function openNewTransactionModal(prePortfolioId = null, preProductId = null) {
     const selectedProduct = S.products.find(p => p.id === data.product_id);
     const selectedAssetType = selectedProduct?.asset_type || 'stock';
 
-    await sbIns('transactions', {
+    await sbIns('fnz_transactions', {
       user_id: S.session.user.id, portfolio_id: data.portfolio_id,
       product_id: data.product_id, type: data.type,
       quantity: parseFloat(data.quantity), price: parseFloat(data.price),
@@ -2462,7 +2462,7 @@ function openEditTransactionModal(transactionId) {
       </div>
     </form>
   `, async data => {
-    await sbUpd('transactions', `id=eq.${transactionId}`, {
+    await sbUpd('fnz_transactions', `id=eq.${transactionId}`, {
       user_id: S.session.user.id, portfolio_id: data.portfolio_id,
       product_id: data.product_id, type: data.type,
       quantity: parseFloat(data.quantity), price: parseFloat(data.price),
@@ -2555,8 +2555,8 @@ function openTagCatModal(catId = null) {
     </form>
   `, async data => {
     const options = data.options.split(',').map(o => o.trim().toUpperCase()).filter(Boolean);
-    if (cat) await sbUpd('tag_categories', `id=eq.${cat.id}`, { options });
-    else     await sbIns('tag_categories', { name: data.name.trim().toUpperCase(), options, user_id: S.session.user.id });
+    if (cat) await sbUpd('fnz_tag_categories', `id=eq.${cat.id}`, { options });
+    else     await sbIns('fnz_tag_categories', { name: data.name.trim().toUpperCase(), options, user_id: S.session.user.id });
     await reload(); closeModal();
   });
 }
@@ -2595,8 +2595,8 @@ function openNewDossierModal(dossierId = null) {
       number: data.number.trim(),
       notes: data.notes || '',
     };
-    if (d) await sbUpd('dossiers', `id=eq.${d.id}`, payload);
-    else   await sbIns('dossiers', payload);
+    if (d) await sbUpd('fnz_dossiers', `id=eq.${d.id}`, payload);
+    else   await sbIns('fnz_dossiers', payload);
     await reload(); closeModal();
   });
 }
@@ -2681,8 +2681,8 @@ function openNewLoanModal(loanId = null) {
       payload.data_inizio_prestito = data.data_inizio_prestito;
       payload.interesse = parseFloat(data.interesse);
     }
-    if (isEdit) await sbUpd('loans', `id=eq.${loanId}`, payload);
-    else        await sbIns('loans', payload);
+    if (isEdit) await sbUpd('fnz_loans', `id=eq.${loanId}`, payload);
+    else        await sbIns('fnz_loans', payload);
     await reload(); closeModal();
   });
   const typeSelect = document.querySelector('#modal-body select[name="type"]');
@@ -2754,7 +2754,7 @@ function openOtherAssetModal(assetId = null) {
       const typeName = newType.trim().toUpperCase();
       const existing = S.otherAssetTypes.find(t => t.name === typeName);
       if (!existing) {
-        const nt = await sbIns('other_asset_types', { user_id: S.session.user.id, name: typeName });
+        const nt = await sbIns('fnz_other_asset_types', { user_id: S.session.user.id, name: typeName });
         S.otherAssetTypes.push(nt);
       }
       assetType = typeName;
@@ -2771,8 +2771,8 @@ function openOtherAssetModal(assetId = null) {
       notes: data.notes.trim(),
     };
     
-    if (isEdit) await sbUpd('other_assets', `id=eq.${a.id}`, payload);
-    else        await sbIns('other_assets', payload);
+    if (isEdit) await sbUpd('fnz_other_assets', `id=eq.${a.id}`, payload);
+    else        await sbIns('fnz_other_assets', payload);
     await reload(); closeModal();
   });
 }
@@ -2796,8 +2796,8 @@ function render() {
     case 'portafogli':         renderPortafogli();         break;
     case 'portafoglio-detail': renderPortafoglioDetail();  break;
     case 'transazioni':        renderTransazioni();        break;
-    case 'dossiers':           renderDossiers();           break;
-    case 'loans':              renderPrestiti();           break;
+    case 'fnz_dossiers':           renderDossiers();           break;
+    case 'fnz_loans':              renderPrestiti();           break;
     case 'other-assets':       renderOtherAssets();        break;
     case 'prezzi':             renderPrezzi();             break;
     case 'prodotti':           renderProdotti();           break;
@@ -2823,17 +2823,17 @@ document.addEventListener('click', async e => {
     case 'new-dossier':     openNewDossierModal(); break;
     case 'edit-dossier':    openNewDossierModal(t.dataset.id); break;
     case 'del-dossier':
-      if (confirm('Eliminare questo dossier?')) { await sbDel('dossiers', `id=eq.${t.dataset.id}`); await reload(); }
+      if (confirm('Eliminare questo dossier?')) { await sbDel('fnz_dossiers', `id=eq.${t.dataset.id}`); await reload(); }
       break;
     case 'new-loan':        openNewLoanModal(); break;
     case 'edit-loan':       openNewLoanModal(t.dataset.id); break;
     case 'del-loan':
-      if (confirm('Eliminare questo prestito?')) { await sbDel('loans', `id=eq.${t.dataset.id}`); await reload(); }
+      if (confirm('Eliminare questo prestito?')) { await sbDel('fnz_loans', `id=eq.${t.dataset.id}`); await reload(); }
       break;
     case 'new-other-asset':  openOtherAssetModal(); break;
     case 'edit-other-asset': openOtherAssetModal(t.dataset.id); break;
     case 'del-other-asset':
-      if (confirm('Eliminare questo asset?')) { await sbDel('other_assets', `id=eq.${t.dataset.id}`); await reload(); }
+      if (confirm('Eliminare questo asset?')) { await sbDel('fnz_other_assets', `id=eq.${t.dataset.id}`); await reload(); }
       break;
     case 'new-product':     openNewProductModal(); break;
     case 'edit-product':    openNewProductModal(t.dataset.id); break;
@@ -2889,28 +2889,28 @@ document.addEventListener('click', async e => {
     case 'refresh-prices':
       t.disabled = true; t.textContent = '⟳ Aggiornando…';
       await refreshPrices();
-      S.priceHistory = await sbQ('price_history', 'select=*&order=price_date.desc');
+      S.priceHistory = await sbQ('fnz_price_history', 'select=*&order=price_date.desc');
       computePricesFromHistory();
       render();
       break;
     case 'del-portfolio':
       if (confirm(`Eliminare il portafoglio e tutte le sue transazioni?`)) {
-        await sbDel('portfolios', `id=eq.${t.dataset.id}`);
+        await sbDel('fnz_portfolios', `id=eq.${t.dataset.id}`);
         if (S.portfolioId === t.dataset.id) navigate('portafogli');
         else await reload();
       }
       break;
     case 'del-transaction':
-      if (confirm('Eliminare questa transazione?')) { await sbDel('transactions', `id=eq.${t.dataset.id}`); await reload(); }
+      if (confirm('Eliminare questa transazione?')) { await sbDel('fnz_transactions', `id=eq.${t.dataset.id}`); await reload(); }
       break;
     case 'del-product':
       if (confirm('Eliminare questo prodotto? Assicurati che non abbia transazioni collegate.')) {
-        try { await sbDel('products', `id=eq.${t.dataset.id}`); await reload(); }
+        try { await sbDel('fnz_products', `id=eq.${t.dataset.id}`); await reload(); }
         catch { alert('Impossibile eliminare: il prodotto ha transazioni collegate.'); }
       }
       break;
     case 'del-tagcat':
-      if (confirm('Eliminare questa categoria tag?')) { await sbDel('tag_categories', `id=eq.${t.dataset.id}`); await reload(); }
+      if (confirm('Eliminare questa categoria tag?')) { await sbDel('fnz_tag_categories', `id=eq.${t.dataset.id}`); await reload(); }
       break;
   }
 });
