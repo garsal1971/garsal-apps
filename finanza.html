@@ -446,8 +446,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.22';
-const APP_BUILD   = '2026-05-28T00:00:00Z';
+const APP_VERSION = 'v1.0.23';
+const APP_BUILD   = '2026-06-02T00:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -556,7 +556,20 @@ async function refreshSession(session) {
 async function logout() {
   try { await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method: 'POST', headers: sbH() }); } catch {}
   clearSession();
+  localStorage.removeItem('sb_token');
   location.reload();
+}
+/* ── Auth da AppSphere (sb_token condiviso) ─────────────────── */
+async function initFromSbToken(token) {
+  try {
+    const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+    })).json();
+    if (user?.id) {
+      return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+    }
+  } catch {}
+  return null;
 }
 /* ── Default tag categories ──────────────────────────────────── */
 const DEFAULT_TAG_CATS = [
@@ -2990,28 +3003,60 @@ function renderUserUI(user) {
   });
 }
 /* ══════════════ BOOT ═══════════════════════════════════════════ */
+async function startApp(session) {
+  S.session = session;
+  const app = $('screen-app');
+  $('screen-login').classList.add('hidden');
+  app.classList.remove('hidden');
+  app.style.display = 'flex';
+  renderUserUI(session.user);
+  $('btn-logout').addEventListener('click', logout);
+  await loadAll();
+  render();
+  autoSaveSnapshot().then(() => {
+    if (S.dashboardSnapshots.length > 0) renderDashboard();
+  });
+}
 async function boot() {
   let session = null;
+
+  // 1. OAuth callback in hash URL (login diretto su finanza.html)
   if (location.hash.includes('access_token')) {
     try { session = await handleOAuthCallback(); } catch {}
   }
+
+  // 2. Token condiviso da AppSphere launcher (sb_token in localStorage)
+  if (!session) {
+    const sbToken = localStorage.getItem('sb_token');
+    if (sbToken) session = await initFromSbToken(sbToken);
+  }
+
+  // 3. Sessione propria salvata localmente
   if (!session) {
     session = loadSession();
     if (session && Date.now() > session.expires_at - 60_000) session = await refreshSession(session);
   }
+
+  // BroadcastChannel AppSphere — attivo sempre per logout/refresh token
+  const _authChannel = new BroadcastChannel('appsphere_auth');
+  _authChannel.onmessage = async (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'LOGOUT') {
+      clearSession();
+      localStorage.removeItem('sb_token');
+      location.reload();
+    } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+      localStorage.setItem('sb_token', e.data.sbToken);
+      if (S.session) {
+        S.session.access_token = e.data.sbToken;
+        console.log('🔄 Token rinnovato silenziosamente (AppSphere)');
+      }
+    }
+  };
+
   $('loading-overlay').classList.add('hidden');
   if (session?.user) {
-    S.session = session;
-    const app = $('screen-app');
-    app.classList.remove('hidden');
-    app.style.display = 'flex';
-    renderUserUI(session.user);
-    $('btn-logout').addEventListener('click', logout);
-    await loadAll();
-    render();
-    autoSaveSnapshot().then(() => {
-      if (S.dashboardSnapshots.length > 0) renderDashboard();
-    });
+    await startApp(session);
   } else {
     $('screen-login').classList.remove('hidden');
     $('btn-login-google').addEventListener('click', loginWithGoogle);
