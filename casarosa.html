@@ -204,21 +204,18 @@
       transactions: [],
       categories: [],
       catMap: {},
-      session: JSON.parse(localStorage.getItem('garsal_session')),
+      session: null,
       selectedYear: null,
       selectedCategory: null,
     };
 
-    if (!S.session) {
-      location.href = 'index.html';
-    }
-
+    const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
     const sb = async (path, method = 'GET', body = null) => {
       const options = {
         method,
         headers: {
           'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${S.session.access_token}`,
+          'Authorization': `Bearer ${tok()}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         }
@@ -231,6 +228,18 @@
       }
       return r.json();
     };
+
+    async function initFromSbToken(token) {
+      try {
+        const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+        })).json();
+        if (user?.id) {
+          return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+        }
+      } catch {}
+      return null;
+    }
 
     const fmtEUR = v => { const n = Math.round(v || 0); return (n < 0 ? '-' : '') + Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €'; };
     const fmtDate = d => new Date(d).toLocaleDateString('it-IT');
@@ -877,7 +886,38 @@
       render();
     });
 
-    loadData();
+    async function boot() {
+      // 1. Token condiviso da AppSphere launcher (sb_token in localStorage)
+      const sbToken = localStorage.getItem('sb_token');
+      if (sbToken) S.session = await initFromSbToken(sbToken);
+
+      // 2. Sessione propria salvata
+      if (!S.session) {
+        try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
+      }
+
+      if (!S.session) {
+        location.href = 'finanza.html';
+        return;
+      }
+
+      // BroadcastChannel AppSphere
+      const _authChannel = new BroadcastChannel('appsphere_auth');
+      _authChannel.onmessage = (e) => {
+        if (!e.data) return;
+        if (e.data.type === 'LOGOUT') {
+          localStorage.removeItem('sb_token');
+          location.href = 'finanza.html';
+        } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+          localStorage.setItem('sb_token', e.data.sbToken);
+          if (S.session) S.session.access_token = e.data.sbToken;
+        }
+      };
+
+      await loadData();
+    }
+
+    boot();
   </script>
 </body>
 </html>
