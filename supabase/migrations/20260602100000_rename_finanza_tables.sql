@@ -76,3 +76,4 @@ CREATE POLICY "fnz_loans_own"                  ON fnz_loans                  FOR
 CREATE POLICY "fnz_other_asset_types_own"      ON fnz_other_asset_types      FOR ALL    USING (user_id = auth.uid());
 CREATE POLICY "fnz_other_assets_own"           ON fnz_other_assets           FOR ALL    USING (user_id = auth.uid());
 CREATE POLICY "fnz_dashboard_snapshots_own"    ON fnz_dashboard_snapshots    FOR ALL    USING (user_id = auth.uid());
+"-- Forced trigger: apply pending migrations" 
