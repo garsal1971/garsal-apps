@@ -20,6 +20,8 @@
             --border: #E5E7EB;
             --card-bg: #FFFFFF;
             --input-bg: #F9FAFB;
+            --memo-title-size: 1.2rem;
+            --memo-excerpt-size: 0.95rem;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -156,7 +158,7 @@
             margin-bottom: 0.5rem;
         }
         .memo-card-title {
-            flex: 1; font-size: 1.2rem; font-weight: 700; line-height: 1.3;
+            flex: 1; font-size: var(--memo-title-size); font-weight: 700; line-height: 1.3;
             word-break: break-word;
         }
         .pin-badge {
@@ -164,7 +166,7 @@
         }
 
         .memo-card-excerpt {
-            font-size: 0.95rem; color: var(--muted); line-height: 1.5;
+            font-size: var(--memo-excerpt-size); color: var(--muted); line-height: 1.5;
             overflow: hidden; display: -webkit-box;
             -webkit-line-clamp: 4; -webkit-box-orient: vertical;
             word-break: break-word;
@@ -622,6 +624,26 @@
             </div>
             <div style="max-width:520px;">
                 <div class="card" style="border:1px solid var(--border);padding:1.25rem;margin-bottom:1rem;">
+                    <div style="font-size:1rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;">📏 Dimensione carattere schede</div>
+                    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                        <span style="font-size:0.8rem;color:#999;">A</span>
+                        <input type="range" id="settingFontScale" min="80" max="150" step="5" value="100"
+                            style="flex:1;height:6px;-webkit-appearance:auto;appearance:auto;accent-color:var(--primary);"
+                            oninput="document.getElementById('fontScaleLabel').textContent=this.value+'%';applyMemoFontScalePreview(this.value);">
+                        <span style="font-size:1.2rem;color:#999;">A</span>
+                        <span id="fontScaleLabel" style="font-weight:700;min-width:3.5rem;text-align:center;background:var(--primary);color:white;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.9rem;">100%</span>
+                    </div>
+                    <div id="fontScalePreview" style="margin-bottom:0.75rem;padding:0.75rem;border:1px dashed #dee2e6;background:#f8f9fa;border-radius:6px;">
+                        <p id="fontPreviewTitle" style="margin:0;font-weight:700;color:#333;font-family:'Darker Grotesque',sans-serif;">Anteprima titolo scheda</p>
+                        <p id="fontPreviewExcerpt" style="margin:0.2rem 0 0 0;color:#6b7280;font-family:'Darker Grotesque',sans-serif;">Anteprima testo scheda · 20/02/2026</p>
+                    </div>
+                    <small style="display:block;color:var(--muted);margin-bottom:1rem;">
+                        Fattore di ingrandimento per titoli e testo delle schede (80%-150%)
+                    </small>
+                    <button class="btn btn-primary" onclick="saveMemoFontScale()" style="text-transform:uppercase;font-weight:700;letter-spacing:.05em;">💾 Salva Impostazioni</button>
+                </div>
+
+                <div class="card" style="border:1px solid var(--border);padding:1.25rem;margin-bottom:1rem;">
                     <div style="font-size:1.2rem;font-weight:700;margin-bottom:0.5rem;">Informazioni</div>
                     <table style="width:100%;font-size:0.95rem;border-collapse:collapse;">
                         <tr>
@@ -846,8 +868,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.26';
-var BUILD_TIME  = '2026-06-01T10:30:00Z';
+var APP_VERSION = 'v1.0.27';
+var BUILD_TIME  = '2026-06-02T15:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -959,6 +981,35 @@ window.addEventListener('load', () => {
 });
 
 // ============================================================
+// FONT SCALE
+// ============================================================
+function applyMemoFontScale(val) {
+    const scale = parseInt(val) / 100;
+    document.documentElement.style.setProperty('--memo-title-size',   (1.2  * scale) + 'rem');
+    document.documentElement.style.setProperty('--memo-excerpt-size', (0.95 * scale) + 'rem');
+}
+function applyMemoFontScalePreview(val) {
+    const scale = parseInt(val) / 100;
+    const t = document.getElementById('fontPreviewTitle');
+    const e = document.getElementById('fontPreviewExcerpt');
+    if (t) t.style.fontSize = (1.2  * scale) + 'rem';
+    if (e) e.style.fontSize = (0.95 * scale) + 'rem';
+}
+function saveMemoFontScale() {
+    const val = document.getElementById('settingFontScale').value;
+    localStorage.setItem('memo_font_scale', val);
+    applyMemoFontScale(val);
+    showToast('✅ Impostazioni salvate');
+}
+function loadMemoFontScale() {
+    const val = parseInt(localStorage.getItem('memo_font_scale') || '100');
+    document.getElementById('settingFontScale').value = val;
+    document.getElementById('fontScaleLabel').textContent = val + '%';
+    applyMemoFontScale(val);
+    applyMemoFontScalePreview(val);
+}
+
+// ============================================================
 // START
 // ============================================================
 function startApp() {
@@ -966,6 +1017,7 @@ function startApp() {
     document.getElementById('infoBuild').textContent   = BUILD_TIME;
     document.getElementById('infoEnv').textContent     = _IS_DEV ? '🧪 Development' : '🚀 Production';
     document.getElementById('sqlMigrations').textContent = SQL_MIGRATIONS;
+    loadMemoFontScale();
 
     log('===========================================');
     log('MEMORANDUM ' + APP_VERSION + ' — build: ' + BUILD_TIME);
