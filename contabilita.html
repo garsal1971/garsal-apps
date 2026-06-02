@@ -199,7 +199,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Conto Cointestato · <span class="mono">v1.0</span>
+    Conto Cointestato · <span class="mono">v1.1</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -252,6 +252,17 @@ async function sbDel(table, filter) {
 }
 
 const loadSession = () => { try { return JSON.parse(localStorage.getItem('garsal_session')); } catch { return null; } };
+async function initFromSbToken(token) {
+  try {
+    const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+    })).json();
+    if (user?.id) {
+      return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+    }
+  } catch {}
+  return null;
+}
 async function refreshSession(session) {
   if (!session?.refresh_token) return null;
   try {
@@ -965,15 +976,39 @@ document.getElementById('modal-close').addEventListener('click', closeModal);
 document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 
 async function init() {
-  let session = loadSession();
-  if (session && session.expires_at < Date.now()) {
-    session = await refreshSession(session);
-  }
+  let session = null;
+
+  // 1. Token condiviso da AppSphere launcher (sb_token in localStorage)
+  const sbToken = localStorage.getItem('sb_token');
+  if (sbToken) session = await initFromSbToken(sbToken);
+
+  // 2. Sessione propria salvata
   if (!session) {
-    location.href = 'index.html';
+    session = loadSession();
+    if (session && session.expires_at < Date.now()) {
+      session = await refreshSession(session);
+    }
+  }
+
+  if (!session) {
+    location.href = 'finanza.html';
     return;
   }
   S.session = session;
+
+  // BroadcastChannel AppSphere
+  const _authChannel = new BroadcastChannel('appsphere_auth');
+  _authChannel.onmessage = (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'LOGOUT') {
+      localStorage.removeItem('sb_token');
+      location.href = 'finanza.html';
+    } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+      localStorage.setItem('sb_token', e.data.sbToken);
+      if (S.session) S.session.access_token = e.data.sbToken;
+    }
+  };
+
   const u = session.user;
   $('user-name').textContent = u.user_metadata?.full_name || u.email?.split('@')[0] || 'Utente';
   if (u.user_metadata?.avatar_url) {
