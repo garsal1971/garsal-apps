@@ -6,7 +6,7 @@
   <title>Conto Cointestato</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -31,7 +31,7 @@
       --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
       --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
     }
-    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; padding-top: 56px; }
     .hidden { display: none !important; }
     .mono   { font-family: var(--font-mono); }
     .pos    { color: var(--c-success); }
@@ -55,11 +55,11 @@
     .spinner { width: 34px; height: 34px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     #screen-app { display: none; flex-direction: column; min-height: 100dvh; }
-    .topbar { position: sticky; top: 0; z-index: 100; background: var(--c-surface); border-bottom: 1px solid var(--c-border); padding: 0 22px; display: flex; align-items: center; gap: 14px; height: 56px; }
-    .topbar-brand { font-weight: 700; font-size: 1.02rem; color: var(--c-primary); letter-spacing: -.02em; display: flex; align-items: center; gap: 8px; }
-    .topbar-brand .logo-dot { width: 27px; height: 27px; background: var(--c-primary); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+    #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
+    #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
     .topbar-spacer { flex: 1; }
-    .topbar-user { display: flex; align-items: center; gap: 10px; font-size: .86rem; color: var(--c-muted); }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--c-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 600; overflow: hidden; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
     .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--c-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 600; overflow: hidden; }
     .avatar img { width: 100%; height: 100%; object-fit: cover; }
     .btn-logout { background: none; border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 4px 11px; font-family: var(--font-sans); font-size: .8rem; color: var(--c-muted); cursor: pointer; transition: border-color .15s, color .15s; }
@@ -137,12 +137,12 @@
     .year-select { padding: 7px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; color: var(--c-text); outline: none; background: var(--c-surface); cursor: pointer; }
     .year-select:focus { border-color: var(--c-primary); }
     .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
-    .btn-hamburger { display: none; background: none; border: none; padding: 6px 8px; cursor: pointer; color: var(--c-text); border-radius: var(--radius-sm); line-height: 0; }
-    .btn-hamburger:hover { background: var(--c-bg); }
+    .btn-hamburger { display: none; position: fixed; top: 10px; right: 14px; z-index: 3001; background: var(--c-primary); color: #fff; border: none; width: 36px; height: 36px; border-radius: var(--radius-sm); cursor: pointer; align-items: center; justify-content: center; line-height: 0; box-shadow: 0 2px 8px rgba(255,51,102,.35); }
+    .btn-hamburger:hover { background: var(--c-primary-h); }
     #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
     #mobile-nav-overlay.open { display: block; }
     @media (max-width: 768px) {
-      .btn-hamburger { display: flex; align-items: center; }
+      .btn-hamburger { display: flex; align-items: center; justify-content: center; }
       .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; display: flex; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
       .sidebar.open { transform: translateX(0); }
       .app-main { padding: 16px; }
@@ -156,26 +156,24 @@
   </style>
 </head>
 <body>
+<div id="garsal-top-bar">
+  <a href="finanza.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+    <span style="width:22px;height:22px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💰</span>
+    <div id="garsal-top-bar-text">GarsalFinanza</div>
+  </a>
+</div>
 <div id="loading-overlay">
   <div class="spinner"></div>
   <span class="text-muted text-sm">Caricamento…</span>
 </div>
 
 <div id="screen-app">
-  <header class="topbar">
-    <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    </button>
-    <div class="topbar-brand">
-      <div class="logo-dot">💰</div>Conto Cointestato
-    </div>
-    <div class="topbar-spacer"></div>
-    <div class="topbar-user">
-      <div class="avatar" id="user-avatar"></div>
-      <span id="user-name"></span>
-      <button class="btn-logout" id="btn-logout">Esci</button>
-    </div>
-  </header>
+  <div style="display:none">
+    <div class="avatar" id="user-avatar"></div>
+    <span id="user-name"></span>
+    <button class="btn-logout" id="btn-logout">Esci</button>
+  </div>
+  <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu">☰</button>
   <div id="mobile-nav-overlay"></div>
   <div class="app-layout">
     <nav class="sidebar" id="sidebar">
@@ -199,7 +197,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Conto Cointestato · <span class="mono">v1.1</span>
+    Conto Cointestato · <span class="mono">v1.2</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
