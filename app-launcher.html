@@ -1646,8 +1646,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.82';
-const BUILD_TIME  = '2026-06-02T18:20:00Z';
+const APP_VERSION = 'v1.5.83';
+const BUILD_TIME  = '2026-06-02T18:21:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1970,7 +1970,7 @@ function render(apps) {
     wrap.innerHTML = `
       <div class="circle" style="width:${size}px;height:${size}px;background:${color};border:4px solid #111;">
         <span class="c-name" style="font-size:${nameFz}px">${app.name}</span>
-        <span class="c-score" style="font-size:${scoreFz}px">${app.score}</span>
+        ${app.score > 0 ? `<span class="c-score" style="font-size:${scoreFz}px">${app.score}</span>` : ''}
       </div>
     `;
 
