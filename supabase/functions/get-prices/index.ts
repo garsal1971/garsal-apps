@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.11.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD
+const VERSION = "5.12.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -150,6 +150,12 @@ async function fetchBorsaItalianaPrice(
 
 // ── Investing.com scraper ─────────────────────────────────────────────────
 
+// Known symbol → Google Finance exchange + currency.
+// Add entries here for stocks not covered by Twelve Data.
+const GOOGLE_FINANCE_SYMBOL_MAP: Record<string, { exchange: string; currency: string }> = {
+  "RY4C": { exchange: "FRA", currency: "EUR" }, // Ryanair su Frankfurt Xetra
+};
+
 // Known ISIN → direct Investing.com ETF page URL.
 // Add entries here when a new ETF is not reachable via JustETF/Yahoo.
 const INVESTING_COM_URLS: Record<string, string> = {
@@ -214,6 +220,79 @@ async function fetchInvestingComPrice(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     dbLog(dbEntries, "WARN", `Investing.com fetch error for ${isin}`, { isin, url, error: msg }, requestId);
+    return null;
+  }
+}
+
+// ── Google Finance scraper ────────────────────────────────────────────────
+
+// Fetches price for stocks listed in GOOGLE_FINANCE_SYMBOL_MAP.
+// URL: https://www.google.com/finance/quote/{SYMBOL}:{EXCHANGE}
+// Returns { price, currency } or null.
+async function fetchGoogleFinancePrice(
+  symbol: string, requestId: string, dbEntries: DbEntry[],
+): Promise<{ price: number; currency: string } | null> {
+  const entry = GOOGLE_FINANCE_SYMBOL_MAP[symbol.toUpperCase()];
+  if (!entry) return null;
+
+  const url = `https://www.google.com/finance/quote/${encodeURIComponent(symbol)}:${entry.exchange}`;
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.google.com/finance/",
+  };
+
+  try {
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      dbLog(dbEntries, "WARN", `Google Finance HTTP ${res.status} for ${symbol}`, { symbol, url, status: res.status }, requestId);
+      return null;
+    }
+    const html = await res.text();
+
+    // Most reliable: data-last-price attribute on the quote element
+    const attrMatch = html.match(/data-last-price="([0-9]+(?:\.[0-9]+)?)"/);
+    if (attrMatch) {
+      const price = parseFloat(attrMatch[1]);
+      if (price > 0) {
+        dbLog(dbEntries, "INFO", `Google Finance price found for ${symbol}`, { symbol, price, exchange: entry.exchange }, requestId);
+        return { price, currency: entry.currency };
+      }
+    }
+
+    // Fallback: JSON patterns embedded in the page
+    const jsonPatterns: RegExp[] = [
+      /"last_price"\s*:\s*"?([0-9]+(?:\.[0-9]+)?)"?/,
+      /"regularMarketPrice"\s*:\s*([0-9]+(?:\.[0-9]+)?)/,
+    ];
+    for (const pat of jsonPatterns) {
+      const m = html.match(pat);
+      if (m) {
+        const price = parseFloat(m[1]);
+        if (price > 0) {
+          dbLog(dbEntries, "INFO", `Google Finance price (JSON) for ${symbol}`, { symbol, price, exchange: entry.exchange, pat: pat.source.substring(0, 40) }, requestId);
+          return { price, currency: entry.currency };
+        }
+      }
+    }
+
+    // Fallback: price display element (class contains YMlKec)
+    const cssMatch = html.match(/class="[^"]*YMlKec[^"]*"[^>]*>([0-9]+[.,][0-9]+)/);
+    if (cssMatch) {
+      const price = parseFloat(cssMatch[1].replace(",", "."));
+      if (price > 0) {
+        dbLog(dbEntries, "INFO", `Google Finance price (CSS) for ${symbol}`, { symbol, price, exchange: entry.exchange }, requestId);
+        return { price, currency: entry.currency };
+      }
+    }
+
+    const snippet = html.substring(0, 600).replace(/\s+/g, " ").trim();
+    dbLog(dbEntries, "WARN", `Google Finance: price not found for ${symbol}`, { symbol, url, snippet }, requestId);
+    return null;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    dbLog(dbEntries, "WARN", `Google Finance fetch error for ${symbol}`, { symbol, error: msg }, requestId);
     return null;
   }
 }
@@ -889,6 +968,32 @@ serve(async (req) => {
               } else {
                 dbLog(dbEntries, "WARN", `TD quote failed for resolved symbol`, { symbol, resolved, error: outcome2.message }, requestId);
               }
+            }
+          }
+
+          // 2h. Google Finance — per azioni con exchange noto nella mappa (anche senza ISIN)
+          if (!outcome.ok && GOOGLE_FINANCE_SYMBOL_MAP[symbol]) {
+            const gfResult = await fetchGoogleFinancePrice(symbol, requestId, dbEntries);
+            if (gfResult !== null) {
+              let gfPrice = gfResult.price;
+              if (gfResult.currency !== TARGET_CURRENCY) {
+                const rate = await getConversionRate(gfResult.currency, TARGET_CURRENCY, TWELVE_DATA_API_KEY, requestId, rateCache);
+                if (rate) {
+                  gfPrice = roundMoney(gfResult.price * rate);
+                } else {
+                  dbLog(dbEntries, "WARN", `GF currency conversion failed`, { symbol, currency: gfResult.currency }, requestId);
+                  if (i < toFetch.length - 1) await delay(8000);
+                  continue;
+                }
+              }
+              rows.push({
+                symbol, price: roundMoney(gfPrice),
+                prev_close: null, change_amt: null, change_pct: null,
+                currency: TARGET_CURRENCY, market_state: "REGULAR",
+                updated_at: new Date().toISOString(),
+              });
+              dbLog(dbEntries, "INFO", `Fetched ${symbol} from Google Finance`, { price: gfPrice, exchange: GOOGLE_FINANCE_SYMBOL_MAP[symbol].exchange }, requestId);
+              continue;
             }
           }
 
