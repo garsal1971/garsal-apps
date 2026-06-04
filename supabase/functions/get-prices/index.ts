@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.14.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.15.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -154,6 +154,12 @@ async function fetchBorsaItalianaPrice(
 // Usato quando TD non trova il ticker senza suffisso exchange.
 const TWELVE_DATA_SYMBOL_OVERRIDES: Record<string, string> = {
   "RY4C": "RY4C:XETR", // Ryanair su Xetra (Frankfurt)
+};
+
+// Symbol → ticker diretto Yahoo Finance (non richiede ISIN nel DB).
+// Usato quando TD richiede piano a pagamento.
+const YAHOO_FINANCE_TICKER_MAP: Record<string, string> = {
+  "RY4C": "RYA.IR", // Ryanair su Euronext Dublin, quotato in EUR
 };
 
 // Known symbol → Google Finance exchange + currency.
@@ -528,6 +534,48 @@ async function fetchYahooFinanceByIsin(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     dbLog(dbEntries, "WARN", `Yahoo Finance fetch error for ${isin}`, { isin, error: msg }, requestId);
+    return null;
+  }
+}
+
+// Fetches price directly from Yahoo Finance using a known ticker (e.g. "RYA.IR").
+// Does NOT require ISIN. Returns price only if currency is EUR.
+async function fetchYahooFinanceByTicker(
+  yTicker: string, requestId: string, dbEntries: DbEntry[],
+): Promise<number | null> {
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+  try {
+    const quoteUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yTicker)}?interval=1d&range=1d`;
+    const res = await fetch(quoteUrl, { headers });
+    if (!res.ok) {
+      dbLog(dbEntries, "WARN", `Yahoo Finance direct HTTP ${res.status} for ${yTicker}`, { yTicker, status: res.status }, requestId);
+      return null;
+    }
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta) {
+      dbLog(dbEntries, "WARN", `Yahoo Finance direct: no meta for ${yTicker}`, { yTicker }, requestId);
+      return null;
+    }
+    const price = parseNumber(meta.regularMarketPrice ?? meta.chartPreviousClose);
+    const currency = ((meta.currency as string) ?? "").toUpperCase();
+    if (price === null || price <= 0) {
+      dbLog(dbEntries, "WARN", `Yahoo Finance direct: invalid price for ${yTicker}`, { yTicker, price }, requestId);
+      return null;
+    }
+    if (currency !== "EUR") {
+      dbLog(dbEntries, "WARN", `Yahoo Finance direct: non-EUR for ${yTicker}`, { yTicker, currency, price }, requestId);
+      return null;
+    }
+    dbLog(dbEntries, "INFO", `Yahoo Finance direct: ${yTicker} → ${price} EUR`, { yTicker, price }, requestId);
+    return price;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    dbLog(dbEntries, "WARN", `Yahoo Finance direct fetch error for ${yTicker}`, { yTicker, error: msg }, requestId);
     return null;
   }
 }
@@ -991,6 +1039,21 @@ serve(async (req) => {
               } else {
                 dbLog(dbEntries, "WARN", `TD quote failed for resolved symbol`, { symbol, resolved, error: outcome2.message }, requestId);
               }
+            }
+          }
+
+          // 2i. Yahoo Finance diretto — ticker noto nella mappa, non richiede ISIN
+          if (!outcome.ok && YAHOO_FINANCE_TICKER_MAP[symbol]) {
+            const yfDirectPrice = await fetchYahooFinanceByTicker(YAHOO_FINANCE_TICKER_MAP[symbol], requestId, dbEntries);
+            if (yfDirectPrice !== null) {
+              rows.push({
+                symbol, price: roundMoney(yfDirectPrice),
+                prev_close: null, change_amt: null, change_pct: null,
+                currency: TARGET_CURRENCY, market_state: null,
+                updated_at: new Date().toISOString(),
+              });
+              dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance (direct ticker)`, { yTicker: YAHOO_FINANCE_TICKER_MAP[symbol], price: yfDirectPrice }, requestId);
+              continue;
             }
           }
 
