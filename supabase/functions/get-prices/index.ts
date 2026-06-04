@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.12.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.13.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -150,10 +150,16 @@ async function fetchBorsaItalianaPrice(
 
 // ── Investing.com scraper ─────────────────────────────────────────────────
 
+// Override simbolo per Twelve Data: ticker generico → "SYMBOL:EXCHANGE" esatto.
+// Usato quando TD non trova il ticker senza suffisso exchange.
+const TWELVE_DATA_SYMBOL_OVERRIDES: Record<string, string> = {
+  "RY4C": "RY4C:XFRA", // Ryanair su Frankfurt Xetra
+};
+
 // Known symbol → Google Finance exchange + currency.
 // Add entries here for stocks not covered by Twelve Data.
 const GOOGLE_FINANCE_SYMBOL_MAP: Record<string, { exchange: string; currency: string }> = {
-  "RY4C": { exchange: "FRA", currency: "EUR" }, // Ryanair su Frankfurt Xetra
+  "RY4C": { exchange: "FRA", currency: "EUR" }, // Ryanair su Frankfurt Xetra (fallback)
 };
 
 // Known ISIN → direct Investing.com ETF page URL.
@@ -844,7 +850,9 @@ serve(async (req) => {
           if (useIsinDirectly) {
             outcome = { ok: false, status: 200, message: "skip-td-direct" };
           } else {
-            outcome = await fetchTwelveDataQuote(symbol, TWELVE_DATA_API_KEY);
+            const tdSymbol = TWELVE_DATA_SYMBOL_OVERRIDES[symbol] ?? symbol;
+            if (tdSymbol !== symbol) resolvedAs = tdSymbol;
+            outcome = await fetchTwelveDataQuote(tdSymbol, TWELVE_DATA_API_KEY);
             madeApiCall = true;
           }
 
