@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.10.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD
+const VERSION = "5.11.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -619,7 +619,8 @@ async function resolveIsinToSymbol(
       dbLog(dbEntries, "WARN", `ISIN not found on Twelve Data: ${isin}`, { isin, apiError: result.message }, requestId);
       return null;
     }
-    const euroExchanges = ["MIL", "XMIL", "MTA", "EPA", "ETR", "AMS", "LON"];
+    // XDUB/ISE first: Dublin trades RYA in EUR; LON trades in GBX (pence)
+    const euroExchanges = ["MIL", "XMIL", "MTA", "EPA", "ETR", "AMS", "XDUB", "ISE", "LON"];
     const match = result.data.find((d: Record<string, string>) => euroExchanges.includes(d.exchange))
         ?? result.data[0];
     const resolved = `${match.symbol}:${match.exchange}`;
@@ -699,7 +700,7 @@ serve(async (req) => {
 
     const staleThreshold = new Date(Date.now() - CACHE_TTL_MS).toISOString();
     const { data: cached, error: cacheError } = await supabase
-        .from("price_cache")
+        .from("fnz_price_cache")
         .select("*")
         .in("symbol", symbols)
         .eq("currency", TARGET_CURRENCY)
@@ -902,11 +903,17 @@ serve(async (req) => {
           }
 
           const result = outcome.result;
-          const price = parseFloat((result.close ?? result.price ?? "0") as string);
+          let price = parseFloat((result.close ?? result.price ?? "0") as string);
           const previousClose = parseFloat((result.previous_close ?? "0") as string) || null;
           const changeAmount = parseFloat((result.change ?? "0") as string) || null;
           const changePct = parseFloat((result.percent_change ?? "0") as string) || null;
-          const sourceCurrency = (result.currency as string) || "USD";
+          let sourceCurrency = ((result.currency as string) || "USD").toUpperCase();
+
+          // GBX = British pence; normalise to GBP before EUR conversion
+          if (sourceCurrency === "GBX") {
+            price = price / 100;
+            sourceCurrency = "GBP";
+          }
 
           if (price > 0) {
             const conversionRate = await getConversionRate(sourceCurrency, TARGET_CURRENCY, TWELVE_DATA_API_KEY, requestId, rateCache);
@@ -945,7 +952,7 @@ serve(async (req) => {
 
       if (rows.length > 0) {
         const { error: upsertError } = await supabase
-            .from("price_cache")
+            .from("fnz_price_cache")
             .upsert(rows, { onConflict: "symbol,currency" })
             .select();
 
