@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.13.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.13.1"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -153,7 +153,7 @@ async function fetchBorsaItalianaPrice(
 // Override simbolo per Twelve Data: ticker generico → "SYMBOL:EXCHANGE" esatto.
 // Usato quando TD non trova il ticker senza suffisso exchange.
 const TWELVE_DATA_SYMBOL_OVERRIDES: Record<string, string> = {
-  "RY4C": "RY4C:XFRA", // Ryanair su Frankfurt Xetra
+  "RY4C": "RY4C:XETR", // Ryanair su Xetra (Frankfurt)
 };
 
 // Known symbol → Google Finance exchange + currency.
