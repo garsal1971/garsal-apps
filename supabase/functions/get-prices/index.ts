@@ -668,7 +668,7 @@ serve(async (req) => {
     // ── Load symbols, ISINs, and asset types from products table ──────────
 
     const { data: productRows, error: prodError } = await supabase
-        .from("products")
+        .from("fnz_products")
         .select("symbol, isin, asset_type");
     if (prodError) {
       log("ERROR", "Products query failed", { requestId, message: prodError.message });
