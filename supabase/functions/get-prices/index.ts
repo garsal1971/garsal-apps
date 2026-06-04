@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.13.1"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.14.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -945,6 +945,21 @@ serve(async (req) => {
                   updated_at: new Date().toISOString(),
                 });
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from Investing.com`, { isin, price: icPrice }, requestId);
+                continue;
+              }
+            }
+
+            // 2e. Yahoo Finance by ISIN — per azioni quando TD richiede piano a pagamento
+            if (isStock) {
+              const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries);
+              if (yfPrice !== null) {
+                rows.push({
+                  symbol, price: roundMoney(yfPrice),
+                  prev_close: null, change_amt: null, change_pct: null,
+                  currency: TARGET_CURRENCY, market_state: null,
+                  updated_at: new Date().toISOString(),
+                });
+                dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance (stock)`, { isin, price: yfPrice }, requestId);
                 continue;
               }
             }
