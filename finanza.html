@@ -436,8 +436,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.32';
-const APP_BUILD   = '2026-06-05T09:00:00Z';
+const APP_VERSION = 'v1.0.33';
+const APP_BUILD   = '2026-06-05T09:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -1587,7 +1587,7 @@ function renderPortafoglioDetail() {
     </div>
     ${txs.length > 0 ? `
       <div class="card">
-        <div class="card-title">Storico transazioni</div>
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Storico transazioni<button class="btn btn-outline btn-sm" data-action="reload-portfolio-detail">🔄 Aggiorna</button></div>
         <div class="table-wrap"><table class="table table-storico">
           <thead><tr><th>Data</th><th>Tipo</th><th>Simbolo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th></th></tr></thead>
           <tbody>${txs.map(t => {
@@ -1621,7 +1621,10 @@ function renderTransazioni() {
   setHtml('view-transazioni', `
     <div class="view-header">
       <div><h2 class="page-title">Transazioni</h2><p class="page-sub">Storico completo carichi e scarichi</p></div>
-      <button class="btn btn-primary btn-sm" data-action="new-transaction">+ Nuova transazione</button>
+      <div class="hstack gap-8">
+        <button class="btn btn-outline btn-sm" data-action="reload-transactions-view">🔄 Aggiorna</button>
+        <button class="btn btn-primary btn-sm" data-action="new-transaction">+ Nuova transazione</button>
+      </div>
     </div>
     ${S.transactions.length === 0
       ? `<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione ancora.</p></div>`
@@ -2539,8 +2542,9 @@ function openPositionTransactionsModal(productId) {
   const today = new Date().toISOString().slice(0, 10);
 
   openModal(`Transazioni: ${product.symbol}`, `
-    <div style="margin-bottom:16px">
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
       <button class="btn btn-primary btn-sm" data-action="new-transaction" data-portfolio-id="${portfolioId}" data-product-id="${productId}">+ Nuova transazione</button>
+      <button class="btn btn-outline btn-sm" data-action="reload-position-modal" data-product-id="${productId}">🔄 Aggiorna</button>
     </div>
     ${txs.length === 0
       ? `<div class="empty-sm">Nessuna transazione per questo prodotto.</div>`
@@ -2851,6 +2855,20 @@ document.addEventListener('click', async e => {
     case 'new-transaction': console.log('🔴 CHIAMO openNewTransactionModal'); openNewTransactionModal(t.dataset.portfolioId || null, t.dataset.productId || null); break;
     case 'edit-transaction': console.log('🔴 CHIAMO openEditTransactionModal'); openEditTransactionModal(t.dataset.id); break;
     case 'open-position-transactions': openPositionTransactionsModal(t.dataset.productId); break;
+    case 'reload-transactions-view':
+      t.disabled = true; t.textContent = '⏳';
+      await reload(); renderTransazioni();
+      break;
+    case 'reload-portfolio-detail':
+      t.disabled = true; t.textContent = '⏳';
+      await reload(); render();
+      break;
+    case 'reload-position-modal': {
+      const pid = t.dataset.productId;
+      t.disabled = true; t.textContent = '⏳';
+      await reload(); openPositionTransactionsModal(pid);
+      break;
+    }
     case 'new-dossier':     openNewDossierModal(); break;
     case 'edit-dossier':    openNewDossierModal(t.dataset.id); break;
     case 'del-dossier':
