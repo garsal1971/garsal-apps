@@ -272,16 +272,14 @@
       .table-posizioni tr > :nth-child(5),.table-posizioni tr > :nth-child(6),
       .table-posizioni tr > :nth-child(7),.table-posizioni tr > :nth-child(9),
       .table-posizioni tr > :nth-child(n+11) { display: none; }
-      /* Storico portafoglio: mostra Data(1) Tipo(2) Simbolo(3) Controv.(6) */
-      /* Storico portafoglio: mostra Data(1) Tipo(2) Simbolo(3) Controv.(6) Azioni(9) */
-      .table-storico tr > :nth-child(4),.table-storico tr > :nth-child(5),
-      .table-storico tr > :nth-child(7),.table-storico tr > :nth-child(8) { display: none; }
-      /* Transazioni: mostra Data(1) Tipo(4) Simbolo(5) Controv.(9) */
-      /* Transazioni: mostra Data(1) Tipo(4) Simbolo(5) Controv.(9) Azioni(12) */
-      .table-transazioni tr > :nth-child(2),.table-transazioni tr > :nth-child(3),
-      .table-transazioni tr > :nth-child(6),.table-transazioni tr > :nth-child(7),
-      .table-transazioni tr > :nth-child(8),.table-transazioni tr > :nth-child(10),
-      .table-transazioni tr > :nth-child(11) { display: none; }
+      /* Storico portafoglio: mostra Azioni(1) Data(2) Tipo(3) Simbolo(4) Controv.(7) */
+      .table-storico tr > :nth-child(5),.table-storico tr > :nth-child(6),
+      .table-storico tr > :nth-child(8),.table-storico tr > :nth-child(9) { display: none; }
+      /* Transazioni: mostra Azioni(1) Data(2) Tipo(5) Simbolo(6) Controv.(10) */
+      .table-transazioni tr > :nth-child(3),.table-transazioni tr > :nth-child(4),
+      .table-transazioni tr > :nth-child(7),.table-transazioni tr > :nth-child(8),
+      .table-transazioni tr > :nth-child(9),.table-transazioni tr > :nth-child(11),
+      .table-transazioni tr > :nth-child(12) { display: none; }
       /* Prodotti: mostra Simbolo(1) Nome(3) Tipo(4) Prezzo(7) */
       .table-prodotti tr > :nth-child(2),.table-prodotti tr > :nth-child(5),
       .table-prodotti tr > :nth-child(6),.table-prodotti tr > :nth-child(8),
@@ -289,10 +287,9 @@
       /* Prezzi: mostra Simbolo(1) Prezzo(4) Stato(6) */
       .table-prezzi tr > :nth-child(2),.table-prezzi tr > :nth-child(3),
       .table-prezzi tr > :nth-child(5) { display: none; }
-      /* Modal transazioni: mostra Data(1) Tipo(2) Qtà(3) Controv.(5) */
-      /* Modal transazioni: mostra Data(1) Tipo(2) Qtà(3) Controv.(5) Azioni(8) */
-      .table-modal-tx tr > :nth-child(4),.table-modal-tx tr > :nth-child(6),
-      .table-modal-tx tr > :nth-child(7) { display: none; }
+      /* Modal transazioni: mostra Azioni(1) Data(2) Tipo(3) Qtà(4) Controv.(6) */
+      .table-modal-tx tr > :nth-child(5),.table-modal-tx tr > :nth-child(7),
+      .table-modal-tx tr > :nth-child(8) { display: none; }
     }
     @media (max-width: 480px) {
       .app-main { padding: 12px; max-width: 100vw; }
@@ -438,8 +435,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.34';
-const APP_BUILD   = '2026-06-05T09:45:00Z';
+const APP_VERSION = 'v1.0.35';
+const APP_BUILD   = '2026-06-05T10:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -1591,10 +1588,14 @@ function renderPortafoglioDetail() {
       <div class="card">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Storico transazioni<button class="btn btn-outline btn-sm" data-action="reload-portfolio-detail">🔄 Aggiorna</button></div>
         <div class="table-wrap"><table class="table table-storico">
-          <thead><tr><th>Data</th><th>Tipo</th><th>Simbolo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Data</th><th>Tipo</th><th>Simbolo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th></tr></thead>
           <tbody>${txs.map(t => {
             const pr = S.products.find(p => p.id === t.product_id);
             return `<tr>
+              <td class="hstack gap-4">
+                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
+                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
+              </td>
               <td class="mono text-sm">${fmtDate(t.date)}</td>
               <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
               <td class="mono fw-600">${pr?.symbol ?? '—'}</td>
@@ -1603,10 +1604,6 @@ function renderPortafoglioDetail() {
               <td class="mono">${fmtEUR(t.quantity * t.price)}</td>
               <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
               <td><div class="truncate" style="max-width:120px">${t.notes || '—'}</div></td>
-              <td>
-                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
-                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
-              </td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
@@ -1631,12 +1628,18 @@ function renderTransazioni() {
     ${S.transactions.length === 0
       ? `<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione ancora.</p></div>`
       : `<div class="card"><div class="table-wrap"><table class="table table-transazioni">
-        <thead><tr><th>Data</th><th>Portafoglio</th><th>Dossier</th><th>Tipo</th><th>Simbolo</th><th>Nome</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th class="text-right">Azioni</th></tr></thead>
+        <thead><tr><th>Azioni</th><th>Data</th><th>Portafoglio</th><th>Dossier</th><th>Tipo</th><th>Simbolo</th><th>Nome</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th></tr></thead>
         <tbody>${S.transactions.map(t => {
           const pf  = S.portfolios.find(x => x.id === t.portfolio_id);
           const pr  = S.products.find(x => x.id === t.product_id);
           const ds  = t.dossier_id ? S.dossiers.find(x => x.id === t.dossier_id) : null;
           return `<tr>
+            <td class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
+            </td>
             <td class="mono text-sm">${fmtDate(t.date)}</td>
             <td><div class="truncate" style="max-width:110px">${pf ? `<span class="hstack gap-4"><span style="width:8px;height:8px;border-radius:50%;background:${pf.color};flex-shrink:0"></span><span class="truncate">${pf.name}</span></span>` : '—'}</div></td>
             <td><div class="truncate" style="max-width:110px">${ds ? `${ds.bank_name} — ${ds.title}` : '—'}</div></td>
@@ -1648,12 +1651,6 @@ function renderTransazioni() {
             <td class="mono fw-600">${fmtEUR(t.quantity * t.price)}</td>
             <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
             <td><div class="truncate" style="max-width:100px">${t.notes || '—'}</div></td>
-            <td class="hstack gap-4 justify-end">
-              <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-              </button>
-              <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
-            </td>
           </tr>`;
         }).join('')}</tbody>
       </table></div></div>`
@@ -2551,9 +2548,13 @@ function openPositionTransactionsModal(productId) {
     ${txs.length === 0
       ? `<div class="empty-sm">Nessuna transazione per questo prodotto.</div>`
       : `<div class="table-wrap"><table class="table table-modal-tx">
-          <thead><tr><th>Data</th><th>Tipo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Data</th><th>Tipo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th></tr></thead>
           <tbody>${txs.map(t => {
             return `<tr>
+              <td class="hstack gap-4">
+                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
+                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}" title="Elimina">✕</button>
+              </td>
               <td class="mono text-sm">${fmtDate(t.date)}</td>
               <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
               <td class="mono">${fmtNum(t.quantity)}</td>
@@ -2561,10 +2562,6 @@ function openPositionTransactionsModal(productId) {
               <td class="mono">${fmtEUR(t.quantity * t.price)}</td>
               <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
               <td><div class="truncate" style="max-width:100px">${t.notes || '—'}</div></td>
-              <td>
-                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
-                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}" title="Elimina">✕</button>
-              </td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>`
