@@ -843,7 +843,18 @@
         return;
       }
 
-      // Detect bank format (similar to CSV bank format)
+      // 1. Extract saldo disponibile from preamble
+      let saldoDisponibile = 0;
+      for (const row of rows) {
+        const joined = row.map(c => String(c || '')).join(' ').toLowerCase();
+        const m = joined.match(/saldo disponibile[:\s]*([0-9.,]+)/);
+        if (m) {
+          saldoDisponibile = parseItNum(m[1]);
+          break;
+        }
+      }
+
+      // 2. Find the header row
       let headerRowIdx = -1;
       for (let i = 0; i < rows.length; i++) {
         const joined = rows[i].map(c => String(c || '').toLowerCase().trim()).join('|');
@@ -875,8 +886,7 @@
         const rawDate = row[col.data];
         if (typeof rawDate === 'number') {
           // Excel date (serial number)
-          const dateObj = XLSX.utils.format_cell({ v: rawDate, t: 'd' });
-          dataStr = new Date(rawDate * 86400000 - 2209161600000).toISOString().slice(0, 10);
+          dataStr = new Date(Math.round((rawDate - 25569) * 86400 * 1000)).toISOString().slice(0, 10);
         } else if (typeof rawDate === 'string') {
           dataStr = itDateToIso(rawDate);
         }
@@ -916,13 +926,31 @@
         return !existingKeys.has(key);
       });
 
+      // Also store saldo
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let saldoMsg = '';
+      if (saldoDisponibile) {
+        try {
+          await sb('cntrs_saldi_terr', 'POST', {
+            user_id: S.session.user.id,
+            data: todayStr,
+            saldo_contabile: saldoDisponibile,
+            saldo_disponibile: saldoDisponibile,
+            note: 'Importato da Excel banca',
+          });
+          saldoMsg = `\nSaldo disponibile salvato: ${fmtEUR(saldoDisponibile)}`;
+        } catch (e) {
+          console.error('Errore salvataggio saldo:', e);
+        }
+      }
+
       if (newItems.length === 0) {
-        alert('Tutte le transazioni sono già presenti nel database.');
+        alert(`Tutte le transazioni sono già presenti nel database.${saldoMsg}`);
         loadData();
         return;
       }
 
-      if (!confirm(`Trovate ${items.length} transazioni.\n${newItems.length} da importare (${items.length - newItems.length} già presenti).\n\nProcedere?`)) return;
+      if (!confirm(`Trovate ${items.length} transazioni.\n${newItems.length} da importare (${items.length - newItems.length} già presenti).${saldoMsg ? '\n' + saldoMsg.trim() : ''}\n\nProcedere?`)) return;
 
       let imported = 0;
       for (const item of newItems) {
@@ -934,7 +962,7 @@
         }
       }
 
-      alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}`);
+      alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}${saldoMsg}`);
       loadData();
     }
 
