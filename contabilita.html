@@ -197,7 +197,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Conto Cointestato · <span class="mono">v1.4</span>
+    Conto Cointestato · <span class="mono">v1.5</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -892,8 +892,22 @@ function navigate(view) {
   if (nEl) nEl.classList.add('active');
   $('sidebar')?.classList.remove('open');
   $('mobile-nav-overlay')?.classList.remove('open');
+  history.pushState({ view }, '');
   render();
 }
+
+window.addEventListener('popstate', e => {
+  if (!e.state) return;
+  const view = e.state.view || 'dashboard';
+  S.view = view;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const vEl = $(`view-${view}`);
+  if (vEl) vEl.classList.add('active');
+  const nEl = document.querySelector(`.nav-item[data-view="${view}"]`);
+  if (nEl) nEl.classList.add('active');
+  render();
+});
 
 function render() {
   switch (S.view) {
@@ -1029,6 +1043,7 @@ async function init() {
   $('footer-info').textContent = `${S.transactions.length} transazioni · ${anni.length} anni`;
 
   navigate('dashboard');
+  history.replaceState({ view: 'dashboard' }, '');
 }
 
 init();
