@@ -281,9 +281,10 @@
       .table-transazioni tr > :nth-child(9),.table-transazioni tr > :nth-child(11),
       .table-transazioni tr > :nth-child(12) { display: none; }
       /* Prodotti: mostra Simbolo(1) Nome(3) Tipo(4) Prezzo(7) */
-      .table-prodotti tr > :nth-child(2),.table-prodotti tr > :nth-child(5),
-      .table-prodotti tr > :nth-child(6),.table-prodotti tr > :nth-child(8),
-      .table-prodotti tr > :nth-child(n+9) { display: none; }
+      /* Prodotti: mostra Azioni(1) Simbolo(2) Nome(4) Tipo(5) Prezzo(8) */
+      .table-prodotti tr > :nth-child(3),.table-prodotti tr > :nth-child(6),
+      .table-prodotti tr > :nth-child(7),.table-prodotti tr > :nth-child(9),
+      .table-prodotti tr > :nth-child(n+10) { display: none; }
       /* Prezzi: mostra Simbolo(1) Prezzo(4) Stato(6) */
       .table-prezzi tr > :nth-child(2),.table-prezzi tr > :nth-child(3),
       .table-prezzi tr > :nth-child(5) { display: none; }
@@ -435,8 +436,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.35';
-const APP_BUILD   = '2026-06-05T10:00:00Z';
+const APP_VERSION = 'v1.0.36';
+const APP_BUILD   = '2026-06-05T10:15:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -1667,14 +1668,17 @@ function renderProdotti() {
       ? `<div class="empty-state"><div class="empty-icon">📋</div><p>Aggiungi i tuoi strumenti finanziari.<br/>Usa i simboli Yahoo Finance.</p></div>`
       : `<div class="card"><div class="table-wrap"><table class="table table-prodotti">
         <thead><tr>
-          <th>Simbolo</th><th>ISIN</th><th>Nome</th><th>Tipo</th><th>Borsa</th><th>Valuta</th>
+          <th></th><th>Simbolo</th><th>ISIN</th><th>Nome</th><th>Tipo</th><th>Borsa</th><th>Valuta</th>
           <th>Prezzo</th><th>Var. %</th>
           ${S.tagCats.map(tc => `<th>${tc.name}</th>`).join('')}
-          <th></th>
         </tr></thead>
         <tbody>${S.products.map(p => {
           const pd = S.prices[p.symbol] || null;
           return `<tr>
+            <td class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-product" data-id="${p.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-product" data-id="${p.id}" title="Elimina">✕</button>
+            </td>
             <td class="mono fw-600">${p.symbol}</td>
             <td class="mono text-sm text-muted">${p.isin || '—'}</td>
             <td>${p.name}</td>
@@ -1684,10 +1688,6 @@ function renderProdotti() {
             <td class="mono ${pnlCls(pd?.change_pct ?? null)}">${pd ? fmtEURc(pd.price) : '—'}</td>
             <td class="mono ${pnlCls(pd?.change_pct ?? null)}">${pd ? fmtPct(pd.change_pct) : '—'}</td>
             ${S.tagCats.map(tc => `<td>${tagBadge(tc.name, p.tags?.[tc.name])}</td>`).join('')}
-            <td><div class="hstack gap-4">
-              <button class="btn-icon" data-action="edit-product" data-id="${p.id}" title="Modifica">✎</button>
-              <button class="btn-icon btn-icon-danger" data-action="del-product" data-id="${p.id}" title="Elimina">✕</button>
-            </div></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div></div>`
