@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -102,7 +103,9 @@
       </div>
       <div class="hstack gap-8">
         <button class="btn btn-primary btn-sm" onclick="openModal()">+ Nuovo Movimento</button>
+        <button class="btn btn-sm" style="border:1px solid var(--c-border)" onclick="document.getElementById('xlsx-input').click()">📊 Importa Excel</button>
         <button class="btn btn-sm" style="border:1px solid var(--c-border)" onclick="document.getElementById('csv-input').click()">📥 Importa CSV</button>
+        <input type="file" id="xlsx-input" accept=".xls,.xlsx" style="display:none" />
         <input type="file" id="csv-input" accept=".csv" style="display:none" />
       </div>
     </div>
@@ -834,6 +837,131 @@
       alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}${saldoMsg}`);
       loadData();
     }
+
+    async function handleXLSXImport(file) {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+      if (rows.length < 2) {
+        alert('File Excel vuoto o senza dati.');
+        return;
+      }
+
+      // Detect bank format (similar to CSV bank format)
+      let headerRowIdx = -1;
+      for (let i = 0; i < rows.length; i++) {
+        const joined = rows[i].map(c => String(c || '').toLowerCase().trim()).join('|');
+        if (joined.includes('data registrazione') && joined.includes('descrizione') && joined.includes('importo')) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+
+      if (headerRowIdx === -1) {
+        alert('Intestazioni non trovate nel formato Excel. Cercata riga con "Data registrazione", "Descrizione", "Importo".');
+        return;
+      }
+
+      const hdr = rows[headerRowIdx].map(c => String(c || '').toLowerCase().trim());
+      const col = {
+        data: hdr.findIndex(c => c.includes('data registrazione')),
+        causale: hdr.findIndex(c => c.includes('causale')),
+        descrizione: hdr.findIndex(c => c.includes('descrizione')),
+        importo: hdr.findIndex(c => c.includes('importo')),
+      };
+
+      const items = [];
+      for (let r = headerRowIdx + 1; r < rows.length; r++) {
+        const row = rows[r];
+        if (!row || row.length < 3) continue;
+
+        let dataStr = '';
+        const rawDate = row[col.data];
+        if (typeof rawDate === 'number') {
+          // Excel date (serial number)
+          const dateObj = XLSX.utils.format_cell({ v: rawDate, t: 'd' });
+          dataStr = new Date(rawDate * 86400000 - 2209161600000).toISOString().slice(0, 10);
+        } else if (typeof rawDate === 'string') {
+          dataStr = itDateToIso(rawDate);
+        }
+
+        if (!dataStr) continue;
+
+        const desc = String(row[col.descrizione] || '');
+        if (!desc) continue;
+
+        const imp = typeof row[col.importo] === 'number' ? row[col.importo] : parseItNum(row[col.importo]);
+        if (imp === 0) continue;
+
+        const causale = col.causale !== -1 ? String(row[col.causale] || '') : '';
+        const catName = guessCategory(causale, desc);
+        const category_id = await ensureCategory(catName);
+
+        items.push({
+          data: dataStr,
+          descrizione: desc,
+          importo_voce: imp,
+          category_id: category_id || undefined,
+          note: '',
+          anno: parseInt(dataStr.slice(0, 4)),
+        });
+      }
+
+      if (items.length === 0) {
+        alert('Nessuna transazione valida trovata nel file Excel.');
+        return;
+      }
+
+      const existingKeys = new Set(
+        S.transactions.map(t => `${t.data}|${t.descrizione}|${t.importo_voce}`)
+      );
+      const newItems = items.filter(item => {
+        const key = `${item.data}|${item.descrizione}|${item.importo_voce}`;
+        return !existingKeys.has(key);
+      });
+
+      if (newItems.length === 0) {
+        alert('Tutte le transazioni sono già presenti nel database.');
+        loadData();
+        return;
+      }
+
+      if (!confirm(`Trovate ${items.length} transazioni.\n${newItems.length} da importare (${items.length - newItems.length} già presenti).\n\nProcedere?`)) return;
+
+      let imported = 0;
+      for (const item of newItems) {
+        try {
+          await sb('cntrs_transactions_terr', 'POST', { ...item, user_id: S.session.user.id });
+          imported++;
+        } catch (e) {
+          console.error('Errore import:', item, e);
+        }
+      }
+
+      alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}`);
+      loadData();
+    }
+
+    document.getElementById('xlsx-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const label = e.target.previousElementSibling.previousElementSibling;
+      const oldText = label.textContent;
+      label.textContent = '⏳ Importazione...';
+      label.style.pointerEvents = 'none';
+      try {
+        await handleXLSXImport(file);
+      } catch (err) {
+        alert('Errore importazione Excel: ' + err.message);
+        console.error(err);
+      } finally {
+        label.textContent = oldText;
+        label.style.pointerEvents = '';
+        e.target.value = '';
+      }
+    });
 
     document.getElementById('csv-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
