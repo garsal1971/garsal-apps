@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏖️ Pensione Countdown v1.0.1</title>
+    <title>🏖️ Pensione Countdown v1.0.2</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -526,7 +526,8 @@
         <div class="countdown-grid">
             <div class="cd-unit days">
                 <span class="cd-number" id="cdDays">--</span>
-                <div class="cd-label">Giorni</div>
+                <div class="cd-label">Giorni Lav.</div>
+                <div style="font-size:0.58rem;opacity:0.7;margin-top:2px;letter-spacing:1px">LUN–VEN</div>
             </div>
             <div class="cd-unit">
                 <span class="cd-number" id="cdHours">--</span>
@@ -581,12 +582,12 @@
         <div class="stat-card">
             <div class="stat-emoji">📅</div>
             <span class="stat-number" id="sTotalDays">--</span>
-            <div class="stat-label">Giorni totali carriera</div>
+            <div class="stat-label">Giorni lav. totali</div>
         </div>
         <div class="stat-card">
             <div class="stat-emoji">💼</div>
             <span class="stat-number" id="sDaysWorked">--</span>
-            <div class="stat-label">Giorni già macinati</div>
+            <div class="stat-label">Giorni lav. macinati</div>
         </div>
         <div class="stat-card">
             <div class="stat-emoji">😴</div>
@@ -627,8 +628,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.0.1';
-var BUILD_TIME  = '2026-06-05T12:00:00Z';
+var APP_VERSION = 'v1.0.2';
+var BUILD_TIME  = '2026-06-05T14:00:00Z';
 console.log('%c 🏖️ PENSIONE COUNTDOWN ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -693,18 +694,16 @@ setInterval(rotateMessage, 6000);
 // MILESTONES
 // ============================================================
 var MILESTONES = [
-    { days: 3000, emoji: '🌍', label: '3.000 giorni alla pensione' },
-    { days: 2000, emoji: '🗺️', label: '2.000 giorni alla pensione' },
-    { days: 1500, emoji: '📡', label: '1.500 giorni alla pensione' },
-    { days: 1000, emoji: '🎯', label: '1.000 giorni alla pensione' },
-    { days: 730,  emoji: '📅', label: '2 anni alla pensione' },
-    { days: 500,  emoji: '🏃', label: '500 giorni alla pensione' },
-    { days: 365,  emoji: '📆', label: '1 anno alla pensione' },
-    { days: 180,  emoji: '🌗', label: '6 mesi alla pensione' },
-    { days: 100,  emoji: '💯', label: '100 giorni alla pensione' },
-    { days: 50,   emoji: '🔥', label: '50 giorni alla pensione' },
-    { days: 30,   emoji: '📌', label: '1 mese alla pensione' },
-    { days: 10,   emoji: '⚡', label: '10 giorni alla pensione!' },
+    { days: 2000, emoji: '🌍', label: '2.000 giorni lavorativi alla pensione' },
+    { days: 1000, emoji: '🎯', label: '1.000 giorni lavorativi alla pensione' },
+    { days: 500,  emoji: '🏃', label: '500 giorni lavorativi alla pensione' },
+    { days: 260,  emoji: '📆', label: '1 anno lavorativo alla pensione' },
+    { days: 200,  emoji: '📅', label: '200 giorni lavorativi alla pensione' },
+    { days: 100,  emoji: '💯', label: '100 giorni lavorativi alla pensione' },
+    { days: 50,   emoji: '🔥', label: '50 giorni lavorativi alla pensione' },
+    { days: 25,   emoji: '⚡', label: '25 giorni lavorativi alla pensione' },
+    { days: 10,   emoji: '💥', label: '10 giorni lavorativi alla pensione!' },
+    { days: 5,    emoji: '📌', label: '1 settimana lavorativa alla pensione!' },
     { days: 1,    emoji: '🥂', label: 'Domani sei LIBERO!' },
     { days: 0,    emoji: '🎉', label: 'SEI IN PENSIONE!' },
 ];
@@ -729,6 +728,24 @@ function isoToday() {
 
 function daysBetween(d1, d2) {
     return Math.floor((d2 - d1) / 86400000);
+}
+
+function workingDays(from, to) {
+    if (to <= from) return 0;
+    var d = new Date(from);
+    d.setHours(0, 0, 0, 0);
+    var end = new Date(to);
+    end.setHours(0, 0, 0, 0);
+    var total = Math.round((end - d) / 86400000);
+    var fullWeeks = Math.floor(total / 7);
+    var extra = total % 7;
+    var count = fullWeeks * 5;
+    var dow = d.getDay();
+    for (var i = 0; i < extra; i++) {
+        var day = (dow + i) % 7;
+        if (day >= 1 && day <= 5) count++;
+    }
+    return count;
 }
 
 function streakEmoji(n) {
@@ -850,12 +867,12 @@ function updateCountdown() {
     }
 
     var total   = Math.floor(diff / 1000);
-    var days    = Math.floor(total / 86400);
     var hours   = Math.floor((total % 86400) / 3600);
     var minutes = Math.floor((total % 3600) / 60);
     var seconds = total % 60;
+    var wdays   = workingDays(now, ret);
 
-    document.getElementById('cdDays').textContent    = days;
+    document.getElementById('cdDays').textContent    = wdays;
     document.getElementById('cdHours').textContent   = pad(hours);
     document.getElementById('cdMinutes').textContent = pad(minutes);
 
@@ -886,9 +903,9 @@ function updateProgress() {
     var start = new Date(S.startDate);
     var ret   = new Date(S.retirementDate);
     var now   = new Date();
-    var total = ret - start;
-    var elapsed = now - start;
-    var pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+    var totalWd   = workingDays(start, ret);
+    var elapsedWd = workingDays(start, now);
+    var pct = totalWd > 0 ? Math.min(100, Math.max(0, (elapsedWd / totalWd) * 100)) : 0;
     var pctStr = pct.toFixed(1) + '%';
 
     document.getElementById('progressFill').style.width = pct + '%';
@@ -907,19 +924,20 @@ function updateStats() {
         return;
     }
 
-    var start   = new Date(S.startDate);
-    var ret     = new Date(S.retirementDate);
-    var now     = new Date();
-    var total   = Math.max(0, daysBetween(start, ret));
-    var worked  = Math.max(0, daysBetween(start, now));
-    var weekends = Math.floor(worked / 7);
-    var coffees  = Math.floor(worked * 2.4);
-    var meetings = Math.floor(worked * 3.1);
-    var mondays  = Math.floor(worked / 7);
+    var start      = new Date(S.startDate);
+    var ret        = new Date(S.retirementDate);
+    var now        = new Date();
+    var totalWd    = Math.max(0, workingDays(start, ret));
+    var workedWd   = Math.max(0, workingDays(start, now));
+    var calWorked  = Math.max(0, daysBetween(start, now));
+    var weekends   = Math.floor(calWorked / 7);
+    var coffees    = Math.floor(workedWd * 2.4);
+    var meetings   = Math.floor(workedWd * 3.1);
+    var mondays    = Math.floor(calWorked / 7);
 
     var fmt = function(n) { return n.toLocaleString('it-IT'); };
-    document.getElementById('sTotalDays').textContent  = fmt(total);
-    document.getElementById('sDaysWorked').textContent = fmt(worked);
+    document.getElementById('sTotalDays').textContent  = fmt(totalWd);
+    document.getElementById('sDaysWorked').textContent = fmt(workedWd);
     document.getElementById('sWeekends').textContent   = fmt(weekends);
     document.getElementById('sCoffees').textContent    = fmt(coffees);
     document.getElementById('sMeetings').textContent   = fmt(meetings);
@@ -936,9 +954,9 @@ function updateMilestones() {
         return;
     }
 
-    var now     = new Date();
-    var ret     = new Date(S.retirementDate + 'T00:00:00');
-    var daysLeft = Math.max(0, Math.ceil((ret - now) / 86400000));
+    var now      = new Date();
+    var ret      = new Date(S.retirementDate + 'T00:00:00');
+    var daysLeft = workingDays(now, ret);
     var foundNext = false;
     var html = '';
 
@@ -957,7 +975,7 @@ function updateMilestones() {
         if (achieved) {
             html += '<span class="ms-status ok">Superato! ✓</span>';
         } else if (isNext) {
-            html += '<span class="ms-status soon">tra ' + daysLeft + 'gg</span>';
+            html += '<span class="ms-status soon">' + daysLeft.toLocaleString('it-IT') + ' gg lav.</span>';
         } else {
             html += '<span class="ms-status wait">in attesa</span>';
         }
