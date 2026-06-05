@@ -148,6 +148,10 @@
 .col-filter-sel { display: block; margin-top: 4px; width: 100%; min-width: 78px; font-size: .68rem; padding: 2px 18px 2px 5px; border: 1px solid var(--c-border); border-radius: 3px; background: var(--c-surface); color: var(--c-text); cursor: pointer; font-family: var(--font-sans); text-transform: none; letter-spacing: 0; font-weight: 400; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%2364748b' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 4px center; }
 .col-filter-sel:focus { outline: 1px solid var(--c-primary); border-color: var(--c-primary); }
 .col-filter-sel.has-filter { border-color: var(--c-primary); color: var(--c-primary); font-weight: 600; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%234f8ef7' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.filter-toggle-bar { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.filter-badge { display:inline-flex; align-items:center; justify-content:center; background:var(--c-primary); color:#fff; border-radius:99px; font-size:.7rem; font-weight:700; min-width:18px; height:18px; padding:0 5px; margin-left:4px; }
+.filter-panel { margin-bottom:16px; padding:16px; }
+.filter-panel-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
     .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); white-space: nowrap; }
     .table tbody tr:hover td { background: #fafbfd; }
     /* ── Badges ───────────────────────────────────────────────── */
@@ -436,8 +440,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.36';
-const APP_BUILD   = '2026-06-05T10:15:00Z';
+const APP_VERSION = 'v1.0.37';
+const APP_BUILD   = '2026-06-05T10:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -461,6 +465,8 @@ const S = {
   modalAction: null,
   charts: {},
   ptfFilters: {},
+  txFilters: { portfolio_id: '', type: '', asset_type: '', symbol: '', dateFrom: '', dateTo: '' },
+  txFiltersOpen: false,
   ptfPnlMode: 'total',
 };
 /* ── Supabase REST helpers ───────────────────────────────────── */
@@ -1618,6 +1624,29 @@ function renderPortafoglioDetail() {
   }
 }
 function renderTransazioni() {
+  const f = S.txFilters;
+  const assetTypeLabels = { stock:'Azione', etf:'ETF', bond:'Obbligazione', crypto:'Crypto', fund:'Fondo', other:'Altro' };
+  const assetTypesSet = new Set(S.products.map(p => p.asset_type || 'other'));
+  const assetTypes = Array.from(assetTypesSet).sort();
+
+  // Applica filtri
+  let txs = S.transactions;
+  if (f.portfolio_id) txs = txs.filter(t => t.portfolio_id === f.portfolio_id);
+  if (f.type)         txs = txs.filter(t => t.type === f.type);
+  if (f.asset_type)   txs = txs.filter(t => (S.products.find(p => p.id === t.product_id)?.asset_type || 'other') === f.asset_type);
+  if (f.symbol) {
+    const q = f.symbol.toLowerCase();
+    txs = txs.filter(t => {
+      const pr = S.products.find(p => p.id === t.product_id);
+      return pr?.symbol.toLowerCase().includes(q) || pr?.name.toLowerCase().includes(q);
+    });
+  }
+  if (f.dateFrom) txs = txs.filter(t => t.date >= f.dateFrom);
+  if (f.dateTo)   txs = txs.filter(t => t.date <= f.dateTo);
+
+  const activeCount = Object.values(f).filter(v => v !== '').length;
+  const badgeHtml = activeCount > 0 ? `<span class="filter-badge">${activeCount}</span>` : '';
+
   setHtml('view-transazioni', `
     <div class="view-header">
       <div><h2 class="page-title">Transazioni</h2><p class="page-sub">Storico completo carichi e scarichi</p></div>
@@ -1626,11 +1655,58 @@ function renderTransazioni() {
         <button class="btn btn-primary btn-sm" data-action="new-transaction">+ Nuova transazione</button>
       </div>
     </div>
-    ${S.transactions.length === 0
-      ? `<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione ancora.</p></div>`
+    <div class="filter-toggle-bar">
+      <button class="btn btn-outline btn-sm ${S.txFiltersOpen ? 'active' : ''}" data-action="tx-filter-toggle">
+        🔍 Filtri${badgeHtml}
+      </button>
+      ${activeCount > 0 ? `<button class="btn btn-outline btn-sm" data-action="tx-filter-reset">✕ Reset filtri</button>` : ''}
+      ${activeCount > 0 ? `<span class="text-sm text-muted">${txs.length} di ${S.transactions.length} transazioni</span>` : ''}
+    </div>
+    ${S.txFiltersOpen ? `
+    <div class="filter-panel card">
+      <div class="filter-panel-grid">
+        <div class="form-group">
+          <label class="form-label">Portafoglio</label>
+          <select class="form-input form-select" data-action="tx-filter" data-col="portfolio_id">
+            <option value="">Tutti</option>
+            ${S.portfolios.map(p => `<option value="${p.id}" ${f.portfolio_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo operazione</label>
+          <select class="form-input form-select" data-action="tx-filter" data-col="type">
+            <option value="">Tutti</option>
+            <option value="BUY" ${f.type === 'BUY' ? 'selected' : ''}>CARICO (BUY)</option>
+            <option value="SELL" ${f.type === 'SELL' ? 'selected' : ''}>SCARICO (SELL)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo prodotto</label>
+          <select class="form-input form-select" data-action="tx-filter" data-col="asset_type">
+            <option value="">Tutti</option>
+            ${assetTypes.map(v => `<option value="${v}" ${f.asset_type === v ? 'selected' : ''}>${assetTypeLabels[v] || v}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Simbolo / Nome</label>
+          <input type="text" class="form-input" placeholder="es. ENI.MI" data-action="tx-filter" data-col="symbol" value="${f.symbol}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Da data</label>
+          <input type="date" class="form-input" data-action="tx-filter" data-col="dateFrom" value="${f.dateFrom}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">A data</label>
+          <input type="date" class="form-input" data-action="tx-filter" data-col="dateTo" value="${f.dateTo}" />
+        </div>
+      </div>
+    </div>
+    ` : ''}
+    ${txs.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">💳</div><p>${S.transactions.length === 0 ? 'Nessuna transazione ancora.' : 'Nessuna transazione corrisponde ai filtri attivi.'}</p></div>`
       : `<div class="card"><div class="table-wrap"><table class="table table-transazioni">
         <thead><tr><th>Azioni</th><th>Data</th><th>Portafoglio</th><th>Dossier</th><th>Tipo</th><th>Simbolo</th><th>Nome</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th></tr></thead>
-        <tbody>${S.transactions.map(t => {
+        <tbody>${txs.map(t => {
           const pf  = S.portfolios.find(x => x.id === t.portfolio_id);
           const pr  = S.products.find(x => x.id === t.product_id);
           const ds  = t.dossier_id ? S.dossiers.find(x => x.id === t.dossier_id) : null;
@@ -2854,6 +2930,14 @@ document.addEventListener('click', async e => {
     case 'new-transaction': console.log('🔴 CHIAMO openNewTransactionModal'); openNewTransactionModal(t.dataset.portfolioId || null, t.dataset.productId || null); break;
     case 'edit-transaction': console.log('🔴 CHIAMO openEditTransactionModal'); openEditTransactionModal(t.dataset.id); break;
     case 'open-position-transactions': openPositionTransactionsModal(t.dataset.productId); break;
+    case 'tx-filter-toggle':
+      S.txFiltersOpen = !S.txFiltersOpen;
+      renderTransazioni();
+      break;
+    case 'tx-filter-reset':
+      S.txFilters = { portfolio_id: '', type: '', asset_type: '', symbol: '', dateFrom: '', dateTo: '' };
+      renderTransazioni();
+      break;
     case 'reload-transactions-view':
       t.disabled = true; t.textContent = '⏳';
       await reload(); renderTransazioni();
@@ -3000,6 +3084,12 @@ document.addEventListener('change', e => {
     if (sel.value) S.ptfFilters[sel.dataset.col] = sel.value;
     else delete S.ptfFilters[sel.dataset.col];
     renderPortafoglioDetail();
+    return;
+  }
+  const txFilterEl = e.target.closest('[data-action="tx-filter"]');
+  if (txFilterEl) {
+    S.txFilters[txFilterEl.dataset.col] = txFilterEl.value;
+    renderTransazioni();
     return;
   }
   const assetFilter = e.target.closest('select[data-action="filter-asset-type"]');
