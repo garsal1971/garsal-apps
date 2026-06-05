@@ -440,8 +440,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.37';
-const APP_BUILD   = '2026-06-05T10:30:00Z';
+const APP_VERSION = 'v1.0.38';
+const APP_BUILD   = '2026-06-05T11:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2890,6 +2890,7 @@ function openOtherAssetModal(assetId = null) {
 function navigate(view, param = null) {
   if (view === 'portafoglio-detail' && param !== S.portfolioId) S.ptfFilters = {};
   S.view = view; S.portfolioId = param;
+  history.pushState({ view, portfolioId: param }, '');
   render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -3138,6 +3139,7 @@ async function startApp(session) {
   $('btn-logout').addEventListener('click', logout);
   await loadAll();
   render();
+  history.replaceState({ view: S.view, portfolioId: S.portfolioId }, '');
   autoSaveSnapshot().then(() => {
     if (S.dashboardSnapshots.length > 0) renderDashboard();
   });
@@ -3200,6 +3202,13 @@ async function boot() {
   }
 }
 const urlErr = new URLSearchParams(location.search).get('error_description');
+window.addEventListener('popstate', e => {
+  if (!e.state || !S.session) return;
+  const { view, portfolioId } = e.state;
+  if (view === 'portafoglio-detail' && portfolioId !== S.portfolioId) S.ptfFilters = {};
+  S.view = view; S.portfolioId = portfolioId || null;
+  render(); window.scrollTo(0, 0);
+});
 if (urlErr) document.addEventListener('DOMContentLoaded', () => {
   const el = $('login-error');
   if (el) { el.textContent = decodeURIComponent(urlErr); el.style.display = 'block'; }
