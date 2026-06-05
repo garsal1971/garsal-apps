@@ -436,8 +436,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.31';
-const APP_BUILD   = '2026-06-04T17:30:00Z';
+const APP_VERSION = 'v1.0.32';
+const APP_BUILD   = '2026-06-05T09:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2348,6 +2348,31 @@ function openNewTransactionModal(prePortfolioId = null, preProductId = null) {
   // iniettati via innerHTML non vengono eseguiti dal browser)
   const assetTypeSelect = document.querySelector('#modal-body select[name="asset_type_filter"]');
   const productSelect   = document.querySelector('#modal-body select[name="product_id"]');
+  const dateInput       = document.querySelector('#modal-body input[name="date"]');
+  const priceInput      = document.querySelector('#modal-body input[name="price"]');
+
+  function getClosestHistoricalPrice(symbol, dateStr) {
+    if (!symbol || !dateStr) return null;
+    const history = S.priceHistory.filter(h => h.symbol === symbol);
+    if (history.length === 0) return null;
+    return history.reduce((closest, h) => {
+      if (!closest) return h;
+      const dCurrent = Math.abs(new Date(h.price_date) - new Date(dateStr));
+      const dClosest  = Math.abs(new Date(closest.price_date) - new Date(dateStr));
+      return dCurrent < dClosest ? h : closest;
+    }, null);
+  }
+
+  function updateDefaultPrice() {
+    const productId = productSelect?.value;
+    const dateStr   = dateInput?.value;
+    if (!productId || !dateStr || !priceInput) return;
+    const product = S.products.find(p => p.id === productId);
+    if (!product) return;
+    const entry = getClosestHistoricalPrice(product.symbol, dateStr);
+    if (entry) priceInput.value = parseFloat(entry.price);
+  }
+
   if (assetTypeSelect && productSelect) {
     const updateProducts = () => {
       const selectedType = assetTypeSelect.value;
@@ -2364,8 +2389,11 @@ function openNewTransactionModal(prePortfolioId = null, preProductId = null) {
         productSelect.appendChild(option);
       });
       productSelect.disabled = false;
+      updateDefaultPrice();
     };
     assetTypeSelect.addEventListener('change', updateProducts);
+    productSelect.addEventListener('change', updateDefaultPrice);
+    if (dateInput) dateInput.addEventListener('change', updateDefaultPrice);
     updateProducts();
   }
 }
