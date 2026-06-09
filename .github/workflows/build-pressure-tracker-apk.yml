@@ -41,9 +41,10 @@ jobs:
 
       - name: Incorpora HTML come asset
         run: |
+          mkdir -p android-app/pressure-tracker/app/src/main/assets/
           cp pressure-tracker.html \
             android-app/pressure-tracker/app/src/main/assets/pressure-tracker.html
-          echo "✅ pressure-tracker.html copiato negli asset"
+          echo "✅ pressure-tracker.html copiato negli asset ($(wc -c < pressure-tracker.html) byte)"
 
       - name: Prepara keystore
         id: keystore
