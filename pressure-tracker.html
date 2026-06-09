@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pressure Tracker v1.0.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --primary:   #FF3366;
+            --secondary: #6C5CE7;
+            --success:   #00B894;
+            --warning:   #F39C12;
+            --danger:    #E74C3C;
+            --dark:      #1F2937;
+            --light:     #FFFFFF;
+            --muted:     #6B7280;
+            --accent:    #2563EB;
+            --border:    #E5E7EB;
+            --card-bg:   #FFFFFF;
+            --input-bg:  #F9FAFB;
+            --sys-color: #E74C3C;
+            --dia-color: #3498DB;
+            --pls-color: #27AE60;
+        }
+
+        body {
+            font-family: 'Darker Grotesque', sans-serif;
+            background: #F3F4F6;
+            color: var(--dark);
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        /* === TOP BAR === */
+        #top-bar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 56px;
+            background: #C0392B;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 12px;
+            z-index: 3000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        #top-bar-icon  { font-size: 20px; }
+        #top-bar-title {
+            font-family: 'Space Mono', monospace;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 1px;
+        }
+        #top-bar-version {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: rgba(255,255,255,0.55);
+            margin-left: auto;
+        }
+
+        /* === LAYOUT === */
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: calc(100vh - 56px);
+        }
+
+        /* === SIDEBAR === */
+        .sidebar {
+            background: #F3F4F6;
+            padding: 1rem 0.75rem;
+            border-right: 1px solid var(--border);
+            position: sticky;
+            top: 56px;
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+        }
+        .sidebar-logo {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 1.5rem;
+            padding: 0 0.25rem;
+            line-height: 1.6;
+        }
+        .nav-menu { display: flex; flex-direction: column; }
+        .nav-item {
+            padding: 0.55rem 0.7rem;
+            margin-bottom: 0.3rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .nav-item:hover { background: rgba(0,0,0,0.06); transform: translateX(3px); }
+        .nav-item.active { background: var(--primary); color: white; }
+
+        @media (min-width: 769px) {
+            .nav-item::after { content: " " attr(data-text); }
+        }
+
+        /* === MAIN === */
+        .main-content { padding: 1.5rem; }
+
+        /* === PAGES === */
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* === PAGE HEADER === */
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 1.5rem;
+        }
+        .page-header h1 { font-size: 1.7rem; font-weight: 900; color: var(--dark); }
+        .page-header p  { font-size: 0.9rem; color: var(--muted); margin-top: 2px; }
+
+        /* === CARD === */
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            margin-bottom: 1.25rem;
+        }
+        .card-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: var(--muted);
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* === STAT ROW === */
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 1.25rem;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .stat-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .stat-value { font-size: 1.8rem; font-weight: 900; font-family: 'Space Mono', monospace; line-height: 1.1; }
+        .stat-sub   { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+        /* === BP BIG === */
+        .bp-big { font-family: 'Space Mono', monospace; line-height: 1; display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px; }
+        .bp-big .sys  { color: var(--sys-color); font-size: 3rem; font-weight: 700; }
+        .bp-big .sep  { color: var(--muted); font-size: 2rem; margin: 0 3px; }
+        .bp-big .dia  { color: var(--dia-color); font-size: 2.3rem; font-weight: 700; }
+        .bp-big .unit { color: var(--muted); font-size: 0.8rem; align-self: flex-end; margin-bottom: 4px; margin-left: 4px; }
+        .bp-big .pls  { color: var(--pls-color); font-size: 1.2rem; margin-left: 12px; }
+
+        /* === BADGES === */
+        .bp-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .bp-low         { background:#EDE9FE; color:#5B21B6; }
+        .bp-optimal     { background:#D1FAE5; color:#065F46; }
+        .bp-normal      { background:#DBEAFE; color:#1E40AF; }
+        .bp-high-normal { background:#FEF3C7; color:#92400E; }
+        .bp-grade1      { background:#FEE2E2; color:#991B1B; }
+        .bp-grade2      { background:#FECACA; color:#7F1D1D; }
+        .bp-grade3      { background:#FCA5A5; color:#450A0A; }
+
+        .pulse-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; }
+        .pulse-low  { background:#F3E8FF; color:#6B21A8; }
+        .pulse-ok   { background:#D1FAE5; color:#065F46; }
+        .pulse-high { background:#FEE2E2; color:#991B1B; }
+
+        /* === FORM === */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 1rem; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 0.82rem; font-weight: 700; color: var(--dark); }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="datetime-local"],
+        input[type="date"],
+        textarea {
+            padding: 9px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: 'Darker Grotesque', sans-serif;
+            background: var(--input-bg);
+            color: var(--dark);
+            transition: border-color 0.2s;
+        }
+        input[type="number"] { font-family: 'Space Mono', monospace; font-size: 1.3rem; }
+        input:focus, textarea:focus { outline: none; border-color: var(--primary); }
+        textarea { resize: vertical; min-height: 80px; }
+
+        /* === BUTTONS === */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Darker Grotesque', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary   { background: var(--primary); color: white; }
+        .btn-primary:hover  { background: #e01f50; }
+        .btn-secondary { background: white; color: var(--dark); border: 1.5px solid var(--border); }
+        .btn-secondary:hover { background: #f0f0f0; }
+        .btn-danger    { background: var(--danger); color: white; }
+        .btn-sm        { padding: 5px 12px; font-size: 0.82rem; }
+
+        /* === BP PREVIEW === */
+        .bp-preview {
+            margin-top: 1rem;
+            padding: 1rem 1.25rem;
+            border-radius: 10px;
+            background: var(--input-bg);
+            border: 1.5px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        /* === MEASUREMENT ITEMS === */
+        .meas-item {
+            background: white;
+            border-radius: 10px;
+            padding: 0.9rem 1.1rem;
+            border: 1px solid var(--border);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: box-shadow 0.2s;
+        }
+        .meas-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .meas-vals { font-family: 'Space Mono', monospace; flex-shrink: 0; white-space: nowrap; }
+        .meas-sys  { color: var(--sys-color); font-size: 1.45rem; font-weight: 700; }
+        .meas-sep  { color: var(--muted); }
+        .meas-dia  { color: var(--dia-color); font-size: 1.15rem; font-weight: 700; }
+        .meas-pls  { color: var(--pls-color); font-size: 0.9rem; margin-left: 8px; }
+        .meas-info { flex: 1; min-width: 0; }
+        .meas-badges { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 3px; }
+        .meas-dt   { font-size: 0.75rem; color: var(--muted); font-family: 'Space Mono', monospace; }
+        .meas-notes { font-size: 0.85rem; color: var(--dark); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .meas-del  { flex-shrink: 0; }
+
+        /* === PERIOD SELECTOR === */
+        .period-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
+        .period-btn {
+            padding: 6px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            background: white;
+            color: var(--muted);
+            transition: all 0.2s;
+            font-family: 'Darker Grotesque', sans-serif;
+        }
+        .period-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+        .period-btn:hover:not(.active) { border-color: var(--dark); color: var(--dark); }
+
+        /* === CHARTS === */
+        .chart-wrap {
+            background: white;
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            margin-bottom: 1.25rem;
+        }
+        .chart-wrap h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 1rem; color: var(--dark); }
+        .chart-box { position: relative; }
+
+        /* === TIME SLOT CARDS === */
+        .slot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; margin-top: 1rem; }
+        .slot-card {
+            background: var(--input-bg);
+            border-radius: 10px;
+            padding: 0.9rem 1rem;
+            border: 1px solid var(--border);
+        }
+        .slot-name  { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
+        .slot-time  { font-size: 0.68rem; color: var(--muted); margin-bottom: 7px; font-family: 'Space Mono', monospace; }
+        .slot-vals  { font-family: 'Space Mono', monospace; }
+        .slot-sys   { color: var(--sys-color); font-size: 1.3rem; font-weight: 700; }
+        .slot-slash { color: var(--muted); }
+        .slot-dia   { color: var(--dia-color); font-size: 1.05rem; font-weight: 700; }
+        .slot-pls   { color: var(--pls-color); font-size: 0.82rem; display: block; margin-top: 2px; }
+        .slot-count { font-size: 0.68rem; color: var(--muted); margin-top: 5px; }
+
+        /* === FILTERS BAR === */
+        .filters-bar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            background: white;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .filters-bar label { font-size: 0.8rem; margin-bottom: 0; white-space: nowrap; }
+        .filters-bar input { padding: 6px 10px; font-size: 0.88rem; min-width: 120px; }
+
+        /* === EMPTY STATE === */
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+        .empty-state .eico { font-size: 3.5rem; margin-bottom: 1rem; }
+        .empty-state h3  { font-size: 1.1rem; color: var(--dark); margin-bottom: 0.5rem; }
+        .empty-state p   { font-size: 0.9rem; }
+
+        /* === TOAST === */
+        #toast {
+            position: fixed;
+            bottom: 24px; right: 24px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            z-index: 9000;
+            transform: translateY(80px);
+            opacity: 0;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            pointer-events: none;
+        }
+        #toast.show { transform: translateY(0); opacity: 1; }
+        #toast.ok  { background: var(--success); color: white; }
+        #toast.err { background: var(--danger);  color: white; }
+
+        /* === DELETE MODAL === */
+        #deleteModal {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 8000;
+            align-items: center;
+            justify-content: center;
+        }
+        #deleteModal.show { display: flex; }
+        .modal-box {
+            background: white;
+            border-radius: 14px;
+            padding: 2rem;
+            max-width: 360px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal-box h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.75rem; }
+        .modal-box p  { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.6; }
+        .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+        /* === EXPORT/IMPORT === */
+        .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+
+        /* === RESPONSIVE === */
+        @media (max-width: 768px) {
+            .app-container { grid-template-columns: 1fr; }
+
+            .sidebar {
+                display: flex !important;
+                position: fixed !important;
+                top: 56px !important;
+                left: 0 !important; right: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                background: #F3F4F6 !important;
+                border-bottom: 2px solid var(--border) !important;
+                border-right: none !important;
+                padding: 0.1rem 0 !important;
+                z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .sidebar-logo { display: none !important; }
+            .nav-menu {
+                display: flex !important;
+                flex-direction: row !important;
+                width: 100% !important;
+                justify-content: space-around !important;
+            }
+            .nav-item {
+                flex: 1 !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0.2rem 0 !important;
+                font-size: 1.7rem !important;
+                gap: 0 !important;
+                border-radius: 0 !important;
+                transform: none !important;
+                margin-bottom: 0 !important;
+            }
+            .nav-item:hover { transform: none !important; }
+            .nav-item.active {
+                background: transparent !important;
+                color: var(--primary) !important;
+                border-bottom: 3px solid var(--primary) !important;
+            }
+            .main-content { padding: 0.75rem; padding-top: calc(0.75rem + 52px); }
+            .bp-big .sys { font-size: 2.4rem; }
+            .bp-big .dia { font-size: 1.9rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- DELETE MODAL -->
+<div id="deleteModal">
+    <div class="modal-box">
+        <h3>🗑️ Elimina misurazione</h3>
+        <p>Sei sicuro di voler eliminare questa misurazione?<br>L'operazione non può essere annullata.</p>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Annulla</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Elimina</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- TOP BAR -->
+<div id="top-bar">
+    <span id="top-bar-icon">❤️</span>
+    <span id="top-bar-title">PRESSURE TRACKER</span>
+    <span id="top-bar-version"></span>
+</div>
+
+<!-- APP -->
+<div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">Pressure<br>Tracker</div>
+        <nav class="nav-menu">
+            <div class="nav-item active" onclick="showPage('dashPage', this)"  data-text="Dashboard">🏠</div>
+            <div class="nav-item"        onclick="showPage('addPage',  this)"  data-text="Aggiungi">➕</div>
+            <div class="nav-item"        onclick="showPage('histPage', this)"  data-text="Storico">📋</div>
+            <div class="nav-item"        onclick="showPage('chartPage',this)"  data-text="Grafici">📊</div>
+            <div class="nav-item"        onclick="showPage('settingsPage',this)" data-text="Dati">⚙️</div>
+        </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+
+        <!-- ===== DASHBOARD ===== -->
+        <div id="dashPage" class="page active">
+            <div class="page-header">
+                <div>
+                    <h1>Dashboard</h1>
+                    <p id="dashDate"></p>
+                </div>
+                <button class="btn btn-primary" onclick="showPage('addPage', null)">➕ Nuova Misurazione</button>
+            </div>
+            <div id="dashContent"></div>
+        </div>
+
+        <!-- ===== AGGIUNGI ===== -->
+        <div id="addPage" class="page">
+            <div class="page-header">
+                <div><h1>Nuova Misurazione</h1></div>
+            </div>
+            <div class="card">
+                <form id="addForm" onsubmit="handleAddSubmit(event)">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>📅 Data e Ora</label>
+                            <input type="datetime-local" id="fDatetime" required>
+                        </div>
+                        <div class="form-group">
+                            <label>🔴 Sistolica (mmHg)</label>
+                            <input type="number" id="fSystolic" min="50" max="300" placeholder="es. 120" required oninput="updateBpPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>🔵 Diastolica (mmHg)</label>
+                            <input type="number" id="fDiastolic" min="30" max="200" placeholder="es. 80" required oninput="updateBpPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>💚 Pulsazioni (bpm)</label>
+                            <input type="number" id="fPulse" min="20" max="300" placeholder="es. 72" oninput="updateBpPreview()">
+                        </div>
+                    </div>
+
+                    <div id="bpPreview" class="bp-preview" style="display:none;"></div>
+
+                    <div class="form-group" style="margin-top:1rem;">
+                        <label>📝 Note</label>
+                        <textarea id="fNotes" placeholder="Opzionale: es. dopo attività fisica, a riposo, dopo caffè..."></textarea>
+                    </div>
+
+                    <div style="display:flex;gap:10px;margin-top:1.25rem;flex-wrap:wrap;">
+                        <button type="submit" class="btn btn-primary">💾 Salva Misurazione</button>
+                        <button type="button" class="btn btn-secondary" onclick="showPage('dashPage', null)">Annulla</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ===== STORICO ===== -->
+        <div id="histPage" class="page">
+            <div class="page-header">
+                <div><h1>Storico Misurazioni</h1></div>
+                <span id="histCount" style="font-size:0.85rem;color:var(--muted);align-self:center;"></span>
+            </div>
+            <div class="filters-bar">
+                <label>Da:</label>
+                <input type="date" id="histFrom">
+                <label>A:</label>
+                <input type="date" id="histTo">
+                <button class="btn btn-secondary btn-sm" onclick="applyHistFilter()">🔍 Filtra</button>
+                <button class="btn btn-secondary btn-sm" onclick="clearHistFilter()">✕ Tutti</button>
+            </div>
+            <div id="histList"></div>
+        </div>
+
+        <!-- ===== GRAFICI ===== -->
+        <div id="chartPage" class="page">
+            <div class="page-header">
+                <div><h1>Grafici &amp; Statistiche</h1></div>
+            </div>
+
+            <div class="period-bar">
+                <button class="period-btn"        data-period="7d"     onclick="setPeriod('7d',this)">7 giorni</button>
+                <button class="period-btn active"  data-period="30d"    onclick="setPeriod('30d',this)">30 giorni</button>
+                <button class="period-btn"        data-period="3m"     onclick="setPeriod('3m',this)">3 mesi</button>
+                <button class="period-btn"        data-period="6m"     onclick="setPeriod('6m',this)">6 mesi</button>
+                <button class="period-btn"        data-period="1y"     onclick="setPeriod('1y',this)">1 anno</button>
+                <button class="period-btn"        data-period="custom" onclick="setPeriod('custom',this)">Personalizzato</button>
+            </div>
+
+            <div id="customRangeBar" style="display:none;" class="filters-bar">
+                <label>Da:</label>
+                <input type="date" id="customFrom">
+                <label>A:</label>
+                <input type="date" id="customTo">
+                <button class="btn btn-primary btn-sm" onclick="applyCustomPeriod()">Applica</button>
+            </div>
+
+            <div id="chartStatRow" class="stat-row"></div>
+
+            <div class="chart-wrap">
+                <h3>📈 Pressione nel Tempo</h3>
+                <div class="chart-box" style="height:280px;"><canvas id="pressureChart"></canvas></div>
+            </div>
+
+            <div class="chart-wrap">
+                <h3>💓 Pulsazioni nel Tempo</h3>
+                <div class="chart-box" style="height:220px;"><canvas id="pulseChart"></canvas></div>
+            </div>
+
+            <div class="chart-wrap">
+                <h3>🕐 Media per Fascia Oraria</h3>
+                <div class="chart-box" style="height:270px;"><canvas id="slotChart"></canvas></div>
+                <div id="slotCards" class="slot-grid"></div>
+            </div>
+        </div>
+
+        <!-- ===== IMPOSTAZIONI / DATI ===== -->
+        <div id="settingsPage" class="page">
+            <div class="page-header">
+                <div><h1>Gestione Dati</h1></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Esporta / Importa</div>
+                <div class="settings-row">
+                    <button class="btn btn-secondary" onclick="exportData()">📤 Esporta JSON</button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📥 Importa JSON</button>
+                    <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importData(event)">
+                </div>
+                <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;">
+                    I dati sono salvati nel <strong>localStorage</strong> del tuo browser.<br>
+                    Esporta regolarmente per fare un backup.
+                </p>
+            </div>
+            <div class="card">
+                <div class="card-title">Cancella tutti i dati</div>
+                <p style="font-size:0.85rem;color:var(--muted);margin-bottom:1rem;line-height:1.6;">
+                    Elimina tutte le misurazioni salvate. Operazione irreversibile.
+                </p>
+                <button class="btn btn-danger" onclick="clearAllData()">🗑️ Cancella tutto</button>
+            </div>
+            <div class="card">
+                <div class="card-title">Classificazione Pressione (ESH/ESC 2018)</div>
+                <div style="display:grid;gap:6px;margin-top:4px;">
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-low">Ipotensione</span> <span style="font-size:0.85rem;color:var(--muted);">Sistolica &lt;90 o Diastolica &lt;60 mmHg</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-optimal">Ottimale</span> <span style="font-size:0.85rem;color:var(--muted);">&lt;120 / &lt;80 mmHg</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-normal">Normale</span> <span style="font-size:0.85rem;color:var(--muted);">120–129 / 80–84 mmHg</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-high-normal">Alta Normale</span> <span style="font-size:0.85rem;color:var(--muted);">130–139 / 85–89 mmHg</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-grade1">Ipertensione G1</span> <span style="font-size:0.85rem;color:var(--muted);">140–159 / 90–99 mmHg</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-grade2">Ipertensione G2</span> <span style="font-size:0.85rem;color:var(--muted);">160–179 / 100–109 mmHg</span></div>
+                    <div style="display:flex;align-items:center;gap:8px;"><span class="bp-badge bp-grade3">Ipertensione G3</span> <span style="font-size:0.85rem;color:var(--muted);">&ge;180 / &ge;110 mmHg</span></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    // ========================================
+    // VERSION
+    // ========================================
+    var APP_VERSION = 'v1.0.0';
+    var BUILD_TIME  = '2026-06-09T12:00:00Z';
+
+    console.log('%c ❤️ PRESSURE TRACKER ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        'background:#C0392B;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+        'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+    // ========================================
+    // CONSTANTS
+    // ========================================
+    var STORAGE_KEY = 'pt_measurements';
+
+    var SLOT_DEFS = {
+        mattina:    { label: 'Mattina',    icon: '🌅', time: '06:00–11:59' },
+        pomeriggio: { label: 'Pomeriggio', icon: '☀️', time: '12:00–17:59' },
+        sera:       { label: 'Sera',       icon: '🌆', time: '18:00–21:59' },
+        notte:      { label: 'Notte',      icon: '🌙', time: '22:00–05:59' }
+    };
+    var SLOT_KEYS = ['mattina','pomeriggio','sera','notte'];
+
+    // ========================================
+    // STATE
+    // ========================================
+    var measurements   = [];
+    var charts         = {};
+    var currentPeriod  = '30d';
+    var customFromVal  = null;
+    var customToVal    = null;
+    var deleteTargetId = null;
+
+    // ========================================
+    // PERSISTENCE
+    // ========================================
+    function loadFromStorage() {
+        try {
+            var raw = localStorage.getItem(STORAGE_KEY);
+            measurements = raw ? JSON.parse(raw) : [];
+        } catch(e) {
+            measurements = [];
+        }
+        measurements.sort(function(a,b){ return new Date(b.measured_at) - new Date(a.measured_at); });
+    }
+
+    function saveToStorage() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(measurements));
+    }
+
+    function genId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    }
+
+    // ========================================
+    // HELPERS
+    // ========================================
+    function showToast(msg, type) {
+        var t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'show ' + (type || 'ok');
+        clearTimeout(t._timer);
+        t._timer = setTimeout(function(){ t.className = ''; }, 3200);
+    }
+
+    function fmtDateTime(isoStr) {
+        if (!isoStr) return '';
+        var d = new Date(isoStr);
+        return d.toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric' })
+             + ' ' + d.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+    }
+
+    function fmtDateShort(isoStr) {
+        if (!isoStr) return '';
+        var d = new Date(isoStr);
+        return d.toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit' });
+    }
+
+    function classifyBP(sys, dia) {
+        if (sys < 90  || dia < 60)  return { label:'Ipotensione',     cls:'bp-low',         icon:'⬇️' };
+        if (sys < 120 && dia < 80)  return { label:'Ottimale',         cls:'bp-optimal',     icon:'✅' };
+        if (sys < 130 && dia < 85)  return { label:'Normale',          cls:'bp-normal',      icon:'🟢' };
+        if (sys < 140 && dia < 90)  return { label:'Alta Normale',     cls:'bp-high-normal', icon:'🟡' };
+        if (sys < 160 && dia < 100) return { label:'Ipertensione G1',  cls:'bp-grade1',      icon:'🟠' };
+        if (sys < 180 && dia < 110) return { label:'Ipertensione G2',  cls:'bp-grade2',      icon:'🔴' };
+        return { label:'Ipertensione G3', cls:'bp-grade3', icon:'🚨' };
+    }
+
+    function classifyPulse(p) {
+        if (p < 60)  return { label:'Bradicardia', cls:'pulse-low' };
+        if (p > 100) return { label:'Tachicardia', cls:'pulse-high' };
+        return { label:'Normale', cls:'pulse-ok' };
+    }
+
+    function getTimeSlot(isoStr) {
+        var h = new Date(isoStr).getHours();
+        if (h >= 6  && h < 12) return 'mattina';
+        if (h >= 12 && h < 18) return 'pomeriggio';
+        if (h >= 18 && h < 22) return 'sera';
+        return 'notte';
+    }
+
+    function avgArr(arr) {
+        var valid = arr.filter(function(v){ return v != null && !isNaN(v); });
+        if (!valid.length) return null;
+        return Math.round(valid.reduce(function(a,b){ return a+b; }, 0) / valid.length);
+    }
+
+    function avgField(list, field) {
+        return avgArr(list.map(function(m){ return m[field]; }));
+    }
+
+    function getPeriodRange() {
+        if (currentPeriod === 'custom') {
+            return {
+                start: customFromVal ? new Date(customFromVal + 'T00:00:00') : null,
+                end:   customToVal   ? new Date(customToVal   + 'T23:59:59') : null
+            };
+        }
+        var now = new Date();
+        var end = new Date(now); end.setHours(23,59,59,999);
+        var start = new Date(now);
+        if (currentPeriod === '7d')  start.setDate(now.getDate() - 6);
+        if (currentPeriod === '30d') start.setDate(now.getDate() - 29);
+        if (currentPeriod === '3m')  start.setMonth(now.getMonth() - 3);
+        if (currentPeriod === '6m')  start.setMonth(now.getMonth() - 6);
+        if (currentPeriod === '1y')  start.setFullYear(now.getFullYear() - 1);
+        start.setHours(0,0,0,0);
+        return { start: start, end: end };
+    }
+
+    function filterByPeriod(list) {
+        var r = getPeriodRange();
+        if (!r.start && !r.end) return list;
+        return list.filter(function(m) {
+            var d = new Date(m.measured_at);
+            if (r.start && d < r.start) return false;
+            if (r.end   && d > r.end)   return false;
+            return true;
+        });
+    }
+
+    // ========================================
+    // NAVIGATION
+    // ========================================
+    function showPage(pageId, navEl) {
+        document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+        document.getElementById(pageId).classList.add('active');
+
+        document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+        if (navEl) {
+            navEl.classList.add('active');
+        } else {
+            document.querySelectorAll('.nav-item').forEach(function(n) {
+                var oc = n.getAttribute('onclick') || '';
+                if (oc.indexOf("'" + pageId + "'") !== -1) n.classList.add('active');
+            });
+        }
+
+        if (pageId === 'dashPage')    renderDashboard();
+        if (pageId === 'addPage')     initAddForm();
+        if (pageId === 'histPage')    renderHistory(measurements);
+        if (pageId === 'chartPage')   renderCharts();
+    }
+
+    // ========================================
+    // DASHBOARD
+    // ========================================
+    function renderDashboard() {
+        var el = document.getElementById('dashContent');
+        document.getElementById('dashDate').textContent = new Date().toLocaleDateString('it-IT',{
+            weekday:'long', day:'2-digit', month:'long', year:'numeric'
+        });
+
+        if (!measurements.length) {
+            el.innerHTML = '<div class="empty-state">'
+                + '<div class="eico">❤️‍🩹</div>'
+                + '<h3>Nessuna misurazione ancora</h3>'
+                + '<p>Aggiungi la tua prima misurazione per iniziare a monitorare la pressione.</p>'
+                + '<br><button class="btn btn-primary" onclick="showPage(\'addPage\', null)" style="margin-top:0.5rem;">➕ Prima Misurazione</button>'
+                + '</div>';
+            return;
+        }
+
+        var last = measurements[0];
+        var bp   = classifyBP(last.systolic, last.diastolic);
+
+        // oggi
+        var todayStr  = new Date().toISOString().slice(0,10);
+        var todayList = measurements.filter(function(m){ return m.measured_at.slice(0,10) === todayStr; });
+
+        // 7 giorni
+        var now = new Date();
+        var w7s = new Date(now); w7s.setDate(now.getDate()-6); w7s.setHours(0,0,0,0);
+        var w7e = new Date(now); w7e.setHours(23,59,59,999);
+        var week7 = measurements.filter(function(m){ var d=new Date(m.measured_at); return d>=w7s && d<=w7e; });
+        var avg7s = avgField(week7,'systolic');
+        var avg7d = avgField(week7,'diastolic');
+        var avg7p = avgField(week7,'pulse');
+
+        // trend vs 7 giorni precedenti
+        var p7e = new Date(w7s); p7e.setDate(p7e.getDate()-1); p7e.setHours(23,59,59,999);
+        var p7s = new Date(p7e); p7s.setDate(p7e.getDate()-6); p7s.setHours(0,0,0,0);
+        var prev7  = measurements.filter(function(m){ var d=new Date(m.measured_at); return d>=p7s && d<=p7e; });
+        var prevS  = avgField(prev7,'systolic');
+        function trendBadge(cur, prv) {
+            if (!cur || !prv) return '';
+            var diff = cur - prv;
+            if (Math.abs(diff)<2) return ' <span style="color:var(--muted)">→</span>';
+            return diff>0 ? ' <span style="color:var(--danger)">↑'+diff+'</span>' : ' <span style="color:var(--success)">↓'+Math.abs(diff)+'</span>';
+        }
+
+        el.innerHTML =
+            '<div class="card">'
+            + '<div class="card-title">Ultima Misurazione</div>'
+            + '<div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;">'
+            + '<div class="bp-big">'
+            + '<span class="sys">' + last.systolic + '</span>'
+            + '<span class="sep">/</span>'
+            + '<span class="dia">' + last.diastolic + '</span>'
+            + '<span class="unit">mmHg</span>'
+            + (last.pulse ? '<span class="pls">♥ '+last.pulse+' bpm</span>' : '')
+            + '</div>'
+            + '<div>'
+            + '<span class="bp-badge '+bp.cls+'">'+bp.icon+' '+bp.label+'</span>'
+            + (last.pulse ? ' <span class="pulse-badge '+classifyPulse(last.pulse).cls+'">'+classifyPulse(last.pulse).label+'</span>' : '')
+            + '<div style="font-size:0.78rem;color:var(--muted);font-family:\'Space Mono\',monospace;margin-top:6px;">'+fmtDateTime(last.measured_at)+'</div>'
+            + (last.notes ? '<div style="font-size:0.85rem;margin-top:4px;">📝 '+last.notes+'</div>' : '')
+            + '</div></div></div>'
+
+            + '<div class="stat-row">'
+            + '<div class="stat-card"><div class="stat-label">Media Sistolica 7gg</div>'
+            + '<div class="stat-value" style="color:var(--sys-color);">'+(avg7s!==null?avg7s:'—')+trendBadge(avg7s,prevS)+'</div>'
+            + '<div class="stat-sub">mmHg</div></div>'
+            + '<div class="stat-card"><div class="stat-label">Media Diastolica 7gg</div>'
+            + '<div class="stat-value" style="color:var(--dia-color);">'+(avg7d!==null?avg7d:'—')+'</div>'
+            + '<div class="stat-sub">mmHg</div></div>'
+            + (avg7p!==null ? '<div class="stat-card"><div class="stat-label">Media Pulsaz. 7gg</div>'
+            + '<div class="stat-value" style="color:var(--pls-color);">'+avg7p+'</div>'
+            + '<div class="stat-sub">bpm</div></div>' : '')
+            + '<div class="stat-card"><div class="stat-label">Misurazioni Oggi</div>'
+            + '<div class="stat-value">'+todayList.length+'</div>'
+            + '<div class="stat-sub">misurazioni</div></div>'
+            + '</div>'
+
+            + '<div class="card"><div class="card-title">'
+            + '<span>Ultime Misurazioni</span>'
+            + '<span style="cursor:pointer;color:var(--primary);font-size:0.78rem;" onclick="showPage(\'histPage\',null)">Vedi tutte →</span>'
+            + '</div>'
+            + measurements.slice(0,8).map(function(m){ return renderMeasItem(m, false); }).join('')
+            + '</div>';
+    }
+
+    // ========================================
+    // ADD FORM
+    // ========================================
+    function initAddForm() {
+        var now   = new Date();
+        var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+        document.getElementById('fDatetime').value  = local.toISOString().slice(0,16);
+        document.getElementById('fSystolic').value  = '';
+        document.getElementById('fDiastolic').value = '';
+        document.getElementById('fPulse').value     = '';
+        document.getElementById('fNotes').value     = '';
+        document.getElementById('bpPreview').style.display = 'none';
+    }
+
+    function updateBpPreview() {
+        var sys  = parseInt(document.getElementById('fSystolic').value);
+        var dia  = parseInt(document.getElementById('fDiastolic').value);
+        var pls  = parseInt(document.getElementById('fPulse').value);
+        var prev = document.getElementById('bpPreview');
+        if (!sys || !dia || isNaN(sys) || isNaN(dia)) { prev.style.display = 'none'; return; }
+        var bp = classifyBP(sys, dia);
+        prev.style.display = 'flex';
+        prev.innerHTML = '<div class="bp-big" style="font-size:0.85em;">'
+            + '<span class="sys">'+sys+'</span><span class="sep">/</span><span class="dia">'+dia+'</span>'
+            + '<span class="unit">mmHg</span>'
+            + (pls && !isNaN(pls) ? '<span class="pls">♥ '+pls+' bpm</span>' : '')
+            + '</div><div>'
+            + '<span class="bp-badge '+bp.cls+'">'+bp.icon+' '+bp.label+'</span>'
+            + (pls && !isNaN(pls) ? ' <span class="pulse-badge '+classifyPulse(pls).cls+'">'+classifyPulse(pls).label+'</span>' : '')
+            + '</div>';
+    }
+
+    function handleAddSubmit(e) {
+        e.preventDefault();
+        var dt  = document.getElementById('fDatetime').value;
+        var sys = parseInt(document.getElementById('fSystolic').value);
+        var dia = parseInt(document.getElementById('fDiastolic').value);
+        var plsRaw = document.getElementById('fPulse').value;
+        var pls    = plsRaw ? parseInt(plsRaw) : null;
+        var notes  = document.getElementById('fNotes').value.trim() || null;
+
+        if (!dt || isNaN(sys) || isNaN(dia)) { showToast('Compila i campi obbligatori', 'err'); return; }
+
+        var m = {
+            id:          genId(),
+            measured_at: new Date(dt).toISOString(),
+            systolic:    sys,
+            diastolic:   dia,
+            pulse:       (pls && !isNaN(pls)) ? pls : null,
+            notes:       notes,
+            created_at:  new Date().toISOString()
+        };
+
+        measurements.unshift(m);
+        measurements.sort(function(a,b){ return new Date(b.measured_at) - new Date(a.measured_at); });
+        saveToStorage();
+        showToast('✅ Misurazione salvata!', 'ok');
+        showPage('dashPage', null);
+    }
+
+    // ========================================
+    // HISTORY
+    // ========================================
+    function renderMeasItem(m, showDel) {
+        var bp = classifyBP(m.systolic, m.diastolic);
+        return '<div class="meas-item" id="mi-'+m.id+'">'
+            + '<div class="meas-vals">'
+            + '<span class="meas-sys">'+m.systolic+'</span>'
+            + '<span class="meas-sep">/</span>'
+            + '<span class="meas-dia">'+m.diastolic+'</span>'
+            + (m.pulse ? '<span class="meas-pls">♥ '+m.pulse+'</span>' : '')
+            + '</div>'
+            + '<div class="meas-info">'
+            + '<div class="meas-badges">'
+            + '<span class="bp-badge '+bp.cls+'">'+bp.icon+' '+bp.label+'</span>'
+            + (m.pulse ? '<span class="pulse-badge '+classifyPulse(m.pulse).cls+'">'+classifyPulse(m.pulse).label+'</span>' : '')
+            + '</div>'
+            + '<div class="meas-dt">'+fmtDateTime(m.measured_at)+'</div>'
+            + (m.notes ? '<div class="meas-notes">📝 '+m.notes+'</div>' : '')
+            + '</div>'
+            + (showDel ? '<div class="meas-del"><button class="btn btn-secondary btn-sm" onclick="openDeleteModal(\''+m.id+'\')" title="Elimina">🗑️</button></div>' : '')
+            + '</div>';
+    }
+
+    function renderHistory(list) {
+        var container = document.getElementById('histList');
+        var countEl   = document.getElementById('histCount');
+        countEl.textContent = list.length + ' misurazioni';
+        if (!list.length) {
+            container.innerHTML = '<div class="empty-state"><div class="eico">📋</div><h3>Nessuna misurazione trovata</h3></div>';
+            return;
+        }
+        container.innerHTML = list.map(function(m){ return renderMeasItem(m, true); }).join('');
+    }
+
+    function applyHistFilter() {
+        var from = document.getElementById('histFrom').value;
+        var to   = document.getElementById('histTo').value;
+        var filtered = measurements.filter(function(m) {
+            var d = m.measured_at.slice(0,10);
+            if (from && d < from) return false;
+            if (to   && d > to)   return false;
+            return true;
+        });
+        renderHistory(filtered);
+    }
+
+    function clearHistFilter() {
+        document.getElementById('histFrom').value = '';
+        document.getElementById('histTo').value   = '';
+        renderHistory(measurements);
+    }
+
+    // ========================================
+    // DELETE
+    // ========================================
+    function openDeleteModal(id) {
+        deleteTargetId = id;
+        document.getElementById('deleteModal').classList.add('show');
+    }
+
+    function closeDeleteModal() {
+        deleteTargetId = null;
+        document.getElementById('deleteModal').classList.remove('show');
+    }
+
+    function confirmDelete() {
+        if (!deleteTargetId) return;
+        var id = deleteTargetId;
+        closeDeleteModal();
+        measurements = measurements.filter(function(m){ return m.id !== id; });
+        saveToStorage();
+        var el = document.getElementById('mi-'+id);
+        if (el) el.remove();
+        var countEl = document.getElementById('histCount');
+        if (countEl) countEl.textContent = measurements.length + ' misurazioni';
+        showToast('🗑️ Misurazione eliminata', 'ok');
+    }
+
+    // ========================================
+    // PERIOD / CHARTS
+    // ========================================
+    function setPeriod(period, btn) {
+        currentPeriod = period;
+        document.querySelectorAll('.period-btn').forEach(function(b){ b.classList.remove('active'); });
+        if (btn) btn.classList.add('active');
+        document.getElementById('customRangeBar').style.display = period === 'custom' ? 'flex' : 'none';
+        if (period !== 'custom') renderCharts();
+    }
+
+    function applyCustomPeriod() {
+        customFromVal = document.getElementById('customFrom').value;
+        customToVal   = document.getElementById('customTo').value;
+        if (!customFromVal || !customToVal) { showToast('Seleziona entrambe le date', 'err'); return; }
+        renderCharts();
+    }
+
+    function destroyChart(key) {
+        if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+    }
+
+    function renderCharts() {
+        var filtered = filterByPeriod(measurements);
+        renderChartStats(filtered);
+        buildPressureChart(filtered);
+        buildPulseChart(filtered);
+        buildSlotChart(filtered);
+    }
+
+    function renderChartStats(list) {
+        var el = document.getElementById('chartStatRow');
+        if (!list.length) {
+            el.innerHTML = '<div style="color:var(--muted);font-size:0.9rem;padding:0.25rem 0 1rem;">Nessuna misurazione nel periodo selezionato.</div>';
+            return;
+        }
+        var avgs = avgField(list,'systolic');
+        var avgd = avgField(list,'diastolic');
+        var avgp = avgField(list,'pulse');
+        var maxS = Math.max.apply(null, list.map(function(m){ return m.systolic; }));
+        var minS = Math.min.apply(null, list.map(function(m){ return m.systolic; }));
+        var bpA  = (avgs && avgd) ? classifyBP(avgs,avgd) : null;
+        el.innerHTML =
+            '<div class="stat-card"><div class="stat-label">Misurazioni</div><div class="stat-value">'+list.length+'</div><div class="stat-sub">nel periodo</div></div>'
+            + '<div class="stat-card"><div class="stat-label">Media Sistolica</div><div class="stat-value" style="color:var(--sys-color);">'+(avgs!==null?avgs:'—')+'</div><div class="stat-sub">mmHg</div></div>'
+            + '<div class="stat-card"><div class="stat-label">Media Diastolica</div><div class="stat-value" style="color:var(--dia-color);">'+(avgd!==null?avgd:'—')+'</div><div class="stat-sub">mmHg</div></div>'
+            + (avgp!==null ? '<div class="stat-card"><div class="stat-label">Media Pulsaz.</div><div class="stat-value" style="color:var(--pls-color);">'+avgp+'</div><div class="stat-sub">bpm</div></div>' : '')
+            + '<div class="stat-card"><div class="stat-label">Max / Min Sistolica</div><div class="stat-value" style="font-size:1.3rem;">'+maxS+' / '+minS+'</div><div class="stat-sub">mmHg</div></div>'
+            + (bpA ? '<div class="stat-card"><div class="stat-label">Classif. Media</div><div style="margin-top:8px;"><span class="bp-badge '+bpA.cls+'">'+bpA.icon+' '+bpA.label+'</span></div></div>' : '');
+    }
+
+    function buildPressureChart(list) {
+        destroyChart('pressure');
+        var ctx = document.getElementById('pressureChart').getContext('2d');
+        if (!list.length) { ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height); return; }
+        var sorted = list.slice().sort(function(a,b){ return new Date(a.measured_at)-new Date(b.measured_at); });
+        var labels = sorted.map(function(m){
+            return fmtDateShort(m.measured_at)+' '+new Date(m.measured_at).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+        });
+        charts.pressure = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label:'Sistolica',  data:sorted.map(function(m){ return m.systolic; }),
+                      borderColor:'#E74C3C', backgroundColor:'rgba(231,76,60,0.07)',
+                      borderWidth:2, pointRadius:4, pointHoverRadius:6, tension:0.3, fill:true },
+                    { label:'Diastolica', data:sorted.map(function(m){ return m.diastolic; }),
+                      borderColor:'#3498DB', backgroundColor:'rgba(52,152,219,0.07)',
+                      borderWidth:2, pointRadius:4, pointHoverRadius:6, tension:0.3, fill:true }
+                ]
+            },
+            options: {
+                responsive:true, maintainAspectRatio:false,
+                interaction:{ mode:'index', intersect:false },
+                plugins:{
+                    legend:{ position:'top', labels:{ font:{ family:'Darker Grotesque', size:13 } } },
+                    tooltip:{ callbacks:{
+                        footer:function(items){
+                            var m=sorted[items[0].dataIndex];
+                            var b=classifyBP(m.systolic,m.diastolic);
+                            return b.icon+' '+b.label;
+                        }
+                    }}
+                },
+                scales:{
+                    x:{ ticks:{ maxTicksLimit:10, font:{ family:'Space Mono', size:10 } }, grid:{ display:false } },
+                    y:{ min:40, title:{ display:true, text:'mmHg' }, ticks:{ font:{ family:'Space Mono', size:11 } } }
+                }
+            }
+        });
+    }
+
+    function buildPulseChart(list) {
+        destroyChart('pulse');
+        var ctx = document.getElementById('pulseChart').getContext('2d');
+        var sorted = list.filter(function(m){ return m.pulse; })
+                         .sort(function(a,b){ return new Date(a.measured_at)-new Date(b.measured_at); });
+        if (!sorted.length) { ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height); return; }
+        var labels = sorted.map(function(m){
+            return fmtDateShort(m.measured_at)+' '+new Date(m.measured_at).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+        });
+        charts.pulse = new Chart(ctx, {
+            type:'line',
+            data:{
+                labels:labels,
+                datasets:[{ label:'Pulsazioni',
+                    data:sorted.map(function(m){ return m.pulse; }),
+                    borderColor:'#27AE60', backgroundColor:'rgba(39,174,96,0.09)',
+                    borderWidth:2, pointRadius:4, tension:0.3, fill:true }]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                interaction:{ mode:'index', intersect:false },
+                plugins:{ legend:{ position:'top', labels:{ font:{ family:'Darker Grotesque', size:13 } } } },
+                scales:{
+                    x:{ ticks:{ maxTicksLimit:10, font:{ family:'Space Mono', size:10 } }, grid:{ display:false } },
+                    y:{ min:30, title:{ display:true, text:'bpm' }, ticks:{ font:{ family:'Space Mono', size:11 } } }
+                }
+            }
+        });
+    }
+
+    function buildSlotChart(list) {
+        destroyChart('slot');
+        var ctx = document.getElementById('slotChart').getContext('2d');
+
+        var grouped = {};
+        SLOT_KEYS.forEach(function(s){ grouped[s] = { sys:[], dia:[], pls:[] }; });
+        list.forEach(function(m) {
+            var s = getTimeSlot(m.measured_at);
+            grouped[s].sys.push(m.systolic);
+            grouped[s].dia.push(m.diastolic);
+            if (m.pulse) grouped[s].pls.push(m.pulse);
+        });
+
+        var labels = SLOT_KEYS.map(function(s){ return SLOT_DEFS[s].icon+' '+SLOT_DEFS[s].label; });
+        var avgSys = SLOT_KEYS.map(function(s){ return avgArr(grouped[s].sys); });
+        var avgDia = SLOT_KEYS.map(function(s){ return avgArr(grouped[s].dia); });
+        var avgPls = SLOT_KEYS.map(function(s){ return avgArr(grouped[s].pls); });
+
+        charts.slot = new Chart(ctx, {
+            type:'bar',
+            data:{
+                labels:labels,
+                datasets:[
+                    { label:'Sistolica media', data:avgSys,
+                      backgroundColor:'rgba(231,76,60,0.75)', borderColor:'#E74C3C',
+                      borderWidth:1.5, borderRadius:5 },
+                    { label:'Diastolica media', data:avgDia,
+                      backgroundColor:'rgba(52,152,219,0.75)', borderColor:'#3498DB',
+                      borderWidth:1.5, borderRadius:5 },
+                    { label:'Pulsazioni medie', data:avgPls,
+                      type:'line', yAxisID:'y2',
+                      borderColor:'#27AE60', backgroundColor:'rgba(39,174,96,0.15)',
+                      borderWidth:2.5, pointRadius:5, tension:0.3, fill:false }
+                ]
+            },
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                interaction:{ mode:'index', intersect:false },
+                plugins:{
+                    legend:{ position:'top', labels:{ font:{ family:'Darker Grotesque', size:13 } } },
+                    tooltip:{ callbacks:{
+                        afterBody:function(items){
+                            var idx=items[0].dataIndex;
+                            if (avgSys[idx] && avgDia[idx]){
+                                var b=classifyBP(avgSys[idx],avgDia[idx]);
+                                return [b.icon+' '+b.label];
+                            }
+                            return [];
+                        }
+                    }}
+                },
+                scales:{
+                    x:{ ticks:{ font:{ family:'Darker Grotesque', size:13 } }, grid:{ display:false } },
+                    y:{ min:40, title:{ display:true, text:'mmHg' }, ticks:{ font:{ family:'Space Mono', size:11 } } },
+                    y2:{ position:'right', title:{ display:true, text:'bpm' },
+                         ticks:{ font:{ family:'Space Mono', size:11 } }, grid:{ display:false } }
+                }
+            }
+        });
+
+        // Slot summary cards
+        document.getElementById('slotCards').innerHTML = SLOT_KEYS.map(function(s) {
+            var g   = grouped[s];
+            var def = SLOT_DEFS[s];
+            var cnt = g.sys.length;
+            if (!cnt) return '<div class="slot-card" style="opacity:0.4;">'
+                + '<div class="slot-name">'+def.icon+' '+def.label+'</div>'
+                + '<div class="slot-time">'+def.time+'</div>'
+                + '<div style="font-size:0.82rem;color:var(--muted);">Nessuna mis.</div></div>';
+            var sys=avgArr(g.sys), dia=avgArr(g.dia), pls=avgArr(g.pls);
+            var bp=classifyBP(sys,dia);
+            return '<div class="slot-card">'
+                + '<div class="slot-name">'+def.icon+' '+def.label+'</div>'
+                + '<div class="slot-time">'+def.time+'</div>'
+                + '<div class="slot-vals">'
+                + '<span class="slot-sys">'+sys+'</span>'
+                + '<span class="slot-slash">/</span>'
+                + '<span class="slot-dia">'+dia+'</span>'
+                + (pls ? '<span class="slot-pls">♥ '+pls+' bpm</span>' : '')
+                + '</div>'
+                + '<span class="bp-badge '+bp.cls+'" style="font-size:0.62rem;margin-top:4px;display:inline-block;">'+bp.label+'</span>'
+                + '<div class="slot-count">'+cnt+' mis.</div>'
+                + '</div>';
+        }).join('');
+    }
+
+    // ========================================
+    // EXPORT / IMPORT / CLEAR
+    // ========================================
+    function exportData() {
+        if (!measurements.length) { showToast('Nessun dato da esportare', 'err'); return; }
+        var json = JSON.stringify(measurements, null, 2);
+        var blob = new Blob([json], { type:'application/json' });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement('a');
+        a.href   = url;
+        a.download = 'pressure-tracker-' + new Date().toISOString().slice(0,10) + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('📤 Dati esportati', 'ok');
+    }
+
+    function importData(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(evt) {
+            try {
+                var data = JSON.parse(evt.target.result);
+                if (!Array.isArray(data)) throw new Error('Formato non valido');
+                var before = measurements.length;
+                // Merge: aggiungi solo quelli con id non già presenti
+                var existingIds = {};
+                measurements.forEach(function(m){ existingIds[m.id] = true; });
+                var added = 0;
+                data.forEach(function(m) {
+                    if (m.id && m.measured_at && m.systolic && m.diastolic && !existingIds[m.id]) {
+                        measurements.push(m);
+                        added++;
+                    }
+                });
+                measurements.sort(function(a,b){ return new Date(b.measured_at)-new Date(a.measured_at); });
+                saveToStorage();
+                showToast('📥 Importate '+added+' misurazioni', 'ok');
+                renderDashboard();
+            } catch(err) {
+                showToast('Errore importazione: '+err.message, 'err');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }
+
+    function clearAllData() {
+        if (!confirm('Sei sicuro? Tutte le misurazioni verranno eliminate permanentemente.')) return;
+        measurements = [];
+        saveToStorage();
+        showToast('🗑️ Tutti i dati eliminati', 'ok');
+        renderDashboard();
+    }
+
+    // ========================================
+    // INIT
+    // ========================================
+    window.addEventListener('load', function() {
+        document.getElementById('top-bar-version').textContent = APP_VERSION;
+        document.title = 'Pressure Tracker ' + APP_VERSION;
+        loadFromStorage();
+        renderDashboard();
+        console.log('✅ Pressure Tracker '+APP_VERSION+' avviato — '+measurements.length+' misurazioni in localStorage');
+    });
+</script>
+</body>
+</html>
