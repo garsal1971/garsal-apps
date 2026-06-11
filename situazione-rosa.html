@@ -307,7 +307,7 @@
         const r = await fetch(`${SUPABASE_URL}/auth/v1/magiclink`, {
           method: 'POST',
           headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, options: { emailRedirectTo: location.href } }),
+          body: JSON.stringify({ email, options: { emailRedirectTo: location.origin + location.pathname } }),
         });
         if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
         document.getElementById('login-success').classList.remove('hidden');
