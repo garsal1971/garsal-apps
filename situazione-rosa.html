@@ -127,13 +127,19 @@
   <div id="screen-app" class="hidden">
     <main class="app-main">
       
-      <!-- ── Prestiti e Mutui ── -->
-      <h2 class="section-title">🏠 I tuoi Prestiti</h2>
-      <div id="loans-container" class="grid-loans">
-        <div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Caricamento prestiti...</div>
+      <!-- ── KPI Dashboard ── -->
+      <div class="kpi-grid" id="kpi-rosa-main">
+        <div class="kpi-card"><div class="kpi-label">Totale Asset</div><div class="kpi-value mono pos" id="tot-asset-rosa">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Saldo Cassa Rosa</div><div class="kpi-value mono" id="tot-saldo">€0,00</div></div>
       </div>
 
-      <!-- ── Danaro di Rosa ── -->
+      <!-- ── Mutuo ── -->
+      <h2 class="section-title">🏠 Il tuo Mutuo</h2>
+      <div id="loans-container" class="grid-loans">
+        <div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Caricamento mutuo...</div>
+      </div>
+
+      <!-- ── Asset ── -->
       <h2 class="section-title">💎 I tuoi Asset</h2>
       <div id="assets-container" class="grid-loans">
         <div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Caricamento asset...</div>
@@ -147,7 +153,7 @@
 
       <div class="kpi-grid" id="kpi-container">
         <div class="kpi-card"><div class="kpi-label">Totale Movimenti</div><div class="kpi-value mono" id="tot-voce">€0,00</div></div>
-        <div class="kpi-card"><div class="kpi-label">Saldo Attuale <span id="saldo-date" style="font-weight:400; font-size:.7rem;"></span></div><div class="kpi-value mono" id="tot-saldo">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Saldo al <span id="saldo-date" style="font-weight:400;"></span></div><div class="kpi-value mono" id="tot-saldo-bottom">€0,00</div></div>
       </div>
 
       <div class="card">
@@ -430,11 +436,11 @@
 
     function renderLoans() {
       const container = document.getElementById('loans-container');
-      const targetNames = ['Da Rosa', 'Da Rosa 2', 'Per via galli'];
-      const filtered = S.loans.filter(l => targetNames.some(tn => l.name && l.name.includes(tn)));
+      // Solo il mutuo "Per via galli"
+      const filtered = S.loans.filter(l => l.name && l.name.toLowerCase().includes('via galli'));
       
       if (filtered.length === 0) {
-        container.innerHTML = '<div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Nessun prestito trovato tra quelli specificati.</div>';
+        container.innerHTML = '<div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Nessun mutuo trovato.</div>';
         return;
       }
 
@@ -442,19 +448,17 @@
         const stats = computeLoanValue(l);
         const own = (parseFloat(l.ownership_percentage) || 100) / 100;
         return `
-          <div class="loan-card">
+          <div class="loan-card" style="border-top-color: var(--c-danger)">
             <div class="loan-name">${l.name}</div>
             <div class="loan-type">${l.type} · POSSESSO ${l.ownership_percentage || 100}%</div>
             
             <div class="loan-stat">
-              <span class="loan-label">${l.type === 'MUTUO' ? 'Capitale Residuo (quota)' : 'Debito Attuale (quota)'}</span>
-              <span class="loan-value" style="color:${l.type === 'MUTUO' ? 'var(--c-danger)' : 'var(--c-warning)'}">${fmtEUR(stats.value)}</span>
+              <span class="loan-label">Capitale Residuo (quota)</span>
+              <span class="loan-value" style="color:var(--c-danger)">${fmtEUR(stats.value)}</span>
             </div>
             
             <div class="loan-footer">
-              ${l.type === 'MUTUO' 
-                ? `Rata: ${fmtEURc(parseFloat(l.rata))} · Rate pagate: ${stats.paymentsMade}/${l.totale_rate}`
-                : `Inizio: ${fmtDate(l.data_inizio_prestito)} · Interesse: ${l.interesse}%`}
+              Rata: ${fmtEURc(parseFloat(l.rata))} · Rate pagate: ${stats.paymentsMade}/${l.totale_rate}
               <br>Valore intero: <strong>${fmtEUR(stats.value / own)}</strong>
             </div>
           </div>
@@ -465,25 +469,22 @@
     function renderAssets() {
       const container = document.getElementById('assets-container');
       const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
+      // Prestiti "Da Rosa" e "Da Rosa 2" trattati come asset
+      const rosaLoans = S.loans.filter(l => l.name && (l.name.includes('Da Rosa') || l.name.includes('Da Rosa 2')));
       
-      if (rosaAssets.length === 0) {
-        container.innerHTML = '<div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Nessun asset (BTP/Conto Arancio) trovato.</div>';
-        return;
-      }
+      let totalAssetRosa = 0;
 
-      container.innerHTML = rosaAssets.map(a => {
+      const assetsHtml = rosaAssets.map(a => {
         const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
-        const own = (parseFloat(a.ownership_percentage) || 100) / 100;
+        totalAssetRosa += val;
         return `
           <div class="loan-card" style="border-top-color: var(--c-success)">
             <div class="loan-name">${a.title}</div>
-            <div class="loan-type">${a.asset_type} · POSSESSO ${a.ownership_percentage}%</div>
-            
+            <div class="loan-type">ASSET · POSSESSO ${a.ownership_percentage}%</div>
             <div class="loan-stat">
               <span class="loan-label">Valore Attuale (quota)</span>
               <span class="loan-value" style="color:var(--c-success)">${fmtEUR(val)}</span>
             </div>
-            
             <div class="loan-footer">
               Valutazione: ${fmtDate(a.valuation_date)}
               ${a.notes ? `<br>Note: ${a.notes}` : ''}
@@ -492,6 +493,34 @@
           </div>
         `;
       }).join('');
+
+      const loansHtml = rosaLoans.map(l => {
+        const stats = computeLoanValue(l);
+        const own = (parseFloat(l.ownership_percentage) || 100) / 100;
+        totalAssetRosa += stats.value;
+        return `
+          <div class="loan-card" style="border-top-color: var(--c-success)">
+            <div class="loan-name">${l.name}</div>
+            <div class="loan-type">PRESTITO · POSSESSO ${l.ownership_percentage || 100}%</div>
+            <div class="loan-stat">
+              <span class="loan-label">Valore Attuale (quota)</span>
+              <span class="loan-value" style="color:var(--c-success)">${fmtEUR(stats.value)}</span>
+            </div>
+            <div class="loan-footer">
+              Inizio: ${fmtDate(l.data_inizio_prestito)} · Interesse: ${l.interesse}%
+              <br>Valore intero: <strong>${fmtEUR(stats.value / own)}</strong>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('tot-asset-rosa').textContent = fmtEUR(totalAssetRosa);
+
+      if (!assetsHtml && !loansHtml) {
+        container.innerHTML = '<div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Nessun asset trovato.</div>';
+      } else {
+        container.innerHTML = assetsHtml + loansHtml;
+      }
     }
 
     function renderCasaRosa() {
