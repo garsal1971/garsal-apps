@@ -215,6 +215,16 @@
       };
       if (body) options.body = JSON.stringify(body);
       const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+      if (r.status === 401 && S.session?.refresh_token) {
+        const ns = await refreshSession(S.session);
+        if (ns) {
+          options.headers['Authorization'] = `Bearer ${ns.access_token}`;
+          const r2 = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+          if (r2.ok) return r2.json();
+        }
+        logout();
+        throw new Error('Sessione scaduta');
+      }
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.message || r.statusText);
@@ -223,6 +233,31 @@
     };
 
     /* ── Auth ── */
+    async function refreshSession(session) {
+      if (!session?.refresh_token) return null;
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: session.refresh_token }),
+        });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+        S.session = ns;
+        localStorage.setItem('garsal_session', JSON.stringify(ns));
+        return ns;
+      } catch { return null; }
+    }
+
+    function logout() {
+      localStorage.removeItem('garsal_session');
+      S.session = null;
+      document.getElementById('screen-login').classList.remove('hidden');
+      document.getElementById('screen-app').classList.add('hidden');
+      document.getElementById('btn-logout').classList.add('hidden');
+      document.getElementById('user-info').classList.add('hidden');
+    }
+
     async function handleAuth() {
       // Check for session in URL (magic link return)
       const hash = location.hash.substring(1);
@@ -246,6 +281,12 @@
       }
 
       if (S.session) {
+        // Check if expired
+        if (S.session.expires_at && Date.now() > S.session.expires_at - 60000) {
+          const ns = await refreshSession(S.session);
+          if (!ns) { logout(); return; }
+        }
+
         document.getElementById('screen-login').classList.add('hidden');
         document.getElementById('screen-app').classList.remove('hidden');
         document.getElementById('btn-logout').classList.remove('hidden');
