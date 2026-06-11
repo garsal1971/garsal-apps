@@ -443,8 +443,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.38';
-const APP_BUILD   = '2026-06-05T11:00:00Z';
+const APP_VERSION = 'v1.0.39';
+const APP_BUILD   = '2026-06-11T16:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -519,10 +519,12 @@ function loginWithGoogle() {
   location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(location.origin + location.pathname)}`;
 }
 async function sendMagicLink(email) {
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/magiclink`, {
+  // create_user:false → il form non può creare nuovi account
+  const redirectTo = encodeURIComponent(location.origin + location.pathname);
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/otp?redirect_to=${redirectTo}`, {
     method: 'POST',
     headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, options: { emailRedirectTo: location.origin + location.pathname } }),
+    body: JSON.stringify({ email, create_user: false }),
   });
   if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
 }
