@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Situazione Rosa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f6fb;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-primary:   #db2777; /* Rosa */
+      --c-primary-h: #be185d;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; padding-top: 56px; }
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .hstack  { display: flex; align-items: center; }
+    .gap-8   { gap: 8px; }
+    .mt-12   { margin-top: 12px; }
+    .mb-20   { margin-bottom: 20px; }
+    .text-muted { color: var(--c-muted); }
+    .text-sm { font-size: .82rem; }
+    .text-lg { font-size: 1.15rem; }
+    .fw-600 { font-weight: 600; }
+    .fw-700 { font-weight: 700; }
+    .text-right { text-align: right; }
+
+    #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
+    #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+
+    /* ── Login ── */
+    #screen-login { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100dvh - 56px); padding: 24px; }
+    .login-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
+    .login-logo { font-size: 48px; margin-bottom: 16px; }
+    .login-card h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .magic-input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .95rem; outline: none; }
+    .btn-magic { width: 100%; padding: 12px; background: var(--c-primary); color: #fff; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; }
+    .login-success { margin-top: 16px; color: var(--c-success); font-size: .9rem; }
+    .login-error { margin-top: 16px; color: var(--c-danger); font-size: .9rem; }
+
+    /* ── Main ── */
+    .app-main { padding: 24px 28px; max-width: 1200px; margin: 0 auto; }
+    .section-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; text-align: right; }
+    
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 24px; }
+    .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    .grid-loans { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .loan-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm); border-top: 4px solid var(--c-primary); }
+    .loan-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; }
+    .loan-type { font-size: .75rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; margin-bottom: 12px; }
+    .loan-stat { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .loan-label { font-size: .85rem; color: var(--c-muted); }
+    .loan-value { font-family: var(--font-mono); font-weight: 600; font-size: 1.1rem; }
+    .loan-footer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--c-border); font-size: .8rem; color: var(--c-muted); }
+
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; padding: 0 10px 9px; }
+    .table td { padding: 12px 10px; border-top: 1px solid var(--c-border); }
+
+    .btn { padding: 8px 14px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .85rem; font-weight: 600; cursor: pointer; border: none; transition: background .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: transparent; border: 1px solid var(--c-border); color: var(--c-text); }
+    .btn-outline:hover { background: var(--c-bg); }
+
+    .year-select { padding: 7px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; outline: none; background: var(--c-surface); cursor: pointer; }
+
+    @media (max-width: 640px) {
+      .app-main { padding: 12px; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      .kpi-value { font-size: 1.2rem; }
+      .grid-loans { grid-template-columns: 1fr; }
+      .table-wrap .table thead { display: none; }
+      .table-wrap .table tr { display: block; margin-bottom: 12px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 12px; }
+      .table-wrap .table td { display: block; border: none; padding: 4px 0; text-align: left; }
+      .table-wrap .table td:before { content: attr(data-label); font-weight: 700; font-size: .7rem; color: var(--c-muted); text-transform: uppercase; display: block; margin-bottom: 2px; }
+      .table-wrap .table td.text-right { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <div id="garsal-top-bar">
+    <div style="display:flex;align-items:center;gap:8px;flex:1;">
+      <span style="width:24px;height:24px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;">🌹</span>
+      <div id="garsal-top-bar-text">Situazione Rosa</div>
+    </div>
+    <div id="user-info" class="hidden" style="color:#fff; font-size:12px; font-family:var(--font-mono);"></div>
+    <button id="btn-logout" class="btn btn-outline btn-sm hidden" style="color:#fff; border-color:rgba(255,255,255,0.3); font-size:11px; padding:4px 8px;">Esci</button>
+  </div>
+
+  <div id="screen-login">
+    <div class="login-card">
+      <div class="login-logo">🌹</div>
+      <h1>Bentornata Rosa</h1>
+      <p class="text-muted text-sm mb-20">Inserisci la tua email per accedere alla tua situazione finanziaria.</p>
+      <form id="login-form">
+        <input type="email" id="login-email" class="magic-input" placeholder="La tua email" required />
+        <button type="submit" class="btn-magic">Invia Link di Accesso</button>
+      </form>
+      <div id="login-success" class="login-success hidden">✅ Link inviato! Controlla la tua email.</div>
+      <div id="login-error" class="login-error hidden"></div>
+    </div>
+  </div>
+
+  <div id="screen-app" class="hidden">
+    <main class="app-main">
+      
+      <!-- ── Prestiti e Mutui ── -->
+      <h2 class="section-title">🏠 I tuoi Prestiti</h2>
+      <div id="loans-container" class="grid-loans">
+        <div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Caricamento prestiti...</div>
+      </div>
+
+      <!-- ── Casa Rosa ── -->
+      <div class="hstack gap-8 mb-20" style="justify-content: space-between; border-top: 2px solid var(--c-border); padding-top: 32px;">
+        <h2 class="section-title" style="margin-bottom:0">💰 Gestione Cassa Casa Rosa</h2>
+        <select id="year-select" class="year-select"></select>
+      </div>
+
+      <div class="kpi-grid" id="kpi-container">
+        <div class="kpi-card"><div class="kpi-label">Totale Movimenti</div><div class="kpi-value mono" id="tot-voce">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Saldo Attuale <span id="saldo-date" style="font-weight:400; font-size:.7rem;"></span></div><div class="kpi-value mono" id="tot-saldo">€0,00</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Pagamenti Attesi</div>
+        <div id="expected-payments" class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); margin-bottom:0;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Riepilogo per Categoria</div>
+        <div id="cat-summary" class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:0;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Ultimi Movimenti</div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Categoria</th>
+                <th class="text-right">Importo</th>
+                <th>Descrizione</th>
+              </tr>
+            </thead>
+            <tbody id="tx-table-body">
+              <tr><td colspan="4" style="text-align:center; padding:40px;" class="text-muted">Caricamento movimenti...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+    let S = {
+      session: null,
+      loans: [],
+      transactions: [],
+      categories: [],
+      catMap: {},
+      latestSaldo: null,
+      selectedYear: new Date().getFullYear(),
+      selectedCategory: null
+    };
+
+    const fmtEUR = v => { 
+      if (v == null) return '—';
+      const n = Math.round(v); 
+      return (n < 0 ? '-' : '') + Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €'; 
+    };
+    const fmtEURc = v => {
+      if (v == null) return '—';
+      return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(v);
+    };
+    const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+
+    const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+    const sb = async (path, method = 'GET', body = null) => {
+      const options = {
+        method,
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${tok()}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        }
+      };
+      if (body) options.body = JSON.stringify(body);
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.message || r.statusText);
+      }
+      return r.json();
+    };
+
+    /* ── Auth ── */
+    async function handleAuth() {
+      // Check for session in URL (magic link return)
+      const hash = location.hash.substring(1);
+      if (hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash);
+        const at = params.get('access_token');
+        const rt = params.get('refresh_token');
+        const expires_in = params.get('expires_in');
+        
+        const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${at}` },
+        })).json();
+        
+        if (user && user.id) {
+          S.session = { access_token: at, refresh_token: rt, user, expires_at: Date.now() + parseInt(expires_in) * 1000 };
+          localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          location.hash = '';
+        }
+      } else {
+        try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
+      }
+
+      if (S.session) {
+        document.getElementById('screen-login').classList.add('hidden');
+        document.getElementById('screen-app').classList.remove('hidden');
+        document.getElementById('btn-logout').classList.remove('hidden');
+        document.getElementById('user-info').textContent = S.session.user.email;
+        document.getElementById('user-info').classList.remove('hidden');
+        loadData();
+      }
+    }
+
+    document.getElementById('login-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      btn.textContent = 'Invio in corso...';
+      
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/magiclink`, {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, options: { emailRedirectTo: location.href } }),
+        });
+        if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
+        document.getElementById('login-success').classList.remove('hidden');
+        document.getElementById('login-error').classList.add('hidden');
+      } catch (err) {
+        document.getElementById('login-error').textContent = err.message;
+        document.getElementById('login-error').classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Invia Link di Accesso';
+      }
+    };
+
+    document.getElementById('btn-logout').onclick = () => {
+      localStorage.removeItem('garsal_session');
+      location.reload();
+    };
+
+    /* ── Data ── */
+    async function loadData() {
+      try {
+        const [loans, tx, cats, saldi] = await Promise.all([
+          sb('fnz_loans?order=created_at.asc'),
+          sb('cntrs_transactions?order=data.desc'),
+          sb('cntrs_categories?order=name'),
+          sb('cntrs_saldi?order=created_at.desc&limit=1'),
+        ]);
+        
+        S.loans = loans;
+        S.transactions = tx;
+        S.categories = cats;
+        S.latestSaldo = saldi && saldi.length ? saldi[0] : null;
+        S.catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
+        
+        render();
+      } catch (e) {
+        console.error('Errore caricamento:', e);
+      }
+    }
+
+    function computeLoanValue(loan) {
+      const today = new Date();
+      const own = (parseFloat(loan.ownership_percentage) || 100) / 100;
+
+      if (loan.type === 'MUTUO') {
+        const capitale = parseFloat(loan.capitale);
+        const rata = parseFloat(loan.rata);
+        const totaleRate = parseInt(loan.totale_rate);
+        const start = new Date(loan.giorno_prima_rata);
+        
+        let mesiPagati = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+        mesiPagati = Math.max(0, Math.min(mesiPagati, totaleRate));
+
+        const calculateRate = (n, pmt, pv) => {
+          let rate = 0.01;
+          let tol = 1e-7;
+          for (let i = 0; i < 1000; i++) {
+            let f = pmt * (1 - Math.pow(1 + rate, -n)) / rate - pv;
+            let df = (-pmt * (1 - Math.pow(1 + rate, -n)) / (rate * rate)) + (pmt * n * Math.pow(1 + rate, -n - 1) / rate);
+            let newRate = rate - f / df;
+            if (Math.abs(newRate - rate) < tol) return newRate;
+            rate = newRate;
+          }
+          return rate;
+        };
+
+        const rate = calculateRate(totaleRate, rata, capitale);
+        let value;
+        if (Math.abs(rate) < 1e-8) {
+          value = (capitale - rata * mesiPagati) * own;
+        } else {
+          value = (capitale * Math.pow(1 + rate, mesiPagati) - rata * (Math.pow(1 + rate, mesiPagati) - 1) / rate) * own;
+        }
+        return { value, paymentsMade: mesiPagati, paymentsRemaining: totaleRate - mesiPagati };
+      } else {
+        const C = parseFloat(loan.capitale);
+        const i = parseFloat(loan.interesse) / 100;
+        const D = new Date(loan.data_inizio_prestito);
+        const t = (today - D) / (1000 * 60 * 60 * 24 * 365.25);
+        const value = C * Math.pow(1 + i, t) * own;
+        return { value, t };
+      }
+    }
+
+    function render() {
+      renderLoans();
+      renderCasaRosa();
+    }
+
+    function renderLoans() {
+      const container = document.getElementById('loans-container');
+      const targetNames = ['Da Rosa', 'Da Rosa 2', 'Per via galli'];
+      const filtered = S.loans.filter(l => targetNames.some(tn => l.name && l.name.includes(tn)));
+      
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Nessun prestito trovato tra quelli specificati.</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(l => {
+        const stats = computeLoanValue(l);
+        const own = (parseFloat(l.ownership_percentage) || 100) / 100;
+        return `
+          <div class="loan-card">
+            <div class="loan-name">${l.name}</div>
+            <div class="loan-type">${l.type} · POSSESSO ${l.ownership_percentage || 100}%</div>
+            
+            <div class="loan-stat">
+              <span class="loan-label">${l.type === 'MUTUO' ? 'Capitale Residuo (quota)' : 'Debito Attuale (quota)'}</span>
+              <span class="loan-value" style="color:${l.type === 'MUTUO' ? 'var(--c-danger)' : 'var(--c-warning)'}">${fmtEUR(stats.value)}</span>
+            </div>
+            
+            <div class="loan-footer">
+              ${l.type === 'MUTUO' 
+                ? `Rata: ${fmtEURc(parseFloat(l.rata))} · Rate pagate: ${stats.paymentsMade}/${l.totale_rate}`
+                : `Inizio: ${fmtDate(l.data_inizio_prestito)} · Interesse: ${l.interesse}%`}
+              <br>Valore intero: <strong>${fmtEUR(stats.value / own)}</strong>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCasaRosa() {
+      const anni = [...new Set(S.transactions.map(t => t.anno || new Date(t.data).getFullYear()))].sort((a, b) => b - a);
+      if (!anni.includes(S.selectedYear)) S.selectedYear = anni[0] || new Date().getFullYear();
+
+      const sel = document.getElementById('year-select');
+      sel.innerHTML = anni.map(a => `<option value="${a}" ${a == S.selectedYear ? 'selected' : ''}>${a}</option>`).join('');
+      sel.onchange = (e) => { S.selectedYear = parseInt(e.target.value); renderCasaRosa(); };
+
+      const current = S.transactions.filter(t => (t.anno || new Date(t.data).getFullYear()) === S.selectedYear);
+      
+      const tbody = document.getElementById('tx-table-body');
+      tbody.innerHTML = current.slice(0, 50).map(t => `
+        <tr>
+          <td class="mono text-sm" data-label="Data">${fmtDate(t.data)}</td>
+          <td class="text-muted" data-label="Categoria">${S.catMap[t.category_id] || '(nessuna)'}</td>
+          <td class="text-right mono fw-600" data-label="Importo">${fmtEUR(t.importo_voce)}</td>
+          <td data-label="Descrizione">
+            <div class="fw-600">${t.descrizione}</div>
+            ${t.note ? `<div class="text-muted text-sm">${t.note}</div>` : ''}
+          </td>
+        </tr>
+      `).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--c-muted)">Nessun movimento per questo anno</td></tr>';
+
+      const allVoce = S.transactions.reduce((s, t) => s + t.importo_voce, 0);
+      document.getElementById('tot-voce').textContent = fmtEUR(allVoce);
+      
+      if (S.latestSaldo) {
+        document.getElementById('tot-saldo').textContent = fmtEUR(S.latestSaldo.saldo_contabile);
+        document.getElementById('saldo-date').textContent = 'al ' + fmtDate(S.latestSaldo.data);
+      }
+
+      // Expected Payments
+      const start = new Date(2021, 8, 1);
+      const now = new Date();
+      const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+      
+      const catTotals = {};
+      S.transactions.forEach(t => {
+        const cat = S.catMap[t.category_id] || 'da attribuire';
+        catTotals[cat] = (catTotals[cat] || 0) + t.importo_voce;
+      });
+
+      const expected = [
+        { label: 'Affitto bonifico rosa', rate: 450, catMatch: 'bonifico' },
+        { label: 'Affitto contante rosa', rate: 300, catMatch: 'contante' },
+      ];
+
+      document.getElementById('expected-payments').innerHTML = expected.map(item => {
+        const expectedTotal = item.rate * months;
+        let actualTotal = 0;
+        Object.entries(catTotals).forEach(([cat, tot]) => {
+          if (cat.toLowerCase().includes(item.catMatch)) actualTotal += tot;
+        });
+        const diff = actualTotal - expectedTotal;
+        const color = diff >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+        return `
+          <div class="kpi-card" style="border-left: 4px solid ${color}">
+            <div class="kpi-label">${item.label}</div>
+            <div class="kpi-value mono" style="color:${color}">${fmtEUR(actualTotal)}</div>
+            <div class="text-sm text-right mt-12" style="color:${color}">
+              ${diff >= 0 ? '+' : ''}${fmtEUR(diff)} (${Math.abs(Math.round(diff/item.rate))} mesi)
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Category Summary (current year)
+      const yearCatTotals = {};
+      current.forEach(t => {
+        const cat = S.catMap[t.category_id] || 'da attribuire';
+        yearCatTotals[cat] = (yearCatTotals[cat] || 0) + t.importo_voce;
+      });
+      document.getElementById('cat-summary').innerHTML = Object.entries(yearCatTotals)
+        .sort((a,b) => b[1] - a[1])
+        .map(([cat, tot]) => `
+          <div class="kpi-card">
+            <div class="kpi-label">${cat}</div>
+            <div class="kpi-value mono" style="font-size:1.1rem">${fmtEUR(tot)}</div>
+          </div>
+        `).join('');
+    }
+
+    handleAuth();
+  </script>
+</body>
+</html>
