@@ -388,6 +388,7 @@
       <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
       
       <div class="nav-label">Altro</div>
+      <button class="nav-item"        data-action="nav" data-view="danaro-rosa">🌹 Danaro di Rosa</button>
       <a class="nav-item" href="casarosa.html" style="text-decoration:none">🏠 Casa Rosa</a>
       <a class="nav-item" href="casaterrasini.html" style="text-decoration:none">🏡 Casa Terrasini</a>
       <a class="nav-item" href="contabilita.html" style="text-decoration:none">💰 Conto Cointestato</a>
@@ -401,6 +402,7 @@
       <div id="view-progressione"        class="view"></div>
       <div id="view-loans"              class="view"></div>
       <div id="view-other-assets"       class="view"></div>
+      <div id="view-danaro-rosa"        class="view"></div>
       <div id="view-prodotti"           class="view"></div>
       <div id="view-prezzi"             class="view"></div>
       <div id="view-tag-config"         class="view"></div>
@@ -800,7 +802,10 @@ function buildSnapshotPayload() {
   const stats      = portfolioStats();
   const grandValue = stats.reduce((s, x) => s + x.totalValue, 0);
   const totalLoans = S.loans.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
-  const totalOther = S.otherAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+  // Escludi esplicitamente danaro_rosa dai totali del patrimonio
+  const totalOther = S.otherAssets
+    .filter(a => a.asset_type !== 'danaro_rosa')
+    .reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
 
   const portfolios = stats.map(({ portfolio: p, holdings: h, totalValue, totalCost, pnl, pnlPct }) => {
     const own = (parseFloat(p.ownership_percentage) || 100) / 100;
@@ -831,16 +836,19 @@ function buildSnapshotPayload() {
     };
   });
 
-  const other_assets = S.otherAssets.map(a => {
-    const own = (parseFloat(a.ownership_percentage) || 100) / 100;
-    return {
-      id: a.id, title: a.title, asset_type: a.asset_type,
-      value: parseFloat(a.value),
-      ownership_pct: parseFloat(a.ownership_percentage) || 100,
-      ownership_value: parseFloat(a.value) * own,
-      valuation_date: a.valuation_date,
-    };
-  });
+  // Escludi danaro_rosa anche dai dettagli dello snapshot per coerenza
+  const other_assets = S.otherAssets
+    .filter(a => a.asset_type !== 'danaro_rosa')
+    .map(a => {
+      const own = (parseFloat(a.ownership_percentage) || 100) / 100;
+      return {
+        id: a.id, title: a.title, asset_type: a.asset_type,
+        value: parseFloat(a.value),
+        ownership_pct: parseFloat(a.ownership_percentage) || 100,
+        ownership_value: parseFloat(a.value) * own,
+        valuation_date: a.valuation_date,
+      };
+    });
 
   return {
     topLevel: {
@@ -1328,7 +1336,6 @@ function renderDashboard() {
   const totalLoans = S.loans.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
   const totalOther = S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
   const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
-  const totalRosa  = rosaAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
 
   const prev = S.prevSnapshot;
   const prevPtfMap = {};
@@ -1348,8 +1355,8 @@ function renderDashboard() {
       </div>
     </div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Patrimonio Netto</div><div class="kpi-value mono neutral">${deltaHtml(grandValue + totalOther + totalRosa - totalLoans, prev ? parseFloat(prev.patrimonio_netto) : null)} ${fmtEUR(grandValue + totalOther + totalRosa - totalLoans)}</div></div>
-      ${kpi('Asset Totali',     fmtEUR(grandValue + totalOther + totalRosa), 'neutral')}
+      <div class="kpi-card"><div class="kpi-label">Patrimonio Netto</div><div class="kpi-value mono neutral">${deltaHtml(grandValue + totalOther - totalLoans, prev ? parseFloat(prev.patrimonio_netto) : null)} ${fmtEUR(grandValue + totalOther - totalLoans)}</div></div>
+      ${kpi('Asset Totali',     fmtEUR(grandValue + totalOther), 'neutral')}
       ${kpi('Debiti Totali',    fmtEUR(totalLoans), 'neg')}
     </div>
 
@@ -1388,42 +1395,6 @@ function renderDashboard() {
                       <td class="text-right">
                         <span class="mono fw-600" style="font-size:.85rem">${fmtEUR0(tv)}</span>${d ? `<br><span style="font-size:.72rem">${d}</span>` : ''}
                       </td>
-                    </tr>`;
-                  }).join('')
-              }
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card" style="grid-column: 1 / -1;">
-        <div class="card-header-row">
-          <div class="card-title">Danaro di Rosa</div>
-          <div class="hstack gap-8">
-            <button class="btn btn-outline btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa">+ Voce</button>
-            <button class="btn btn-outline btn-sm" data-action="nav" data-view="other-assets">Gestisci →</button>
-          </div>
-        </div>
-        <div class="kpi-label">Valore totale</div>
-        <div class="mono text-lg fw-700 pos mb-16 text-right">${fmtEUR(totalRosa)}</div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Voce</th>
-                <th class="text-right">Valore</th>
-                <th>Info</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rosaAssets.length === 0
-                ? `<tr><td colspan="3" class="empty-sm">Nessuna voce inserita. Usa 'Altri Asset' con tipo 'danaro_rosa'.</td></tr>`
-                : rosaAssets.map(a => {
-                    const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
-                    return `<tr style="cursor:pointer" data-action="edit-other-asset" data-id="${a.id}">
-                      <td class="fw-600">${a.title}</td>
-                      <td class="text-right mono fw-600 pos">${fmtEUR(val)}</td>
-                      <td class="text-sm text-muted">${fmtDate(a.valuation_date)}${a.notes ? ` · ${a.notes}` : ''}</td>
                     </tr>`;
                   }).join('')
               }
@@ -1909,9 +1880,9 @@ function renderOtherAssets() {
       <div><h2 class="page-title">Altri Asset</h2><p class="page-sub">Gestione immobili, beni di valore e altri investimenti</p></div>
       <button class="btn btn-primary btn-sm" data-action="new-other-asset">+ Nuovo Asset</button>
     </div>
-    ${S.otherAssets.length === 0
+    ${S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').length === 0
       ? `<div class="empty-state"><div class="empty-icon">💎</div><p>Nessun asset ancora.</p></div>`
-      : `<div class="grid-auto">${S.otherAssets.map(a => {
+      : `<div class="grid-auto">${S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').map(a => {
           const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
           return `
         <div class="card">
@@ -1937,6 +1908,46 @@ function renderOtherAssets() {
           </div>
           ${a.description ? `<div class="settings-row text-muted text-sm mt-4">${a.description}</div>` : ''}
           ${a.notes ? `<div class="settings-row text-muted text-sm mt-2"><em>${a.notes}</em></div>` : ''}
+        </div>`;
+        }).join('')}</div>`
+    }
+  `);
+}
+function renderDanaroRosa() {
+  const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
+  const totalVal   = rosaAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+
+  setHtml('view-danaro-rosa', `
+    <div class="view-header">
+      <div><h2 class="page-title">Danaro di Rosa</h2><p class="page-sub">Asset esclusi dal patrimonio personale</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa">+ Nuova voce</button>
+    </div>
+    <div class="kpi-grid">
+      ${kpi('Valore Totale Rosa', fmtEUR(totalVal), 'neutral')}
+    </div>
+    ${rosaAssets.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🌹</div><p>Nessuna voce inserita.<br/>Usa il tasto "+ Nuova voce" per aggiungere BTP o saldi.</p></div>`
+      : `<div class="grid-auto">${rosaAssets.map(a => {
+          const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
+          return `
+        <div class="card" style="border-top: 4px solid var(--c-success)">
+          <div class="card-header-row">
+            <div class="card-title truncate" style="max-width:200px">${a.title}</div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-other-asset" data-id="${a.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-other-asset" data-id="${a.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="portfolio-card-stats">
+            <div>
+              <div class="kpi-label">Saldo / Valore di mercato</div>
+              <div class="mono portfolio-card-value">${fmtEUR(val)}</div>
+            </div>
+          </div>
+          <div class="settings-row text-sm mt-12">
+            Data: <strong>${fmtDate(a.valuation_date)}</strong>
+          </div>
+          ${a.notes ? `<div class="settings-row text-muted text-sm mt-4">Note: ${a.notes}</div>` : ''}
         </div>`;
         }).join('')}</div>`
     }
