@@ -233,6 +233,18 @@
     };
 
     /* ── Auth ── */
+    async function initFromSbToken(token) {
+      try {
+        const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+        })).json();
+        if (user?.id) {
+          return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+        }
+      } catch {}
+      return null;
+    }
+
     async function refreshSession(session) {
       if (!session?.refresh_token) return null;
       try {
@@ -251,6 +263,7 @@
 
     function logout() {
       localStorage.removeItem('garsal_session');
+      localStorage.removeItem('sb_token');
       S.session = null;
       document.getElementById('screen-login').classList.remove('hidden');
       document.getElementById('screen-app').classList.add('hidden');
@@ -259,7 +272,14 @@
     }
 
     async function handleAuth() {
-      // Check for session in URL (magic link return)
+      // 1. Token condiviso da AppSphere launcher (sb_token in localStorage)
+      const sbToken = localStorage.getItem('sb_token');
+      if (sbToken && !S.session) {
+        S.session = await initFromSbToken(sbToken);
+        if (S.session) localStorage.setItem('garsal_session', JSON.stringify(S.session));
+      }
+
+      // 2. Check for session in URL (magic link return)
       const hash = location.hash.substring(1);
       if (hash.includes('access_token=')) {
         const params = new URLSearchParams(hash);
@@ -274,9 +294,10 @@
         if (user && user.id) {
           S.session = { access_token: at, refresh_token: rt, user, expires_at: Date.now() + parseInt(expires_in) * 1000 };
           localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          localStorage.setItem('sb_token', at);
           location.hash = '';
         }
-      } else {
+      } else if (!S.session) {
         try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
       }
 
@@ -307,7 +328,7 @@
         const r = await fetch(`${SUPABASE_URL}/auth/v1/magiclink`, {
           method: 'POST',
           headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, options: { emailRedirectTo: location.origin + location.pathname } }),
+          body: JSON.stringify({ email, options: { emailRedirectTo: location.origin } }),
         });
         if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
         document.getElementById('login-success').classList.remove('hidden');
