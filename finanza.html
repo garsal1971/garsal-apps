@@ -1842,19 +1842,23 @@ function renderDanaroRosa() {
   setHtml('view-danaro-rosa', `
     <div class="view-header">
       <div><h2 class="page-title">Danaro di Rosa</h2><p class="page-sub">Asset esclusi dal patrimonio personale</p></div>
-      <button class="btn btn-primary btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa">+ Nuova voce</button>
+      <div class="hstack gap-8">
+        <button class="btn btn-primary btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa" data-pre-title="BTP ITALIA">+ BTP</button>
+        <button class="btn btn-primary btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa" data-pre-title="CONTO ARANCIO">+ Conto Arancio</button>
+        <button class="btn btn-outline btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa">+ Altro</button>
+      </div>
     </div>
     <div class="kpi-grid">
       ${kpi('Valore Totale Rosa', fmtEUR(totalVal), 'neutral')}
     </div>
     ${rosaAssets.length === 0
-      ? `<div class="empty-state"><div class="empty-icon">🌹</div><p>Nessuna voce inserita.<br/>Usa il tasto "+ Nuova voce" per aggiungere BTP o saldi.</p></div>`
+      ? `<div class="empty-state"><div class="empty-icon">🌹</div><p>Nessuna voce inserita.<br/>Usa i tasti sopra per aggiungere BTP o saldi di Rosa.</p></div>`
       : `<div class="grid-auto">${rosaAssets.map(a => {
           const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
           return `
         <div class="card" style="border-top: 4px solid var(--c-success)">
           <div class="card-header-row">
-            <div class="card-title truncate" style="max-width:200px">${a.title}</div>
+            <div class="card-title truncate" style="max-width:200px">${a.title} ${a.description ? `<small class="text-muted">(${a.description})</small>` : ''}</div>
             <div class="hstack gap-4">
               <button class="btn-icon" data-action="edit-other-asset" data-id="${a.id}" title="Modifica">✎</button>
               <button class="btn-icon btn-icon-danger" data-action="del-other-asset" data-id="${a.id}" title="Elimina">✕</button>
@@ -2749,21 +2753,27 @@ function openNewLoanModal(loanId = null) {
     });
   }
 }
-function openOtherAssetModal(assetId = null, preType = null) {
+function openOtherAssetModal(assetId = null, preType = null, preTitle = null) {
   const a = assetId ? S.otherAssets.find(x => x.id === assetId) : null;
   const isEdit = !!a;
   const types = S.otherAssetTypes.map(t => t.name).sort();
   const currentType = a?.asset_type || preType || '';
+  const currentTitle = a?.title || preTitle || '';
+
+  // Se è danaro_rosa, personalizziamo le etichette
+  const isRosa = currentType === 'danaro_rosa';
+  const valLabel = isRosa ? 'Valore di mercato / Saldo *' : 'Valore Stimato *';
+  const descLabel = isRosa && currentTitle.includes('BTP') ? 'Valore Nominale' : 'Descrizione';
   
-  openModal(isEdit ? 'Modifica Asset' : 'Nuovo Asset', `
+  openModal(isEdit ? 'Modifica Voce' : 'Nuova Voce', `
     <form id="modal-form">
       <div class="form-group">
         <label class="form-label">Titolo *</label>
-        <input name="title" class="form-input" required placeholder="es. Appartamento Milano" value="${a?.title || ''}" />
+        <input name="title" class="form-input" required placeholder="es. BTP ITALIA o CONTO ARANCIO" value="${currentTitle}" />
       </div>
       <div class="form-group">
-        <label class="form-label">Descrizione</label>
-        <input name="description" class="form-input" placeholder="es. Bilocale zona centro" value="${a?.description || ''}" />
+        <label class="form-label">${descLabel}</label>
+        <input name="description" class="form-input" placeholder="${isRosa && currentTitle.includes('BTP') ? 'es. 10.000' : 'Opzionale'}" value="${a?.description || ''}" />
       </div>
       <div class="form-row-2">
         <div class="form-group">
@@ -2771,13 +2781,14 @@ function openOtherAssetModal(assetId = null, preType = null) {
           <div class="hstack gap-4">
             <select name="asset_type" class="form-input form-select" required>
               <option value="">— Seleziona —</option>
+              ${!types.includes('danaro_rosa') ? `<option value="danaro_rosa" ${currentType === 'danaro_rosa' ? 'selected' : ''}>danaro_rosa</option>` : ''}
               ${types.map(t => `<option value="${t}" ${currentType === t ? 'selected' : ''}>${t}</option>`).join('')}
               <option value="__NEW__">+ Aggiungi nuovo...</option>
             </select>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Valore Stimato *</label>
+          <label class="form-label">${valLabel}</label>
           <input name="value" type="number" step="any" min="0" class="form-input mono" required value="${a?.value || ''}" />
         </div>
       </div>
@@ -2884,7 +2895,7 @@ document.addEventListener('click', async e => {
     case 'del-loan':
       if (confirm('Eliminare questo prestito?')) { await sbDel('fnz_loans', `id=eq.${t.dataset.id}`); await reload(); }
       break;
-    case 'new-other-asset':  openOtherAssetModal(null, t.dataset.preType || null); break;
+    case 'new-other-asset':  openOtherAssetModal(null, t.dataset.preType || null, t.dataset.preTitle || null); break;
     case 'edit-other-asset': openOtherAssetModal(t.dataset.id); break;
     case 'del-other-asset':
       if (confirm('Eliminare questo asset?')) { await sbDel('fnz_other_assets', `id=eq.${t.dataset.id}`); await reload(); }
