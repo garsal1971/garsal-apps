@@ -133,6 +133,12 @@
         <div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Caricamento prestiti...</div>
       </div>
 
+      <!-- ── Danaro di Rosa ── -->
+      <h2 class="section-title">💎 I tuoi Asset</h2>
+      <div id="assets-container" class="grid-loans">
+        <div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Caricamento asset...</div>
+      </div>
+
       <!-- ── Casa Rosa ── -->
       <div class="hstack gap-8 mb-20" style="justify-content: space-between; border-top: 2px solid var(--c-border); padding-top: 32px;">
         <h2 class="section-title" style="margin-bottom:0">💰 Gestione Cassa Casa Rosa</h2>
@@ -183,6 +189,7 @@
     let S = {
       session: null,
       loans: [],
+      otherAssets: [],
       transactions: [],
       categories: [],
       catMap: {},
@@ -350,16 +357,18 @@
     /* ── Data ── */
     async function loadData() {
       try {
-        const [loans, tx, cats, saldi] = await Promise.all([
+        const [loans, tx, cats, saldi, assets] = await Promise.all([
           sb('fnz_loans?order=created_at.asc'),
           sb('cntrs_transactions?order=data.desc'),
           sb('cntrs_categories?order=name'),
           sb('cntrs_saldi?order=created_at.desc&limit=1'),
+          sb('fnz_other_assets?order=valuation_date.desc'),
         ]);
         
         S.loans = loans;
         S.transactions = tx;
         S.categories = cats;
+        S.otherAssets = assets;
         S.latestSaldo = saldi && saldi.length ? saldi[0] : null;
         S.catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
         
@@ -415,6 +424,7 @@
 
     function render() {
       renderLoans();
+      renderAssets();
       renderCasaRosa();
     }
 
@@ -446,6 +456,38 @@
                 ? `Rata: ${fmtEURc(parseFloat(l.rata))} · Rate pagate: ${stats.paymentsMade}/${l.totale_rate}`
                 : `Inizio: ${fmtDate(l.data_inizio_prestito)} · Interesse: ${l.interesse}%`}
               <br>Valore intero: <strong>${fmtEUR(stats.value / own)}</strong>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderAssets() {
+      const container = document.getElementById('assets-container');
+      const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
+      
+      if (rosaAssets.length === 0) {
+        container.innerHTML = '<div class="text-muted" style="grid-column: 1/-1; text-align:center; padding:20px;">Nessun asset (BTP/Conto Arancio) trovato.</div>';
+        return;
+      }
+
+      container.innerHTML = rosaAssets.map(a => {
+        const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
+        const own = (parseFloat(a.ownership_percentage) || 100) / 100;
+        return `
+          <div class="loan-card" style="border-top-color: var(--c-success)">
+            <div class="loan-name">${a.title}</div>
+            <div class="loan-type">${a.asset_type} · POSSESSO ${a.ownership_percentage}%</div>
+            
+            <div class="loan-stat">
+              <span class="loan-label">Valore Attuale (quota)</span>
+              <span class="loan-value" style="color:var(--c-success)">${fmtEUR(val)}</span>
+            </div>
+            
+            <div class="loan-footer">
+              Valutazione: ${fmtDate(a.valuation_date)}
+              ${a.notes ? `<br>Note: ${a.notes}` : ''}
+              <br>Valore intero: <strong>${fmtEUR(parseFloat(a.value))}</strong>
             </div>
           </div>
         `;

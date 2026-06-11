@@ -1326,7 +1326,9 @@ function renderDashboard() {
   const grandFullValue = stats.reduce((s, x) => s + (x.totalValue / ((parseFloat(x.portfolio.ownership_percentage) || 100) / 100)), 0);
 
   const totalLoans = S.loans.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
-  const totalOther = S.otherAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+  const totalOther = S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+  const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
+  const totalRosa  = rosaAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
 
   const prev = S.prevSnapshot;
   const prevPtfMap = {};
@@ -1346,8 +1348,8 @@ function renderDashboard() {
       </div>
     </div>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Patrimonio Netto</div><div class="kpi-value mono neutral">${deltaHtml(grandValue + totalOther - totalLoans, prev ? parseFloat(prev.patrimonio_netto) : null)} ${fmtEUR(grandValue + totalOther - totalLoans)}</div></div>
-      ${kpi('Asset Totali',     fmtEUR(grandValue + totalOther), 'neutral')}
+      <div class="kpi-card"><div class="kpi-label">Patrimonio Netto</div><div class="kpi-value mono neutral">${deltaHtml(grandValue + totalOther + totalRosa - totalLoans, prev ? parseFloat(prev.patrimonio_netto) : null)} ${fmtEUR(grandValue + totalOther + totalRosa - totalLoans)}</div></div>
+      ${kpi('Asset Totali',     fmtEUR(grandValue + totalOther + totalRosa), 'neutral')}
       ${kpi('Debiti Totali',    fmtEUR(totalLoans), 'neg')}
     </div>
 
@@ -1393,8 +1395,44 @@ function renderDashboard() {
           </table>
         </div>
       </div>
-      
+
       <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-header-row">
+          <div class="card-title">Danaro di Rosa</div>
+          <div class="hstack gap-8">
+            <button class="btn btn-outline btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa">+ Voce</button>
+            <button class="btn btn-outline btn-sm" data-action="nav" data-view="other-assets">Gestisci →</button>
+          </div>
+        </div>
+        <div class="kpi-label">Valore totale</div>
+        <div class="mono text-lg fw-700 pos mb-16 text-right">${fmtEUR(totalRosa)}</div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Voce</th>
+                <th class="text-right">Valore</th>
+                <th>Info</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rosaAssets.length === 0
+                ? `<tr><td colspan="3" class="empty-sm">Nessuna voce inserita. Usa 'Altri Asset' con tipo 'danaro_rosa'.</td></tr>`
+                : rosaAssets.map(a => {
+                    const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
+                    return `<tr style="cursor:pointer" data-action="edit-other-asset" data-id="${a.id}">
+                      <td class="fw-600">${a.title}</td>
+                      <td class="text-right mono fw-600 pos">${fmtEUR(val)}</td>
+                      <td class="text-sm text-muted">${fmtDate(a.valuation_date)}${a.notes ? ` · ${a.notes}` : ''}</td>
+                    </tr>`;
+                  }).join('')
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="card">
         <div class="card-header-row">
           <div class="card-title">Prestiti e Mutui</div>
           <button class="btn btn-outline btn-sm" data-action="nav" data-view="loans">Dettaglio →</button>
@@ -1425,7 +1463,7 @@ function renderDashboard() {
         </div>
       </div>
 
-      <div class="card" style="grid-column: 1 / -1;">
+      <div class="card">
         <div class="card-header-row">
           <div class="card-title">Altri Asset</div>
           <button class="btn btn-outline btn-sm" data-action="nav" data-view="other-assets">Dettaglio →</button>
@@ -1441,9 +1479,9 @@ function renderDashboard() {
               </tr>
             </thead>
             <tbody>
-              ${S.otherAssets.length === 0
+              ${S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').length === 0
                 ? `<tr><td colspan="2" class="empty-sm">Nessun altro asset inserito.</td></tr>`
-                : S.otherAssets.map(a => {
+                : S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').map(a => {
                     const val = parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100;
                     return `<tr style="cursor:pointer" data-action="nav" data-view="other-assets">
                       <td class="fw-600">${a.title}</td>
@@ -2807,10 +2845,11 @@ function openNewLoanModal(loanId = null) {
     });
   }
 }
-function openOtherAssetModal(assetId = null) {
+function openOtherAssetModal(assetId = null, preType = null) {
   const a = assetId ? S.otherAssets.find(x => x.id === assetId) : null;
   const isEdit = !!a;
   const types = S.otherAssetTypes.map(t => t.name).sort();
+  const currentType = a?.asset_type || preType || '';
   
   openModal(isEdit ? 'Modifica Asset' : 'Nuovo Asset', `
     <form id="modal-form">
@@ -2828,7 +2867,7 @@ function openOtherAssetModal(assetId = null) {
           <div class="hstack gap-4">
             <select name="asset_type" class="form-input form-select" required>
               <option value="">— Seleziona —</option>
-              ${types.map(t => `<option value="${t}" ${a?.asset_type === t ? 'selected' : ''}>${t}</option>`).join('')}
+              ${types.map(t => `<option value="${t}" ${currentType === t ? 'selected' : ''}>${t}</option>`).join('')}
               <option value="__NEW__">+ Aggiungi nuovo...</option>
             </select>
           </div>
@@ -2964,7 +3003,7 @@ document.addEventListener('click', async e => {
     case 'del-loan':
       if (confirm('Eliminare questo prestito?')) { await sbDel('fnz_loans', `id=eq.${t.dataset.id}`); await reload(); }
       break;
-    case 'new-other-asset':  openOtherAssetModal(); break;
+    case 'new-other-asset':  openOtherAssetModal(null, t.dataset.preType || null); break;
     case 'edit-other-asset': openOtherAssetModal(t.dataset.id); break;
     case 'del-other-asset':
       if (confirm('Eliminare questo asset?')) { await sbDel('fnz_other_assets', `id=eq.${t.dataset.id}`); await reload(); }
