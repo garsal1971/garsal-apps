@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Rosa v1.2.0</title>
+  <title>Situazione Rosa v1.2.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -189,8 +189,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.2.0';
-    const BUILD_TIME  = '2026-06-11T17:30:00Z';
+    const APP_VERSION = 'v1.2.1';
+    const BUILD_TIME  = '2026-06-11T20:45:00Z';
     console.log('%c SITUAZIONE ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#db2777;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -591,8 +591,10 @@
       document.getElementById('tot-voce').textContent = fmtEUR(allVoce);
       
       if (S.latestSaldo) {
-        document.getElementById('tot-saldo').textContent = fmtEUR(S.latestSaldo.saldo_contabile);
-        document.getElementById('saldo-date').textContent = 'al ' + fmtDate(S.latestSaldo.data);
+        const saldoTxt = fmtEUR(S.latestSaldo.saldo_contabile);
+        document.getElementById('tot-saldo').textContent = saldoTxt;
+        document.getElementById('tot-saldo-bottom').textContent = saldoTxt;
+        document.getElementById('saldo-date').textContent = fmtDate(S.latestSaldo.data);
       }
 
       // Expected Payments
