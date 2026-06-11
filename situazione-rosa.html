@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Rosa</title>
+  <title>Situazione Rosa v1.1.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -189,8 +189,18 @@
   </div>
 
   <script>
+    const APP_VERSION = 'v1.1.0';
+    const BUILD_TIME  = '2026-06-11T16:30:00Z';
+    console.log('%c SITUAZIONE ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        'background:#db2777;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+        'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
     const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+    // Solo questi utenti possono usare questa pagina (la vera protezione
+    // dei dati è comunque lato server, via RLS su Supabase)
+    const ALLOWED_EMAILS = ['r.bertuglia@yahoo.it', 'garsal1971@gmail.com'];
 
     let S = {
       session: null,
@@ -321,6 +331,16 @@
           if (!ns) { logout(); return; }
         }
 
+        // Allowlist: questa pagina è riservata a Rosa (e al proprietario)
+        const email = (S.session.user?.email || '').toLowerCase();
+        if (!ALLOWED_EMAILS.includes(email)) {
+          logout();
+          const errEl = document.getElementById('login-error');
+          errEl.textContent = 'Questo account non è autorizzato ad accedere a questa pagina.';
+          errEl.classList.remove('hidden');
+          return;
+        }
+
         document.getElementById('screen-login').classList.add('hidden');
         document.getElementById('screen-app').classList.remove('hidden');
         document.getElementById('btn-logout').classList.remove('hidden');
@@ -332,16 +352,26 @@
 
     document.getElementById('login-form').onsubmit = async (e) => {
       e.preventDefault();
-      const email = document.getElementById('login-email').value;
+      const email = document.getElementById('login-email').value.trim().toLowerCase();
       const btn = e.target.querySelector('button');
+
+      if (!ALLOWED_EMAILS.includes(email)) {
+        document.getElementById('login-error').textContent = 'Email non autorizzata per questa pagina.';
+        document.getElementById('login-error').classList.remove('hidden');
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = 'Invio in corso...';
-      
+
       try {
-        const r = await fetch(`${SUPABASE_URL}/auth/v1/magiclink`, {
+        // create_user:false → questo form non può creare nuovi account;
+        // redirect_to come query param (è ciò che GoTrue legge davvero)
+        const redirectTo = encodeURIComponent(location.origin + location.pathname);
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/otp?redirect_to=${redirectTo}`, {
           method: 'POST',
           headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, options: { emailRedirectTo: location.origin + location.pathname } }),
+          body: JSON.stringify({ email, create_user: false }),
         });
         if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
         document.getElementById('login-success').classList.remove('hidden');
