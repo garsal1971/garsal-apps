@@ -2513,7 +2513,7 @@ async function loadDecisionAlerts() {
   if (!token) { console.log('[alerts] no token'); return; }
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/dc_decisions?show_home_alert=eq.true&status=eq.active&select=title`,
+      `${SUPABASE_URL}/rest/v1/dc_decisions?show_home_alert=eq.true&status=eq.active&select=id,title`,
       { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
     );
     console.log('[alerts] status:', res.status);
@@ -2524,15 +2524,30 @@ async function loadDecisionAlerts() {
     }
     const rows = await res.json();
     console.log('[alerts] righe:', rows.length, rows);
+
+    // Filtra quelle già chiuse oggi
+    const today = new Date().toISOString().slice(0, 10);
+    const dismissedKey = 'alerts_dismissed_' + today;
+    const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+    const visible = rows.filter(r => !dismissed.includes(r.id));
+
     const banner = document.getElementById('decision-alerts-banner');
     if (!banner) return;
-    if (!rows.length) { banner.style.display = 'none'; return; }
+    if (!visible.length) { banner.style.display = 'none'; return; }
+
     banner.style.display = 'block';
-    banner.innerHTML = '🔔 Decisioni in evidenza: ' +
-      rows.map(r => `<span onclick="window.location.href='decisions.html'" style="background:rgba(255,255,255,0.2);border-radius:4px;padding:2px 8px;margin:0 3px;cursor:pointer;text-decoration:underline;">${r.title}</span>`).join('');
+    banner.innerHTML = '🔔 ' +
+      visible.map(r => `<span onclick="dismissAlert('${r.id}', '${dismissedKey}')" style="background:rgba(255,255,255,0.2);border-radius:4px;padding:2px 10px;margin:0 3px;cursor:pointer;">✕ ${r.title}</span>`).join('');
   } catch(e) {
     console.warn('[alerts] eccezione:', e);
   }
+}
+
+function dismissAlert(id, key) {
+  const dismissed = JSON.parse(localStorage.getItem(key) || '[]');
+  if (!dismissed.includes(id)) dismissed.push(id);
+  localStorage.setItem(key, JSON.stringify(dismissed));
+  loadDecisionAlerts();
 }
 
 // ── HAMBURGER MENU ──
