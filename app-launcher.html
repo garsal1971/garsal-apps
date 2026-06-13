@@ -2510,14 +2510,20 @@ async function loadApps() {
 
 async function loadDecisionAlerts() {
   const token = localStorage.getItem('sb_token');
-  if (!token) return;
+  if (!token) { console.log('[alerts] no token'); return; }
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/dc_decisions?show_home_alert=eq.true&status=eq.active&select=title`,
       { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
     );
-    if (!res.ok) return;
+    console.log('[alerts] status:', res.status);
+    if (!res.ok) {
+      const txt = await res.text();
+      console.warn('[alerts] errore risposta:', txt);
+      return;
+    }
     const rows = await res.json();
+    console.log('[alerts] righe:', rows.length, rows);
     const banner = document.getElementById('decision-alerts-banner');
     if (!banner) return;
     if (!rows.length) { banner.style.display = 'none'; return; }
@@ -2525,7 +2531,7 @@ async function loadDecisionAlerts() {
     banner.innerHTML = '🔔 Decisioni in evidenza: ' +
       rows.map(r => `<span style="background:rgba(255,255,255,0.2);border-radius:4px;padding:0 6px;margin:0 3px;">${r.title}</span>`).join('');
   } catch(e) {
-    console.warn('loadDecisionAlerts:', e);
+    console.warn('[alerts] eccezione:', e);
   }
 }
 
