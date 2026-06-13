@@ -1389,6 +1389,9 @@
   </button>
 </div>
 
+<!-- DECISION ALERTS BANNER -->
+<div id="decision-alerts-banner" style="display:none; background:linear-gradient(135deg,#7B2FBE,#EE334E); color:#fff; padding:0.6rem 1rem; font-size:0.82rem; font-weight:600; position:relative; z-index:200; line-height:1.4;"></div>
+
 <!-- HAMBURGER DROPDOWN -->
 <div id="hamburger-menu">
   <button class="hm-item" onclick="closeHamburgerMenu(); window.open('comandi.html','_blank');">🛠 Comandi</button>
@@ -2502,6 +2505,28 @@ async function loadApps() {
   }));
 
   render(apps);
+  loadDecisionAlerts();
+}
+
+async function loadDecisionAlerts() {
+  const token = localStorage.getItem('sb_token');
+  if (!token) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/dc_decisions?show_home_alert=eq.true&status=eq.active&select=title`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
+    );
+    if (!res.ok) return;
+    const rows = await res.json();
+    const banner = document.getElementById('decision-alerts-banner');
+    if (!banner) return;
+    if (!rows.length) { banner.style.display = 'none'; return; }
+    banner.style.display = 'block';
+    banner.innerHTML = '🔔 Decisioni in evidenza: ' +
+      rows.map(r => `<span style="background:rgba(255,255,255,0.2);border-radius:4px;padding:0 6px;margin:0 3px;">${r.title}</span>`).join('');
+  } catch(e) {
+    console.warn('loadDecisionAlerts:', e);
+  }
 }
 
 // ── HAMBURGER MENU ──
