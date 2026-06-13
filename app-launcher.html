@@ -2529,7 +2529,7 @@ async function loadDecisionAlerts() {
     if (!rows.length) { banner.style.display = 'none'; return; }
     banner.style.display = 'block';
     banner.innerHTML = '🔔 Decisioni in evidenza: ' +
-      rows.map(r => `<span style="background:rgba(255,255,255,0.2);border-radius:4px;padding:0 6px;margin:0 3px;">${r.title}</span>`).join('');
+      rows.map(r => `<span onclick="window.location.href='decisions.html'" style="background:rgba(255,255,255,0.2);border-radius:4px;padding:2px 8px;margin:0 3px;cursor:pointer;text-decoration:underline;">${r.title}</span>`).join('');
   } catch(e) {
     console.warn('[alerts] eccezione:', e);
   }
