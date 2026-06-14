@@ -2422,6 +2422,7 @@ function broadcastHiddenMode() {
 }
 
 function updateHiddenIndicator() {
+  loadDecisionAlerts();
   const el = document.getElementById('code-entry');
   if (!el) return;
   el.classList.toggle('active', hiddenMode);
@@ -2509,6 +2510,8 @@ async function loadApps() {
 }
 
 async function loadDecisionAlerts() {
+  const banner = document.getElementById('decision-alerts-banner');
+  if (!hiddenMode) { if (banner) banner.style.display = 'none'; return; }
   const token = localStorage.getItem('sb_token');
   if (!token) { console.log('[alerts] no token'); return; }
   try {
