@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.21.0</title>
+    <title>Tasks v19.21.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2471,8 +2471,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.21.0';
-        const BUILD_TIME  = '2026-05-28T10:00:00Z';
+        const APP_VERSION = 'v19.21.1';
+        const BUILD_TIME  = '2026-06-19T08:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -3058,8 +3058,7 @@
                 { id: crypto.randomUUID(), name: 'Media', value: 50, color: '#2563EB' },
                 { id: crypto.randomUUID(), name: 'Bassa', value: 25, color: '#6B7280' }
             ];
-            
-            priorities = defaultPriorities;
+
             try {
                 for (const priority of defaultPriorities) {
                     await sb.from('cm_priorities').insert([priority]);
@@ -3068,6 +3067,9 @@
             } catch (e) {
                 console.error('Error creating default priorities:', e);
             }
+            // Ricarica sempre dal DB per usare solo ID effettivamente presenti
+            const { data } = await sb.from('cm_priorities').select('*').order('value', { ascending: false });
+            priorities = data && data.length > 0 ? data : [];
         }
 
         async function addPriority() {
@@ -6757,12 +6759,15 @@
             const startDateRaw = document.getElementById('taskStartDate').value;
             const startDateValue = euToIso(startDateRaw) || startDateRaw || null;
             
+            const _rawPriorityId = document.getElementById('taskPriority').value || null;
+            const _validPriorityId = _rawPriorityId && priorities.some(p => p.id === _rawPriorityId) ? _rawPriorityId : null;
+
             const taskData = {
                 title: document.getElementById('taskTitle').value,
                 description: document.getElementById('taskDescription').value || null,
                 type: taskType,
                 categories: selectedCategories,
-                priority_id: document.getElementById('taskPriority').value || null,
+                priority_id: _validPriorityId,
                 start_date: startDateValue || localDateTimeStr(),
                 success_points: parseInt(document.getElementById('successPoints').value),
                 failure_points: parseInt(document.getElementById('failurePoints').value),
