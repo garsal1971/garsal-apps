@@ -108,9 +108,8 @@ Tables are namespaced by app prefix:
 |---|---|
 | `ts_tasks` | All tasks |
 | `ts_history` | Audit log of task state changes |
-| `ts_priorities` | Configurable priority levels |
+| `ts_priorities` | Configurable priority levels (read-only from tasks.html) |
 | `ts_settings` | Key-value app settings |
-| `ts_notes` | Free-form notes / appunti |
 
 **Task types** in `ts_tasks.type`:
 - `single` — one-off task with a `start_date`
@@ -143,6 +142,91 @@ Tables are namespaced by app prefix:
 
 ---
 
+## Funzioni RPC Supabase — Task lifecycle
+
+Le operazioni sul ciclo di vita dei task (complete, skip, fail) sono implementate come funzioni PostgreSQL `SECURITY DEFINER` nel DB. **Il client JavaScript deve sempre delegare a queste RPC e non reimplementare mai la logica lato client.**
+
+### Regola fondamentale
+
+> Tutta la logica di transizione di stato dei task (calcolo prossima occorrenza, aggiornamento `ts_tasks`, inserimento in `ts_history`, aggiornamento/eliminazione `cm_notification_rules`) vive esclusivamente nelle RPC server-side. Il JS chiama la RPC e poi ricarica i dati.
+
+### Funzioni disponibili
+
+| Funzione | File migration | Parametri | Descrizione |
+|---|---|---|---|
+| `task_complete` | `20260518100000_task_complete.sql` | `p_task_id uuid, p_today date` | Completa un task |
+| `task_skip` | `20260619100000_task_skip.sql` | `p_task_id uuid, p_days integer DEFAULT 1` | Salta un task alla prossima occorrenza |
+| `task_fail` | `20260619110000_task_fail.sql` | `p_task_id uuid` | Segna un task come fallito |
+| `task_next_recurring_date` | `20260520110000_fix_task_next_recurring_date.sql` | `p_task ts_tasks, p_base date` | Calcola la prossima data per task `recurring` |
+
+Tutte le funzioni restituiscono `jsonb` con la struttura:
+```json
+{ "ok": true, "action": "completed|skipped|failed", "points": 10, "type": "single", "next": "<timestamptz>" }
+```
+In caso di errore: `{ "ok": false, "error": "messaggio" }`.
+
+### Comportamento per tipo di task
+
+#### `task_complete`
+| Tipo | Comportamento |
+|---|---|
+| `single` | status → `terminated`, inserisce record `terminated` in history, elimina notification rules |
+| `simple_recurring` | next = current + `repeat_after_days`, status → `completed`, aggiorna notification |
+| `recurring` | chiama `task_next_recurring_date()`; se null → `terminated`; altrimenti → `completed` + aggiorna notification |
+| `multiple` | trova prossima data in `multiple_dates[]`; se esiste → `completed`; altrimenti → `terminated` + elimina notification |
+| `workflow` | controlla tutti gli step; se tutti done → `terminated`; se parziale → risponde senza modificare status |
+| `free_repeat` | status → `completed`, aggiorna `last_completed_date`, nessuna prossima occorrenza |
+
+#### `task_skip`
+`p_days` è usato solo per il tipo `single` (quanti giorni spostare). Per tutti gli altri tipi viene ignorato.
+
+| Tipo | Comportamento |
+|---|---|
+| `single` | next = current + `p_days`, status → `skipped`, aggiorna notification |
+| `simple_recurring` | next = current + `repeat_after_days`, status → `skipped`, aggiorna notification |
+| `recurring` | chiama `task_next_recurring_date()`; se null → errore; altrimenti status → `skipped` + aggiorna notification |
+| `multiple` | trova prossima data in `multiple_dates[]`; se esiste → `skipped`; se era l'ultima → `terminated` + elimina notification |
+| `free_repeat` | restituisce errore (non supporta skip) |
+
+#### `task_fail`
+| Tipo | Comportamento |
+|---|---|
+| `single` | status → `terminated`, inserisce record `terminated` in history, elimina notification rules |
+| `simple_recurring` | next = current + `repeat_after_days`, status → `failed`, aggiorna notification |
+| `recurring` | chiama `task_next_recurring_date()`; se null → `terminated`; altrimenti → `failed` + aggiorna notification |
+| `multiple` | trova prossima data in `multiple_dates[]`; se esiste → `failed`; se era l'ultima → `terminated` + elimina notification |
+
+### Pattern JS corretto (tasks.html)
+
+```js
+// CORRETTO — delega tutto al server
+const { data: result, error } = await sb.rpc('task_skip', { p_task_id: id, p_days: 3 });
+if (error || !result?.ok) { alert('Errore: ' + (error?.message || result?.error)); return; }
+await loadTasks();
+await loadHistory();
+if (result.next) await updateSmartBlockFireAt(id, new Date(result.next).toISOString());
+
+// SBAGLIATO — non calcolare mai la prossima data lato JS
+// const nextDate = new Date(task.next_occurrence_date);
+// nextDate.setDate(nextDate.getDate() + task.repeat_after_days);  // ← da non fare
+```
+
+### Dettaglio tecnico: `v_time_of_day`
+
+Tutte le RPC preservano l'orario originale del task quando calcolano la prossima occorrenza:
+```sql
+v_time_of_day := COALESCE(v_task.start_date, now())
+                 - date_trunc('day', COALESCE(v_task.start_date, now()));
+-- poi: v_next_ts := v_next_date::timestamptz + v_time_of_day;
+```
+Questo garantisce che un task impostato alle 09:00 rimanga alle 09:00 su ogni occorrenza successiva.
+
+### Aggiornamento migration
+
+Le migration vengono applicate **automaticamente** al push su `claude/**` tramite `.github/workflows/deploy.yml` (step `Apply Supabase migrations` → `supabase db push`). Non è necessaria nessuna azione manuale.
+
+---
+
 ## App Details
 
 ### `app-launcher.html` — AppSphere
@@ -153,11 +237,13 @@ Tables are namespaced by app prefix:
 - Color palette: Olympic rings colors (`#0081C8`, `#FCB131`, `#1A1A1A`, `#00A651`, `#EE334E`)
 
 ### `tasks.html` — Tasks
-- Full task lifecycle: create, edit, complete, clone, delete
+- Full task lifecycle: create, edit, complete, skip, fail, clone, delete
 - Calendar/planner view with recurring task support
 - European date format display (`dd/mm/yyyy`) with ISO storage
-- Sidebar sections: Dashboard, Categories, Planner, Reminders, Notes, Priority settings, Settings
-- Significant file (~8 900 lines); sections delineated by `// ========================================` comments
+- Sidebar sections: Dashboard, Gestione (tasks only), Planner, Reminder, Impostazioni
+- FAB `+` apre direttamente la creazione task
+- `cm_priorities` e `cm_categories` sono **sola lettura** in tasks.html — la gestione CRUD è in AppSphere → Dati Comuni
+- Significant file (~8 500 lines); sections delineated by `// ========================================` comments
 
 ### `habit-tracker.html` — Habit Stack Tracker
 - Stack-based habits with daily completion tracking
