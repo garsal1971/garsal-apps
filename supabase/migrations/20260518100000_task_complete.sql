@@ -152,7 +152,9 @@ BEGIN
       INTO v_dates
       FROM unnest(v_task.multiple_dates) AS d;
 
-    v_cur_str := split_part(COALESCE(v_task.next_occurrence_date::text, ''), 'T', 1);
+    -- FIX: ::date::text → 'YYYY-MM-DD', compatibile con i valori in multiple_dates[]
+    -- (split_part(timestamptz::text,'T',1) non funziona: PG usa spazio, non 'T')
+    v_cur_str := COALESCE(v_task.next_occurrence_date::date::text, '');
 
     FOR j IN 1..array_length(v_dates, 1) LOOP
       IF v_dates[j] = v_cur_str THEN
