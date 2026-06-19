@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.21.1</title>
+    <title>Tasks v19.21.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1794,25 +1794,14 @@
                 
                 <div class="card">
                     <h3 style="margin-bottom: 1.5rem;">🎯 Priorità Task</h3>
-                    
+
                     <div class="form-group">
-                        <label class="form-label">Gestisci Livelli di Priorità</label>
-                        <small style="opacity: 0.7; display: block; margin: 0.3rem 0 0.5rem 0;">
-                            Personalizza i livelli di priorità disponibili per i task
+                        <label class="form-label">Livelli di Priorità</label>
+                        <small style="opacity: 0.7; display: block; margin: 0.3rem 0 0.8rem 0;">
+                            Le priorità sono gestite centralmente e condivise tra le app.
                         </small>
-                        <div id="prioritiesList" style="margin-bottom: 1rem;"></div>
+                        <div id="prioritiesList"></div>
                     </div>
-                    
-                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 0.5rem; margin-bottom: 1rem;">
-                        <input type="text" class="form-input" id="newPriorityName" placeholder="Nome (es. Urgente)">
-                        <input type="number" class="form-input" id="newPriorityValue" placeholder="Valore" min="0" max="100">
-                        <input type="color" class="form-input" id="newPriorityColor" value="#FF3366">
-                        <button class="btn btn-primary" onclick="addPriority()">+ Aggiungi</button>
-                    </div>
-                    
-                    <small style="opacity: 0.7; display: block;">
-                        Il valore numerico determina l'ordine (più alto = più importante)
-                    </small>
                 </div>
                 
                 <div class="card">
@@ -2471,8 +2460,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.21.1';
-        const BUILD_TIME  = '2026-06-19T08:00:00Z';
+        const APP_VERSION = 'v19.21.2';
+        const BUILD_TIME  = '2026-06-19T09:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -3036,128 +3025,12 @@
                 const { data, error } = await sb.from('cm_priorities').select('*').order('value', { ascending: false });
                 if (error) {
                     console.error('Error loading priorities:', error);
-                    await initializeDefaultPriorities();
                 } else {
-                    if (data && data.length > 0) {
-                        priorities = data;
-                    } else {
-                        await initializeDefaultPriorities();
-                    }
+                    priorities = data || [];
                     console.log('Priorities loaded:', priorities);
                 }
             } catch (e) {
                 console.error('Exception loading priorities:', e);
-                await initializeDefaultPriorities();
-            }
-        }
-
-        async function initializeDefaultPriorities() {
-            const defaultPriorities = [
-                { id: crypto.randomUUID(), name: 'Urgente', value: 100, color: '#E74C3C' },
-                { id: crypto.randomUUID(), name: 'Alta', value: 75, color: '#F39C12' },
-                { id: crypto.randomUUID(), name: 'Media', value: 50, color: '#2563EB' },
-                { id: crypto.randomUUID(), name: 'Bassa', value: 25, color: '#6B7280' }
-            ];
-
-            try {
-                for (const priority of defaultPriorities) {
-                    await sb.from('cm_priorities').insert([priority]);
-                }
-                console.log('Default priorities created');
-            } catch (e) {
-                console.error('Error creating default priorities:', e);
-            }
-            // Ricarica sempre dal DB per usare solo ID effettivamente presenti
-            const { data } = await sb.from('cm_priorities').select('*').order('value', { ascending: false });
-            priorities = data && data.length > 0 ? data : [];
-        }
-
-        async function addPriority() {
-            const name = document.getElementById('newPriorityName').value.trim();
-            const value = parseInt(document.getElementById('newPriorityValue').value);
-            const color = document.getElementById('newPriorityColor').value;
-            
-            if (!name || isNaN(value)) {
-                alert('Inserisci nome e valore validi');
-                return;
-            }
-            
-            const newPriority = {
-                id: crypto.randomUUID(),
-                name: name,
-                value: value,
-                color: color
-            };
-            
-            try {
-                const { error } = await sb.from('cm_priorities').insert([newPriority]);
-                if (error) throw error;
-                
-                priorities.push(newPriority);
-                priorities.sort((a, b) => b.value - a.value);
-                
-                document.getElementById('newPriorityName').value = '';
-                document.getElementById('newPriorityValue').value = '';
-                document.getElementById('newPriorityColor').value = '#FF3366';
-                
-                renderPrioritiesList();
-                updatePrioritySelects();
-                showToast('✅ Priorità aggiunta');
-            } catch (error) {
-                console.error('Error adding priority:', error);
-                alert('Errore aggiunta priorità');
-            }
-        }
-
-        async function deletePriority(id) {
-            if (!await customConfirm('Eliminare questa priorità?')) return;
-            
-            try {
-                const { error } = await sb.from('cm_priorities').delete().eq('id', id);
-                if (error) throw error;
-                
-                priorities = priorities.filter(p => p.id !== id);
-                renderPrioritiesList();
-                updatePrioritySelects();
-                showToast('✅ Priorità eliminata');
-            } catch (error) {
-                console.error('Error deleting priority:', error);
-                alert('Errore eliminazione priorità');
-            }
-        }
-
-        async function editPriority(id) {
-            const priority = priorities.find(p => p.id === id);
-            if (!priority) return;
-            
-            const newName = prompt('Nuovo nome:', priority.name);
-            if (!newName) return;
-            
-            const newValue = parseInt(prompt('Nuovo valore (0-100):', priority.value));
-            if (isNaN(newValue)) return;
-            
-            const newColor = prompt('Nuovo colore (hex):', priority.color);
-            if (!newColor) return;
-            
-            try {
-                const { error } = await sb.from('cm_priorities').update({
-                    name: newName,
-                    value: newValue,
-                    color: newColor
-                }).eq('id', id);
-                
-                if (error) throw error;
-                
-                const index = priorities.findIndex(p => p.id === id);
-                priorities[index] = { ...priority, name: newName, value: newValue, color: newColor };
-                priorities.sort((a, b) => b.value - a.value);
-                
-                renderPrioritiesList();
-                updatePrioritySelects();
-                showToast('✅ Priorità aggiornata');
-            } catch (error) {
-                console.error('Error updating priority:', error);
-                alert('Errore aggiornamento priorità');
             }
         }
 
@@ -3171,16 +3044,10 @@
             }
             
             listEl.innerHTML = priorities.map(p => `
-                <div class="card" style="background: ${p.color}15; border: 2px solid ${p.color}; margin-bottom: 0.5rem; padding: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div style="width: 20px; height: 20px; background: ${p.color};"></div>
-                        <strong style="color: ${p.color};">${p.name}</strong>
-                        <span style="opacity: 0.7; font-size: 0.9rem;">(${p.value})</span>
-                    </div>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-small btn-secondary" onclick="editPriority('${p.id}')">✏️</button>
-                        <button class="btn btn-small btn-danger" onclick="deletePriority('${p.id}')">🗑️</button>
-                    </div>
+                <div class="card" style="background: ${p.color}15; border: 2px solid ${p.color}; margin-bottom: 0.5rem; padding: 0.5rem; display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 20px; height: 20px; background: ${p.color}; flex-shrink: 0;"></div>
+                    <strong style="color: ${p.color};">${p.name}</strong>
+                    <span style="opacity: 0.7; font-size: 0.9rem;">(${p.value})</span>
                 </div>
             `).join('');
         }
