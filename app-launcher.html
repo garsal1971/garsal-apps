@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.82</title>
+<title>AppSphere v1.5.84</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1353,7 +1353,126 @@
   }
   #code-confirm:hover { color: #fff; }
 
-</style>
+  /* ── DATI COMUNI MODAL ── */
+  #daticomuni-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.48);
+    z-index: 700;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  #daticomuni-overlay.open { display: flex; }
+  #daticomuni-modal {
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    width: 100%;
+    max-width: 600px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #daticomuni-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  #daticomuni-header h2 { font-size: 16px; font-weight: 700; color: #222; margin: 0; }
+  #daticomuni-header button { background: none; border: none; font-size: 20px; cursor: pointer; color: #888; padding: 2px 6px; }
+  #daticomuni-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .dc-tab {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #888;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .dc-tab.active { color: #FF3366; border-bottom-color: #FF3366; }
+  #daticomuni-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 16px 20px 24px;
+  }
+  .dc-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: #f9f9f9;
+    border: 1px solid #eee;
+  }
+  .dc-item-color { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; }
+  .dc-item-name { flex: 1; font-size: 14px; font-weight: 600; color: #222; }
+  .dc-item-meta { font-size: 12px; color: #999; }
+  .dc-item-actions { display: flex; gap: 6px; }
+  .dc-btn-sm {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .dc-btn-edit { background: #f0f0f0; color: #444; }
+  .dc-btn-del { background: #ffeaea; color: #E74C3C; }
+  .dc-add-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 14px;
+    background: #f9f9f9;
+    border-radius: 12px;
+    border: 1px dashed #ddd;
+  }
+  .dc-add-form h4 { margin: 0 0 6px; font-size: 13px; color: #555; }
+  .dc-input {
+    padding: 9px 12px;
+    border: 1.5px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    background: #fff;
+    color: #222;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .dc-input:focus { outline: none; border-color: #FF3366; }
+  .dc-row { display: flex; gap: 8px; }
+  .dc-btn-add {
+    padding: 9px 16px;
+    background: #FF3366;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .dc-btn-add:hover { opacity: 0.88; }
+  .dc-empty { text-align: center; color: #aaa; padding: 24px 0; font-size: 14px; }
+
+
 </head>
 <body>
 
@@ -1399,6 +1518,7 @@
   <button class="hm-item" onclick="closeHamburgerMenu(); openBadgeSettings();">⚙ Badge</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNotifiche();">🔔 Notifiche</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNqv();">⚡ Notifica al Volo</button>
+  <button class="hm-item" onclick="closeHamburgerMenu(); openDatiComuni();">🗂 Dati Comuni</button>
   <button class="hm-item danger" onclick="closeHamburgerMenu(); logout();">↩ Esci</button>
 </div>
 
@@ -1469,6 +1589,23 @@
 
       <button id="profilo-save-btn" onclick="saveProfilo()">💾 Salva profilo</button>
       <div id="profilo-saved-msg">✅ Profilo salvato!</div>
+    </div>
+  </div>
+</div>
+
+<!-- DATI COMUNI MODAL -->
+<div id="daticomuni-overlay" onclick="handleDatiComuniOverlayClick(event)">
+  <div id="daticomuni-modal">
+    <div id="daticomuni-header">
+      <h2>🗂 Dati Comuni</h2>
+      <button onclick="closeDatiComuni()">✕</button>
+    </div>
+    <div id="daticomuni-tabs">
+      <button class="dc-tab active" id="dc-tab-priorities" onclick="switchDcTab('priorities')">🎯 Priorità</button>
+      <button class="dc-tab" id="dc-tab-categories" onclick="switchDcTab('categories')">🏷 Categorie</button>
+    </div>
+    <div id="daticomuni-body">
+      <!-- populated by JS -->
     </div>
   </div>
 </div>
@@ -1649,8 +1786,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.83';
-const BUILD_TIME  = '2026-06-02T18:21:00Z';
+const APP_VERSION = 'v1.5.84';
+const BUILD_TIME  = '2026-06-19T10:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3560,6 +3697,187 @@ document.getElementById('hidden-icon').addEventListener('click', () => {
   updateHiddenIndicator();
   loadApps();
 });
+
+// ── DATI COMUNI ──────────────────────────────────────────────────────────────
+
+let _dcTab = 'priorities';
+let _dcPriorities = [];
+let _dcCategories = [];
+
+function openDatiComuni() {
+  document.getElementById('daticomuni-overlay').classList.add('open');
+  loadDcData();
+}
+
+function closeDatiComuni() {
+  document.getElementById('daticomuni-overlay').classList.remove('open');
+}
+
+function handleDatiComuniOverlayClick(e) {
+  if (e.target === document.getElementById('daticomuni-overlay')) closeDatiComuni();
+}
+
+function switchDcTab(tab) {
+  _dcTab = tab;
+  document.getElementById('dc-tab-priorities').classList.toggle('active', tab === 'priorities');
+  document.getElementById('dc-tab-categories').classList.toggle('active', tab === 'categories');
+  renderDcBody();
+}
+
+async function loadDcData() {
+  const token = localStorage.getItem('sb_token');
+  const hdrs = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token };
+  const [rp, rc] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/cm_priorities?select=*&order=value.desc`, { headers: hdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/cm_categories?select=*&order=name.asc`, { headers: hdrs })
+  ]);
+  _dcPriorities = rp.ok ? await rp.json() : [];
+  _dcCategories = rc.ok ? await rc.json() : [];
+  renderDcBody();
+}
+
+function renderDcBody() {
+  const body = document.getElementById('daticomuni-body');
+  if (_dcTab === 'priorities') {
+    body.innerHTML = renderDcPriorities();
+  } else {
+    body.innerHTML = renderDcCategories();
+  }
+}
+
+function renderDcPriorities() {
+  const list = _dcPriorities.length === 0
+    ? `<div class="dc-empty">Nessuna priorità configurata</div>`
+    : _dcPriorities.map(p => `
+        <div class="dc-item">
+          <div class="dc-item-color" style="background:${p.color}"></div>
+          <span class="dc-item-name">${p.name}</span>
+          <span class="dc-item-meta">${p.value}</span>
+          <div class="dc-item-actions">
+            <button class="dc-btn-sm dc-btn-edit" onclick="editDcPriority('${p.id}')">✏️</button>
+            <button class="dc-btn-sm dc-btn-del" onclick="deleteDcPriority('${p.id}')">🗑</button>
+          </div>
+        </div>`).join('');
+  return `
+    ${list}
+    <div class="dc-add-form">
+      <h4>+ Nuova priorità</h4>
+      <input class="dc-input" id="dc-p-name" placeholder="Nome (es. Urgente)">
+      <div class="dc-row">
+        <input class="dc-input" id="dc-p-value" type="number" placeholder="Valore (0-100)" min="0" max="100" style="flex:1">
+        <input class="dc-input" id="dc-p-color" type="color" value="#FF3366" style="width:48px;padding:4px;">
+      </div>
+      <button class="dc-btn-add" onclick="addDcPriority()">Aggiungi</button>
+    </div>`;
+}
+
+function renderDcCategories() {
+  const list = _dcCategories.length === 0
+    ? `<div class="dc-empty">Nessuna categoria configurata</div>`
+    : _dcCategories.map(c => `
+        <div class="dc-item">
+          <div class="dc-item-color" style="background:${c.color};border-radius:6px;font-size:13px;display:flex;align-items:center;justify-content:center;">${c.icon || ''}</div>
+          <span class="dc-item-name">${c.name}</span>
+          <div class="dc-item-actions">
+            <button class="dc-btn-sm dc-btn-edit" onclick="editDcCategory('${c.id}')">✏️</button>
+            <button class="dc-btn-sm dc-btn-del" onclick="deleteDcCategory('${c.id}')">🗑</button>
+          </div>
+        </div>`).join('');
+  return `
+    ${list}
+    <div class="dc-add-form">
+      <h4>+ Nuova categoria</h4>
+      <input class="dc-input" id="dc-c-name" placeholder="Nome categoria">
+      <div class="dc-row">
+        <input class="dc-input" id="dc-c-icon" placeholder="Icona emoji" style="flex:1">
+        <input class="dc-input" id="dc-c-color" type="color" value="#2563EB" style="width:48px;padding:4px;">
+      </div>
+      <button class="dc-btn-add" onclick="addDcCategory()">Aggiungi</button>
+    </div>`;
+}
+
+async function addDcPriority() {
+  const name  = document.getElementById('dc-p-name').value.trim();
+  const value = parseInt(document.getElementById('dc-p-value').value);
+  const color = document.getElementById('dc-p-color').value;
+  if (!name || isNaN(value)) { alert('Inserisci nome e valore'); return; }
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_priorities`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ id: crypto.randomUUID(), name, value, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function deleteDcPriority(id) {
+  if (!confirm('Eliminare questa priorità?')) return;
+  const token = localStorage.getItem('sb_token');
+  await fetch(`${SUPABASE_URL}/rest/v1/cm_priorities?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+  });
+  await loadDcData();
+}
+
+async function editDcPriority(id) {
+  const p = _dcPriorities.find(x => x.id === id);
+  if (!p) return;
+  const name  = prompt('Nome:', p.name); if (!name) return;
+  const value = parseInt(prompt('Valore (0-100):', p.value)); if (isNaN(value)) return;
+  const color = prompt('Colore hex:', p.color); if (!color) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_priorities?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ name, value, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function addDcCategory() {
+  const name  = document.getElementById('dc-c-name').value.trim();
+  const icon  = document.getElementById('dc-c-icon').value.trim() || '📌';
+  const color = document.getElementById('dc-c-color').value;
+  if (!name) { alert('Inserisci il nome'); return; }
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_categories`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ id: crypto.randomUUID(), name, icon, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function deleteDcCategory(id) {
+  if (!confirm('Eliminare questa categoria?')) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_categories?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function editDcCategory(id) {
+  const c = _dcCategories.find(x => x.id === id);
+  if (!c) return;
+  const name  = prompt('Nome:', c.name); if (!name) return;
+  const icon  = prompt('Icona emoji:', c.icon || ''); if (icon === null) return;
+  const color = prompt('Colore hex:', c.color); if (!color) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_categories?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ name, icon, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
 
 // ── PWA Service Worker ───────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
