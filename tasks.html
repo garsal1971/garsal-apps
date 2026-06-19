@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.21.2</title>
+    <title>Tasks v19.22.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1570,8 +1570,8 @@
         <!-- Mobile Menu Toggle -->
         <button class="menu-toggle" onclick="toggleMenu()">☰</button>
         
-        <!-- Quick Add Note Button (opposite to hamburger) -->
-        <button class="quick-add-note" onclick="showQuickNoteModal()" title="Aggiungi Appunto Veloce">+</button>
+        <!-- Quick Add Task Button -->
+        <button class="quick-add-note" onclick="showCreateTaskModal()" title="Nuovo Task">+</button>
 
         <!-- Hidden Mode FAB -->
         <button class="hidden-mode-fab" id="hiddenModeFab" onclick="toggleHiddenMode()" title="Modalità Nascosta">🙈</button>
@@ -1696,14 +1696,6 @@
                 <div id="tasksList"></div>
             </div>
 
-            <!-- Categories -->
-            <div id="categoriesPage" class="hidden">
-                <div class="page-header">
-                    <button class="btn btn-primary" onclick="createCategory()">Nuova Categoria</button>
-                </div>
-                <div id="categoriesList"></div>
-            </div>
-
             <!-- Planner Page -->
             <div id="plannerPage">
                 
@@ -1729,18 +1721,8 @@
                 <div id="calendarContainer"></div>
             </div>
 
-            <!-- Management Page (Tasks, Categories, Notes) -->
+            <!-- Management Page -->
             <div id="managementPage" class="hidden">
-                <!-- Tab Selector -->
-                <div class="card" style="margin-bottom: 1.5rem;">
-                    <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-primary" onclick="switchManagementView('tasks')" id="btnTasksView" style="flex: 1; min-width: 0;">Attività</button>
-                        <button class="btn btn-secondary" onclick="switchManagementView('categories')" id="btnCategoriesView" style="flex: 1; min-width: 0;">Categorie</button>
-                        <button class="btn btn-secondary" onclick="switchManagementView('notes')" id="btnNotesView" style="flex: 1; min-width: 0;">Appunti</button>
-                    </div>
-                </div>
-
-                <!-- Management Container -->
                 <div id="managementContainer"></div>
             </div>
 
@@ -1856,15 +1838,6 @@
                         <span>5 (Singolo, Ricorrente, Ricorrenza Semplice, Multiplo, Libera Ripetizione)</span>
                     </div>
                 </div>
-            </div>
-
-            <!-- Appunti -->
-            <div id="notesPage" class="hidden">
-                <div class="page-header">
-                    <button class="btn btn-primary" onclick="showAddNoteModal()">Nuovo Appunto</button>
-                </div>
-
-                <div id="notesList"></div>
             </div>
 
         </main>
@@ -2372,20 +2345,6 @@
         </div>
     </div>
 
-    <!-- View Category Modal -->
-    <div id="viewCategoryModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Task della Categoria</h2>
-                <span class="modal-close" onclick="closeViewCategoryModal()">✕</span>
-            </div>
-            <div id="viewCategoryContent"></div>
-            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-                <button class="btn btn-secondary" onclick="closeViewCategoryModal()">Chiudi</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Categories Popup Modal -->
     <div id="categoriesPopupModal" class="modal">
         <div class="modal-content" style="max-width: 400px;">
@@ -2400,68 +2359,9 @@
         </div>
     </div>
 
-    <!-- Add/Edit Note Modal -->
-    <div id="noteModal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2 class="modal-title" id="noteModalTitle">Nuovo Appunto</h2>
-                <span class="modal-close" onclick="closeNoteModal()">✕</span>
-            </div>
-            <form id="noteForm" onsubmit="saveNote(event)">
-                <input type="hidden" id="editNoteId" value="">
-                
-                <div class="form-group">
-                    <label class="form-label">Titolo *</label>
-                    <input type="text" class="form-input" id="noteTitle" required placeholder="Es: Idea per progetto">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Data/Ora</label>
-                    <input type="text" class="form-input" id="noteDate" placeholder="GG-MM-AAAA HH:MM">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Contenuto</label>
-                    <textarea class="form-input" id="noteContent" rows="6" placeholder="Scrivi qui il tuo appunto..."></textarea>
-                </div>
-                
-                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                    <button type="submit" class="btn btn-primary">💾 Salva</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeNoteModal()">Annulla</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Quick Note Modal (Simple: only name and date) -->
-    <div id="quickNoteModal" class="modal">
-        <div class="modal-content" style="max-width: 400px;">
-            <div class="modal-header">
-                <h2 class="modal-title">📝 Appunto Veloce</h2>
-                <span class="modal-close" onclick="closeQuickNoteModal()">✕</span>
-            </div>
-            <form id="quickNoteForm" onsubmit="saveQuickNote(event)">
-                <div class="form-group">
-                    <label class="form-label">Nome *</label>
-                    <input type="text" class="form-input" id="quickNoteName" required placeholder="Es: Chiamare Mario" autofocus>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Data/Ora</label>
-                    <input type="text" class="form-input" id="quickNoteDate" placeholder="GG-MM-AAAA HH:MM">
-                </div>
-                
-                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                    <button type="submit" class="btn btn-primary">✓ Salva</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeQuickNoteModal()">Annulla</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
-        const APP_VERSION = 'v19.21.2';
-        const BUILD_TIME  = '2026-06-19T09:00:00Z';
+        const APP_VERSION = 'v19.22.0';
+        const BUILD_TIME  = '2026-06-19T11:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2630,13 +2530,10 @@
         let selectedCategories = [];
         let _setCreatedAtToNextOccurrence = false; // impostato in editTask(), letto in saveTask()
         let currentViewTaskId = null;
-        let notes = []; // Appunti
         let priorities = []; // Livelli di priorità
         let reminderPresets = []; // Preset promemoria da DB
         let fpStart = null;
         let fpDeadline = null;
-        let fpNoteDate = null;
-        let fpQuickNoteDate = null;
 
         const FP_OPTS_BASE = {
             locale: 'it',
@@ -2657,8 +2554,6 @@
                 }
             });
             fpDeadline = flatpickr(document.getElementById('taskDeadline'), FP_OPTS_BASE);
-            fpNoteDate = flatpickr(document.getElementById('noteDate'), FP_OPTS_BASE);
-            fpQuickNoteDate = flatpickr(document.getElementById('quickNoteDate'), FP_OPTS_BASE);
         }
 
         async function init() {
@@ -2697,8 +2592,6 @@
             console.log('Tasks loaded:', tasks.length);
             await loadHistory();
             console.log('History loaded:', history.length);
-            await loadNotes();
-            console.log('Notes loaded:', notes.length);
             renderCalendar();
             console.log('Planner rendered');
             
@@ -3481,8 +3374,6 @@
             if (page === 'dashboard') renderDashboard();
             if (page === 'tasks') renderTasks();
             if (page === 'planner') renderCalendar();
-            if (page === 'categories') renderCategories();
-            if (page === 'notes') renderNotes();
             if (page === 'management') renderManagement();
             if (page === 'promemoria') loadQueueItems();
             if (page === 'cronologia') renderHistoryPage();
@@ -4719,115 +4610,6 @@
                     groupElement.style.display = 'none';
                     iconElement.textContent = '▶';
                 }
-            }
-        }
-
-        function renderCategories(containerElement = document) {
-            // Aggiungi conteggio task per ordinamento
-            const categoriesWithCount = categories.map(cat => {
-                const taskCount = tasks.filter(t => t.categories?.some(cid => cid == cat.id)).length;
-                return { ...cat, taskCount };
-            });
-            
-            // Ordina per numero task (decrescente)
-            categoriesWithCount.sort((a, b) => b.taskCount - a.taskCount);
-            
-            const html = categoriesWithCount.map(cat => {
-                const taskCount = cat.taskCount;
-                const freeRepeatCount = tasks.filter(t => t.categories?.some(cid => cid == cat.id) && t.type === 'free_repeat').length;
-                const canDelete = taskCount === 0;
-                const showInDash = cat.show_in_dashboard || false;
-                
-                return `
-                    <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <!-- Header: icona + nome + mostra dashboard + toggle, tutto in una riga -->
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
-                            <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
-                                <div style="width: 44px; height: 44px; background: ${cat.color}; border-radius: 0; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;">
-                                    ${cat.icon}
-                                </div>
-                                <div style="min-width: 0;">
-                                    <h3 style="margin: 0; font-size: 1.1rem; color: #333; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${cat.name}</h3>
-                                    <p style="margin: 0.15rem 0 0 0; opacity: 0.6; font-size: 0.8rem;">${taskCount} task ${taskCount === 1 ? 'associato' : 'associati'}</p>
-                                </div>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
-                                <span style="font-size: 0.85rem; color: var(--accent); white-space: nowrap;">Mostra in Dashboard</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" ${showInDash ? 'checked' : ''} 
-                                           onchange="toggleDashboardVisibility('${cat.id}', this.checked)">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <!-- Action Buttons -->
-                        <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
-                            <button onclick="viewCategoryTasks('${cat.id}')" style="
-                                background: var(--accent);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                Vedi Task
-                            </button>
-                            <button onclick="editCategory('${cat.id}')" style="
-                                background: var(--primary);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                Modifica
-                            </button>
-                            ${canDelete ? 
-                                `<button onclick="deleteCategory('${cat.id}')" style="
-                                    background: var(--danger);
-                                    color: white;
-                                    border: none;
-                                    padding: 0.25rem 0.6rem;
-                                    border-radius: 0;
-                                    font-size: 0.9rem;
-                                    font-weight: 600;
-                                    cursor: pointer;
-                                    transition: all 0.2s ease;
-                                    white-space: nowrap;
-                                " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                    Elimina
-                                </button>` :
-                                `<button disabled title="Ci sono task associati" style="
-                                    background: #D1D5DB;
-                                    color: #9CA3AF;
-                                    border: none;
-                                    padding: 0.25rem 0.6rem;
-                                    border-radius: 0;
-                                    font-size: 0.9rem;
-                                    font-weight: 600;
-                                    cursor: not-allowed;
-                                    white-space: nowrap;
-                                ">
-                                    Elimina
-                                </button>`
-                            }
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            const listEl = containerElement.querySelector('#categoriesList');
-            if (listEl) {
-                listEl.innerHTML = html;
             }
         }
 
@@ -7723,286 +7505,6 @@
             updateNotificationStatus();
         }
         
-        // ========================================
-        // APPUNTI
-        // ========================================
-        
-        async function loadNotes() {
-            console.log('🔵 loadNotes() called');
-            try {
-                const { data, error } = await sb.from('ts_notes').select('*').order('date', { ascending: false });
-                console.log('🔵 Notes query result:', { data, error });
-                
-                if (error) {
-                    console.error('❌ Error loading notes:', error);
-                    alert('Errore caricamento appunti: ' + error.message);
-                    return;
-                }
-                
-                if (data) {
-                    notes = data;
-                    console.log('✅ Loaded notes:', notes.length, notes);
-                } else {
-                    notes = [];
-                    console.log('⚠️ No notes data returned');
-                }
-            } catch (err) {
-                console.error('❌ Exception in loadNotes:', err);
-                alert('Errore: ' + err.message);
-            }
-        }
-        
-        function renderNotes(containerElement = document) {
-            console.log('🔵 renderNotes() called, notes:', notes.length);
-            
-            const listEl = containerElement.querySelector('#notesList');
-            console.log('🔵 notesList element:', listEl);
-            
-            if (!listEl) {
-                console.error('❌ Element notesList not found!');
-                return;
-            }
-            
-            if (!notes || notes.length === 0) {
-                console.log('⚠️ No notes to display');
-                listEl.innerHTML = '<div class="card" style="background: white; border-radius: 0; padding: 1.0rem; text-align: center;"><p style="opacity: 0.7;">Nessun appunto. Clicca su "Nuovo Appunto" per iniziare.</p></div>';
-                return;
-            }
-            
-            const html = notes.map(note => {
-                const date = note.date ? new Date(note.date) : null;
-                const dateStr = date ? formatDateTime(date) : 'Nessuna data';
-                const content = note.content || '';
-                const preview = content.length > 150 ? content.substring(0, 150) + '...' : content;
-                
-                return `
-                    <div class="card" style="background: white; border-radius: 0; padding: 0.75rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                        <!-- Note Content -->
-                        <div style="margin-bottom: 1.5rem;">
-                            <div style="display: flex; align-items: flex-start; gap: 0.8rem;">
-                                <span style="font-size: 1.3rem; color: #666; min-width: 30px;">📝</span>
-                                <div style="flex: 1;">
-                                    <h3 style="margin: 0; font-size: 1.1rem; color: #333; font-weight: 600; line-height: 1.4;">${note.title}</h3>
-                                    <p style="opacity: 0.6; margin: 0.5rem 0 0 0; font-size: 0.85rem;">📅 ${dateStr}</p>
-                                    ${preview ? `<p style="opacity: 0.7; margin: 0.8rem 0 0 0; font-size: 0.9rem; line-height: 1.5;">${preview}</p>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Action Buttons -->
-                        <div style="display: flex; gap: 0.8rem; justify-content: flex-start; align-items: center;">
-                            <button onclick="editNote('${note.id}')" style="
-                                background: var(--primary);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                Modifica
-                            </button>
-                            <button onclick="convertNoteToTask('${note.id}')" style="
-                                background: var(--success);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="Converti in Task">
-                                Task
-                            </button>
-                            <button onclick="deleteNote('${note.id}')" style="
-                                background: var(--danger);
-                                color: white;
-                                border: none;
-                                padding: 0.25rem 0.6rem;
-                                border-radius: 0;
-                                font-size: 0.9rem;
-                                font-weight: 600;
-                                cursor: pointer;
-                                transition: all 0.2s ease;
-                                white-space: nowrap;
-                            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-                                Elimina
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-            console.log('✅ Generated HTML length:', html.length);
-            listEl.innerHTML = html;
-            console.log('✅ renderNotes completed');
-        }
-        
-        function showAddNoteModal() {
-            document.getElementById('noteModalTitle').textContent = 'Nuovo Appunto';
-            document.getElementById('editNoteId').value = '';
-            document.getElementById('noteForm').reset();
-            
-            // Imposta data/ora corrente
-            fpNoteDate.setDate(new Date(), false);
-
-            document.getElementById('noteModal').classList.add('active');
-        }
-        
-        function editNote(id) {
-            const note = notes.find(n => n.id === id);
-            if (!note) return;
-            
-            document.getElementById('noteModalTitle').textContent = 'Modifica Appunto';
-            document.getElementById('editNoteId').value = id;
-            document.getElementById('noteTitle').value = note.title;
-            if (note.date) fpNoteDate.setDate(note.date, false); else fpNoteDate.clear();
-            document.getElementById('noteContent').value = note.content || '';
-            
-            document.getElementById('noteModal').classList.add('active');
-        }
-        
-        async function saveNote(e) {
-            e.preventDefault();
-            
-            const noteId = document.getElementById('editNoteId').value;
-            const noteDateRaw = document.getElementById('noteDate').value;
-            const noteData = {
-                title: document.getElementById('noteTitle').value,
-                date: euToIso(noteDateRaw) || noteDateRaw || null,
-                content: document.getElementById('noteContent').value || null
-            };
-            
-            if (noteId) {
-                // UPDATE
-                const { data, error } = await sb.from('ts_notes').update(noteData).eq('id', noteId).select();
-                if (data) {
-                    const index = notes.findIndex(n => n.id === noteId);
-                    if (index !== -1) notes[index] = data[0];
-                }
-            } else {
-                // INSERT
-                const { data, error } = await sb.from('ts_notes').insert([noteData]).select();
-                if (data) {
-                    notes.unshift(data[0]);
-                }
-            }
-            
-            closeNoteModal();
-            renderNotes();
-        }
-        
-        async function deleteNote(id) {
-            if (!await customConfirm('Eliminare questo appunto?')) return;
-            
-            await sb.from('ts_notes').delete().eq('id', id);
-            notes = notes.filter(n => n.id !== id);
-            renderNotes();
-        }
-        
-        function convertNoteToTask(noteId) {
-            const note = notes.find(n => n.id === noteId);
-            if (!note) {
-                alert('Appunto non trovato');
-                return;
-            }
-            
-            // Apri il modal di creazione task
-            showCreateTaskModal();
-            
-            // Pre-compila i campi con i dati dell'appunto
-            document.getElementById('taskTitle').value = note.title;
-            
-            // Se c'è una data, impostala come start_date
-            if (note.date) {
-                fpStart.setDate(new Date(note.date), false);
-            }
-            
-            // Se c'è contenuto, mettilo nella descrizione
-            if (note.content) {
-                document.getElementById('taskDescription').value = note.content;
-            }
-            
-            // Trova la categoria "Appunti" se esiste
-            const appuntiCategory = categories.find(c => 
-                c.name.toLowerCase().includes('appunt') || 
-                c.name.toLowerCase().includes('note')
-            );
-            
-            if (appuntiCategory) {
-                selectedCategories = [appuntiCategory.id];
-                renderCategoriesSelect();
-            }
-            
-            // Mostra toast
-            showToast('📝 Appunto caricato nel form task!');
-            
-            // Opzionale: chiedi se vuoi eliminare l'appunto dopo la conversione
-            setTimeout(async () => {
-                if (await customConfirm('Vuoi eliminare l\'appunto originale dopo averlo convertito?')) {
-                    deleteNote(noteId);
-                }
-            }, 500);
-        }
-        
-        function closeNoteModal() {
-            document.getElementById('noteModal').classList.remove('active');
-        }
-
-        // ========================================
-        // QUICK NOTE (Appunto veloce dal bottone +)
-        // ========================================
-        
-        function showQuickNoteModal() {
-            document.getElementById('quickNoteForm').reset();
-            
-            // Imposta data/ora corrente
-            fpQuickNoteDate.setDate(new Date(), false);
-            
-            document.getElementById('quickNoteModal').classList.add('active');
-            
-            // Focus sul campo nome dopo un attimo (per mobile)
-            setTimeout(() => {
-                document.getElementById('quickNoteName').focus();
-            }, 100);
-        }
-        
-        async function saveQuickNote(e) {
-            e.preventDefault();
-            
-            const quickDateRaw = document.getElementById('quickNoteDate').value;
-            const noteData = {
-                title: document.getElementById('quickNoteName').value,
-                date: euToIso(quickDateRaw) || quickDateRaw || null,
-                content: null // Appunto veloce non ha contenuto
-            };
-            
-            // INSERT
-            const { data, error } = await sb.from('ts_notes').insert([noteData]).select();
-            if (data) {
-                notes.unshift(data[0]);
-            }
-            
-            closeQuickNoteModal();
-            
-            // Se siamo nella pagina appunti, aggiorna la lista
-            if (!document.getElementById('notesPage').classList.contains('hidden')) {
-                renderNotes();
-            }
-            
-            // Feedback visivo
-            showToast('✓ Appunto salvato!');
-        }
-        
-        function closeQuickNoteModal() {
-            document.getElementById('quickNoteModal').classList.remove('active');
-        }
-        
         function showToast(message) {
             // Crea toast temporaneo
             const toast = document.createElement('div');
@@ -8552,132 +8054,6 @@ Per attivarle:
                 alert('Errore nel salvare le impostazioni');
             }
         }
-        // CATEGORY MANAGEMENT
-        async function toggleDashboardVisibility(categoryId, show) {
-            console.log('Toggling dashboard visibility for category:', categoryId, 'to:', show);
-            
-            try {
-                const { data, error } = await sb.from('cm_categories')
-                    .update({ show_in_dashboard: show })
-                    .eq('id', categoryId)
-                    .select();
-                
-                if (error) {
-                    console.error('Error updating category:', error);
-                    alert('Errore nell\'aggiornamento: ' + error.message);
-                } else if (data) {
-                    const index = categories.findIndex(c => c.id === categoryId);
-                    if (index !== -1) categories[index] = data[0];
-                    console.log('Category updated successfully');
-                    renderDashboard(); // Aggiorna la dashboard
-                }
-            } catch (e) {
-                console.error('Exception updating category:', e);
-                alert('Errore: ' + e.message);
-            }
-        }
-
-        function editCategory(id) {
-            const cat = categories.find(c => c.id === id);
-            if (!cat) return;
-            
-            const newName = prompt('Nuovo nome categoria:', cat.name);
-            if (!newName) return;
-            
-            const newColor = prompt('Nuovo colore (es: #FF3366):', cat.color);
-            if (!newColor) return;
-            
-            const newIcon = prompt('Nuova icona emoji:', cat.icon);
-            if (!newIcon) return;
-            
-            updateCategory(id, newName, newColor, newIcon);
-        }
-
-        async function updateCategory(id, name, color, icon) {
-            const { data, error } = await sb.from('cm_categories')
-                .update({ name, color, icon })
-                .eq('id', id)
-                .select();
-            
-            if (data) {
-                const index = categories.findIndex(c => c.id === id);
-                if (index !== -1) categories[index] = data[0];
-                renderCategories();
-                renderTasks();
-                renderDashboard();
-            }
-        }
-
-        async function deleteCategory(id) {
-            const cat = categories.find(c => c.id == id);
-            if (!cat) return;
-            const taskCount = tasks.filter(t => t.categories?.some(cid => cid == id)).length;
-            
-            if (taskCount > 0) {
-                alert('Impossibile eliminare: ci sono ancora task associati a questa categoria');
-                return;
-            }
-            
-            if (!await customConfirm(`Eliminare la categoria "${cat.name}"?`)) return;
-            
-            await sb.from('cm_categories').delete().eq('id', id);
-            categories = categories.filter(c => c.id !== id);
-            renderCategories();
-        }
-
-        function viewCategoryTasks(categoryId) {
-            const cat = categories.find(c => c.id === categoryId);
-            if (!cat) return;
-            
-            const categoryTasks = tasks.filter(t => 
-                t.categories?.includes(categoryId) && ['started', 'completed', 'failed', 'skipped'].includes(t.status)
-            );
-            
-            let html = `
-                <div class="task-detail">
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">Categoria:</span>
-                        <span>${cat.icon} ${cat.name}</span>
-                    </div>
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">Colore:</span>
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <div style="width: 30px; height: 30px; background: ${cat.color}; border-radius: 0;"></div>
-                            <span>${cat.color}</span>
-                        </div>
-                    </div>
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">Task totali:</span>
-                        <span>${categoryTasks.length}</span>
-                    </div>
-                </div>
-                
-                <h3 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--accent);">Task associati:</h3>
-            `;
-            
-            if (categoryTasks.length === 0) {
-                html += '<p style="opacity: 0.7;">Nessun task in questa categoria</p>';
-            } else {
-                html += categoryTasks.map(task => {
-                    const typeLabel = task.type === 'single' ? '📅 Singolo' : '♾️ ' + getRecurringLabel(task);
-                    return `
-                        <div class="card" style="cursor: pointer;" onclick="closeViewCategoryModal(); viewTask('${task.id}')">
-                            <h3>${task.title}</h3>
-                            <p style="opacity: 0.7; margin-top: 0.3rem;">${typeLabel}</p>
-                            ${task.description ? `<p style="margin-top: 0.5rem; font-size: 0.9rem;">${task.description}</p>` : ''}
-                        </div>
-                    `;
-                }).join('');
-            }
-            
-            document.getElementById('viewCategoryContent').innerHTML = html;
-            document.getElementById('viewCategoryModal').classList.add('active');
-        }
-
-        function closeViewCategoryModal() {
-            document.getElementById('viewCategoryModal').classList.remove('active');
-        }
-
         function showCategoriesPopup(categoriesList) {
             const content = document.getElementById('categoriesPopupContent');
             content.innerHTML = categoriesList.map(cat => `
@@ -8732,12 +8108,6 @@ Per attivarle:
 
         function switchManagementView(view) {
             currentManagementView = view;
-            
-            // Aggiorna i bottoni
-            document.getElementById('btnTasksView').className = view === 'tasks' ? 'btn btn-primary' : 'btn btn-secondary';
-            document.getElementById('btnCategoriesView').className = view === 'categories' ? 'btn btn-primary' : 'btn btn-secondary';
-            document.getElementById('btnNotesView').className = view === 'notes' ? 'btn btn-primary' : 'btn btn-secondary';
-            
             renderManagement();
         }
 
@@ -9190,20 +8560,6 @@ Per attivarle:
                 
                 // Riapplica i filtri - PASSA IL CONTAINER!
                 applyTaskFilters(container);
-            } else if (currentManagementView === 'categories') {
-                // Mostra il contenuto della pagina Categories
-                const categoriesContent = document.getElementById('categoriesPage').cloneNode(true);
-                categoriesContent.classList.remove('hidden');
-                categoriesContent.id = '';
-                container.innerHTML = categoriesContent.innerHTML;
-                renderCategories(container);
-            } else if (currentManagementView === 'notes') {
-                // Mostra il contenuto della pagina Notes
-                const notesContent = document.getElementById('notesPage').cloneNode(true);
-                notesContent.classList.remove('hidden');
-                notesContent.id = '';
-                container.innerHTML = notesContent.innerHTML;
-                renderNotes(container);
             }
         }
 
