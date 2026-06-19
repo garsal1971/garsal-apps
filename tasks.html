@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.22.1</title>
+    <title>Tasks v19.23.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2348,8 +2348,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.22.1';
-        const BUILD_TIME  = '2026-06-19T12:00:00Z';
+        const APP_VERSION = 'v19.23.0';
+        const BUILD_TIME  = '2026-06-19T14:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -7172,105 +7172,18 @@
 
         async function failTask(id) {
             if (!await customConfirm('Segnare task come fallito?')) return;
-            
-            const task = tasks.find(t => t.id === id);
-            
-            const fromStatusFail = task.status;
-            await sb.from('ts_history').insert([historyRecord(id, fromStatusFail, 'failed', 'failed', task.failure_points)]);
 
-            // Determina la data di completamento
-            const failedDate = task.next_occurrence_date || task.start_date || new Date().toISOString();
-
-            // Task singoli: chiudi il task
-            if (task.type === 'single') {
-                await sb.from('ts_tasks').update({
-                    status: 'terminated',
-                    last_completed_date: failedDate
-                }).eq('id', id);
-                await sb.from('ts_history').insert([termRecord(id, 'failed')]);
-                await deleteNotificationRules(id);
-
-                await loadTasks();
-                
-            // Per ricorrenza semplice, sposta alla prossima occorrenza
-            } else if (task.type === 'simple_recurring') {
-                const baseDate = new Date(task.next_occurrence_date || task.start_date);
-                const nextDate = new Date(baseDate);
-                nextDate.setDate(baseDate.getDate() + (task.repeat_after_days || 7));
-
-                await sb.from('ts_tasks').update({
-                    status: 'failed',
-                    next_occurrence_date: nextDate.toISOString()
-                }).eq('id', id);
-
-                await loadTasks();
-                await updateSmartBlockFireAt(id, nextDate.toISOString());
-
-            // Per ricorrenti avanzati, calcola prossima occorrenza
-            } else if (task.type === 'recurring') {
-                const baseDate = task.next_occurrence_date ? new Date(task.next_occurrence_date) : new Date(task.start_date);
-                const nextDate = getNextRecurringDate(task, baseDate);
-
-                // Se non c'è prossima occorrenza, chiudi il task
-                if (!nextDate) {
-                    await sb.from('ts_tasks').update({
-                        status: 'terminated',
-                        next_occurrence_date: null
-                    }).eq('id', id);
-                    await sb.from('ts_history').insert([termRecord(id, 'failed')]);
-                    await deleteNotificationRules(id);
-                } else {
-                    await sb.from('ts_tasks').update({
-                        status: 'failed',
-                        next_occurrence_date: nextDate.toISOString()
-                    }).eq('id', id);
-                }
-
-                await loadTasks();
-                if (nextDate) await updateSmartBlockFireAt(id, nextDate.toISOString());
-
-            // Per task multipli, passa alla prossima data
-            } else if (task.type === 'multiple') {
-                // Assicurati che multiple_dates sia un array
-                let datesArray = task.multiple_dates;
-                if (typeof datesArray === 'string') {
-                    datesArray = JSON.parse(datesArray);
-                }
-                
-                // Ordina le date
-                const sortedDates = [...datesArray].sort();
-                
-                // Trova l'indice della data corrente
-                // IMPORTANTE: Estrarre la data SENZA conversione UTC
-                const currentDateStr = task.next_occurrence_date.split('T')[0];
-                const currentIndex = sortedDates.indexOf(currentDateStr);
-                
-                // Calcola la prossima data
-                let nextOccurrence = null;
-                
-                if (currentIndex !== -1 && currentIndex < sortedDates.length - 1) {
-                    // C'è ancora una data successiva
-                    nextOccurrence = sortedDates[currentIndex + 1] + 'T00:00:00';
-                }
-                // Se nextOccurrence è null, era l'ultima data
-                
-                await sb.from('ts_tasks').update({
-                    next_occurrence_date: nextOccurrence,
-                    status: nextOccurrence === null ? 'terminated' : 'failed'
-                }).eq('id', id);
-                if (nextOccurrence === null) {
-                    await sb.from('ts_history').insert([termRecord(id, 'failed')]);
-                    await deleteNotificationRules(id);
-                }
-
-                await loadTasks();
+            const { data: result, error } = await sb.rpc('task_fail', { p_task_id: id });
+            if (error || !result?.ok) {
+                alert('Errore: ' + (error?.message || result?.error));
+                return;
             }
 
+            await loadTasks();
             await loadHistory();
+            if (result.next) await updateSmartBlockFireAt(id, new Date(result.next).toISOString());
 
             showToast('✗ Task fallito');
-            
-            // Refresh della vista corrente
             renderDashboard();
             renderCalendar();
             renderManagement();
@@ -7278,139 +7191,35 @@
         
         async function skipTask(id) {
             const task = tasks.find(t => t.id === id);
-            
-            let newDate;
-            let skipMessage;
-            
-            // Per task ricorrenti (recurring e simple_recurring), salta automaticamente alla prossima occorrenza
-            if (task.type === 'simple_recurring') {
-                // Chiedi conferma
-                if (!await customConfirm('Saltare questo task alla prossima occorrenza?')) return;
-                
-                // Per ricorrenza semplice, calcola dalla next_occurrence_date + repeat_after_days
-                const baseDate = new Date(task.next_occurrence_date || task.start_date);
-                newDate = new Date(baseDate);
-                newDate.setDate(baseDate.getDate() + (task.repeat_after_days || 7));
-                skipMessage = 'Task saltato alla prossima occorrenza';
-                
-            } else if (task.type === 'recurring') {
-                // Chiedi conferma
-                if (!await customConfirm('Saltare questo task alla prossima occorrenza?')) return;
-                
-                // Per ricorrenti avanzati, usa la funzione di calcolo della prossima data
-                const baseDate = task.next_occurrence_date ? new Date(task.next_occurrence_date) : new Date(task.start_date);
-                newDate = getNextRecurringDate(task, baseDate);
-                
-                if (!newDate) {
-                    showToast('❌ Impossibile calcolare la prossima occorrenza');
-                    return;
-                }
-                skipMessage = 'Task saltato alla prossima occorrenza';
-                
-            } else if (task.type === 'multiple') {
-                // Per task multipli, passa alla prossima data nella lista
-                if (!await customConfirm('Saltare questo task alla prossima data?')) return;
-                
-                // Assicurati che multiple_dates sia un array
-                let datesArray = task.multiple_dates;
-                if (typeof datesArray === 'string') {
-                    datesArray = JSON.parse(datesArray);
-                }
-                
-                // Ordina le date
-                const sortedDates = [...datesArray].sort();
-                
-                // Trova l'indice della data corrente
-                // IMPORTANTE: Estrarre la data SENZA conversione UTC
-                const currentDateStr = task.next_occurrence_date.split('T')[0];
-                const currentIndex = sortedDates.indexOf(currentDateStr);
-                
-                // Calcola la prossima data
-                if (currentIndex !== -1 && currentIndex < sortedDates.length - 1) {
-                    // C'è ancora una data successiva
-                    newDate = new Date(sortedDates[currentIndex + 1] + 'T00:00:00');
-                    skipMessage = 'Task saltato alla prossima data';
-                } else {
-                    // Era l'ultima data, chiudi il task
-                    await sb.from('ts_history').insert([
-                        historyRecord(id, task.status, 'skipped', 'skipped', task.skip_points),
-                        termRecord(id, 'skipped')
-                    ]);
 
-                    await sb.from('ts_tasks').update({
-                        next_occurrence_date: null,
-                        status: 'terminated'
-                    }).eq('id', id);
-                    await deleteNotificationRules(id);
-
-                    await loadTasks();
-                    await loadHistory();
-                    renderDashboard();
-                    renderCalendar();
-                    renderManagement();
-
-                    showToast('⛔ Ultima data saltata, task terminato');
-                    return;
-                }
-                
-            } else {
-                // Per task singoli, chiedi quanti giorni
+            let p_days = 1;
+            if (task.type === 'single') {
                 const defaultDays = settings['default_skip_days'] || '1';
                 const daysInput = prompt('Di quanti giorni vuoi spostare il task in avanti?', defaultDays);
-                
-                // Se annulla, esci
                 if (daysInput === null) return;
-                
-                const days = parseInt(daysInput);
-                
-                // Valida input
-                if (isNaN(days) || days < 1) {
+                p_days = parseInt(daysInput);
+                if (isNaN(p_days) || p_days < 1) {
                     alert('Inserisci un numero valido di giorni (minimo 1)');
                     return;
                 }
-                
-                // Calcola nuova data: dalla next_occurrence_date + giorni inseriti
-                const baseDate = new Date(task.next_occurrence_date || task.start_date);
-                newDate = new Date(baseDate);
-                newDate.setDate(baseDate.getDate() + days);
-                
-                const dayLabel = days === 1 ? 'giorno' : 'giorni';
-                skipMessage = `Task spostato di ${days} ${dayLabel}`;
-            }
-            
-            // Registra skip nella history
-            await sb.from('ts_history').insert([historyRecord(id, task.status, 'skipped', 'skipped', task.skip_points)]);
-            
-            // Aggiorna in base al tipo di task
-            if (task.type === 'single') {
-                // Per task singoli, aggiorna next_occurrence_date
-                await sb.from('ts_tasks').update({
-                    status: 'skipped',
-                    next_occurrence_date: newDate.toISOString()
-                }).eq('id', id);
-
-            } else if (task.type === 'simple_recurring' || task.type === 'recurring') {
-                // Per ricorrenti, aggiorna next_occurrence_date
-                await sb.from('ts_tasks').update({
-                    status: 'skipped',
-                    next_occurrence_date: newDate.toISOString()
-                }).eq('id', id);
-
+                if (!await customConfirm(`Spostare il task di ${p_days} ${p_days === 1 ? 'giorno' : 'giorni'}?`)) return;
             } else if (task.type === 'multiple') {
-                // Per task multipli, aggiorna solo next_occurrence_date
-                await sb.from('ts_tasks').update({
-                    status: 'skipped',
-                    next_occurrence_date: newDate.toISOString()
-                }).eq('id', id);
+                if (!await customConfirm('Saltare questo task alla prossima data?')) return;
+            } else {
+                if (!await customConfirm('Saltare questo task alla prossima occorrenza?')) return;
             }
-            
+
+            const { data: result, error } = await sb.rpc('task_skip', { p_task_id: id, p_days });
+            if (error || !result?.ok) {
+                alert('Errore: ' + (error?.message || result?.error));
+                return;
+            }
+
             await loadTasks();
             await loadHistory();
-            if (newDate) await updateSmartBlockFireAt(id, newDate.toISOString());
+            if (result.next) await updateSmartBlockFireAt(id, new Date(result.next).toISOString());
 
-            showToast(`⏭ ${skipMessage}`);
-            
-            // Refresh della vista corrente
+            showToast('⏭ Task saltato');
             renderDashboard();
             renderCalendar();
             renderManagement();
