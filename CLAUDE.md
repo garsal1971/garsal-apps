@@ -211,6 +211,22 @@ if (result.next) await updateSmartBlockFireAt(id, new Date(result.next).toISOStr
 // nextDate.setDate(nextDate.getDate() + task.repeat_after_days);  // ← da non fare
 ```
 
+### Dettaglio tecnico: estrazione data da `next_occurrence_date` per tipo `multiple`
+
+Nelle RPC che gestiscono il tipo `multiple`, la data corrente viene estratta così:
+
+```sql
+-- CORRETTO
+v_cur_str := COALESCE(v_task.next_occurrence_date::date::text, '');
+-- → '2026-06-19'  ✓ confrontabile con multiple_dates[]
+
+-- SBAGLIATO (non usare)
+v_cur_str := split_part(v_task.next_occurrence_date::text, 'T', 1);
+-- PostgreSQL formatta timestamptz come '2026-06-19 08:00:00+00' (spazio, non 'T')
+-- → split_part restituisce l'intera stringa → confronto con 'YYYY-MM-DD' fallisce sempre
+-- → v_cur_idx rimane NULL → il task viene terminato alla prima occorrenza (bug critico)
+```
+
 ### Dettaglio tecnico: `v_time_of_day`
 
 Tutte le RPC preservano l'orario originale del task quando calcolano la prossima occorrenza:
