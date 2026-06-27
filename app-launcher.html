@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.84</title>
+<title>AppSphere v1.5.85</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1786,8 +1786,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.84';
-const BUILD_TIME  = '2026-06-19T10:00:00Z';
+const APP_VERSION = 'v1.5.85';
+const BUILD_TIME  = '2026-06-27T14:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2248,12 +2248,12 @@ function loginWithGoogle() {
   const redirect = isAndroidApp
     ? 'garsalapps://oauth'
     : window.location.href.split('#')[0].split('?')[0];
+  // Scope Google Fit rimossi: le API di Google Fit sono state dismesse da
+  // Google (l'app usa Health Connect sul nativo). Gli scope fitness.* non più
+  // validi bloccavano il consenso OAuth dopo la scelta dell'account.
   const scopes = [
     'email',
     'profile',
-    'https://www.googleapis.com/auth/fitness.activity.read',
-    'https://www.googleapis.com/auth/fitness.body.read',
-    'https://www.googleapis.com/auth/fitness.nutrition.read',
     'https://www.googleapis.com/auth/calendar.readonly',
   ].join(' ');
   window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google`
@@ -2674,8 +2674,6 @@ async function loadDecisionAlerts() {
       visible.map(r => `<span onclick="dismissAlert('${r.id}', '${dismissedKey}')" style="background:rgba(255,255,255,0.2);border-radius:4px;padding:2px 10px;margin:0 3px;cursor:pointer;">✕ ${r.title}</span>`).join('');
   } catch(e) {
     console.warn('[alerts] eccezione:', e);
-  }
-}
   }
 }
 
