@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.86</title>
+<title>AppSphere v1.5.87</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1793,8 +1793,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.86';
-const BUILD_TIME  = '2026-06-27T12:00:00Z';
+const APP_VERSION = 'v1.5.87';
+const BUILD_TIME  = '2026-06-27T13:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3956,10 +3956,20 @@ async function editDcCategory(id) {
 
 // ── PWA Service Worker ───────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
+  // Quando un nuovo SW prende il controllo (es. dopo un bump della shell),
+  // ricarica UNA volta per servire subito la versione fresca ed evitare che
+  // resti in cache una copia vecchia di app-launcher.html (pagina bianca).
+  let _swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function() {
+    if (_swRefreshing) return;
+    _swRefreshing = true;
+    window.location.reload();
+  });
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('/sw.js')
       .then(function(reg) {
         console.log('[SW] Registrato:', reg.scope);
+        reg.update(); // forza il check di aggiornamento del SW ad ogni avvio
       })
       .catch(function(err) {
         console.warn('[SW] Registrazione fallita:', err);
