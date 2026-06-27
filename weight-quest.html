@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.118</title>
+    <title>Weight Quest v3.5.121</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
@@ -1226,8 +1226,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.120';
-        var BUILD_TIME  = '2026-05-27T09:00:00Z';
+        var APP_VERSION = 'v3.5.121';
+        var BUILD_TIME  = '2026-06-27T10:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2855,19 +2855,31 @@
                 return;
             }
             
-            // Verifica data per chiusura con successo
+            // Vincolo per chiusura con successo: il peso minimo registrato oggi
+            // deve essere <= peso obiettivo (end_weight). Nessun vincolo sulla data.
             if (newStatus === 'success') {
-                var today = new Date();
-                today.setHours(0, 0, 0, 0); // Azzera ore per confronto solo date
-                
-                var endDate = new Date(userData.currentObjective.end_date);
-                endDate.setHours(0, 0, 0, 0);
-                
-                if (today < endDate) {
-                    alert('Non puoi chiudere con SUCCESSO prima della data di fine obiettivo!\n\n' +
-                          'Data fine: ' + userData.currentObjective.end_date + '\n' +
-                          'Oggi: ' + localDateStr(today) + '\n\n' +
-                          'Puoi solo chiudere come FALLITO prima della fine.');
+                var endW = parseFloat(userData.currentObjective.end_weight);
+                if (!isFinite(endW)) {
+                    alert('Obiettivo senza peso target valido: impossibile chiudere con SUCCESSO.');
+                    return;
+                }
+
+                var todayStr = localDateStr(new Date());
+                var todayWeights = (userData.weights || []).filter(function(r) {
+                    return r.date === todayStr && r.weight != null && isFinite(r.weight);
+                });
+
+                if (!todayWeights.length) {
+                    alert('Non puoi chiudere con SUCCESSO: nessun peso registrato oggi (' + todayStr + ').');
+                    return;
+                }
+
+                var todayMin = Math.min.apply(null, todayWeights.map(function(r) { return r.weight; }));
+                if (todayMin > endW) {
+                    alert('Non puoi chiudere con SUCCESSO!\n\n' +
+                          'Peso minimo di oggi: ' + todayMin + ' kg\n' +
+                          'Obiettivo: ' + endW + ' kg\n\n' +
+                          'Il minimo del giorno deve essere ≤ obiettivo.');
                     return;
                 }
             }
