@@ -13,6 +13,18 @@
   to = "/test-dashboard.html"
   status = 200
 
+# HTML mai in cache: l'app (WebView) carica la root "/" e deve sempre ricevere
+# l'ultima versione, altrimenti resta su un app-launcher vecchio (login rotto).
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
 [[headers]]
   for = "/.well-known/assetlinks.json"
   [headers.values]
