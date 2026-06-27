@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.87</title>
+<title>AppSphere v1.5.84</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,9 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="AppSphere">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet"></noscript>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { overflow: hidden; height: 100%; }
@@ -40,11 +38,6 @@
     touch-action: none;
     will-change: left, top;
   }
-  /* Animazione fluida quando le bolle vengono ridimensionate dopo l'arrivo
-     degli score (classe temporanea, rimossa dopo l'animazione per non
-     interferire con il drag). */
-  .cw.resizing { transition: left 0.45s ease, top 0.45s ease; }
-  .cw.resizing .circle { transition: width 0.45s ease, height 0.45s ease, box-shadow 0.2s, border-radius 0.3s; }
   .cw.dragging { cursor: grabbing; z-index: 1000 !important; }
   .cw.dragging .circle {
     box-shadow: 0 16px 48px rgba(0,0,0,0.2);
@@ -1793,8 +1786,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.87';
-const BUILD_TIME  = '2026-06-27T13:00:00Z';
+const APP_VERSION = 'v1.5.84';
+const BUILD_TIME  = '2026-06-19T10:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2581,9 +2574,8 @@ function updateHiddenIndicator() {
 async function loadApps() {
   const token = localStorage.getItem('sb_token');
 
-  // Carica la sequenza nascosta in background (serve solo per la capture
-  // mode durante il drag, non blocca il rendering delle bolle).
-  if (!hiddenSeqLength) loadHiddenSequence();
+  // Carica anche la sequenza nascosta se non ancora disponibile
+  if (!hiddenSeqLength) await loadHiddenSequence();
 
   // 1. Leggi le app: in modalità normale solo quelle attive e non riservate;
   //    in modalità nascosta anche quelle riservate
@@ -2622,23 +2614,9 @@ async function loadApps() {
     rows = rows.filter(r => !r.riservato);
   }
 
-  // 2. Render IMMEDIATO con score placeholder (0): le bolle compaiono subito
-  //    e sono già interattive, senza attendere le score_query.
-  const apps = rows.map((row, i) => ({
-    id:          row.id,
-    name:        row.title,
-    description: row.description || '',
-    score:       0,
-    color:       (row.color || OLYMPIC[i % OLYMPIC.length]).trim(),
-    html_file:   row.html_file,
-  }));
-
-  render(apps);
-  loadDecisionAlerts();
-
-  // 3. Calcola le score_query in parallelo IN BACKGROUND; quando tutte sono
-  //    pronte, aggiorna le dimensioni delle bolle in-place (niente reshuffle).
-  Promise.all(rows.map(async (row, i) => {
+  // 2. Per ogni app esegui la score_query
+  const apps = await Promise.all(rows.map(async (row, i) => {
+    let score = 0;
     try {
       const rpc = await fetch(`${SUPABASE_URL}/rest/v1/rpc/run_score_query`, {
         method: 'POST',
@@ -2649,64 +2627,23 @@ async function loadApps() {
         },
         body: JSON.stringify({ query: row.score_query })
       });
-      if (rpc.ok) apps[i].score = Number(await rpc.json()) || 0;
+      if (rpc.ok) score = Number(await rpc.json()) || 0;
     } catch(e) {
       console.warn('Score query fallita per', row.title, e);
     }
-  })).then(() => {
-    // Applica solo se nel frattempo non è stato fatto un altro render
-    if (CURRENT_APPS === apps) applyScores();
-  });
-}
 
-// Aggiorna dimensione/punteggio delle bolle già renderizzate, senza
-// ricreare il DOM né rimescolare le posizioni: le bolle crescono in-place
-// e vengono risistemati eventuali overlap con una transizione fluida.
-function applyScores() {
-  if (!nodes.length) return;
+    return {
+      id:          row.id,
+      name:        row.title,
+      description: row.description || '',
+      score:       score,
+      color:       (row.color || OLYMPIC[i % OLYMPIC.length]).trim(),
+      html_file:   row.html_file,
+    };
+  }));
 
-  nodes.forEach(node => {
-    const size = sizeOf(node.app.score);
-    node.r = size / 2;
-    const circle = node.el.querySelector('.circle');
-    if (!circle) return;
-    node.el.classList.add('resizing');
-    circle.style.width  = size + 'px';
-    circle.style.height = size + 'px';
-
-    const nameEl = circle.querySelector('.c-name');
-    if (nameEl) nameEl.style.fontSize = fitFontSize(node.app.name, size) + 'px';
-
-    let scoreEl = circle.querySelector('.c-score');
-    if (node.app.score > 0) {
-      const scoreFz = Math.max(9, Math.round(size * 0.13));
-      if (!scoreEl) {
-        scoreEl = document.createElement('span');
-        scoreEl.className = 'c-score';
-        circle.appendChild(scoreEl);
-      }
-      scoreEl.style.fontSize = scoreFz + 'px';
-      scoreEl.textContent = node.app.score;
-    } else if (scoreEl) {
-      scoreEl.remove();
-    }
-  });
-
-  // Risolvi gli overlap dovuti alle nuove dimensioni e riposiziona
-  settlePositions();
-  nodes.forEach(node => {
-    node.el.style.left = node.x + 'px';
-    node.el.style.top  = node.y + 'px';
-  });
-
-  // Rimuovi la classe di transizione dopo l'animazione (così il drag resta reattivo)
-  setTimeout(() => { nodes.forEach(n => n.el.classList.remove('resizing')); }, 500);
-
-  // Aggiorna il totale nel pannello punteggio
-  const total = CURRENT_APPS.reduce((s, a) => s + a.score, 0);
-  const spv = document.getElementById('sp-value');
-  if (spv) spv.textContent = total.toLocaleString('it-IT');
-  updateScorePanel();
+  render(apps);
+  loadDecisionAlerts();
 }
 
 async function loadDecisionAlerts() {
@@ -2737,6 +2674,8 @@ async function loadDecisionAlerts() {
       visible.map(r => `<span onclick="dismissAlert('${r.id}', '${dismissedKey}')" style="background:rgba(255,255,255,0.2);border-radius:4px;padding:2px 10px;margin:0 3px;cursor:pointer;">✕ ${r.title}</span>`).join('');
   } catch(e) {
     console.warn('[alerts] eccezione:', e);
+  }
+}
   }
 }
 
@@ -3701,20 +3640,6 @@ async function init() {
 }
 init();
 
-// Ritorno da un'app figlia (es. Weight Quest, aperta con location.href).
-// Se la pagina viene ripristinata dalla bfcache (gesto/tasto "indietro"),
-// init() NON viene rieseguito e la pagina resterebbe "congelata" con dati
-// stale. Su pageshow.persisted aggiorniamo lo stato.
-window.addEventListener('pageshow', (e) => {
-  if (!e.persisted) return; // navigazione normale: init() ha già girato
-  const token = localStorage.getItem('sb_token');
-  if (token && CURRENT_APPS.length) {
-    loadApps();   // sessione attiva: ricarica app/score (render in-place)
-  } else {
-    init();       // sessione assente o persa: ripeti il flow completo
-  }
-});
-
 window.addEventListener('resize', () => { if (CURRENT_APPS.length) render(); });
 
 // ── LONG PRESS / LONG CLICK helper ───────────────────────────────────────────
@@ -3956,20 +3881,10 @@ async function editDcCategory(id) {
 
 // ── PWA Service Worker ───────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  // Quando un nuovo SW prende il controllo (es. dopo un bump della shell),
-  // ricarica UNA volta per servire subito la versione fresca ed evitare che
-  // resti in cache una copia vecchia di app-launcher.html (pagina bianca).
-  let _swRefreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', function() {
-    if (_swRefreshing) return;
-    _swRefreshing = true;
-    window.location.reload();
-  });
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('/sw.js')
       .then(function(reg) {
         console.log('[SW] Registrato:', reg.scope);
-        reg.update(); // forza il check di aggiornamento del SW ad ogni avvio
       })
       .catch(function(err) {
         console.warn('[SW] Registrazione fallita:', err);
