@@ -1,8 +1,5 @@
-// AppSphere Service Worker v1.1.0
-// Bump CACHE_NAME ad ogni modifica della shell per invalidare la cache vecchia:
-// l'handler 'activate' cancella le cache con nome diverso, eliminando copie
-// stale di /app-launcher.html che potrebbero essere servite sui fresh load.
-const CACHE_NAME = 'appsphere-v2';
+// AppSphere Service Worker v1.0.0
+const CACHE_NAME = 'appsphere-v1';
 
 // File da pre-cachare (shell dell'app)
 const PRECACHE = [
