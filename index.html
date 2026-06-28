@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.82</title>
+<title>AppSphere v1.5.91</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -252,10 +252,6 @@
     font-weight: 600;
     color: #fff;
     letter-spacing: 0.2px;
-  }
-  #user-name {
-    color: rgba(255,255,255,0.85);
-    font-size: 11px;
   }
   /* ── HAMBURGER BTN ── */
   #hamburger-btn {
@@ -1357,7 +1353,126 @@
   }
   #code-confirm:hover { color: #fff; }
 
-</style>
+  /* ── DATI COMUNI MODAL ── */
+  #daticomuni-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.48);
+    z-index: 700;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  #daticomuni-overlay.open { display: flex; }
+  #daticomuni-modal {
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    width: 100%;
+    max-width: 600px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #daticomuni-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  #daticomuni-header h2 { font-size: 16px; font-weight: 700; color: #222; margin: 0; }
+  #daticomuni-header button { background: none; border: none; font-size: 20px; cursor: pointer; color: #888; padding: 2px 6px; }
+  #daticomuni-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .dc-tab {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #888;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .dc-tab.active { color: #FF3366; border-bottom-color: #FF3366; }
+  #daticomuni-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 16px 20px 24px;
+  }
+  .dc-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: #f9f9f9;
+    border: 1px solid #eee;
+  }
+  .dc-item-color { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; }
+  .dc-item-name { flex: 1; font-size: 14px; font-weight: 600; color: #222; }
+  .dc-item-meta { font-size: 12px; color: #999; }
+  .dc-item-actions { display: flex; gap: 6px; }
+  .dc-btn-sm {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .dc-btn-edit { background: #f0f0f0; color: #444; }
+  .dc-btn-del { background: #ffeaea; color: #E74C3C; }
+  .dc-add-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 14px;
+    background: #f9f9f9;
+    border-radius: 12px;
+    border: 1px dashed #ddd;
+  }
+  .dc-add-form h4 { margin: 0 0 6px; font-size: 13px; color: #555; }
+  .dc-input {
+    padding: 9px 12px;
+    border: 1.5px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    background: #fff;
+    color: #222;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .dc-input:focus { outline: none; border-color: #FF3366; }
+  .dc-row { display: flex; gap: 8px; }
+  .dc-btn-add {
+    padding: 9px 16px;
+    background: #FF3366;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .dc-btn-add:hover { opacity: 0.88; }
+  .dc-empty { text-align: center; color: #aaa; padding: 24px 0; font-size: 14px; }
+
+
 </head>
 <body>
 
@@ -1369,6 +1484,8 @@
   </div>
   <div class="login-card">
     <div class="login-title">AppSphere</div>
+    <div id="login-version" style="text-align:center; font-family:'DM Mono',monospace;
+         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">v1.5.91</div>
     <div class="login-sub">// il tuo universo di applicazioni</div>
     <button class="google-btn" onclick="loginWithGoogle()">
       <svg class="google-icon" viewBox="0 0 24 24">
@@ -1388,11 +1505,13 @@
     <div id="user-bar-brand-icon">G</div>
     <div id="user-bar-brand-text">Garsal Apps</div>
   </div>
-  <span id="user-name"></span>
   <button id="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
     <span></span><span></span><span></span>
   </button>
 </div>
+
+<!-- DECISION ALERTS BANNER -->
+<div id="decision-alerts-banner" style="display:none; position:fixed; top:56px; left:0; right:0; background:linear-gradient(135deg,#7B2FBE,#EE334E); color:#fff; padding:0.55rem 1rem; font-size:0.82rem; font-weight:600; z-index:199; line-height:1.5; box-shadow:0 2px 8px rgba(0,0,0,0.2);"></div>
 
 <!-- HAMBURGER DROPDOWN -->
 <div id="hamburger-menu">
@@ -1401,6 +1520,7 @@
   <button class="hm-item" onclick="closeHamburgerMenu(); openBadgeSettings();">⚙ Badge</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNotifiche();">🔔 Notifiche</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNqv();">⚡ Notifica al Volo</button>
+  <button class="hm-item" onclick="closeHamburgerMenu(); openDatiComuni();">🗂 Dati Comuni</button>
   <button class="hm-item danger" onclick="closeHamburgerMenu(); logout();">↩ Esci</button>
 </div>
 
@@ -1471,6 +1591,23 @@
 
       <button id="profilo-save-btn" onclick="saveProfilo()">💾 Salva profilo</button>
       <div id="profilo-saved-msg">✅ Profilo salvato!</div>
+    </div>
+  </div>
+</div>
+
+<!-- DATI COMUNI MODAL -->
+<div id="daticomuni-overlay" onclick="handleDatiComuniOverlayClick(event)">
+  <div id="daticomuni-modal">
+    <div id="daticomuni-header">
+      <h2>🗂 Dati Comuni</h2>
+      <button onclick="closeDatiComuni()">✕</button>
+    </div>
+    <div id="daticomuni-tabs">
+      <button class="dc-tab active" id="dc-tab-priorities" onclick="switchDcTab('priorities')">🎯 Priorità</button>
+      <button class="dc-tab" id="dc-tab-categories" onclick="switchDcTab('categories')">🏷 Categorie</button>
+    </div>
+    <div id="daticomuni-body">
+      <!-- populated by JS -->
     </div>
   </div>
 </div>
@@ -1651,8 +1788,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.82';
-const BUILD_TIME  = '2026-06-01T00:00:00Z';
+const APP_VERSION = 'v1.5.91';
+const BUILD_TIME  = '2026-06-28T10:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1975,7 +2112,7 @@ function render(apps) {
     wrap.innerHTML = `
       <div class="circle" style="width:${size}px;height:${size}px;background:${color};border:4px solid #111;">
         <span class="c-name" style="font-size:${nameFz}px">${app.name}</span>
-        ${app.score ? `<span class="c-score" style="font-size:${scoreFz}px">${app.score}</span>` : ''}
+        ${app.score > 0 ? `<span class="c-score" style="font-size:${scoreFz}px">${app.score}</span>` : ''}
       </div>
     `;
 
@@ -2109,16 +2246,20 @@ const SUPABASE_KEY = _IS_DEV
 function loginWithGoogle() {
   // Se l'app gira nel WebView Android, usa il custom scheme come redirect_to
   // in modo che il deep link torni direttamente all'app dopo il login Google.
+  // Su Android NON usiamo più il redirect diretto a 'garsalapps://oauth':
+  // Chrome blocca il salto automatico da una pagina di login a uno schema
+  // custom. Passiamo invece da una pagina-ponte https (oauth-callback.html)
+  // che riapre l'app (via App Link verificato o con un tap dell'utente).
   const isAndroidApp = (typeof window.AndroidBridge !== 'undefined') && window.AndroidBridge.isNativeApp();
   const redirect = isAndroidApp
-    ? 'garsalapps://oauth'
+    ? window.location.origin + '/oauth-callback.html'
     : window.location.href.split('#')[0].split('?')[0];
+  // Scope Google Fit rimossi: le API di Google Fit sono state dismesse da
+  // Google (l'app usa Health Connect sul nativo). Gli scope fitness.* non più
+  // validi bloccavano il consenso OAuth dopo la scelta dell'account.
   const scopes = [
     'email',
     'profile',
-    'https://www.googleapis.com/auth/fitness.activity.read',
-    'https://www.googleapis.com/auth/fitness.body.read',
-    'https://www.googleapis.com/auth/fitness.nutrition.read',
     'https://www.googleapis.com/auth/calendar.readonly',
   ].join(' ');
   window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google`
@@ -2328,7 +2469,7 @@ async function getUserInfo(token) {
 function showApp(user) {
   localStorage.setItem('was_authenticated', '1'); // flag storico, non più usato per auto-login
   const name = user?.user_metadata?.full_name || user?.email || 'Utente';
-  document.getElementById('user-name').textContent = name.split(' ')[0];
+  // (nome non mostrato)
   document.getElementById('user-bar').classList.add('visible');
   document.getElementById('score-panel').classList.add('visible');
 
@@ -2424,6 +2565,7 @@ function broadcastHiddenMode() {
 }
 
 function updateHiddenIndicator() {
+  loadDecisionAlerts();
   const el = document.getElementById('code-entry');
   if (!el) return;
   el.classList.toggle('active', hiddenMode);
@@ -2507,6 +2649,45 @@ async function loadApps() {
   }));
 
   render(apps);
+  loadDecisionAlerts();
+}
+
+async function loadDecisionAlerts() {
+  const banner = document.getElementById('decision-alerts-banner');
+  const token = localStorage.getItem('sb_token');
+  if (!token) { if (banner) banner.style.display = 'none'; return; }
+  try {
+    // In modalità normale: solo decisioni non riservate; in hidden: tutte
+    const hiddenFilter = hiddenMode ? '' : '&or=(is_hidden.eq.false,is_hidden.is.null)';
+    const url = `${SUPABASE_URL}/rest/v1/dc_decisions?show_home_alert=eq.true&status=eq.active${hiddenFilter}&select=id,title`;
+    const res = await fetch(url, { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } });
+    console.log('[alerts] status:', res.status, hiddenMode ? '(hidden)' : '(normale)');
+    if (!res.ok) { console.warn('[alerts] errore:', await res.text()); if (banner) banner.style.display = 'none'; return; }
+    const rows = await res.json();
+    console.log('[alerts] righe:', rows.length, rows);
+
+    // Dismissione: bucket da 5 minuti (debug)
+    const bucket = Math.floor(Date.now() / (5 * 60 * 1000));
+    const dismissedKey = 'alerts_dismissed_' + bucket;
+    const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+    const visible = rows.filter(r => !dismissed.includes(r.id));
+
+    if (!banner) return;
+    if (!visible.length) { banner.style.display = 'none'; return; }
+
+    banner.style.display = 'block';
+    banner.innerHTML = '🔔 ' +
+      visible.map(r => `<span onclick="dismissAlert('${r.id}', '${dismissedKey}')" style="background:rgba(255,255,255,0.2);border-radius:4px;padding:2px 10px;margin:0 3px;cursor:pointer;">✕ ${r.title}</span>`).join('');
+  } catch(e) {
+    console.warn('[alerts] eccezione:', e);
+  }
+}
+
+function dismissAlert(id, key) {
+  const dismissed = JSON.parse(localStorage.getItem(key) || '[]');
+  if (!dismissed.includes(id)) dismissed.push(id);
+  localStorage.setItem(key, JSON.stringify(dismissed));
+  loadDecisionAlerts();
 }
 
 // ── HAMBURGER MENU ──
@@ -3521,17 +3702,201 @@ document.getElementById('hidden-icon').addEventListener('click', () => {
   loadApps();
 });
 
-// ── PWA Service Worker ───────────────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js')
-      .then(function(reg) {
-        console.log('[SW] Registrato:', reg.scope);
-      })
-      .catch(function(err) {
-        console.warn('[SW] Registrazione fallita:', err);
-      });
+// ── DATI COMUNI ──────────────────────────────────────────────────────────────
+
+let _dcTab = 'priorities';
+let _dcPriorities = [];
+let _dcCategories = [];
+
+function openDatiComuni() {
+  document.getElementById('daticomuni-overlay').classList.add('open');
+  loadDcData();
+}
+
+function closeDatiComuni() {
+  document.getElementById('daticomuni-overlay').classList.remove('open');
+}
+
+function handleDatiComuniOverlayClick(e) {
+  if (e.target === document.getElementById('daticomuni-overlay')) closeDatiComuni();
+}
+
+function switchDcTab(tab) {
+  _dcTab = tab;
+  document.getElementById('dc-tab-priorities').classList.toggle('active', tab === 'priorities');
+  document.getElementById('dc-tab-categories').classList.toggle('active', tab === 'categories');
+  renderDcBody();
+}
+
+async function loadDcData() {
+  const token = localStorage.getItem('sb_token');
+  const hdrs = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token };
+  const [rp, rc] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/cm_priorities?select=*&order=value.desc`, { headers: hdrs }),
+    fetch(`${SUPABASE_URL}/rest/v1/cm_categories?select=*&order=name.asc`, { headers: hdrs })
+  ]);
+  _dcPriorities = rp.ok ? await rp.json() : [];
+  _dcCategories = rc.ok ? await rc.json() : [];
+  renderDcBody();
+}
+
+function renderDcBody() {
+  const body = document.getElementById('daticomuni-body');
+  if (_dcTab === 'priorities') {
+    body.innerHTML = renderDcPriorities();
+  } else {
+    body.innerHTML = renderDcCategories();
+  }
+}
+
+function renderDcPriorities() {
+  const list = _dcPriorities.length === 0
+    ? `<div class="dc-empty">Nessuna priorità configurata</div>`
+    : _dcPriorities.map(p => `
+        <div class="dc-item">
+          <div class="dc-item-color" style="background:${p.color}"></div>
+          <span class="dc-item-name">${p.name}</span>
+          <span class="dc-item-meta">${p.value}</span>
+          <div class="dc-item-actions">
+            <button class="dc-btn-sm dc-btn-edit" onclick="editDcPriority('${p.id}')">✏️</button>
+            <button class="dc-btn-sm dc-btn-del" onclick="deleteDcPriority('${p.id}')">🗑</button>
+          </div>
+        </div>`).join('');
+  return `
+    ${list}
+    <div class="dc-add-form">
+      <h4>+ Nuova priorità</h4>
+      <input class="dc-input" id="dc-p-name" placeholder="Nome (es. Urgente)">
+      <div class="dc-row">
+        <input class="dc-input" id="dc-p-value" type="number" placeholder="Valore (0-100)" min="0" max="100" style="flex:1">
+        <input class="dc-input" id="dc-p-color" type="color" value="#FF3366" style="width:48px;padding:4px;">
+      </div>
+      <button class="dc-btn-add" onclick="addDcPriority()">Aggiungi</button>
+    </div>`;
+}
+
+function renderDcCategories() {
+  const list = _dcCategories.length === 0
+    ? `<div class="dc-empty">Nessuna categoria configurata</div>`
+    : _dcCategories.map(c => `
+        <div class="dc-item">
+          <div class="dc-item-color" style="background:${c.color};border-radius:6px;font-size:13px;display:flex;align-items:center;justify-content:center;">${c.icon || ''}</div>
+          <span class="dc-item-name">${c.name}</span>
+          <div class="dc-item-actions">
+            <button class="dc-btn-sm dc-btn-edit" onclick="editDcCategory('${c.id}')">✏️</button>
+            <button class="dc-btn-sm dc-btn-del" onclick="deleteDcCategory('${c.id}')">🗑</button>
+          </div>
+        </div>`).join('');
+  return `
+    ${list}
+    <div class="dc-add-form">
+      <h4>+ Nuova categoria</h4>
+      <input class="dc-input" id="dc-c-name" placeholder="Nome categoria">
+      <div class="dc-row">
+        <input class="dc-input" id="dc-c-icon" placeholder="Icona emoji" style="flex:1">
+        <input class="dc-input" id="dc-c-color" type="color" value="#2563EB" style="width:48px;padding:4px;">
+      </div>
+      <button class="dc-btn-add" onclick="addDcCategory()">Aggiungi</button>
+    </div>`;
+}
+
+async function addDcPriority() {
+  const name  = document.getElementById('dc-p-name').value.trim();
+  const value = parseInt(document.getElementById('dc-p-value').value);
+  const color = document.getElementById('dc-p-color').value;
+  if (!name || isNaN(value)) { alert('Inserisci nome e valore'); return; }
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_priorities`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ id: crypto.randomUUID(), name, value, color })
   });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function deleteDcPriority(id) {
+  if (!confirm('Eliminare questa priorità?')) return;
+  const token = localStorage.getItem('sb_token');
+  await fetch(`${SUPABASE_URL}/rest/v1/cm_priorities?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+  });
+  await loadDcData();
+}
+
+async function editDcPriority(id) {
+  const p = _dcPriorities.find(x => x.id === id);
+  if (!p) return;
+  const name  = prompt('Nome:', p.name); if (!name) return;
+  const value = parseInt(prompt('Valore (0-100):', p.value)); if (isNaN(value)) return;
+  const color = prompt('Colore hex:', p.color); if (!color) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_priorities?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ name, value, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function addDcCategory() {
+  const name  = document.getElementById('dc-c-name').value.trim();
+  const icon  = document.getElementById('dc-c-icon').value.trim() || '📌';
+  const color = document.getElementById('dc-c-color').value;
+  if (!name) { alert('Inserisci il nome'); return; }
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_categories`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ id: crypto.randomUUID(), name, icon, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function deleteDcCategory(id) {
+  if (!confirm('Eliminare questa categoria?')) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_categories?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token }
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+async function editDcCategory(id) {
+  const c = _dcCategories.find(x => x.id === id);
+  if (!c) return;
+  const name  = prompt('Nome:', c.name); if (!name) return;
+  const icon  = prompt('Icona emoji:', c.icon || ''); if (icon === null) return;
+  const color = prompt('Colore hex:', c.color); if (!color) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/cm_categories?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify({ name, icon, color })
+  });
+  if (!res.ok) { alert('Errore: ' + await res.text()); return; }
+  await loadDcData();
+}
+
+// ── PWA Service Worker DISATTIVATO ───────────────────────────────────────────
+// Il Service Worker metteva in cache versioni vecchie/rotte di app-launcher
+// (pagina bianca, login bloccato) servendole anche quando Netlify aveva già
+// pubblicato la versione nuova. Lo rimuoviamo del tutto: disregistra ogni SW
+// e svuota tutte le cache. Le app richiedono comunque internet.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then(function(regs) { regs.forEach(function(r) { r.unregister(); }); })
+    .catch(function() {});
+}
+if (window.caches && caches.keys) {
+  caches.keys()
+    .then(function(keys) { keys.forEach(function(k) { caches.delete(k); }); })
+    .catch(function() {});
 }
 </script>
 </body>
