@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.87</title>
+<title>AppSphere v1.5.88</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1496,7 +1496,7 @@
     </button>
   </div>
   <div id="login-version" style="position:fixed; bottom:14px; left:0; right:0; text-align:center;
-       font-family:'DM Mono',monospace; font-size:13px; color:#9aa3af;">AppSphere v1.5.87</div>
+       font-family:'DM Mono',monospace; font-size:13px; color:#9aa3af;">AppSphere v1.5.88</div>
 </div>
 
 <!-- UTENTE BAR / TOP BAR -->
@@ -1788,8 +1788,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.87';
-const BUILD_TIME  = '2026-06-27T16:00:00Z';
+const APP_VERSION = 'v1.5.88';
+const BUILD_TIME  = '2026-06-28T07:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3883,17 +3883,20 @@ async function editDcCategory(id) {
   await loadDcData();
 }
 
-// ── PWA Service Worker ───────────────────────────────────────────────────────
+// ── PWA Service Worker DISATTIVATO ───────────────────────────────────────────
+// Il Service Worker metteva in cache versioni vecchie/rotte di app-launcher
+// (pagina bianca, login bloccato) servendole anche quando Netlify aveva già
+// pubblicato la versione nuova. Lo rimuoviamo del tutto: disregistra ogni SW
+// e svuota tutte le cache. Le app richiedono comunque internet.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js')
-      .then(function(reg) {
-        console.log('[SW] Registrato:', reg.scope);
-      })
-      .catch(function(err) {
-        console.warn('[SW] Registrazione fallita:', err);
-      });
-  });
+  navigator.serviceWorker.getRegistrations()
+    .then(function(regs) { regs.forEach(function(r) { r.unregister(); }); })
+    .catch(function() {});
+}
+if (window.caches && caches.keys) {
+  caches.keys()
+    .then(function(keys) { keys.forEach(function(k) { caches.delete(k); }); })
+    .catch(function() {});
 }
 </script>
 </body>
