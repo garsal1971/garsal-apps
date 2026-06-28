@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.93</title>
+<title>AppSphere v1.5.94</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1370,7 +1370,7 @@
   <div class="login-card">
     <div class="login-title">AppSphere</div>
     <div id="login-version" style="text-align:center; font-family:'DM Mono',monospace;
-         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">v1.5.93</div>
+         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">v1.5.94</div>
     <div class="login-sub">// il tuo universo di applicazioni</div>
     <button class="google-btn" onclick="loginWithGoogle()">
       <svg class="google-icon" viewBox="0 0 24 24">
@@ -1653,7 +1653,7 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.93';
+const APP_VERSION = 'v1.5.94';
 const BUILD_TIME  = '2026-06-28T11:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
@@ -2437,8 +2437,19 @@ function updateHiddenIndicator() {
 }
 
 // ── CARICA APP DA SUPABASE ──
+const APPS_CACHE_KEY = 'appsphere_apps_cache';
+
 async function loadApps() {
   const token = localStorage.getItem('sb_token');
+
+  // Render IMMEDIATO dalla cache: mostra subito le bolle con le ultime
+  // dimensioni/punteggi salvati, senza attendere le query dei punteggi.
+  if (!CURRENT_APPS.length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(APPS_CACHE_KEY) || 'null');
+      if (Array.isArray(cached) && cached.length) render(cached);
+    } catch (e) {}
+  }
 
   // Carica anche la sequenza nascosta se non ancora disponibile
   if (!hiddenSeqLength) await loadHiddenSequence();
@@ -2508,7 +2519,12 @@ async function loadApps() {
     };
   }));
 
-  render(apps);
+  // Salva in cache per il prossimo avvio (bolle istantanee)
+  try { localStorage.setItem(APPS_CACHE_KEY, JSON.stringify(apps)); } catch (e) {}
+
+  // Ri-disegna solo se i dati freschi differiscono da quelli già mostrati,
+  // così non si rimescolano le posizioni quando i punteggi non sono cambiati.
+  if (JSON.stringify(apps) !== JSON.stringify(CURRENT_APPS)) render(apps);
 }
 
 // ── HAMBURGER MENU ──
