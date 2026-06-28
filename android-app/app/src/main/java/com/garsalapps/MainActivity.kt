@@ -401,10 +401,21 @@ class MainActivity : AppCompatActivity() {
                     if (url.contains("supabase.co/auth/v1/authorize") &&
                         url.contains("provider=google")
                     ) {
-                        CustomTabsIntent.Builder()
-                            .setShowTitle(true)
-                            .build()
-                            .launchUrl(this@MainActivity, uri)
+                        // Apri il login Google nel BROWSER COMPLETO, non in Custom Tab:
+                        // dalla Custom Tab (aperta dall'app) il deep link garsalapps://
+                        // della pagina-ponte NON rilancia l'app; dal browser completo sì.
+                        try {
+                            val ext = Intent(Intent.ACTION_VIEW, uri)
+                            ext.addCategory(Intent.CATEGORY_BROWSABLE)
+                            ext.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            startActivity(ext)
+                        } catch (e: Exception) {
+                            Log.w("MainActivity", "ACTION_VIEW browser fallito, fallback Custom Tab: $e")
+                            CustomTabsIntent.Builder()
+                                .setShowTitle(true)
+                                .build()
+                                .launchUrl(this@MainActivity, uri)
+                        }
                         return true
                     }
 
