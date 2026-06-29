@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.122</title>
+    <title>Weight Quest v3.5.123</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -883,6 +883,32 @@
                             <input type="text" id="objectiveName" placeholder="Es: Dieta Primavera 2026">
                         </div>
 
+                        <div style="margin-bottom: 8px;">
+                            <label style="display: block; font-size: 12px; color: #666; margin-bottom: 5px;">Tipo Obiettivo</label>
+                            <select id="objectiveType" onchange="onObjectiveTypeChange()">
+                                <option value="perdere">📉 Perdere peso</option>
+                                <option value="mantenere">⚖️ Mantenere peso</option>
+                            </select>
+                        </div>
+
+                        <!-- Campi specifici "Mantenere peso" (nascosti di default) -->
+                        <div id="maintainFields" style="display:none;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;">
+                                <div>
+                                    <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Data Inizio</label>
+                                    <input type="date" id="maintainStartDate">
+                                </div>
+                                <div>
+                                    <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Numero Settimane</label>
+                                    <input type="number" id="maintainWeeks" min="1" value="4">
+                                </div>
+                                <div style="grid-column: 1 / -1;">
+                                    <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">Peso da Mantenere (kg)</label>
+                                    <input type="number" id="maintainWeight" step="0.1" placeholder="Es: 75.0">
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Barra traguardi intermedi con stelle -->
                         <div id="milestoneProgressBar" style="display:none;"></div>
 
@@ -905,6 +931,8 @@
                             </div>
                         </div>
 
+                        <!-- Campi specifici "Perdere peso" (milestone progressive) -->
+                        <div id="loseWeightFields">
                         <!-- Punti totali per traguardi intermedi di peso -->
                         <div style="margin: 10px 0 16px;">
                             <label style="display: block; font-size: 11px; color: #666; margin-bottom: 5px;">⭐ Punti Totali Traguardi Intermedi</label>
@@ -922,6 +950,7 @@
                             <input type="number" step="0.1" id="newMilestoneWeight" placeholder="Peso (kg)">
                         </div>
                         <button id="btnAddMilestone">➕ Aggiungi Milestone</button>
+                        </div><!-- /loseWeightFields -->
 
                         <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
 
@@ -1226,8 +1255,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.122';
-        var BUILD_TIME  = '2026-06-27T11:00:00Z';
+        var APP_VERSION = 'v3.5.123';
+        var BUILD_TIME  = '2026-06-29T12:00:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2226,7 +2255,7 @@
 
                 // Event listeners
                 document.getElementById('btnAddMilestone').onclick = addMilestone;
-                document.getElementById('btnSaveObjective').onclick = doSaveMilestones;
+                document.getElementById('btnSaveObjective').onclick = saveObjective;
                 document.getElementById('btnZoomIn').onclick = zoomIn;
                 document.getElementById('btnResetZoom').onclick = resetZoom;
                 document.getElementById('btnZoomOut').onclick = zoomOut;
@@ -2613,9 +2642,43 @@
             doSaveMilestones();
         }
 
+        // Mostra/nasconde i campi in base al tipo di obiettivo selezionato
+        function onObjectiveTypeChange() {
+            var type = document.getElementById('objectiveType').value;
+            var isMaintain = (type === 'mantenere');
+            var loseEl = document.getElementById('loseWeightFields');
+            var maintainEl = document.getElementById('maintainFields');
+            if (loseEl) loseEl.style.display = isMaintain ? 'none' : 'block';
+            if (maintainEl) maintainEl.style.display = isMaintain ? 'block' : 'none';
+            // La barra traguardi ha senso solo per "perdere"
+            var bar = document.getElementById('milestoneProgressBar');
+            if (bar && isMaintain) bar.style.display = 'none';
+        }
+
+        // Dispatcher: il click su "Salva" instrada al builder del tipo corretto
+        function saveObjective() {
+            // Blocca modifica se obiettivo chiuso
+            if (userData.currentObjective && (userData.currentObjective.status === 'success' || userData.currentObjective.status === 'failed')) {
+                alert('Questo obiettivo è chiuso e non può essere modificato!');
+                return;
+            }
+            var type = document.getElementById('objectiveType').value;
+            if (type === 'mantenere') {
+                saveMaintainObjective();
+            } else {
+                doSaveMilestones();
+            }
+        }
+
+        // Salvataggio obiettivo "perdere peso" (milestone progressive)
         function doSaveMilestones() {
             var objectiveName = document.getElementById('objectiveName').value.trim();
             if (!objectiveName) { alert('Inserisci un nome per l\'obiettivo!'); return; }
+
+            if (tempMilestones.length < 2) {
+                alert('Serve almeno una data di inizio e una di fine (minimo 2 milestone)!');
+                return;
+            }
 
             var dailyBonus = parseInt(document.getElementById('objectiveDailyBonus').value) || 10;
             var dailyMalus = parseInt(document.getElementById('objectiveDailyMalus').value) || 5;
@@ -2627,6 +2690,7 @@
 
             var payload = {
                 objective_name: objectiveName,
+                objective_type: 'perdere',
                 start_date:     firstMilestone.date,
                 start_weight:   firstMilestone.weight,
                 end_date:       lastMilestone.date,
@@ -2639,11 +2703,63 @@
                 status:         'active'
             };
 
+            persistObjective(payload, tempMilestones.slice());
+        }
+
+        // Salvataggio obiettivo "mantenere peso" (target piatto su N settimane)
+        function saveMaintainObjective() {
+            var objectiveName = document.getElementById('objectiveName').value.trim();
+            if (!objectiveName) { alert('Inserisci un nome per l\'obiettivo!'); return; }
+
+            var startDate = document.getElementById('maintainStartDate').value;
+            var weeks     = parseInt(document.getElementById('maintainWeeks').value);
+            var weight    = parseFloat(document.getElementById('maintainWeight').value);
+
+            if (!startDate)              { alert('Inserisci la data di inizio!'); return; }
+            if (!weeks || weeks < 1)     { alert('Inserisci un numero di settimane valido (≥ 1)!'); return; }
+            if (!weight || weight <= 0)  { alert('Inserisci un peso da mantenere valido!'); return; }
+
+            // end_date = start_date + settimane * 7 giorni
+            var endD = new Date(startDate + 'T12:00:00');
+            endD.setDate(endD.getDate() + weeks * 7);
+            var endDate = localDateStr(endD);
+
+            var dailyBonus = parseInt(document.getElementById('objectiveDailyBonus').value) || 10;
+            var dailyMalus = parseInt(document.getElementById('objectiveDailyMalus').value) || 5;
+            var finalBonus = parseInt(document.getElementById('objectiveFinalBonus').value) || 100;
+            var finalMalus = parseInt(document.getElementById('objectiveFinalMalus').value) || 50;
+
+            // Target piatto: 2 milestone con lo stesso peso → interpolazione = peso ogni giorno
+            var flatMilestones = [
+                { date: startDate, weight: weight },
+                { date: endDate,   weight: weight }
+            ];
+
+            var payload = {
+                objective_name: objectiveName,
+                objective_type: 'mantenere',
+                start_date:     startDate,
+                start_weight:   weight,
+                end_date:       endDate,
+                end_weight:     weight,
+                daily_bonus:    dailyBonus,
+                daily_malus:    dailyMalus,
+                final_bonus:    finalBonus,
+                final_malus:    finalMalus,
+                milestones:     JSON.stringify(flatMilestones),
+                status:         'active'
+            };
+
+            persistObjective(payload, flatMilestones);
+        }
+
+        // Persiste un obiettivo (INSERT/PATCH) e aggiorna la UI. Condiviso fra i due tipi.
+        function persistObjective(payload, milestones) {
             var isNew   = !userData.currentObjective;
             var url     = supabase.url + '/rest/v1/ps_objectives' + (isNew ? '' : '?id=eq.' + userData.currentObjective.id);
             var method  = isNew ? 'POST' : 'PATCH';
 
-            log((isNew ? 'INSERT' : 'UPDATE') + ' obiettivo: ' + objectiveName);
+            log((isNew ? 'INSERT' : 'UPDATE') + ' obiettivo: ' + payload.objective_name + ' (' + payload.objective_type + ')');
 
             fetch(url, {
                 method: method,
@@ -2657,16 +2773,17 @@
             .then(function(data) {
                 var saved = Array.isArray(data) ? data[0] : data;
                 userData.currentObjective = saved;
-                userData.milestones = tempMilestones.slice();
+                userData.milestones = milestones.slice();
+                tempMilestones = milestones.slice();
                 log('Obiettivo salvato id=' + (saved ? saved.id : '?'));
                 updateMultiplierDisplay();
                 updateObjectiveStatusBar(saved ? saved.status : 'active');
                 loadAllObjectives(); // Ricarica dropdown
-                
+
                 // Ricarica dati peso per aggiornare target e punteggi
                 reloadWeightData();
-                
-                alert('Obiettivo "' + objectiveName + '" ' + (isNew ? 'creato' : 'aggiornato') + '!');
+
+                alert('Obiettivo "' + payload.objective_name + '" ' + (isNew ? 'creato' : 'aggiornato') + '!');
             })
             .catch(function(e) { log('ERROR save: ' + e.message); alert('Errore: ' + e.message); });
         }
@@ -2713,7 +2830,8 @@
                 var opt = document.createElement('option');
                 opt.value = obj.id;
                 var statusIcon = obj.status === 'success' ? '🏆' : obj.status === 'failed' ? '💀' : '🎯';
-                opt.textContent = statusIcon + ' ' + obj.objective_name + ' (' + obj.start_date + ' → ' + obj.end_date + ')';
+                var typeIcon = (obj.objective_type === 'mantenere') ? '⚖️' : '📉';
+                opt.textContent = statusIcon + typeIcon + ' ' + obj.objective_name + ' (' + obj.start_date + ' → ' + obj.end_date + ')';
                 sel.appendChild(opt);
             });
 
@@ -2746,6 +2864,12 @@
             document.getElementById('objectiveFinalBonus').value = '100';
             document.getElementById('objectiveFinalMalus').value = '50';
             document.getElementById('objectiveMilestonePts').value = '0';
+            // Reset campi "mantenere" + tipo di default
+            document.getElementById('objectiveType').value = 'perdere';
+            document.getElementById('maintainStartDate').value = '';
+            document.getElementById('maintainWeeks').value = '4';
+            document.getElementById('maintainWeight').value = '';
+            onObjectiveTypeChange();
             updateMilestoneList();
             updateObjectiveStatusBar(null);
             updateUILockState('active'); // Abilita tutto per nuovo obiettivo
@@ -2773,6 +2897,22 @@
             // Carica punti traguardi da localStorage
             var savedPts = localStorage.getItem(getMilestonePtsKey(obj));
             document.getElementById('objectiveMilestonePts').value = savedPts !== null ? savedPts : 0;
+
+            // Tipo obiettivo + campi specifici
+            var objType = obj.objective_type || 'perdere';
+            document.getElementById('objectiveType').value = objType;
+            if (objType === 'mantenere') {
+                document.getElementById('maintainStartDate').value = obj.start_date || '';
+                document.getElementById('maintainWeight').value = obj.start_weight != null ? obj.start_weight : '';
+                var weeks = 4;
+                if (obj.start_date && obj.end_date) {
+                    var s = new Date(obj.start_date + 'T12:00:00');
+                    var e = new Date(obj.end_date + 'T12:00:00');
+                    weeks = Math.max(1, Math.round((e - s) / (1000 * 60 * 60 * 24 * 7)));
+                }
+                document.getElementById('maintainWeeks').value = weeks;
+            }
+            onObjectiveTypeChange();
 
             updateMilestoneList();
             updateObjectiveStatusBar(obj.status);
@@ -2818,6 +2958,10 @@
             document.getElementById('objectiveMilestonePts').disabled = isClosed;
             document.getElementById('newMilestoneDate').disabled = isClosed;
             document.getElementById('newMilestoneWeight').disabled = isClosed;
+            document.getElementById('objectiveType').disabled = isClosed;
+            document.getElementById('maintainStartDate').disabled = isClosed;
+            document.getElementById('maintainWeeks').disabled = isClosed;
+            document.getElementById('maintainWeight').disabled = isClosed;
 
             // Disabilita bottoni di modifica
             document.getElementById('btnAddMilestone').disabled = isClosed;
@@ -2859,8 +3003,7 @@
                 return;
             }
             
-            // Vincolo per chiusura con successo: il peso minimo registrato oggi
-            // deve essere <= peso obiettivo (end_weight). Nessun vincolo sulla data.
+            // Vincolo per chiusura con successo.
             if (newStatus === 'success') {
                 var endW = parseFloat(userData.currentObjective.end_weight);
                 if (!isFinite(endW)) {
@@ -2868,23 +3011,50 @@
                     return;
                 }
 
-                var todayStr = localDateStr(new Date());
-                var todayWeights = (userData.weights || []).filter(function(r) {
-                    return r.date === todayStr && r.weight != null && isFinite(r.weight);
-                });
+                var isMaintain = (userData.currentObjective.objective_type === 'mantenere');
 
-                if (!todayWeights.length) {
-                    alert('Non puoi chiudere con SUCCESSO: nessun peso registrato oggi (' + todayStr + ').');
-                    return;
-                }
+                if (isMaintain) {
+                    // "Mantenere peso": il peso MASSIMO registrato nel periodo
+                    // [start_date, end_date] deve essere <= peso stabilito.
+                    var startStr = userData.currentObjective.start_date;
+                    var endStr   = userData.currentObjective.end_date;
+                    var periodWeights = (userData.weights || []).filter(function(r) {
+                        return r.date >= startStr && r.date <= endStr && r.weight != null && isFinite(r.weight);
+                    });
 
-                var todayMin = Math.min.apply(null, todayWeights.map(function(r) { return r.weight; }));
-                if (todayMin > endW) {
-                    alert('Non puoi chiudere con SUCCESSO!\n\n' +
-                          'Peso minimo di oggi: ' + todayMin + ' kg\n' +
-                          'Obiettivo: ' + endW + ' kg\n\n' +
-                          'Il minimo del giorno deve essere ≤ obiettivo.');
-                    return;
+                    if (!periodWeights.length) {
+                        alert('Non puoi chiudere con SUCCESSO: nessun peso registrato nel periodo (' + startStr + ' → ' + endStr + ').');
+                        return;
+                    }
+
+                    var periodMax = Math.max.apply(null, periodWeights.map(function(r) { return r.weight; }));
+                    if (periodMax > endW) {
+                        alert('Non puoi chiudere con SUCCESSO!\n\n' +
+                              'Peso massimo del periodo: ' + periodMax + ' kg\n' +
+                              'Peso stabilito: ' + endW + ' kg\n\n' +
+                              'Il massimo del periodo deve essere ≤ peso stabilito.');
+                        return;
+                    }
+                } else {
+                    // "Perdere peso": il peso minimo registrato oggi deve essere <= peso obiettivo.
+                    var todayStr = localDateStr(new Date());
+                    var todayWeights = (userData.weights || []).filter(function(r) {
+                        return r.date === todayStr && r.weight != null && isFinite(r.weight);
+                    });
+
+                    if (!todayWeights.length) {
+                        alert('Non puoi chiudere con SUCCESSO: nessun peso registrato oggi (' + todayStr + ').');
+                        return;
+                    }
+
+                    var todayMin = Math.min.apply(null, todayWeights.map(function(r) { return r.weight; }));
+                    if (todayMin > endW) {
+                        alert('Non puoi chiudere con SUCCESSO!\n\n' +
+                              'Peso minimo di oggi: ' + todayMin + ' kg\n' +
+                              'Obiettivo: ' + endW + ' kg\n\n' +
+                              'Il minimo del giorno deve essere ≤ obiettivo.');
+                        return;
+                    }
                 }
             }
             
