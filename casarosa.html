@@ -195,6 +195,18 @@
     </div>
   </div>
 
+  <div id="import-review-overlay" class="modal-overlay hidden">
+    <div class="modal" style="max-width:640px">
+      <h3 id="import-review-title" style="margin-bottom:6px">Verifica transazioni</h3>
+      <p style="font-size:.82rem;color:var(--c-muted);margin-bottom:14px">Queste righe hanno stessa data e stesso importo di movimenti già presenti. Seleziona quelle da importare comunque.</p>
+      <div id="import-review-list" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+      <div class="hstack gap-8" style="justify-content:flex-end">
+        <button class="btn" onclick="closeImportReview()">Ignora tutte</button>
+        <button class="btn btn-primary" onclick="confirmImportReview()">Importa selezionate</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -633,6 +645,112 @@
       return null;
     }
 
+    function findImportConflicts(items) {
+      const byKey = new Map();
+      for (const t of S.transactions) {
+        const key = `${t.data}|${t.importo_voce}`;
+        if (!byKey.has(key)) byKey.set(key, []);
+        byKey.get(key).push(t);
+      }
+      const autoItems = [];
+      const conflicts = [];
+      for (const item of items) {
+        const key = `${item.data}|${item.importo_voce}`;
+        if (byKey.has(key)) {
+          conflicts.push({ item, matches: byKey.get(key) });
+        } else {
+          autoItems.push(item);
+        }
+      }
+      return { autoItems, conflicts };
+    }
+
+    async function insertTransactions(items) {
+      let imported = 0;
+      for (const item of items) {
+        try {
+          await sb('cntrs_transactions', 'POST', { ...item, user_id: S.session.user.id });
+          imported++;
+        } catch (e) {
+          console.error('Errore import:', item, e);
+        }
+      }
+      return imported;
+    }
+
+    let _reviewState = null;
+
+    async function importItemsWithReview(items, saldoMsg) {
+      if (items.length === 0) {
+        alert(`Nessuna transazione valida trovata.${saldoMsg || ''}`);
+        loadData();
+        return;
+      }
+
+      const { autoItems, conflicts } = findImportConflicts(items);
+      const autoImported = autoItems.length ? await insertTransactions(autoItems) : 0;
+
+      if (conflicts.length === 0) {
+        alert(`✅ Importazione completata!\n\nCaricate: ${autoImported}${saldoMsg || ''}`);
+        loadData();
+        return;
+      }
+
+      await loadData();
+      openImportReview(conflicts, autoImported, saldoMsg || '');
+    }
+
+    function openImportReview(conflicts, autoImported, saldoMsg) {
+      _reviewState = { conflicts, autoImported, saldoMsg };
+      const list = document.getElementById('import-review-list');
+      list.innerHTML = conflicts.map((c, i) => `
+        <div class="card" style="padding:10px 14px">
+          <label class="hstack gap-8" style="align-items:flex-start;cursor:pointer">
+            <input type="checkbox" id="review-chk-${i}" style="margin-top:4px" />
+            <div style="flex:1">
+              <div style="font-size:.78rem;color:var(--c-muted);margin-bottom:4px">${fmtDate(c.item.data)} · <span class="mono">${fmtEUR(c.item.importo_voce)}</span></div>
+              <div class="form-row" style="gap:14px">
+                <div>
+                  <div style="font-size:.68rem;text-transform:uppercase;color:var(--c-muted);margin-bottom:2px">Nuovo (dal file)</div>
+                  <div style="font-weight:600">${c.item.descrizione}</div>
+                </div>
+                <div>
+                  <div style="font-size:.68rem;text-transform:uppercase;color:var(--c-muted);margin-bottom:2px">Già presente</div>
+                  <div>${c.matches.map(m => m.descrizione).join('<br>')}</div>
+                </div>
+              </div>
+            </div>
+          </label>
+        </div>
+      `).join('');
+      document.getElementById('import-review-title').textContent =
+        `Verifica ${conflicts.length} transazion${conflicts.length === 1 ? 'e' : 'i'} con stessa data e importo`;
+      document.getElementById('import-review-overlay').classList.remove('hidden');
+    }
+
+    function closeImportReview() {
+      document.getElementById('import-review-overlay').classList.add('hidden');
+      if (_reviewState) {
+        alert(`✅ Importazione completata!\n\nCaricate: ${_reviewState.autoImported}\nIgnorate: ${_reviewState.conflicts.length}${_reviewState.saldoMsg}`);
+      }
+      _reviewState = null;
+      loadData();
+    }
+
+    async function confirmImportReview() {
+      if (!_reviewState) return;
+      const { conflicts, autoImported, saldoMsg } = _reviewState;
+      const selected = conflicts
+        .filter((c, i) => document.getElementById(`review-chk-${i}`)?.checked)
+        .map(c => c.item);
+      document.getElementById('import-review-overlay').classList.add('hidden');
+      const confirmedImported = selected.length ? await insertTransactions(selected) : 0;
+      const skipped = conflicts.length - selected.length;
+      _reviewState = null;
+      alert(`✅ Importazione completata!\n\nCaricate automaticamente: ${autoImported}\nConfermate manualmente: ${confirmedImported}\nIgnorate: ${skipped}${saldoMsg}`);
+      loadData();
+    }
+
     async function handleCSVImport(file) {
       const text = await file.text();
 
@@ -688,33 +806,7 @@
           return;
         }
 
-        const existingKeys = new Set(
-          S.transactions.map(t => `${t.data}|${t.descrizione}|${t.importo_voce}`)
-        );
-        const newItems = items.filter(item => {
-          const key = `${item.data}|${item.descrizione}|${item.importo_voce}`;
-          return !existingKeys.has(key);
-        });
-
-        if (newItems.length === 0) {
-          alert('Tutte le transazioni sono già presenti nel database.');
-          return;
-        }
-
-        if (!confirm(`Trovate ${items.length} transazioni.\n${newItems.length} da importare (${items.length - newItems.length} già presenti).\n\nProcedere?`)) return;
-
-        let imported = 0;
-        for (const item of newItems) {
-          try {
-            await sb('cntrs_transactions', 'POST', { ...item, user_id: S.session.user.id });
-            imported++;
-          } catch (e) {
-            console.error('Errore import:', item, e);
-          }
-        }
-
-        alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}`);
-        loadData();
+        await importItemsWithReview(items, '');
         return;
       }
 
@@ -789,14 +881,6 @@
         return;
       }
 
-      const existingKeys = new Set(
-        S.transactions.map(t => `${t.data}|${t.descrizione}|${t.importo_voce}`)
-      );
-      const newItems = items.filter(item => {
-        const key = `${item.data}|${item.descrizione}|${item.importo_voce}`;
-        return !existingKeys.has(key);
-      });
-
       // Also store saldo
       const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -816,26 +900,7 @@
         }
       }
 
-      if (newItems.length === 0) {
-        alert(`Tutte le transazioni sono già presenti nel database.${saldoMsg}`);
-        loadData();
-        return;
-      }
-
-      if (!confirm(`Trovate ${items.length} transazioni.\n${newItems.length} da importare (${items.length - newItems.length} già presenti).${saldoMsg ? '\n' + saldoMsg.trim() : ''}\n\nProcedere?`)) return;
-
-      let imported = 0;
-      for (const item of newItems) {
-        try {
-          await sb('cntrs_transactions', 'POST', { ...item, user_id: S.session.user.id });
-          imported++;
-        } catch (e) {
-          console.error('Errore import:', item, e);
-        }
-      }
-
-      alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}${saldoMsg}`);
-      loadData();
+      await importItemsWithReview(items, saldoMsg);
     }
 
     async function handleXLSXImport(file) {
@@ -924,14 +989,6 @@
         return;
       }
 
-      const existingKeys = new Set(
-        S.transactions.map(t => `${t.data}|${t.descrizione}|${t.importo_voce}`)
-      );
-      const newItems = items.filter(item => {
-        const key = `${item.data}|${item.descrizione}|${item.importo_voce}`;
-        return !existingKeys.has(key);
-      });
-
       // Also store saldo
       const todayStr = new Date().toISOString().slice(0, 10);
       let saldoMsg = '';
@@ -950,26 +1007,7 @@
         }
       }
 
-      if (newItems.length === 0) {
-        alert(`Tutte le transazioni sono già presenti nel database.${saldoMsg}`);
-        loadData();
-        return;
-      }
-
-      if (!confirm(`Trovate ${items.length} transazioni.\n${newItems.length} da importare (${items.length - newItems.length} già presenti).${saldoMsg ? '\n' + saldoMsg.trim() : ''}\n\nProcedere?`)) return;
-
-      let imported = 0;
-      for (const item of newItems) {
-        try {
-          await sb('cntrs_transactions', 'POST', { ...item, user_id: S.session.user.id });
-          imported++;
-        } catch (e) {
-          console.error('Errore import:', item, e);
-        }
-      }
-
-      alert(`✅ Importazione completata!\n\nCaricate: ${imported}\nSaltate: ${newItems.length - imported}${saldoMsg}`);
-      loadData();
+      await importItemsWithReview(items, saldoMsg);
     }
 
     document.getElementById('xlsx-input').addEventListener('change', async (e) => {
