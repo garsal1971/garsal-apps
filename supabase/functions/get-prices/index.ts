@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.15.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.16.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -649,6 +649,7 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   XLM: "stellar", VET: "vechain", FIL: "filecoin", TRX: "tron",
   NEAR: "near", APT: "aptos", OP: "optimism", ARB: "arbitrum",
   SUI: "sui", SEI: "sei-network", PEPE: "pepe", SHIB: "shiba-inu",
+  POL: "polygon-ecosystem-token", // rebrand di MATIC (2024), ID CoinGecko diverso da matic-network
 };
 
 // Fetches EUR price from CoinGecko for a crypto symbol.
@@ -917,9 +918,13 @@ serve(async (req) => {
                 updated_at: new Date().toISOString(),
               });
               dbLog(dbEntries, "INFO", `Fetched ${symbol} from CoinGecko`, { price: cgPrice }, requestId);
-              continue;
+            } else {
+              dbLog(dbEntries, "WARN", `CoinGecko failed for ${symbol}, no further fallback for crypto`, { symbol }, requestId);
             }
-            dbLog(dbEntries, "WARN", `CoinGecko failed for ${symbol}, no further fallback for crypto`, { symbol }, requestId);
+            // Pacing tra chiamate CoinGecko consecutive: la ricerca /search per simboli
+            // non in COINGECKO_ID_MAP raddoppia le richieste ed è facile sforare il
+            // rate limit del piano free quando si aggiungono più crypto insieme.
+            if (i < toFetch.length - 1) await delay(3000);
             continue;
           }
 
