@@ -399,6 +399,7 @@
       <div id="view-portafoglio-detail" class="view"></div>
       <div id="view-transazioni"        class="view"></div>
       <div id="view-dossiers"           class="view"></div>
+      <div id="view-dossier-detail"     class="view"></div>
       <div id="view-progressione"        class="view"></div>
       <div id="view-loans"              class="view"></div>
       <div id="view-other-assets"       class="view"></div>
@@ -443,8 +444,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.39';
-const APP_BUILD   = '2026-06-11T16:30:00Z';
+const APP_VERSION = 'v1.0.40';
+const APP_BUILD   = '2026-07-03T20:15:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -454,6 +455,7 @@ const S = {
   session: null,
   view: 'dashboard',
   portfolioId: null,
+  dossierId: null,
   portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [],
   otherAssets: [], otherAssetTypes: [],
   dashboardSnapshots: [],
@@ -645,9 +647,13 @@ async function reload() {
   render();
 }
 /* ── Business logic — costo medio ponderato ──────────────────── */
-function computeHoldings(portfolioId = null) {
+function computeHoldings(filter = null) {
+  const portfolioId = typeof filter === 'string' ? filter : (filter?.portfolioId ?? null);
+  const dossierId   = (filter && typeof filter === 'object') ? (filter.dossierId ?? null) : null;
   const txs = (portfolioId
     ? S.transactions.filter(t => t.portfolio_id === portfolioId)
+    : dossierId
+    ? S.transactions.filter(t => t.dossier_id === dossierId)
     : S.transactions
   ).slice().sort((a, b) => (a.date + a.created_at).localeCompare(b.date + b.created_at));
   const map = new Map(); // productId → { qty, costBasis }
@@ -706,26 +712,12 @@ function portfolioStats() {
   });
 }
 function computeDossierValue(dossierId) {
-  const txs = S.transactions
-    .filter(t => t.dossier_id === dossierId)
-    .slice()
-    .sort((a, b) => (a.date + a.created_at).localeCompare(b.date + b.created_at));
-  const map = new Map(); // productId -> qty
-  for (const tx of txs) {
-    const qty = parseFloat(tx.quantity);
-    const cur = map.get(tx.product_id) || 0;
-    map.set(tx.product_id, tx.type === 'BUY' ? cur + qty : cur - qty);
-  }
+  const holdings = computeHoldings({ dossierId });
   let total = 0;
   let hasMissingPrice = false;
-  for (const [productId, qty] of map.entries()) {
-    if (qty <= 0.000001) continue;
-    const product = S.products.find(p => p.id === productId);
-    if (!product) continue;
-    const pd = S.prices[product.symbol] || null;
-    const price = pd?.price ?? null;
-    if (price == null) { hasMissingPrice = true; continue; }
-    total += qty * price;
+  for (const h of holdings) {
+    if (h.currentPrice == null) { hasMissingPrice = true; continue; }
+    total += h.currentValue;
   }
   return { total, hasMissingPrice };
 }
@@ -1831,9 +1823,90 @@ function renderDossiers() {
             </div>
           </div>
           ${d.notes ? `<div class="settings-row text-muted text-sm">${d.notes}</div>` : ''}
+          <button class="btn btn-outline btn-sm mt-12" data-action="view-dossier" data-id="${d.id}">Apri →</button>
         </div>`;
         }).join('')}</div>`
     }
+  `);
+}
+function renderDossierDetail() {
+  const dossier = S.dossiers.find(d => d.id === S.dossierId);
+  if (!dossier) { navigate('dossiers'); return; }
+  const holdings  = computeHoldings({ dossierId: dossier.id });
+  const totalVal  = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0);
+  const totalCost = holdings.reduce((s, h) => s + h.costBasis, 0);
+  const totalPnl  = totalVal - totalCost;
+  const totalPct  = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+  const txs       = S.transactions.filter(t => t.dossier_id === dossier.id);
+  setHtml('view-dossier-detail', `
+    <div class="view-header">
+      <div class="hstack gap-8">
+        <button class="btn btn-sm btn-outline" data-action="nav" data-view="dossiers">← Dossier</button>
+        <div>
+          <h2 class="page-title">${dossier.bank_name} — ${dossier.title}</h2>
+          <p class="page-sub">Numero: ${dossier.number}</p>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" data-action="new-transaction" data-dossier-id="${dossier.id}">+ Transazione</button>
+    </div>
+    <div class="kpi-grid">
+      ${kpi('Valore Dossier', fmtEUR(totalVal),  'neutral')}
+      ${kpi('Investito',      fmtEUR(totalCost), 'neutral')}
+      ${kpi('P&amp;L',        fmtEUR(totalPnl),  pnlCls(totalPnl))}
+      ${kpi('Rendimento',     fmtPct(totalPct),  pnlCls(totalPct))}
+    </div>
+    <div class="grid-2 mb-16">
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-title">Prodotti nel dossier</div>
+        ${holdings.length === 0
+          ? `<div class="empty-sm">Nessuna posizione in questo dossier. Aggiungi una transazione BUY con questo dossier selezionato.</div>`
+          : `<div class="table-wrap"><table class="table table-posizioni">
+            <thead><tr>
+              <th>Simbolo</th><th>Nome</th><th>Tipo</th><th>Qtà</th>
+              <th>Costo medio</th><th>Prezzo att.</th><th>Var. %</th>
+              <th>Valore</th><th>P&amp;L</th><th>P&amp;L %</th>
+            </tr></thead>
+            <tbody>${holdings.map(h => `
+              <tr data-action="open-dossier-position-transactions" data-product-id="${h.product.id}" style="cursor:pointer">
+                <td class="mono fw-600">${h.product.symbol}</td>
+                <td><div class="truncate" style="max-width:160px">${h.product.name}</div></td>
+                <td>${assetBadge(h.product.asset_type)}</td>
+                <td class="mono">${fmtNum(h.qty)}</td>
+                <td class="mono">${fmtEURc(h.avgCost)}</td>
+                <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.currentPrice != null ? fmtEURc(h.currentPrice) : '—'}</td>
+                <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.pd ? fmtPct(h.pd.change_pct) : '—'}</td>
+                <td class="mono fw-600">${fmtEUR(h.currentValue ?? h.costBasis)}</td>
+                <td class="mono ${pnlCls(h.pnl)}">${h.pnl != null ? fmtEUR(h.pnl) : '—'}</td>
+                <td><span class="badge ${h.pnlPct != null && h.pnlPct >= 0 ? 'badge-pos' : 'badge-neg'}">${fmtPct(h.pnlPct)}</span></td>
+              </tr>`).join('')}
+            </tbody></table></div>`
+        }
+      </div>
+    </div>
+    ${txs.length > 0 ? `
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">Storico transazioni<button class="btn btn-outline btn-sm" data-action="reload-dossier-detail">🔄 Aggiorna</button></div>
+        <div class="table-wrap"><table class="table table-storico">
+          <thead><tr><th></th><th>Data</th><th>Tipo</th><th>Simbolo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th></tr></thead>
+          <tbody>${txs.map(t => {
+            const pr = S.products.find(p => p.id === t.product_id);
+            return `<tr>
+              <td class="hstack gap-4">
+                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
+                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}">✕</button>
+              </td>
+              <td class="mono text-sm">${fmtDate(t.date)}</td>
+              <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
+              <td class="mono fw-600">${pr?.symbol ?? '—'}</td>
+              <td class="mono">${fmtNum(t.quantity)}</td>
+              <td class="mono">${fmtEURc(t.price)}</td>
+              <td class="mono">${fmtEUR(t.quantity * t.price)}</td>
+              <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
+              <td><div class="truncate" style="max-width:120px">${t.notes || '—'}</div></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </div>` : ''}
   `);
 }
 function renderPrestiti() {
@@ -2375,7 +2448,7 @@ function openNewProductModal(productId = null) {
     await reload(); closeModal();
   });
 }
-function openNewTransactionModal(prePortfolioId = null, preProductId = null) {
+function openNewTransactionModal(prePortfolioId = null, preProductId = null, preDossierId = null) {
   console.log('🔵 openNewTransactionModal CHIAMATA', { prePortfolioId, preProductId });
   console.log('🔵 S.portfolios:', S.portfolios.length, 'S.products:', S.products.length);
   if (!S.portfolios.length) { alert('Crea prima un portafoglio.'); return; }
@@ -2410,7 +2483,7 @@ function openNewTransactionModal(prePortfolioId = null, preProductId = null) {
           <label class="form-label">Dossier (opzionale)</label>
           <select name="dossier_id" class="form-input form-select">
             <option value="">— Nessun Dossier —</option>
-            ${S.dossiers.map(d => `<option value="${d.id}">${d.bank_name} — ${d.title}</option>`).join('')}
+            ${S.dossiers.map(d => `<option value="${d.id}" ${preDossierId === d.id ? 'selected' : ''}>${d.bank_name} — ${d.title}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -2700,6 +2773,41 @@ function openPositionTransactionsModal(productId) {
     }
   `);
 }
+function openDossierPositionTransactionsModal(productId) {
+  const product = S.products.find(p => p.id === productId);
+  if (!product) return;
+
+  const dossierId = S.dossierId;
+  const txs = S.transactions.filter(t => t.dossier_id === dossierId && t.product_id === productId);
+
+  openModal(`Transazioni: ${product.symbol}`, `
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary btn-sm" data-action="new-transaction" data-dossier-id="${dossierId}" data-product-id="${productId}">+ Nuova transazione</button>
+      <button class="btn btn-outline btn-sm" data-action="reload-dossier-position-modal" data-product-id="${productId}">🔄 Aggiorna</button>
+    </div>
+    ${txs.length === 0
+      ? `<div class="empty-sm">Nessuna transazione per questo prodotto in questo dossier.</div>`
+      : `<div class="table-wrap"><table class="table table-modal-tx">
+          <thead><tr><th></th><th>Data</th><th>Tipo</th><th>Qtà</th><th>Prezzo</th><th>Controv.</th><th>Comm.</th><th>Note</th></tr></thead>
+          <tbody>${txs.map(t => {
+            return `<tr>
+              <td class="hstack gap-4">
+                <button class="btn-icon" data-action="edit-transaction" data-id="${t.id}" title="Modifica">✎</button>
+                <button class="btn-icon btn-icon-danger" data-action="del-transaction" data-id="${t.id}" title="Elimina">✕</button>
+              </td>
+              <td class="mono text-sm">${fmtDate(t.date)}</td>
+              <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
+              <td class="mono">${fmtNum(t.quantity)}</td>
+              <td class="mono">${fmtEURc(t.price)}</td>
+              <td class="mono">${fmtEUR(t.quantity * t.price)}</td>
+              <td class="mono text-muted">${parseFloat(t.commission) > 0 ? fmtEURc(t.commission) : '—'}</td>
+              <td><div class="truncate" style="max-width:100px">${t.notes || '—'}</div></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`
+    }
+  `);
+}
 function openTagCatModal(catId = null) {
   const cat = catId ? S.tagCats.find(c => c.id === catId) : null;
   openModal(cat ? 'Modifica categoria tag' : 'Nuova categoria tag', `
@@ -2953,8 +3061,10 @@ function openOtherAssetModal(assetId = null, preType = null, preTitle = null) {
 /* ══════════════ NAVIGATION ═════════════════════════════════════ */
 function navigate(view, param = null) {
   if (view === 'portafoglio-detail' && param !== S.portfolioId) S.ptfFilters = {};
-  S.view = view; S.portfolioId = param;
-  history.pushState({ view, portfolioId: param }, '');
+  S.view = view;
+  if (view === 'portafoglio-detail') S.portfolioId = param;
+  if (view === 'dossier-detail') S.dossierId = param;
+  history.pushState({ view, portfolioId: S.portfolioId, dossierId: S.dossierId }, '');
   render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -2962,7 +3072,8 @@ function render() {
   $(`view-${S.view}`)?.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(b => {
     const match = b.dataset.view === S.view ||
-      (S.view === 'portafoglio-detail' && b.dataset.view === 'portafogli');
+      (S.view === 'portafoglio-detail' && b.dataset.view === 'portafogli') ||
+      (S.view === 'dossier-detail' && b.dataset.view === 'dossiers');
     b.classList.toggle('active', match);
   });
   switch (S.view) {
@@ -2972,6 +3083,7 @@ function render() {
     case 'portafoglio-detail': renderPortafoglioDetail();  break;
     case 'transazioni':        renderTransazioni();        break;
     case 'dossiers':          renderDossiers();           break;
+    case 'dossier-detail':    renderDossierDetail();      break;
     case 'loans':             renderPrestiti();           break;
     case 'other-assets':       renderOtherAssets();        break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
@@ -2993,9 +3105,10 @@ document.addEventListener('click', async e => {
     case 'view-portfolio':  navigate('portafoglio-detail', t.dataset.id); break;
     case 'new-portfolio':   openNewPortfolioModal(); break;
     case 'edit-portfolio':  openNewPortfolioModal(t.dataset.id); break;
-    case 'new-transaction': console.log('🔴 CHIAMO openNewTransactionModal'); openNewTransactionModal(t.dataset.portfolioId || null, t.dataset.productId || null); break;
+    case 'new-transaction': console.log('🔴 CHIAMO openNewTransactionModal'); openNewTransactionModal(t.dataset.portfolioId || null, t.dataset.productId || null, t.dataset.dossierId || null); break;
     case 'edit-transaction': console.log('🔴 CHIAMO openEditTransactionModal'); openEditTransactionModal(t.dataset.id); break;
     case 'open-position-transactions': openPositionTransactionsModal(t.dataset.productId); break;
+    case 'open-dossier-position-transactions': openDossierPositionTransactionsModal(t.dataset.productId); break;
     case 'tx-filter-toggle':
       S.txFiltersOpen = !S.txFiltersOpen;
       renderTransazioni();
@@ -3018,10 +3131,25 @@ document.addEventListener('click', async e => {
       await reload(); openPositionTransactionsModal(pid);
       break;
     }
+    case 'reload-dossier-detail':
+      t.disabled = true; t.textContent = '⏳';
+      await reload(); render();
+      break;
+    case 'reload-dossier-position-modal': {
+      const pid = t.dataset.productId;
+      t.disabled = true; t.textContent = '⏳';
+      await reload(); openDossierPositionTransactionsModal(pid);
+      break;
+    }
+    case 'view-dossier':    navigate('dossier-detail', t.dataset.id); break;
     case 'new-dossier':     openNewDossierModal(); break;
     case 'edit-dossier':    openNewDossierModal(t.dataset.id); break;
     case 'del-dossier':
-      if (confirm('Eliminare questo dossier?')) { await sbDel('fnz_dossiers', `id=eq.${t.dataset.id}`); await reload(); }
+      if (confirm('Eliminare questo dossier?')) {
+        await sbDel('fnz_dossiers', `id=eq.${t.dataset.id}`);
+        if (S.dossierId === t.dataset.id) navigate('dossiers');
+        else await reload();
+      }
       break;
     case 'new-loan':        openNewLoanModal(); break;
     case 'edit-loan':       openNewLoanModal(t.dataset.id); break;
@@ -3269,9 +3397,9 @@ async function boot() {
 const urlErr = new URLSearchParams(location.search).get('error_description');
 window.addEventListener('popstate', e => {
   if (!e.state || !S.session) return;
-  const { view, portfolioId } = e.state;
+  const { view, portfolioId, dossierId } = e.state;
   if (view === 'portafoglio-detail' && portfolioId !== S.portfolioId) S.ptfFilters = {};
-  S.view = view; S.portfolioId = portfolioId || null;
+  S.view = view; S.portfolioId = portfolioId || null; S.dossierId = dossierId || null;
   render(); window.scrollTo(0, 0);
 });
 if (urlErr) document.addEventListener('DOMContentLoaded', () => {
