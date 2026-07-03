@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.16.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.16.1"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -692,7 +692,14 @@ async function fetchCryptoPrice(
   // Step 2: fetch EUR price
   try {
     const priceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coinId)}&vs_currencies=eur&include_24hr_change=true`;
-    const res = await fetch(priceUrl, { headers });
+    let res = await fetch(priceUrl, { headers });
+    if (res.status === 429) {
+      // Free CoinGecko API rate-limita spesso le IP condivise di Supabase Edge:
+      // un retry dopo una breve attesa risolve la maggior parte dei 429 transitori.
+      dbLog(dbEntries, "WARN", `CoinGecko 429 for ${symbol}, retry after backoff`, { symbol, coinId }, requestId);
+      await delay(5000);
+      res = await fetch(priceUrl, { headers });
+    }
     if (!res.ok) {
       dbLog(dbEntries, "WARN", `CoinGecko price HTTP ${res.status} for ${symbol}`, { symbol, coinId, status: res.status }, requestId);
       return null;
