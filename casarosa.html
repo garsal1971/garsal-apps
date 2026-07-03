@@ -117,7 +117,10 @@
 
     <div class="card" id="expected-payments-card" style="margin-bottom:14px">
       <div style="font-size:.74rem;font-weight:600;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px">Pagamenti Attesi</div>
-      <div id="expected-payments" class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))"></div>
+      <div id="expected-payments" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div id="expected-payments-main" class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));flex:2 1 520px;margin-bottom:0"></div>
+        <div id="expected-payments-side" style="display:flex;flex-direction:column;gap:10px;flex:1 1 220px"></div>
+      </div>
     </div>
 
     <div class="card" style="margin-bottom:14px">
@@ -397,7 +400,8 @@
         allCatTotals[key] += t.importo_voce;
       });
 
-      const container = document.getElementById('expected-payments');
+      const container = document.getElementById('expected-payments-main');
+      const sideContainer = document.getElementById('expected-payments-side');
       container.innerHTML = expected.map(item => {
         const expectedTotal = item.rate * months;
 
@@ -473,15 +477,15 @@
       const imuColor = imuAlert ? 'var(--c-danger)' : imuCount > 0 ? 'var(--c-success)' : 'var(--c-muted)';
       const imuBg = imuAlert ? '#fef2f2' : imuCount > 0 ? '#f0fdf4' : 'var(--c-surface)';
       const imuBorder = imuAlert ? '#dc2626' : imuCount > 0 ? '#16a34a' : 'var(--c-border)';
-      container.innerHTML += `
-        <div style="background:${imuBg};border:1.5px solid ${imuBorder};border-radius:var(--radius);padding:16px 18px;">
-          <div style="font-size:.72rem;font-weight:700;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px;letter-spacing:.04em">IMU ${isAllYears ? '— Tutti gli anni' : S.selectedYear}</div>
-          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
-            <span class="mono" style="font-size:1.3rem;font-weight:700;color:${imuColor}">${fmtEUR(imuTotal)}</span>
-            <span style="font-size:.8rem;color:var(--c-muted)">${imuCount} pagament${imuCount === 1 ? 'o' : 'i'}</span>
+      sideContainer.innerHTML = `
+        <div style="background:${imuBg};border:1.5px solid ${imuBorder};border-radius:var(--radius);padding:10px 14px;">
+          <div style="font-size:.7rem;font-weight:700;color:var(--c-muted);text-transform:uppercase;margin-bottom:6px;letter-spacing:.04em">IMU ${isAllYears ? '— Tutti gli anni' : S.selectedYear}</div>
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span class="mono" style="font-size:1.1rem;font-weight:700;color:${imuColor}">${fmtEUR(imuTotal)}</span>
+            <span style="font-size:.76rem;color:var(--c-muted)">${imuCount} pagament${imuCount === 1 ? 'o' : 'i'}</span>
           </div>
-          ${imuAlert ? `<div style="font-size:.78rem;font-weight:700;color:var(--c-danger);margin-top:6px">⚠ Nessun pagamento IMU dopo il 15 maggio</div>` : ''}
-          ${!isAllYears && !imuAlert && imuCount === 0 ? `<div style="font-size:.78rem;color:var(--c-muted);margin-top:6px">Nessun pagamento per ${S.selectedYear}</div>` : ''}
+          ${imuAlert ? `<div style="font-size:.74rem;font-weight:700;color:var(--c-danger);margin-top:4px">⚠ Nessun pagamento IMU dopo il 15 maggio</div>` : ''}
+          ${!isAllYears && !imuAlert && imuCount === 0 ? `<div style="font-size:.74rem;color:var(--c-muted);margin-top:4px">Nessun pagamento per ${S.selectedYear}</div>` : ''}
         </div>`;
 
       // SPESE CONDOMINIO CASA card (anno selezionato o tutti)
@@ -495,14 +499,14 @@
       const condColor = condAlert ? 'var(--c-danger)' : condCount > 0 ? 'var(--c-success)' : 'var(--c-muted)';
       const condBg = condAlert ? '#fef2f2' : condCount > 0 ? '#f0fdf4' : 'var(--c-surface)';
       const condBorder = condAlert ? '#dc2626' : condCount > 0 ? '#16a34a' : 'var(--c-border)';
-      container.innerHTML += `
-        <div style="background:${condBg};border:1.5px solid ${condBorder};border-radius:var(--radius);padding:16px 18px;">
-          <div style="font-size:.72rem;font-weight:700;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px;letter-spacing:.04em">Spese Condominio Casa ${isAllYears ? '— Tutti gli anni' : S.selectedYear}</div>
-          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:4px">
-            <span class="mono" style="font-size:1.3rem;font-weight:700;color:${condColor}">${fmtEUR(condTotal)}</span>
-            <span style="font-size:.8rem;color:var(--c-muted)">${condCount} pagament${condCount === 1 ? 'o' : 'i'}</span>
+      sideContainer.innerHTML += `
+        <div style="background:${condBg};border:1.5px solid ${condBorder};border-radius:var(--radius);padding:10px 14px;">
+          <div style="font-size:.7rem;font-weight:700;color:var(--c-muted);text-transform:uppercase;margin-bottom:6px;letter-spacing:.04em">Spese Condominio Casa ${isAllYears ? '— Tutti gli anni' : S.selectedYear}</div>
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span class="mono" style="font-size:1.1rem;font-weight:700;color:${condColor}">${fmtEUR(condTotal)}</span>
+            <span style="font-size:.76rem;color:var(--c-muted)">${condCount} pagament${condCount === 1 ? 'o' : 'i'}</span>
           </div>
-          ${condAlert ? `<div style="font-size:.78rem;font-weight:700;color:var(--c-danger);margin-top:6px">⚠ Nessun pagamento registrato</div>` : ''}
+          ${condAlert ? `<div style="font-size:.74rem;font-weight:700;color:var(--c-danger);margin-top:4px">⚠ Nessun pagamento registrato</div>` : ''}
         </div>`;
     }
 
