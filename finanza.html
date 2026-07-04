@@ -447,8 +447,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.41';
-const APP_BUILD   = '2026-07-04T11:10:00Z';
+const APP_VERSION = 'v1.0.42';
+const APP_BUILD   = '2026-07-04T12:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3097,6 +3097,7 @@ function openNewContributionModal(fundId, contributionId = null) {
         <label class="form-label">Importo (€) *</label>
         <input name="amount" type="number" step="0.01" min="0.01" class="form-input mono" required value="${c?.amount || ''}" />
       </div>
+      <div id="contrib-adjusted-preview" class="settings-row text-sm text-muted mb-12"></div>
       <div class="form-group">
         <label class="form-label">Note</label>
         <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${c?.notes || ''}</textarea>
@@ -3119,6 +3120,28 @@ function openNewContributionModal(fundId, contributionId = null) {
     else   await sbIns('fnz_fund_contributions', payload);
     await reload(); closeModal();
   });
+  const dateInput   = document.querySelector('#modal-body input[name="date"]');
+  const amountInput = document.querySelector('#modal-body input[name="amount"]');
+  const preview     = $('contrib-adjusted-preview');
+  const updatePreview = () => {
+    const date   = dateInput.value;
+    const amount = parseFloat(amountInput.value);
+    if (!date || !amount) { preview.innerHTML = ''; return; }
+    const otherYears = S.fundContributions
+      .filter(x => x.fund_id === fund.id && x.id !== c?.id)
+      .map(x => parseInt(x.date.slice(0, 4), 10));
+    const referenceYear = Math.min(parseInt(date.slice(0, 4), 10), ...(otherYears.length ? otherYears : [Infinity]));
+    const idxMap = foiIndexMap();
+    const coefficient = foiCoefficient(referenceYear, parseInt(date.slice(0, 4), 10), idxMap);
+    if (coefficient == null) {
+      preview.innerHTML = `⚠️ Manca l'indice FOI per l'anno di riferimento (${referenceYear}) o per l'anno del versamento: impossibile attualizzare.`;
+      return;
+    }
+    preview.innerHTML = `Valore al potere d'acquisto del ${referenceYear} (anno di riferimento del fondo): <strong>${fmtEURc(amount * coefficient)}</strong> <span class="text-muted">(coeff. ${coefficient.toFixed(4)})</span>`;
+  };
+  dateInput.addEventListener('input', updatePreview);
+  amountInput.addEventListener('input', updatePreview);
+  updatePreview();
 }
 function openFoiIndexModal() {
   const rows = S.foiIndex.slice().sort((a, b) => a.year - b.year);
