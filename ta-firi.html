@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sfide v1.0.0</title>
+    <title>Ta Firi v1.0.1</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -55,7 +55,6 @@
 
         .sidebar-logo { padding: 0.5rem 0.6rem 1.5rem; }
         .sidebar-logo-title { font-size: 1.8rem; font-weight: 900; color: var(--challenge); line-height: 1; }
-        .sidebar-logo-sub { font-size: 1rem; color: var(--muted); font-style: italic; margin-top: 0.2rem; }
 
         .nav-menu { list-style: none; }
         .nav-item {
@@ -226,7 +225,7 @@
     <div id="authOverlay">
         <div style="font-size:3.5rem;">🔐</div>
         <h2 style="color:#fff; margin:0; font-size:1.4rem; font-weight:700;">Accesso richiesto</h2>
-        <p style="color:#aaa; margin:0; text-align:center; max-width:320px; line-height:1.6;">Apri <strong style="color:#8E44AD;">Sfide</strong> da AppSphere per accedere con il tuo account Google.</p>
+        <p style="color:#aaa; margin:0; text-align:center; max-width:320px; line-height:1.6;">Apri <strong style="color:#8E44AD;">Ta Firi</strong> da AppSphere per accedere con il tuo account Google.</p>
         <a href="/" style="margin-top:0.5rem; padding:0.8rem 2rem; background:#8E44AD; color:#fff; border-radius:10px; text-decoration:none; font-weight:700; font-size:0.95rem;">Vai ad AppSphere</a>
     </div>
 
@@ -244,8 +243,7 @@
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-logo">
-                <div class="sidebar-logo-title">🎯 Sfide</div>
-                <div class="sidebar-logo-sub">Ta Firi</div>
+                <div class="sidebar-logo-title">🎯 Ta Firi</div>
             </div>
             <ul class="nav-menu">
                 <li class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">📋 Dashboard</li>
@@ -334,9 +332,9 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.0.0';
-        const BUILD_TIME  = '2026-07-04T15:00:00Z';
-        console.log('%c SFIDE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        const APP_VERSION = 'v1.0.1';
+        const BUILD_TIME  = '2026-07-04T16:30:00Z';
+        console.log('%c TA FIRI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
 
@@ -365,7 +363,7 @@
                 auth:   { persistSession: false, autoRefreshToken: false },
                 global: { headers: { Authorization: 'Bearer ' + token } }
             });
-            console.log('✅ Supabase autenticato con token Google (Sfide ' + APP_VERSION + ')');
+            console.log('✅ Supabase autenticato con token Google (Ta Firi ' + APP_VERSION + ')');
             document.getElementById('authOverlay').style.display = 'none';
             init();
         }
@@ -723,7 +721,7 @@
         // INIT
         // ==========================================
         async function init() {
-            console.log('🚀 Inizializzazione Sfide...');
+            console.log('🚀 Inizializzazione Ta Firi...');
             await loadAll();
             console.log('✅ App inizializzata');
         }
@@ -734,7 +732,7 @@
         window.addEventListener('message', (e) => {
             if (!e.data) return;
             if (e.data.type === 'SB_TOKEN' && e.data.token) {
-                console.log('✅ SB_TOKEN ricevuto dal launcher (Sfide)');
+                console.log('✅ SB_TOKEN ricevuto dal launcher (Ta Firi)');
                 initWithToken(e.data.token);
             }
         });
