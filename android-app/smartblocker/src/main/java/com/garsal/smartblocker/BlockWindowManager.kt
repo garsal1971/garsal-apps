@@ -115,14 +115,14 @@ class BlockWindowManager(private val ctx: Context) {
 
     private fun checkPin() {
         if (pinBuffer == Config.PIN) {
-            val entityIds = Prefs.getBlockEntityIds(ctx)
+            val entities = Prefs.getBlockEntities(ctx)
             ctx.startService(Intent(ctx, BlockerService::class.java).apply {
                 action = BlockerService.ACTION_UNBLOCK
             })
-            if (entityIds.isNotEmpty()) {
+            if (entities.isNotEmpty()) {
                 Thread {
                     val api = SupabaseApi(ctx)
-                    entityIds.forEach { api.completeTask(it) }
+                    entities.forEach { api.completeEntity(it.app, it.entityId) }
                     api.triggerFillQueue()
                 }.start()
             }
@@ -142,10 +142,13 @@ class BlockWindowManager(private val ctx: Context) {
     }
 
     private fun buildView(): View {
+        // Verde per le sfide Ta Firi?, rosso per i task (comportamento invariato).
+        val bgColor = if (Prefs.isChallengeOnlyBlock(ctx)) "#0F3D24" else "#4A1414"
+
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#1A1A2E"))
+            setBackgroundColor(Color.parseColor(bgColor))
             layoutParams = ViewGroup.LayoutParams(MP, MP)
             setPadding(48, 80, 48, 80)
         }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ta Firi? v1.0.2</title>
+    <title>Ta Firi? v1.1.0</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -332,8 +332,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.0.2';
-        const BUILD_TIME  = '2026-07-04T17:00:00Z';
+        const APP_VERSION = 'v1.1.0';
+        const BUILD_TIME  = '2026-07-04T18:30:00Z';
         console.log('%c TA FIRI? ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -383,6 +383,91 @@
             localStorage.removeItem('sb_token');
             document.getElementById('authOverlay').style.display = 'flex';
             return true;
+        }
+
+        function decodeJWT(token) {
+            try {
+                const payload = token.split('.')[1];
+                return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+            } catch { return null; }
+        }
+
+        // Converte una data 'YYYY-MM-DD' + orario 'HH:MM' (interpretati come Europe/Rome,
+        // DST-aware) in ISO UTC — stessa logica di euToRomeUTC in tasks.html.
+        // Necessario perché l'app Android smartblocker interpreta sempre due_at come istante UTC.
+        function dateTimeToRomeUTC(dateStr, timeStr) {
+            const [year, mon, day] = dateStr.split('-').map(Number); // mon: 1-indexed
+            const [h, mn] = timeStr.split(':').map(Number);
+            function lastSunday(y, moIdx) { // moIdx: 0-indexed
+                const lastDay = new Date(Date.UTC(y, moIdx + 1, 0));
+                return lastDay.getUTCDate() - lastDay.getUTCDay();
+            }
+            const dstStart = lastSunday(year, 2);  // ultima domenica di marzo (inizio CEST)
+            const dstEnd   = lastSunday(year, 9);  // ultima domenica di ottobre (fine CEST)
+            const mon0 = mon - 1;
+            const inCEST = (mon0 > 2 || (mon0 === 2 && day >= dstStart))
+                        && (mon0 < 9 || (mon0 === 9 && day < dstEnd));
+            const offsetH = inCEST ? 2 : 1;
+            return new Date(Date.UTC(year, mon0, day, h - offsetH, mn)).toISOString();
+        }
+
+        // ==========================================
+        // SMART BLOCK — regola cm_notification_rules (channel='smart_block', app='ta_firi')
+        // ==========================================
+        async function upsertSmartBlockRule(challenge) {
+            const token = sbAccessToken;
+            if (!token) return;
+            const userId = decodeJWT(token)?.sub;
+            if (!userId) { console.warn('⚠️ upsertSmartBlockRule: user_id non trovato'); return; }
+
+            const dueAtIso = dateTimeToRomeUTC(challenge.start_date, formatTime(challenge.checkin_time));
+            const { error } = await supabaseClient.from('cm_notification_rules').upsert({
+                user_id: userId,
+                app: 'ta_firi',
+                entity_id: challenge.id,
+                entity_type: 'challenge',
+                entity_title: challenge.title,
+                reminder_presets: { due_at: dueAtIso },
+                notification_spec: {},
+                channel: 'smart_block',
+                enabled: true
+            }, { onConflict: 'user_id,app,entity_id,channel' });
+
+            if (error) console.error('❌ upsertSmartBlockRule:', error.message);
+        }
+
+        async function deleteSmartBlockRule(challengeId) {
+            const { error } = await supabaseClient.from('cm_notification_rules')
+                .delete().eq('app', 'ta_firi').eq('entity_id', challengeId).eq('channel', 'smart_block');
+            if (error) console.error('❌ deleteSmartBlockRule:', error.message);
+        }
+
+        // Rete di sicurezza: crea la regola smart_block per le sfide attive che ne sono prive
+        // (sfide create prima di questa funzione, o regola persa per qualche motivo).
+        async function ensureSmartBlockRules() {
+            const active = challenges.filter(c => c.status === 'active');
+            if (active.length === 0) return;
+
+            const { data: existingRules, error } = await supabaseClient
+                .from('cm_notification_rules')
+                .select('entity_id')
+                .eq('app', 'ta_firi')
+                .eq('channel', 'smart_block');
+            if (error) { console.error('❌ ensureSmartBlockRules:', error.message); return; }
+
+            const existingIds = new Set((existingRules || []).map(r => r.entity_id));
+            const today = todayStr();
+
+            for (const c of active) {
+                if (existingIds.has(c.id)) continue;
+                const days = (checkinsByChallenge[c.id] || [])
+                    .filter(d => d.status === 'pending')
+                    .sort((a, b) => a.day_date.localeCompare(b.day_date));
+                const nextDay = days.find(d => d.day_date >= today) || days[0];
+                if (!nextDay) continue; // nessun giorno pendente da schedulare
+
+                await upsertSmartBlockRule({ ...c, start_date: nextDay.day_date });
+            }
         }
 
         // ==========================================
@@ -464,6 +549,7 @@
             await loadChallenges();
             await loadCheckins();
             await finalizeExpiredChallenges();
+            await ensureSmartBlockRules();
             renderDashboard();
             renderStorico();
         }
@@ -521,6 +607,8 @@
             const { error: daysError } = await supabaseClient.from('sf_checkins').insert(dayRows);
             if (daysError) console.error('❌ Errore creazione giorni sfida:', daysError.message);
 
+            await upsertSmartBlockRule(newChallenge);
+
             closeModal();
             showToast('✅ Sfida creata: ' + title);
             await loadAll();
@@ -530,6 +618,7 @@
             if (!confirm('Eliminare definitivamente questa sfida?')) return;
             const { error } = await supabaseClient.from('sf_challenges').delete().eq('id', id);
             if (error) { showToast('Errore: ' + error.message); console.error(error); return; }
+            await deleteSmartBlockRule(id);
             showToast('🗑 Sfida eliminata');
             await loadAll();
         }
@@ -537,6 +626,20 @@
         // ==========================================
         // CHECK-IN GIORNALIERO
         // ==========================================
+
+        // Check-in "ufficiale" del giorno corrente: passa dalla RPC sf_checkin_set,
+        // che aggiorna anche la regola smart_block per il giorno successivo.
+        // Usare SOLO per il check-in di oggi (banner) — per correggere giorni passati
+        // usare cycleCheckin, che non tocca la regola di promemoria.
+        async function submitTodayCheckin(challengeId, status) {
+            const { data, error } = await supabaseClient.rpc('sf_checkin_set', {
+                p_challenge_id: challengeId, p_status: status, p_today: todayStr()
+            });
+            if (error || !data?.ok) { showToast('Errore: ' + (error?.message || data?.error)); return; }
+            await loadCheckins();
+            renderDashboard();
+        }
+
         async function setCheckinStatus(challengeId, dayDate, status) {
             const { error } = await supabaseClient.from('sf_checkins')
                 .update({ status, checked_at: new Date().toISOString() })
@@ -579,7 +682,6 @@
             const pending = getPendingCheckinsNow();
             if (pending.length === 0) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
 
-            const today = todayStr();
             banner.style.display = 'block';
             banner.innerHTML = `
                 <div class="checkin-banner-card">
@@ -588,8 +690,8 @@
                         <div class="checkin-banner-row">
                             <span>${escapeHtml(c.title)}</span>
                             <div class="checkin-banner-actions">
-                                <button class="btn btn-success btn-sm" onclick="setCheckinStatus('${c.id}','${today}','done')">✅ Fatto</button>
-                                <button class="btn btn-danger btn-sm" onclick="setCheckinStatus('${c.id}','${today}','not_done')">❌ Non fatto</button>
+                                <button class="btn btn-success btn-sm" onclick="submitTodayCheckin('${c.id}','done')">✅ Fatto</button>
+                                <button class="btn btn-danger btn-sm" onclick="submitTodayCheckin('${c.id}','not_done')">❌ Non fatto</button>
                             </div>
                         </div>
                     `).join('')}

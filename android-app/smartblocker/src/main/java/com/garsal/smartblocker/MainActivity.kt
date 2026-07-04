@@ -95,7 +95,7 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         })
         titleCol.addView(TextView(this).apply {
-            text = "v1.2.9 · PIN: ${Config.PIN}"
+            text = "v1.3.0 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         })
@@ -269,7 +269,7 @@ class MainActivity : AppCompatActivity() {
         }, lp(32))
 
         settingsContainer.addView(TextView(this).apply {
-            text = "Rinvii: ${Config.MAX_SNOOZES}  ·  Durata rinvio: ${Config.SNOOZE_DURATION_MS / 60000} min\nI blocchi arrivano da tasks.html via Supabase"
+            text = "Rinvii: ${Config.MAX_SNOOZES}  ·  Durata rinvio: ${Config.SNOOZE_DURATION_MS / 60000} min\nI blocchi arrivano da tasks.html (rosso) e ta-firi.html (verde) via Supabase"
             textSize = 15f
             setTextColor(0xFF374151.toInt())
         }, lp(8))
