@@ -374,6 +374,7 @@
       <button class="nav-item"        data-action="nav" data-view="portafogli">💼 Portafogli</button>
       <button class="nav-item"        data-action="nav" data-view="transazioni">💳 Transazioni</button>
       <button class="nav-item"        data-action="nav" data-view="dossiers">📁 Dossier</button>
+      <button class="nav-item"        data-action="nav" data-view="fondi">🤝 Fondi</button>
       <button class="nav-item"        data-action="nav" data-view="prodotti">📋 Prodotti</button>
       <button class="nav-item"        data-action="nav" data-view="prezzi">🏷️ Prezzi</button>
 
@@ -400,6 +401,8 @@
       <div id="view-transazioni"        class="view"></div>
       <div id="view-dossiers"           class="view"></div>
       <div id="view-dossier-detail"     class="view"></div>
+      <div id="view-fondi"              class="view"></div>
+      <div id="view-fondo-detail"       class="view"></div>
       <div id="view-progressione"        class="view"></div>
       <div id="view-loans"              class="view"></div>
       <div id="view-other-assets"       class="view"></div>
@@ -444,8 +447,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.40';
-const APP_BUILD   = '2026-07-03T20:15:00Z';
+const APP_VERSION = 'v1.0.41';
+const APP_BUILD   = '2026-07-04T11:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -456,8 +459,10 @@ const S = {
   view: 'dashboard',
   portfolioId: null,
   dossierId: null,
+  fundId: null,
   portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [],
   otherAssets: [], otherAssetTypes: [],
+  funds: [], fundContributions: [], foiIndex: [],
   dashboardSnapshots: [],
   prevSnapshot: null,
   chartSeries: { totale: true, portafogli: true, asset: true, debiti: true },
@@ -582,7 +587,7 @@ const DEFAULT_TAG_CATS = [
 ];
 /* ── Data loaders ────────────────────────────────────────────── */
 async function loadAll() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
@@ -591,6 +596,9 @@ async function loadAll() {
     sbQ('fnz_loans',          'select=*&order=created_at.asc'),
     sbQ('fnz_other_assets',   'select=*&order=valuation_date.desc'),
     sbQ('fnz_other_asset_types','select=*&order=name.asc'),
+    sbQ('fnz_funds',              'select=*&order=created_at.asc'),
+    sbQ('fnz_fund_contributions', 'select=*&order=date.asc,created_at.asc'),
+    sbQ('fnz_foi_index',          'select=*&order=year.asc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -600,6 +608,9 @@ async function loadAll() {
   S.loans        = loans;
   S.otherAssets  = otherAssets;
   S.otherAssetTypes = otherAssetTypes;
+  S.funds        = funds;
+  S.fundContributions = fundContributions;
+  S.foiIndex     = foiIndex;
   if (tagCats.length === 0) {
     await Promise.all(DEFAULT_TAG_CATS.map(tc => sbIns('fnz_tag_categories', { ...tc, user_id: S.session.user.id })));
     S.tagCats = await sbQ('fnz_tag_categories', 'select=*&order=name.asc');
@@ -616,7 +627,7 @@ async function loadAll() {
     S.prevSnapshot = _p[0] || null; }
 }
 async function reload() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
@@ -625,6 +636,9 @@ async function reload() {
     sbQ('fnz_loans',          'select=*&order=created_at.asc'),
     sbQ('fnz_other_assets',   'select=*&order=valuation_date.desc'),
     sbQ('fnz_other_asset_types','select=*&order=name.asc'),
+    sbQ('fnz_funds',              'select=*&order=created_at.asc'),
+    sbQ('fnz_fund_contributions', 'select=*&order=date.asc,created_at.asc'),
+    sbQ('fnz_foi_index',          'select=*&order=year.asc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -634,6 +648,9 @@ async function reload() {
   S.loans        = loans;
   S.otherAssets  = otherAssets;
   S.otherAssetTypes = otherAssetTypes;
+  S.funds        = funds;
+  S.fundContributions = fundContributions;
+  S.foiIndex     = foiIndex;
   await loadPricesFromCache();
   S.priceHistory = await sbQ('fnz_price_history', 'select=*&order=price_date.desc');
   computePricesFromHistory();
@@ -720,6 +737,57 @@ function computeDossierValue(dossierId) {
     total += h.currentValue;
   }
   return { total, hasMissingPrice };
+}
+/* ── Business logic — Fondi comuni (quote attualizzate ISTAT FOI) ──
+   Calcola la percentuale di possesso di ogni partecipante a un fondo,
+   attualizzando ogni versamento al potere d'acquisto dell'anno del
+   primo versamento del fondo tramite l'indice ISTAT FOI (media annua).
+   coefficiente_anno = indice_anno_riferimento / indice_anno_versamento
+   importo_attualizzato = importo_nominale × coefficiente_anno        */
+function foiIndexMap() {
+  const m = new Map();
+  for (const r of S.foiIndex) m.set(r.year, parseFloat(r.index_value));
+  return m;
+}
+function foiCoefficient(referenceYear, year, idxMap = foiIndexMap()) {
+  const refIdx  = idxMap.get(referenceYear);
+  const yearIdx = idxMap.get(year);
+  if (refIdx == null || yearIdx == null) return null;
+  return refIdx / yearIdx;
+}
+function computeFundShares(fundId) {
+  const contributions = S.fundContributions
+    .filter(c => c.fund_id === fundId)
+    .slice()
+    .sort((a, b) => (a.date + a.created_at).localeCompare(b.date + b.created_at));
+  if (contributions.length === 0) {
+    return { referenceYear: null, idxMap: foiIndexMap(), rows: [], participants: [], totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false };
+  }
+  const idxMap = foiIndexMap();
+  const referenceYear = Math.min(...contributions.map(c => parseInt(c.date.slice(0, 4), 10)));
+  let hasMissingIndex = false;
+  const rows = contributions.map(c => {
+    const year = parseInt(c.date.slice(0, 4), 10);
+    const amount = parseFloat(c.amount);
+    const coefficient = foiCoefficient(referenceYear, year, idxMap);
+    if (coefficient == null) hasMissingIndex = true;
+    const adjusted = coefficient != null ? amount * coefficient : null;
+    return { ...c, year, amount, coefficient, adjusted };
+  });
+  const byParticipant = new Map();
+  for (const r of rows) {
+    const cur = byParticipant.get(r.participant) || { participant: r.participant, count: 0, totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false };
+    cur.count += 1;
+    cur.totalNominal += r.amount;
+    if (r.adjusted != null) cur.totalAdjusted += r.adjusted; else cur.hasMissingIndex = true;
+    byParticipant.set(r.participant, cur);
+  }
+  const totalNominal  = rows.reduce((s, r) => s + r.amount, 0);
+  const totalAdjusted = rows.reduce((s, r) => s + (r.adjusted || 0), 0);
+  const participants = [...byParticipant.values()]
+    .map(p => ({ ...p, percentage: totalAdjusted > 0 ? (p.totalAdjusted / totalAdjusted) * 100 : 0 }))
+    .sort((a, b) => b.totalAdjusted - a.totalAdjusted);
+  return { referenceYear, idxMap, rows, participants, totalNominal, totalAdjusted, hasMissingIndex };
 }
 /* ── Business logic — loans ──────────────────────────────────── */
 function computeLoanValue(loan) {
@@ -1909,6 +1977,109 @@ function renderDossierDetail() {
       </div>` : ''}
   `);
 }
+/* ── Fondi comuni ─────────────────────────────────────────────── */
+function renderFunds() {
+  setHtml('view-fondi', `
+    <div class="view-header">
+      <div><h2 class="page-title">Fondi</h2><p class="page-sub">Fondi comuni tra più partecipanti: calcolo quote di possesso attualizzate con indice ISTAT FOI</p></div>
+      <div class="hstack gap-8">
+        <button class="btn btn-outline btn-sm" data-action="open-foi-index">🏷️ Indice FOI</button>
+        <button class="btn btn-primary btn-sm" data-action="new-fund">+ Nuovo Fondo</button>
+      </div>
+    </div>
+    ${S.funds.length === 0
+      ? `<div class="empty-state"><div class="empty-icon">🤝</div><p>Nessun fondo ancora.</p></div>`
+      : `<div class="grid-auto">${S.funds.map(f => {
+          const stats = computeFundShares(f.id);
+          return `
+        <div class="card">
+          <div class="card-header-row">
+            <div class="card-title">${f.name}</div>
+            <div class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-fund" data-id="${f.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-fund" data-id="${f.id}" title="Elimina">✕</button>
+            </div>
+          </div>
+          <div class="settings-row text-sm">Partecipanti: <strong>${stats.participants.length}</strong> · Versamenti: <strong>${stats.rows.length}</strong></div>
+          <div class="portfolio-card-stats">
+            <div>
+              <div class="kpi-label">Totale attualizzato${stats.hasMissingIndex ? ' <span class="text-muted text-sm">(parziale)</span>' : ''}</div>
+              <div class="mono portfolio-card-value">${fmtEUR(stats.totalAdjusted)}</div>
+            </div>
+          </div>
+          ${f.notes ? `<div class="settings-row text-muted text-sm">${f.notes}</div>` : ''}
+          <button class="btn btn-outline btn-sm mt-12" data-action="view-fund" data-id="${f.id}">Apri →</button>
+        </div>`;
+        }).join('')}</div>`
+    }
+  `);
+}
+function renderFundDetail() {
+  const fund = S.funds.find(f => f.id === S.fundId);
+  if (!fund) { navigate('fondi'); return; }
+  const stats = computeFundShares(fund.id);
+  setHtml('view-fondo-detail', `
+    <div class="view-header">
+      <div class="hstack gap-8">
+        <button class="btn btn-sm btn-outline" data-action="nav" data-view="fondi">← Fondi</button>
+        <div>
+          <h2 class="page-title">${fund.name}</h2>
+          <p class="page-sub">${fund.notes || 'Fondo comune'}</p>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" data-action="new-contribution" data-fund-id="${fund.id}">+ Versamento</button>
+    </div>
+    ${stats.referenceYear == null
+      ? `<div class="empty-sm">Nessun versamento ancora. Aggiungi il primo versamento per iniziare il calcolo delle quote.</div>`
+      : `
+    <div class="kpi-grid">
+      ${kpi('Anno di riferimento', stats.referenceYear, 'neutral')}
+      ${kpi('Totale nominale',     fmtEUR(stats.totalNominal),  'neutral')}
+      ${kpi('Totale attualizzato', fmtEUR(stats.totalAdjusted), 'neutral')}
+      ${kpi('Partecipanti',        stats.participants.length, 'neutral')}
+    </div>
+    ${stats.hasMissingIndex ? `<div class="empty-sm" style="margin-bottom:14px">⚠️ Manca l'indice FOI per uno o più anni: alcuni versamenti non sono stati attualizzati. Aggiorna l'indice da "🏷️ Indice FOI".</div>` : ''}
+    <div class="grid-2 mb-16">
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-title">Quote di possesso</div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Persona</th><th>Versamenti</th><th>Totale nominale</th><th>Totale attualizzato</th><th>Quota %</th><th></th></tr></thead>
+          <tbody>${stats.participants.map(p => `
+            <tr>
+              <td class="fw-600">${p.participant}</td>
+              <td class="mono">${p.count}</td>
+              <td class="mono">${fmtEUR(p.totalNominal)}</td>
+              <td class="mono fw-600">${fmtEUR(p.totalAdjusted)}</td>
+              <td><span class="badge badge-pos">${p.percentage.toFixed(2)}%</span></td>
+              <td><button class="btn-icon btn-icon-danger" data-action="del-fund-participant" data-fund-id="${fund.id}" data-participant="${encodeURIComponent(p.participant)}" title="Rimuovi partecipante e i suoi versamenti">✕</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Versamenti</div>
+      <div class="table-wrap"><table class="table table-storico">
+        <thead><tr><th></th><th>Persona</th><th>Data</th><th>Importo nominale</th><th>Coefficiente</th><th>Importo attualizzato</th><th>Note</th></tr></thead>
+        <tbody>${stats.rows.map(r => `
+          <tr>
+            <td class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-contribution" data-id="${r.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-contribution" data-id="${r.id}" title="Elimina">✕</button>
+            </td>
+            <td class="fw-600">${r.participant}</td>
+            <td class="mono text-sm">${fmtDate(r.date)}</td>
+            <td class="mono">${fmtEURc(r.amount)}</td>
+            <td class="mono text-muted">${r.coefficient != null ? r.coefficient.toFixed(4) : '—'}</td>
+            <td class="mono fw-600">${r.adjusted != null ? fmtEURc(r.adjusted) : '—'}</td>
+            <td><div class="truncate" style="max-width:120px">${r.notes || '—'}</div></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`
+    }
+  `);
+}
 function renderPrestiti() {
   setHtml('view-loans', `
     <div class="view-header">
@@ -2874,6 +3045,111 @@ function openNewDossierModal(dossierId = null) {
     await reload(); closeModal();
   });
 }
+function openNewFundModal(fundId = null) {
+  const f = fundId ? S.funds.find(x => x.id === fundId) : null;
+  openModal(f ? 'Modifica Fondo' : 'Nuovo Fondo', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Crypto" value="${f?.name || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea name="notes" class="form-input" rows="3" placeholder="Opzionale">${f?.notes || ''}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${f ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      user_id: S.session.user.id,
+      name: data.name.trim(),
+      notes: data.notes || '',
+    };
+    if (f) await sbUpd('fnz_funds', `id=eq.${f.id}`, payload);
+    else   await sbIns('fnz_funds', payload);
+    await reload(); closeModal();
+  });
+}
+function openNewContributionModal(fundId, contributionId = null) {
+  const c = contributionId ? S.fundContributions.find(x => x.id === contributionId) : null;
+  const targetFundId = c ? c.fund_id : fundId;
+  const fund = S.funds.find(x => x.id === targetFundId);
+  if (!fund) { alert('Crea prima un fondo.'); return; }
+  openModal(c ? 'Modifica Versamento' : `Nuovo Versamento — ${fund.name}`, `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Persona *</label>
+          <input name="participant" class="form-input" required placeholder="es. Salvatore" value="${c?.participant || ''}" list="fund-participants-list" />
+          <datalist id="fund-participants-list">
+            ${[...new Set(S.fundContributions.filter(x => x.fund_id === fund.id).map(x => x.participant))].map(p => `<option value="${p}"></option>`).join('')}
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input name="date" type="date" class="form-input" required value="${c?.date || ''}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Importo (€) *</label>
+        <input name="amount" type="number" step="0.01" min="0.01" class="form-input mono" required value="${c?.amount || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${c?.notes || ''}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${c ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      user_id: S.session.user.id,
+      fund_id: fund.id,
+      participant: data.participant.trim(),
+      date: data.date,
+      amount: parseFloat(data.amount),
+      notes: data.notes || '',
+    };
+    if (c) await sbUpd('fnz_fund_contributions', `id=eq.${c.id}`, payload);
+    else   await sbIns('fnz_fund_contributions', payload);
+    await reload(); closeModal();
+  });
+}
+function openFoiIndexModal() {
+  const rows = S.foiIndex.slice().sort((a, b) => a.year - b.year);
+  openModal('Indice ISTAT FOI (media annua)', `
+    <p class="text-muted text-sm mb-12">Indice per anno, usato per attualizzare i versamenti dei fondi al potere d'acquisto dell'anno del primo versamento. Coefficiente = indice(anno riferimento) / indice(anno versamento).</p>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Anno</th><th>Indice</th><th>Nota</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="mono fw-600">${r.year}</td>
+            <td><input type="number" step="0.0001" min="0.0001" class="form-input mono" id="foi-idx-${r.year}" value="${r.index_value}" /></td>
+            <td><input type="text" class="form-input" id="foi-note-${r.year}" value="${r.note || ''}" /></td>
+            <td class="hstack gap-4">
+              <button class="btn-icon" data-action="save-foi-row" data-year="${r.year}" title="Salva">✔</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-foi-row" data-year="${r.year}" title="Elimina">✕</button>
+            </td>
+          </tr>`).join('')}
+        <tr>
+          <td><input type="number" class="form-input mono" id="foi-year-new" placeholder="es. 2027" /></td>
+          <td><input type="number" step="0.0001" min="0.0001" class="form-input mono" id="foi-idx-new" placeholder="Indice" /></td>
+          <td><input type="text" class="form-input" id="foi-note-new" placeholder="Nota (opzionale)" /></td>
+          <td><button class="btn-icon" data-action="add-foi-row" title="Aggiungi">+</button></td>
+        </tr>
+      </tbody>
+    </table></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-action="close-modal">Chiudi</button>
+    </div>
+  `);
+}
 function openNewLoanModal(loanId = null) {
   const l = loanId ? S.loans.find(x => x.id === loanId) : null;
   const isEdit = !!l;
@@ -3064,7 +3340,8 @@ function navigate(view, param = null) {
   S.view = view;
   if (view === 'portafoglio-detail') S.portfolioId = param;
   if (view === 'dossier-detail') S.dossierId = param;
-  history.pushState({ view, portfolioId: S.portfolioId, dossierId: S.dossierId }, '');
+  if (view === 'fondo-detail') S.fundId = param;
+  history.pushState({ view, portfolioId: S.portfolioId, dossierId: S.dossierId, fundId: S.fundId }, '');
   render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -3073,7 +3350,8 @@ function render() {
   document.querySelectorAll('.nav-item').forEach(b => {
     const match = b.dataset.view === S.view ||
       (S.view === 'portafoglio-detail' && b.dataset.view === 'portafogli') ||
-      (S.view === 'dossier-detail' && b.dataset.view === 'dossiers');
+      (S.view === 'dossier-detail' && b.dataset.view === 'dossiers') ||
+      (S.view === 'fondo-detail' && b.dataset.view === 'fondi');
     b.classList.toggle('active', match);
   });
   switch (S.view) {
@@ -3084,6 +3362,8 @@ function render() {
     case 'transazioni':        renderTransazioni();        break;
     case 'dossiers':          renderDossiers();           break;
     case 'dossier-detail':    renderDossierDetail();      break;
+    case 'fondi':             renderFunds();              break;
+    case 'fondo-detail':      renderFundDetail();         break;
     case 'loans':             renderPrestiti();           break;
     case 'other-assets':       renderOtherAssets();        break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
@@ -3149,6 +3429,52 @@ document.addEventListener('click', async e => {
         await sbDel('fnz_dossiers', `id=eq.${t.dataset.id}`);
         if (S.dossierId === t.dataset.id) navigate('dossiers');
         else await reload();
+      }
+      break;
+    case 'view-fund':      navigate('fondo-detail', t.dataset.id); break;
+    case 'new-fund':       openNewFundModal(); break;
+    case 'edit-fund':      openNewFundModal(t.dataset.id); break;
+    case 'del-fund':
+      if (confirm('Eliminare questo fondo e tutti i suoi versamenti?')) {
+        await sbDel('fnz_funds', `id=eq.${t.dataset.id}`);
+        if (S.fundId === t.dataset.id) navigate('fondi');
+        else await reload();
+      }
+      break;
+    case 'new-contribution':  openNewContributionModal(t.dataset.fundId); break;
+    case 'edit-contribution': openNewContributionModal(null, t.dataset.id); break;
+    case 'del-contribution':
+      if (confirm('Eliminare questo versamento?')) { await sbDel('fnz_fund_contributions', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'del-fund-participant':
+      if (confirm(`Rimuovere ${decodeURIComponent(t.dataset.participant)} e tutti i suoi versamenti da questo fondo? Le percentuali verranno ricalcolate sui restanti partecipanti.`)) {
+        await sbDel('fnz_fund_contributions', `fund_id=eq.${t.dataset.fundId}&participant=eq.${t.dataset.participant}`);
+        await reload();
+      }
+      break;
+    case 'open-foi-index': openFoiIndexModal(); break;
+    case 'add-foi-row': {
+      const year = parseInt($('foi-year-new').value, 10);
+      const indexValue = parseFloat($('foi-idx-new').value);
+      const note = $('foi-note-new').value || '';
+      if (!year || !indexValue) { alert('Inserisci anno e indice.'); break; }
+      await sbUpsert('fnz_foi_index', { user_id: S.session.user.id, year, index_value: indexValue, note }, 'user_id,year');
+      await reload(); openFoiIndexModal();
+      break;
+    }
+    case 'save-foi-row': {
+      const year = parseInt(t.dataset.year, 10);
+      const indexValue = parseFloat($(`foi-idx-${year}`).value);
+      const note = $(`foi-note-${year}`).value || '';
+      if (!indexValue) { alert('Indice non valido.'); break; }
+      await sbUpsert('fnz_foi_index', { user_id: S.session.user.id, year, index_value: indexValue, note }, 'user_id,year');
+      await reload(); openFoiIndexModal();
+      break;
+    }
+    case 'del-foi-row':
+      if (confirm(`Eliminare l'indice FOI per l'anno ${t.dataset.year}?`)) {
+        await sbDel('fnz_foi_index', `year=eq.${t.dataset.year}`);
+        await reload(); openFoiIndexModal();
       }
       break;
     case 'new-loan':        openNewLoanModal(); break;
