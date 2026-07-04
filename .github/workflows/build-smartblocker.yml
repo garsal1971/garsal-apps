@@ -39,18 +39,37 @@ jobs:
             "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" 2>&1 || true
           fi
 
+      - name: Prepara keystore
+        id: keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android-app/garsal.keystore
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"                  >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"            >> $GITHUB_ENV
+            echo "✅ Keystore dai secrets — build release con firma fissa"
+          else
+            echo "⚠️  KEYSTORE_BASE64 non configurato — impossibile firmare in modo stabile"
+            exit 1
+          fi
+
       - name: Make gradlew executable
         run: chmod +x android-app/gradlew
 
-      - name: Build SmartBlocker debug APK
+      - name: Build SmartBlocker release APK
         working-directory: android-app
-        run: ./gradlew :smartblocker:assembleDebug --no-daemon
+        run: |
+          ./gradlew :smartblocker:assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="${{ github.workspace }}/android-app/garsal.keystore" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SmartBlocker-debug
-          path: android-app/smartblocker/build/outputs/apk/debug/smartblocker-debug.apk
+          name: SmartBlocker-release
+          path: android-app/smartblocker/build/outputs/apk/release/smartblocker-release.apk
           retention-days: 30
 
       - name: Pubblica APK su master (scaricabile via Netlify)
@@ -59,7 +78,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           VERSION=$(grep versionName android-app/smartblocker/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
-          cp android-app/smartblocker/build/outputs/apk/debug/smartblocker-debug.apk /tmp/SmartBlocker-latest.apk
+          cp android-app/smartblocker/build/outputs/apk/release/smartblocker-release.apk /tmp/SmartBlocker-latest.apk
 
           git fetch origin master
           git checkout master
