@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sfide v1.0.0</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #6C5CE7;
+            --success: #00B894;
+            --warning: #F39C12;
+            --danger: #E74C3C;
+            --dark: #1F2937;
+            --light: #FFFFFF;
+            --muted: #6B7280;
+            --accent: #2563EB;
+            --border: #E5E7EB;
+            --card-bg: #FFFFFF;
+            --input-bg: #F9FAFB;
+            --challenge: #8E44AD;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Darker Grotesque', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        /* ── GARSAL TOP BAR ── */
+        #garsal-top-bar {
+            position: fixed; top: 0; left: 0; right: 0; height: 56px;
+            background: #0081C8; display: flex; align-items: center;
+            padding: 0 20px; gap: 10px; z-index: 3000;
+        }
+        #garsal-top-bar-icon {
+            width: 22px; height: 22px; background: rgba(255,255,255,0.25);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: #fff; font-family: 'Space Mono', monospace; flex-shrink: 0;
+        }
+        #garsal-top-bar-text {
+            font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px;
+        }
+
+        .app-container { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+
+        .sidebar { background: #F3F4F6; padding: 1.0rem 0.75rem; border-right: 1px solid var(--border); }
+
+        .sidebar-logo { padding: 0.5rem 0.6rem 1.5rem; }
+        .sidebar-logo-title { font-size: 1.8rem; font-weight: 900; color: var(--challenge); line-height: 1; }
+        .sidebar-logo-sub { font-size: 1rem; color: var(--muted); font-style: italic; margin-top: 0.2rem; }
+
+        .nav-menu { list-style: none; }
+        .nav-item {
+            padding: 0.5rem 0.6rem; margin-bottom: 0.5rem; cursor: pointer;
+            transition: all 0.3s ease; font-size: 1.1rem; font-weight: 500;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.4); transform: translateX(5px); }
+        .nav-item.active { background: var(--challenge); color: #fff; }
+
+        .score-widget {
+            margin-top: 3rem; padding: 0.75rem; background: rgba(142,68,173,0.1);
+            border: 2px solid var(--challenge);
+        }
+        .score-value { font-family: 'Space Mono', monospace; font-size: 3rem; font-weight: 700; color: var(--challenge); text-align: center; }
+        .score-label { text-align: center; margin-top: 0.5rem; opacity: 0.8; }
+
+        .sidebar-add-btn {
+            margin-top: 1.5rem; width: 100%; padding: 0.75rem; background: var(--challenge);
+            color: white; border: none; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.3s ease;
+        }
+        .sidebar-add-btn:hover { transform: translateY(-2px); }
+
+        .main-content { padding: 2rem; overflow-y: auto; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;
+        }
+        .page-title { font-size: 2.5rem; font-weight: 900; color: var(--dark); }
+
+        .btn {
+            padding: 0.75rem 1.5rem; border: none; cursor: pointer; font-family: inherit;
+            font-size: 1rem; font-weight: 700; transition: all 0.3s ease;
+        }
+        .btn-primary { background: var(--challenge); color: #fff; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(142,68,173,0.4); }
+        .btn-success { background: var(--success); color: #fff; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-secondary { background: var(--muted); color: #fff; }
+        .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+
+        .card { background: var(--card-bg); border: 2px solid var(--border); padding: 1.5rem; margin-bottom: 1.5rem; }
+
+        .empty-state { text-align: center; padding: 3rem 1rem; opacity: 0.6; font-size: 1.1rem; }
+
+        /* Banner check-in */
+        #checkinBanner { display: none; }
+        .checkin-banner-card {
+            background: rgba(243,156,18,0.1); border: 2px solid var(--warning);
+            padding: 1.25rem; margin-bottom: 1.5rem;
+        }
+        .checkin-banner-title { font-weight: 900; font-size: 1.2rem; margin-bottom: 0.75rem; }
+        .checkin-banner-row {
+            display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+            padding: 0.6rem 0; border-top: 1px solid rgba(0,0,0,0.08);
+        }
+        .checkin-banner-row:first-of-type { border-top: none; }
+        .checkin-banner-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+        /* Challenge card */
+        .challenge-card { background: var(--card-bg); border: 2px solid var(--border); padding: 1.5rem; margin-bottom: 1.25rem; }
+        .challenge-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+        .challenge-title { font-size: 1.4rem; font-weight: 900; }
+        .challenge-objective { color: var(--muted); margin-top: 0.2rem; font-size: 1.05rem; }
+        .challenge-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.95rem; color: var(--muted); }
+        .challenge-meta span { white-space: nowrap; }
+
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 700; color: #fff; }
+        .badge-active { background: var(--accent); }
+        .badge-completed { background: var(--success); }
+        .badge-failed { background: var(--danger); }
+        .badge-scoring { background: var(--secondary); }
+
+        .day-grid { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 1rem 0; }
+        .day-pill {
+            width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 700; border: 2px solid var(--border); background: var(--input-bg);
+            color: var(--muted); cursor: default;
+        }
+        .day-pill.clickable { cursor: pointer; }
+        .day-pill.clickable:hover { border-color: var(--challenge); }
+        .day-pill.done { background: var(--success); color: #fff; border-color: var(--success); }
+        .day-pill.not-done { background: var(--danger); color: #fff; border-color: var(--danger); }
+        .day-pill.pending-past { background: var(--warning); color: #fff; border-color: var(--warning); }
+        .day-pill.future { opacity: 0.4; }
+
+        .challenge-actions { display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: flex-end; }
+
+        .score-final { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.1rem; }
+
+        /* Modal */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 4000; align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: #fff; padding: 2rem; max-width: 550px; width: 90%; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .modal-title { font-size: 1.8rem; font-weight: 900; }
+        .modal-close { cursor: pointer; font-size: 2rem; font-weight: 700; color: var(--muted); }
+        .modal-close:hover { color: var(--danger); }
+
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; font-weight: 700; margin-bottom: 0.4rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.7rem; border: 2px solid var(--border); background: var(--input-bg);
+            font-family: inherit; font-size: 1rem;
+        }
+        .form-group textarea { resize: vertical; min-height: 70px; }
+        .form-row { display: flex; gap: 1rem; }
+        .form-row .form-group { flex: 1; }
+        .form-hint { font-size: 0.85rem; color: var(--muted); margin-top: 0.3rem; }
+
+        /* FAB */
+        .fab-btn {
+            position: fixed; bottom: 2rem; right: 2rem; width: 60px; height: 60px; border-radius: 50%;
+            background: var(--challenge); color: #fff; font-size: 2rem; border: none; cursor: pointer;
+            box-shadow: 0 4px 20px rgba(142,68,173,0.5); z-index: 2500; display: flex; align-items: center; justify-content: center;
+        }
+        .fab-btn:hover { transform: scale(1.08); }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 2rem; left: 2rem; background: var(--dark); color: #fff;
+            padding: 1rem 1.5rem; z-index: 5000; max-width: 300px; animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { transform: translateX(-400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* Auth overlay */
+        #authOverlay {
+            display: none; position: fixed; inset: 0; background: rgba(15,15,30,0.97); z-index: 9999;
+            flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; font-family: inherit;
+        }
+
+        /* Bottom nav mobile */
+        .bottom-nav {
+            display: none; position: fixed; top: 56px; left: 0; right: 0; background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 2000; padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+        }
+        .bottom-nav-items { display: flex; justify-content: space-around; align-items: center; max-width: 600px; margin: 0 auto; }
+        .bottom-nav-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 0.7rem 0.5rem; color: var(--muted); cursor: pointer; border: none; background: none;
+            flex: 1; font-size: 0.75rem;
+        }
+        .bottom-nav-item .icon { font-size: 1.8rem; }
+        .bottom-nav-item.active { color: var(--challenge); }
+
+        @media (max-width: 768px) {
+            .app-container { grid-template-columns: 1fr; padding-top: 55px; }
+            .bottom-nav { display: block; }
+            .sidebar { display: none !important; }
+            .main-content { padding: 1rem; }
+            .page-title { font-size: 2rem; }
+            .form-row { flex-direction: column; gap: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="garsal-top-bar">
+        <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+            <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
+            <div id="garsal-top-bar-text">Garsal Apps</div>
+        </a>
+    </div>
+
+    <div id="authOverlay">
+        <div style="font-size:3.5rem;">🔐</div>
+        <h2 style="color:#fff; margin:0; font-size:1.4rem; font-weight:700;">Accesso richiesto</h2>
+        <p style="color:#aaa; margin:0; text-align:center; max-width:320px; line-height:1.6;">Apri <strong style="color:#8E44AD;">Sfide</strong> da AppSphere per accedere con il tuo account Google.</p>
+        <a href="/" style="margin-top:0.5rem; padding:0.8rem 2rem; background:#8E44AD; color:#fff; border-radius:10px; text-decoration:none; font-weight:700; font-size:0.95rem;">Vai ad AppSphere</a>
+    </div>
+
+    <nav class="bottom-nav">
+        <div class="bottom-nav-items">
+            <button class="bottom-nav-item active" onclick="showPage('dashboard')" data-page="dashboard">
+                <span class="icon">🎯</span>
+            </button>
+            <button class="bottom-nav-item" onclick="showPage('storico')" data-page="storico">
+                <span class="icon">🏆</span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="sidebar-logo-title">🎯 Sfide</div>
+                <div class="sidebar-logo-sub">Ta Firi</div>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">📋 Dashboard</li>
+                <li class="nav-item" data-page="storico" onclick="showPage('storico')">🏆 Storico</li>
+            </ul>
+            <div class="score-widget">
+                <div class="score-value" id="sidebarTotalScore">0</div>
+                <div class="score-label">Punti guadagnati</div>
+            </div>
+            <button class="sidebar-add-btn" onclick="openNewChallengeModal()">+ Nuova sfida</button>
+        </aside>
+
+        <main class="main-content">
+            <div id="page-dashboard" class="page active">
+                <div class="page-header">
+                    <div class="page-title">Dashboard</div>
+                </div>
+                <div id="checkinBanner"></div>
+                <div id="activeChallengesList"></div>
+            </div>
+
+            <div id="page-storico" class="page">
+                <div class="page-header">
+                    <div class="page-title">Storico sfide</div>
+                </div>
+                <div id="historyList"></div>
+            </div>
+        </main>
+    </div>
+
+    <button class="fab-btn" onclick="openNewChallengeModal()" title="Nuova sfida">+</button>
+
+    <!-- Modal nuova sfida -->
+    <div class="modal" id="challengeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">🎯 Nuova sfida</div>
+                <span class="modal-close" onclick="closeModal()">&times;</span>
+            </div>
+            <form id="challengeForm" onsubmit="submitChallengeForm(event)">
+                <div class="form-group">
+                    <label>Titolo *</label>
+                    <input type="text" id="cfTitle" required placeholder="es. 30 giorni senza zucchero">
+                </div>
+                <div class="form-group">
+                    <label>Obiettivo</label>
+                    <textarea id="cfObjective" placeholder="Cosa vuoi ottenere con questa sfida?"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Data inizio *</label>
+                        <input type="date" id="cfStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Durata (giorni) *</label>
+                        <input type="number" id="cfDuration" min="1" value="21" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Orario avviso check-in *</label>
+                        <input type="time" id="cfCheckinTime" value="20:00" required>
+                        <div class="form-hint">A quest'ora, aprendo l'app, ti verrà chiesto se hai fatto la sfida oggi.</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Punteggio totale in palio *</label>
+                        <input type="number" id="cfTotalPoints" min="0" value="100" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Schema punteggio *</label>
+                    <select id="cfScoringType">
+                        <option value="all_or_nothing">Tutto o niente — punti pieni solo se riesci ogni giorno</option>
+                        <option value="proportional">Proporzionale — punti in base ai giorni riusciti</option>
+                    </select>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.5rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+                    <button type="submit" class="btn btn-primary">Crea sfida</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // VERSION
+        // ==========================================
+        const APP_VERSION = 'v1.0.0';
+        const BUILD_TIME  = '2026-07-04T15:00:00Z';
+        console.log('%c SFIDE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+            'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+            'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+        // ==========================================
+        // SUPABASE — client inizializzato dopo auth
+        // ==========================================
+        const _DEV_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0'];
+        const _IS_DEV = _DEV_HOSTS.includes(window.location.hostname)
+                     || (window.location.hostname.endsWith('.netlify.app')
+                        && window.location.hostname.startsWith('dev--'));
+        const SUPABASE_URL = _IS_DEV
+            ? 'https://hcmmywitrbmcsmytjbaf.supabase.co'
+            : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+        const SUPABASE_KEY = _IS_DEV
+            ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbW15d2l0cmJtY3NteXRqYmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3ODE1NDUsImV4cCI6MjA4OTM1NzU0NX0.pAtj6THjWXibrMulU1IVGH-BFx4YkjkNT_x07lNUfWE'
+            : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+        let supabaseClient = null;
+        let sbAccessToken  = null;
+
+        function initWithToken(token) {
+            if (supabaseClient) return;
+            sbAccessToken = token;
+            localStorage.setItem('sb_token', token);
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + token } }
+            });
+            console.log('✅ Supabase autenticato con token Google (Sfide ' + APP_VERSION + ')');
+            document.getElementById('authOverlay').style.display = 'none';
+            init();
+        }
+
+        function handleAuthError(error) {
+            if (!error) return false;
+            const msg = (error.message || '').toLowerCase();
+            const isAuthError = error.status === 401
+                || msg.includes('jwt expired')
+                || msg.includes('invalid jwt')
+                || msg.includes('not authenticated')
+                || msg.includes('pgjwt');
+            if (!isAuthError) return false;
+            console.warn('🔒 Token scaduto — sessione invalidata');
+            supabaseClient = null;
+            sbAccessToken = null;
+            localStorage.removeItem('sb_token');
+            document.getElementById('authOverlay').style.display = 'flex';
+            return true;
+        }
+
+        // ==========================================
+        // STATO
+        // ==========================================
+        let challenges = [];             // righe sf_challenges
+        let checkinsByChallenge = {};     // challenge_id -> [ {id, day_date, status, checked_at} ]
+
+        // ==========================================
+        // HELPER DATE — sempre locali, mai UTC (evita bug off-by-one)
+        // ==========================================
+        function pad2(n) { return String(n).padStart(2, '0'); }
+        function localDateStr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+        function todayStr() { return localDateStr(new Date()); }
+        function nowTimeStr() { const d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+        function addDaysStr(dateStr, days) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dt = new Date(y, m - 1, d);
+            dt.setDate(dt.getDate() + days);
+            return localDateStr(dt);
+        }
+        function formatDateIt(dateStr) {
+            const [y, m, d] = dateStr.split('-');
+            return `${d}/${m}/${y}`;
+        }
+        function formatTime(t) { return (t || '').slice(0, 5); }
+
+        // ==========================================
+        // TOAST
+        // ==========================================
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        // ==========================================
+        // NAVIGAZIONE
+        // ==========================================
+        function showPage(name) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + name).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === name));
+            document.querySelectorAll('.bottom-nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === name));
+        }
+
+        // ==========================================
+        // CARICAMENTO DATI
+        // ==========================================
+        async function loadChallenges() {
+            const { data, error } = await supabaseClient.from('sf_challenges').select('*').order('start_date', { ascending: false });
+            if (error) { if (!handleAuthError(error)) { console.error('Errore:', error); showToast('Errore: ' + error.message); } return; }
+            challenges = data || [];
+        }
+
+        async function loadCheckins() {
+            const { data, error } = await supabaseClient.from('sf_checkins').select('*').order('day_date', { ascending: true });
+            if (error) { if (!handleAuthError(error)) { console.error('Errore:', error); showToast('Errore: ' + error.message); } return; }
+            checkinsByChallenge = {};
+            (data || []).forEach(c => {
+                if (!checkinsByChallenge[c.challenge_id]) checkinsByChallenge[c.challenge_id] = [];
+                checkinsByChallenge[c.challenge_id].push(c);
+            });
+        }
+
+        async function finalizeExpiredChallenges() {
+            const today = todayStr();
+            const toFinalize = challenges.filter(c => c.status === 'active' && c.end_date < today);
+            for (const c of toFinalize) {
+                const { error } = await supabaseClient.rpc('sf_finalize_challenge', { p_challenge_id: c.id });
+                if (error) console.error('❌ sf_finalize_challenge:', c.id, error.message);
+            }
+            if (toFinalize.length) await loadChallenges();
+        }
+
+        async function loadAll() {
+            await loadChallenges();
+            await loadCheckins();
+            await finalizeExpiredChallenges();
+            renderDashboard();
+            renderStorico();
+        }
+
+        // ==========================================
+        // CREAZIONE / ELIMINAZIONE SFIDA
+        // ==========================================
+        function openNewChallengeModal() {
+            document.getElementById('challengeForm').reset();
+            document.getElementById('cfStartDate').value = todayStr();
+            document.getElementById('cfDuration').value = 21;
+            document.getElementById('cfCheckinTime').value = '20:00';
+            document.getElementById('cfTotalPoints').value = 100;
+            document.getElementById('cfScoringType').value = 'all_or_nothing';
+            document.getElementById('challengeModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('challengeModal').classList.remove('active');
+        }
+
+        async function submitChallengeForm(evt) {
+            evt.preventDefault();
+            const title        = document.getElementById('cfTitle').value.trim();
+            const objective    = document.getElementById('cfObjective').value.trim();
+            const startDate    = document.getElementById('cfStartDate').value;
+            const duration     = parseInt(document.getElementById('cfDuration').value, 10);
+            const checkinTime  = document.getElementById('cfCheckinTime').value;
+            const totalPoints  = parseInt(document.getElementById('cfTotalPoints').value, 10);
+            const scoringType  = document.getElementById('cfScoringType').value;
+
+            if (!title || !startDate || !duration || duration < 1) {
+                showToast('Compila tutti i campi obbligatori');
+                return;
+            }
+
+            const endDate = addDaysStr(startDate, duration - 1);
+
+            const { data: newChallenge, error } = await supabaseClient.from('sf_challenges').insert({
+                title, objective,
+                start_date: startDate,
+                duration_days: duration,
+                end_date: endDate,
+                checkin_time: checkinTime,
+                total_points: totalPoints,
+                scoring_type: scoringType
+            }).select().single();
+
+            if (error) { showToast('Errore: ' + error.message); console.error(error); return; }
+
+            const dayRows = [];
+            for (let i = 0; i < duration; i++) {
+                dayRows.push({ challenge_id: newChallenge.id, day_date: addDaysStr(startDate, i), status: 'pending' });
+            }
+            const { error: daysError } = await supabaseClient.from('sf_checkins').insert(dayRows);
+            if (daysError) console.error('❌ Errore creazione giorni sfida:', daysError.message);
+
+            closeModal();
+            showToast('✅ Sfida creata: ' + title);
+            await loadAll();
+        }
+
+        async function deleteChallenge(id) {
+            if (!confirm('Eliminare definitivamente questa sfida?')) return;
+            const { error } = await supabaseClient.from('sf_challenges').delete().eq('id', id);
+            if (error) { showToast('Errore: ' + error.message); console.error(error); return; }
+            showToast('🗑 Sfida eliminata');
+            await loadAll();
+        }
+
+        // ==========================================
+        // CHECK-IN GIORNALIERO
+        // ==========================================
+        async function setCheckinStatus(challengeId, dayDate, status) {
+            const { error } = await supabaseClient.from('sf_checkins')
+                .update({ status, checked_at: new Date().toISOString() })
+                .eq('challenge_id', challengeId)
+                .eq('day_date', dayDate);
+            if (error) { showToast('Errore: ' + error.message); console.error(error); return; }
+            await loadCheckins();
+            renderDashboard();
+        }
+
+        function cycleCheckin(challengeId, dayDate, currentStatus) {
+            const next = currentStatus === 'pending' ? 'done' : currentStatus === 'done' ? 'not_done' : 'pending';
+            setCheckinStatus(challengeId, dayDate, next);
+        }
+
+        function getCheckin(challengeId, dayDate) {
+            const list = checkinsByChallenge[challengeId] || [];
+            return list.find(c => c.day_date === dayDate);
+        }
+
+        // Sfide attive che oggi richiedono il check-in (orario avviso raggiunto e giorno ancora 'pending')
+        function getPendingCheckinsNow() {
+            const today = todayStr();
+            const nowTime = nowTimeStr();
+            const result = [];
+            challenges.filter(c => c.status === 'active').forEach(c => {
+                if (today < c.start_date || today > c.end_date) return;
+                if (formatTime(c.checkin_time) > nowTime) return;
+                const checkin = getCheckin(c.id, today);
+                if (checkin && checkin.status === 'pending') result.push(c);
+            });
+            return result;
+        }
+
+        // ==========================================
+        // RENDERING
+        // ==========================================
+        function renderCheckinBanner() {
+            const banner = document.getElementById('checkinBanner');
+            const pending = getPendingCheckinsNow();
+            if (pending.length === 0) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
+
+            const today = todayStr();
+            banner.style.display = 'block';
+            banner.innerHTML = `
+                <div class="checkin-banner-card">
+                    <div class="checkin-banner-title">🔔 Check-in di oggi</div>
+                    ${pending.map(c => `
+                        <div class="checkin-banner-row">
+                            <span>${escapeHtml(c.title)}</span>
+                            <div class="checkin-banner-actions">
+                                <button class="btn btn-success btn-sm" onclick="setCheckinStatus('${c.id}','${today}','done')">✅ Fatto</button>
+                                <button class="btn btn-danger btn-sm" onclick="setCheckinStatus('${c.id}','${today}','not_done')">❌ Non fatto</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderDayGrid(challenge) {
+            const today = todayStr();
+            let html = '<div class="day-grid">';
+            for (let i = 0; i < challenge.duration_days; i++) {
+                const dayDate = addDaysStr(challenge.start_date, i);
+                const checkin = getCheckin(challenge.id, dayDate);
+                const status = checkin ? checkin.status : 'pending';
+                let cls = 'day-pill';
+                let clickable = false;
+                if (dayDate > today) {
+                    cls += ' future';
+                } else if (status === 'done') {
+                    cls += ' done clickable'; clickable = true;
+                } else if (status === 'not_done') {
+                    cls += ' not-done clickable'; clickable = true;
+                } else {
+                    cls += ' pending-past clickable'; clickable = true;
+                }
+                const onclick = clickable ? `onclick="cycleCheckin('${challenge.id}','${dayDate}','${status}')"` : '';
+                html += `<div class="${cls}" ${onclick} title="${formatDateIt(dayDate)} — ${statusLabel(status)}">${i + 1}</div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        function statusLabel(status) {
+            return status === 'done' ? 'Fatto' : status === 'not_done' ? 'Non fatto' : 'In attesa';
+        }
+
+        function scoringLabel(type) {
+            return type === 'proportional' ? 'Proporzionale' : 'Tutto o niente';
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str || '';
+            return div.innerHTML;
+        }
+
+        function renderDashboard() {
+            renderCheckinBanner();
+            const container = document.getElementById('activeChallengesList');
+            const active = challenges.filter(c => c.status === 'active');
+
+            if (active.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nessuna sfida attiva. Tocca + per crearne una nuova.</div>';
+                return;
+            }
+
+            const today = todayStr();
+            container.innerHTML = active.map(c => {
+                const doneDays = (checkinsByChallenge[c.id] || []).filter(k => k.status === 'done').length;
+                const dayNumber = Math.min(
+                    Math.max(1, Math.floor((new Date(today) - new Date(c.start_date)) / 86400000) + 1),
+                    c.duration_days
+                );
+                return `
+                    <div class="challenge-card">
+                        <div class="challenge-card-header">
+                            <div>
+                                <div class="challenge-title">${escapeHtml(c.title)}</div>
+                                ${c.objective ? `<div class="challenge-objective">${escapeHtml(c.objective)}</div>` : ''}
+                            </div>
+                            <span class="badge badge-active">Giorno ${dayNumber}/${c.duration_days}</span>
+                        </div>
+                        <div class="challenge-meta">
+                            <span>📅 ${formatDateIt(c.start_date)} → ${formatDateIt(c.end_date)}</span>
+                            <span>🔔 ${formatTime(c.checkin_time)}</span>
+                            <span>🎯 In palio: ${c.total_points} punti</span>
+                            <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
+                            <span>✅ ${doneDays}/${c.duration_days} giorni fatti</span>
+                        </div>
+                        ${renderDayGrid(c)}
+                        <div class="challenge-actions">
+                            <button class="btn btn-danger btn-sm" onclick="deleteChallenge('${c.id}')">Elimina</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderStorico() {
+            const container = document.getElementById('historyList');
+            const done = challenges.filter(c => c.status !== 'active');
+            const totalScore = done.reduce((sum, c) => sum + (c.final_score || 0), 0);
+            document.getElementById('sidebarTotalScore').textContent = totalScore;
+
+            if (done.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nessuna sfida conclusa ancora.</div>';
+                return;
+            }
+
+            container.innerHTML = done.map(c => {
+                const doneDays = (checkinsByChallenge[c.id] || []).filter(k => k.status === 'done').length;
+                const badgeClass = c.status === 'completed' ? 'badge-completed' : 'badge-failed';
+                const badgeLabel = c.status === 'completed' ? 'Completata' : 'Fallita';
+                return `
+                    <div class="challenge-card">
+                        <div class="challenge-card-header">
+                            <div>
+                                <div class="challenge-title">${escapeHtml(c.title)}</div>
+                                ${c.objective ? `<div class="challenge-objective">${escapeHtml(c.objective)}</div>` : ''}
+                            </div>
+                            <span class="badge ${badgeClass}">${badgeLabel}</span>
+                        </div>
+                        <div class="challenge-meta">
+                            <span>📅 ${formatDateIt(c.start_date)} → ${formatDateIt(c.end_date)}</span>
+                            <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
+                            <span>✅ ${doneDays}/${c.duration_days} giorni fatti</span>
+                            <span class="score-final">🏅 ${c.final_score ?? 0}/${c.total_points} punti</span>
+                        </div>
+                        ${renderDayGrid(c)}
+                        <div class="challenge-actions">
+                            <button class="btn btn-danger btn-sm" onclick="deleteChallenge('${c.id}')">Elimina</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ==========================================
+        // INIT
+        // ==========================================
+        async function init() {
+            console.log('🚀 Inizializzazione Sfide...');
+            await loadAll();
+            console.log('✅ App inizializzata');
+        }
+
+        // ==========================================
+        // AUTH — token da launcher via postMessage o localStorage
+        // ==========================================
+        window.addEventListener('message', (e) => {
+            if (!e.data) return;
+            if (e.data.type === 'SB_TOKEN' && e.data.token) {
+                console.log('✅ SB_TOKEN ricevuto dal launcher (Sfide)');
+                initWithToken(e.data.token);
+            }
+        });
+
+        const _authChannel = new BroadcastChannel('appsphere_auth');
+        _authChannel.onmessage = (e) => {
+            if (!e.data) return;
+            if (e.data.type === 'LOGOUT') {
+                supabaseClient = null;
+                sbAccessToken = null;
+                localStorage.removeItem('sb_token');
+                document.getElementById('authOverlay').style.display = 'flex';
+                console.log('🔒 Sessione invalidata da AppSphere (logout)');
+            } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+                const newToken = e.data.sbToken;
+                localStorage.setItem('sb_token', newToken);
+                sbAccessToken = newToken;
+                if (supabaseClient) {
+                    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                        auth:   { persistSession: false, autoRefreshToken: false },
+                        global: { headers: { Authorization: 'Bearer ' + newToken } }
+                    });
+                }
+                console.log('🔄 Token rinnovato silenziosamente (AppSphere)');
+            }
+        };
+
+        window.addEventListener('load', () => {
+            const stored = localStorage.getItem('sb_token');
+            if (stored) {
+                initWithToken(stored);
+            } else {
+                document.getElementById('authOverlay').style.display = 'flex';
+                console.warn('⚠️ Nessun SB_TOKEN — attendo dal launcher (AppSphere)');
+            }
+        });
+    </script>
+</body>
+</html>
