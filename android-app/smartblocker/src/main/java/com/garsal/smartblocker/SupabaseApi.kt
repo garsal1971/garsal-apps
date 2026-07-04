@@ -17,11 +17,12 @@ class SupabaseApi(private val ctx: Context) {
 
     data class BlockEntry(
         val id:       String,
-        val entityId: String,   // task UUID (per completamento)
+        val entityId: String,   // task/sfida UUID (per completamento)
         val title:    String,
         val fireAt:   String,   // ISO UTC
         val status:   String,
-        val myToken:  Boolean   // true se device_token corrisponde
+        val myToken:  Boolean,  // true se device_token corrisponde
+        val app:      String    // 'tasks' | 'ta_firi' — determina la RPC da chiamare allo sblocco
     )
 
     data class QueueResult(
@@ -41,7 +42,7 @@ class SupabaseApi(private val ctx: Context) {
         return try {
             val nowMs = System.currentTimeMillis()
             val url = "$base/rest/v1/cm_notification_queue" +
-                "?channel=eq.smart_block&select=id,entity_id,title,body,fire_at,status,metadata&limit=50"
+                "?channel=eq.smart_block&select=id,entity_id,title,body,fire_at,status,metadata,app&limit=50"
             val conn = openConn(url, "GET")
             val code = conn.responseCode
             if (code != 200) {
@@ -66,8 +67,9 @@ class SupabaseApi(private val ctx: Context) {
                 val status   = item.optString("status", "")
                 val token    = item.optJSONObject("metadata")?.optString("device_token") ?: ""
                 val myToken  = token == deviceToken
+                val app      = item.optString("app", "tasks")
 
-                entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken))
+                entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken, app))
 
                 val fireAtMs = parseIsoMs(fireAt)
                 if (myToken && status == "pending" && fireAtMs > 0L) {
@@ -174,6 +176,35 @@ class SupabaseApi(private val ctx: Context) {
         } catch (e: Exception) {
             AppLogger.log(ctx, "SUPABASE", "completeTask errore: ${e.message}")
         }
+    }
+
+    /**
+     * Chiama la RPC sf_checkin_set per marcare il check-in odierno di una sfida Ta Firi? come fatto.
+     * Da chiamare su un thread in background dopo che l'utente sblocca con PIN.
+     */
+    fun completeChallengeCheckin(entityId: String) {
+        if (entityId.isBlank()) return
+        try {
+            val today = Prefs.getBlockDate(ctx).ifBlank { romeDateStr() }
+            val urlStr = "$base/rest/v1/rpc/sf_checkin_set"
+            val conn = openConn(urlStr, "POST")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = "{\"p_challenge_id\":\"$entityId\",\"p_status\":\"done\",\"p_today\":\"$today\"}"
+            conn.outputStream.write(body.toByteArray())
+            val code = conn.responseCode
+            val resp = if (code < 400) conn.inputStream?.bufferedReader()?.readText() ?: ""
+                       else conn.errorStream?.bufferedReader()?.readText() ?: ""
+            conn.disconnect()
+            AppLogger.log(ctx, "SUPABASE", "completeChallengeCheckin $entityId p_today=$today → HTTP $code $resp")
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "SUPABASE", "completeChallengeCheckin errore: ${e.message}")
+        }
+    }
+
+    /** Dispatcher: sceglie la RPC giusta in base all'app di provenienza dell'entità sbloccata. */
+    fun completeEntity(app: String, entityId: String) {
+        if (app == "ta_firi") completeChallengeCheckin(entityId) else completeTask(entityId)
     }
 
     /**

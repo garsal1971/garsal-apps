@@ -122,7 +122,7 @@ class BlockerService : Service() {
         Prefs.setState(this, Prefs.STATE_NONE)
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
-        Prefs.clearBlockEntityIds(this)
+        Prefs.clearBlockEntities(this)
         Prefs.clearBlockTitle(this)
         Prefs.clearBlockDate(this)
         blockWm?.dismiss()
@@ -156,9 +156,9 @@ class BlockerService : Service() {
             if (dueIds.isNotEmpty()) {
                 AppLogger.log(this, "SUPABASE", "blocchi pronti: ${dueIds.joinToString()} — mostro overlay")
                 dueIds.forEach { SupabaseApi(this).markSent(it) }
-                val entityIds = result.entries
+                val blockEntities = result.entries
                     .filter { it.id in dueIds && it.entityId.isNotBlank() }
-                    .map { it.entityId }
+                    .map { BlockedEntity(it.app, it.entityId) }
                 val blockTitle = result.entries
                     .filter { it.id in dueIds }
                     .joinToString(" · ") { it.title.take(40) }
@@ -166,7 +166,7 @@ class BlockerService : Service() {
                     .firstOrNull { it.id in dueIds && it.fireAt.isNotBlank() }
                     ?.fireAt?.take(10) ?: ""
                 handler.post {
-                    Prefs.setBlockEntityIds(this, entityIds)
+                    Prefs.setBlockEntities(this, blockEntities)
                     Prefs.setBlockTitle(this, blockTitle)
                     Prefs.setBlockDate(this, blockDate)
                     Prefs.setState(this, Prefs.STATE_TRIGGERED)

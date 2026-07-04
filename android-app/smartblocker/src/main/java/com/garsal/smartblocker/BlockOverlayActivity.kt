@@ -105,14 +105,14 @@ class BlockOverlayActivity : Activity() {
 
     private fun checkPin() {
         if (pinBuffer == Config.PIN) {
-            val entityIds = Prefs.getBlockEntityIds(this)
+            val entities = Prefs.getBlockEntities(this)
             startService(Intent(this, BlockerService::class.java).apply {
                 action = BlockerService.ACTION_UNBLOCK
             })
-            if (entityIds.isNotEmpty()) {
+            if (entities.isNotEmpty()) {
                 Thread {
                     val api = SupabaseApi(this)
-                    entityIds.forEach { api.completeTask(it) }
+                    entities.forEach { api.completeEntity(it.app, it.entityId) }
                 }.start()
             }
             finish()
@@ -133,10 +133,13 @@ class BlockOverlayActivity : Activity() {
     // ── Layout programmatico ─────────────────────────────────────────────────
 
     private fun buildView(): View {
+        // Verde per le sfide Ta Firi?, rosso per i task (comportamento invariato).
+        val bgColor = if (Prefs.isChallengeOnlyBlock(this)) "#0F3D24" else "#4A1414"
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#1A1A2E"))
+            setBackgroundColor(Color.parseColor(bgColor))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT

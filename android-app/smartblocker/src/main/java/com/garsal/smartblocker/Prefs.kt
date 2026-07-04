@@ -3,6 +3,9 @@ package com.garsal.smartblocker
 import android.content.Context
 import android.content.SharedPreferences
 
+/** Entità in blocco: app di provenienza ('tasks' | 'ta_firi') + id dell'entità (task o sfida). */
+data class BlockedEntity(val app: String, val entityId: String)
+
 object Prefs {
     private const val NAME = "smartblocker_prefs"
 
@@ -25,15 +28,24 @@ object Prefs {
     fun getLastTrigger(ctx: Context): String = sp(ctx).getString("last_trigger", "") ?: ""
     fun setLastTrigger(ctx: Context, k: String) { sp(ctx).edit().putString("last_trigger", k).apply() }
 
-    /** Entity IDs dei task da completare quando l'utente sblocca con PIN (separati da virgola). */
-    fun getBlockEntityIds(ctx: Context): List<String> {
-        val raw = sp(ctx).getString("block_entity_ids", "") ?: ""
-        return raw.split(",").filter { it.isNotBlank() }
+    /** Entità (app|entityId) da completare quando l'utente sblocca con PIN (separate da virgola). */
+    fun getBlockEntities(ctx: Context): List<BlockedEntity> {
+        val raw = sp(ctx).getString("block_entities", "") ?: ""
+        return raw.split(",").filter { it.isNotBlank() }.mapNotNull {
+            val parts = it.split("|", limit = 2)
+            if (parts.size == 2) BlockedEntity(parts[0], parts[1]) else null
+        }
     }
-    fun setBlockEntityIds(ctx: Context, ids: List<String>) {
-        sp(ctx).edit().putString("block_entity_ids", ids.joinToString(",")).apply()
+    fun setBlockEntities(ctx: Context, entities: List<BlockedEntity>) {
+        sp(ctx).edit().putString("block_entities", entities.joinToString(",") { "${it.app}|${it.entityId}" }).apply()
     }
-    fun clearBlockEntityIds(ctx: Context) { sp(ctx).edit().remove("block_entity_ids").apply() }
+    fun clearBlockEntities(ctx: Context) { sp(ctx).edit().remove("block_entities").apply() }
+
+    /** true se il blocco corrente riguarda solo sfide Ta Firi (sfondo verde), false altrimenti (sfondo rosso). */
+    fun isChallengeOnlyBlock(ctx: Context): Boolean {
+        val entities = getBlockEntities(ctx)
+        return entities.isNotEmpty() && entities.all { it.app == "ta_firi" }
+    }
 
     /** Titolo del blocco attivo (join dei titoli dei task pendenti). */
     fun getBlockTitle(ctx: Context): String = sp(ctx).getString("block_title", "") ?: ""
