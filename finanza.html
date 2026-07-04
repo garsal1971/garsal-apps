@@ -295,6 +295,10 @@
       /* Modal transazioni: mostra Azioni(1) Data(2) Tipo(3) Qtà(4) Controv.(6) */
       .table-modal-tx tr > :nth-child(5),.table-modal-tx tr > :nth-child(7),
       .table-modal-tx tr > :nth-child(8) { display: none; }
+      /* Versamenti fondo: mostra Azioni(1) Persona(2) Data(3) Nominale(4) Attualizzato(6) */
+      .table-versamenti tr > :nth-child(5),.table-versamenti tr > :nth-child(7) { display: none; }
+      /* Quote fondo: mostra Persona(1) Attualizzato(4) Quota%(5) Azioni(6) */
+      .table-quote-fondo tr > :nth-child(2),.table-quote-fondo tr > :nth-child(3) { display: none; }
     }
     @media (max-width: 480px) {
       .app-main { padding: 12px; max-width: 100vw; }
@@ -447,8 +451,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.42';
-const APP_BUILD   = '2026-07-04T12:00:00Z';
+const APP_VERSION = 'v1.0.43';
+const APP_BUILD   = '2026-07-04T13:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2042,7 +2046,7 @@ function renderFundDetail() {
     <div class="grid-2 mb-16">
       <div class="card" style="grid-column:1/-1">
         <div class="card-title">Quote di possesso</div>
-        <div class="table-wrap"><table class="table">
+        <div class="table-wrap"><table class="table table-quote-fondo">
           <thead><tr><th>Persona</th><th>Versamenti</th><th>Totale nominale</th><th>Totale attualizzato</th><th>Quota %</th><th></th></tr></thead>
           <tbody>${stats.participants.map(p => `
             <tr>
@@ -2059,7 +2063,7 @@ function renderFundDetail() {
     </div>
     <div class="card">
       <div class="card-title">Versamenti</div>
-      <div class="table-wrap"><table class="table table-storico">
+      <div class="table-wrap"><table class="table table-versamenti">
         <thead><tr><th></th><th>Persona</th><th>Data</th><th>Importo nominale</th><th>Coefficiente</th><th>Importo attualizzato</th><th>Note</th></tr></thead>
         <tbody>${stats.rows.map(r => `
           <tr>
