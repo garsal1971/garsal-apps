@@ -451,8 +451,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.43';
-const APP_BUILD   = '2026-07-04T13:40:00Z';
+const APP_VERSION = 'v1.0.44';
+const APP_BUILD   = '2026-07-04T15:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -629,6 +629,7 @@ async function loadAll() {
   { const _t = new Date().toISOString().slice(0,10);
     const _p = await sbQ('fnz_dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
     S.prevSnapshot = _p[0] || null; }
+  await syncFundOwnership();
 }
 async function reload() {
   const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
@@ -665,6 +666,7 @@ async function reload() {
   { const _t = new Date().toISOString().slice(0,10);
     const _p = await sbQ('fnz_dashboard_snapshots', `select=snapshot_date,patrimonio_netto,portafogli_totali,details&snapshot_date=lt.${_t}&order=snapshot_date.desc&limit=1`);
     S.prevSnapshot = _p[0] || null; }
+  await syncFundOwnership();
   render();
 }
 /* ── Business logic — costo medio ponderato ──────────────────── */
@@ -792,6 +794,41 @@ function computeFundShares(fundId) {
     .map(p => ({ ...p, percentage: totalAdjusted > 0 ? (p.totalAdjusted / totalAdjusted) * 100 : 0 }))
     .sort((a, b) => b.totalAdjusted - a.totalAdjusted);
   return { referenceYear, idxMap, rows, participants, totalNominal, totalAdjusted, hasMissingIndex };
+}
+/* ── Fondi — collegamento a portafoglio/altro asset ──────────────
+   Un fondo può essere collegato a un portafoglio o a un altro asset:
+   il fondo mostra il saldo dell'asset collegato, e la quota del
+   "partecipante di riferimento" (owner_participant) viene sincronizzata
+   automaticamente sul campo ownership_percentage dell'asset collegato. */
+function computeFundLinkedBalance(fund) {
+  if (fund.linked_portfolio_id) {
+    const p = S.portfolios.find(x => x.id === fund.linked_portfolio_id);
+    if (!p) return null;
+    const holdings = computeHoldings(p.id);
+    const value = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0);
+    return { kind: 'portfolio', label: `Portafoglio: ${p.name}`, value, target: p };
+  }
+  if (fund.linked_other_asset_id) {
+    const a = S.otherAssets.find(x => x.id === fund.linked_other_asset_id);
+    if (!a) return null;
+    return { kind: 'other_asset', label: `Altro asset: ${a.title || a.asset_type}`, value: parseFloat(a.value), target: a };
+  }
+  return null;
+}
+async function syncFundOwnership() {
+  for (const fund of S.funds) {
+    if (!fund.owner_participant) continue;
+    const link = computeFundLinkedBalance(fund);
+    if (!link) continue;
+    const stats = computeFundShares(fund.id);
+    const owner = stats.participants.find(p => p.participant === fund.owner_participant);
+    if (!owner) continue;
+    const pct = Math.round(owner.percentage * 100) / 100;
+    if (Math.abs(parseFloat(link.target.ownership_percentage) - pct) < 0.005) continue;
+    const table = link.kind === 'portfolio' ? 'fnz_portfolios' : 'fnz_other_assets';
+    await sbUpd(table, `id=eq.${link.target.id}`, { ownership_percentage: pct });
+    link.target.ownership_percentage = pct;
+  }
 }
 /* ── Business logic — loans ──────────────────────────────────── */
 function computeLoanValue(loan) {
@@ -1995,6 +2032,7 @@ function renderFunds() {
       ? `<div class="empty-state"><div class="empty-icon">🤝</div><p>Nessun fondo ancora.</p></div>`
       : `<div class="grid-auto">${S.funds.map(f => {
           const stats = computeFundShares(f.id);
+          const link  = computeFundLinkedBalance(f);
           return `
         <div class="card">
           <div class="card-header-row">
@@ -2005,6 +2043,7 @@ function renderFunds() {
             </div>
           </div>
           <div class="settings-row text-sm">Partecipanti: <strong>${stats.participants.length}</strong> · Versamenti: <strong>${stats.rows.length}</strong></div>
+          ${link ? `<div class="settings-row text-sm">Collegato a: <strong>${link.label}</strong> (${fmtEUR(link.value)})</div>` : ''}
           <div class="portfolio-card-stats">
             <div>
               <div class="kpi-label">Totale attualizzato${stats.hasMissingIndex ? ' <span class="text-muted text-sm">(parziale)</span>' : ''}</div>
@@ -2043,6 +2082,22 @@ function renderFundDetail() {
       ${kpi('Partecipanti',        stats.participants.length, 'neutral')}
     </div>
     ${stats.hasMissingIndex ? `<div class="empty-sm" style="margin-bottom:14px">⚠️ Manca l'indice FOI per uno o più anni: alcuni versamenti non sono stati attualizzati. Aggiorna l'indice da "🏷️ Indice FOI".</div>` : ''}
+    ${(() => {
+      const link = computeFundLinkedBalance(fund);
+      if (!link) return '';
+      const owner = fund.owner_participant ? stats.participants.find(p => p.participant === fund.owner_participant) : null;
+      return `
+    <div class="card mb-16">
+      <div class="card-title">Collegamento</div>
+      <div class="settings-row text-sm">${link.label} · Saldo attuale: <strong>${fmtEUR(link.value)}</strong></div>
+      ${fund.owner_participant
+        ? (owner
+          ? `<div class="settings-row text-sm">Possesso di <strong>${fund.owner_participant}</strong> sincronizzato automaticamente: <strong>${owner.percentage.toFixed(2)}%</strong> (campo "Possesso %" attuale sul collegamento: ${parseFloat(link.target.ownership_percentage).toFixed(2)}%)</div>`
+          : `<div class="settings-row text-sm text-muted">Nessun versamento trovato per il partecipante di riferimento "${fund.owner_participant}": la % non viene aggiornata.</div>`)
+        : `<div class="settings-row text-sm text-muted">Nessun partecipante di riferimento impostato: modifica il fondo per abilitare la sincronizzazione automatica della % di possesso.</div>`
+      }
+    </div>`;
+    })()}
     <div class="grid-2 mb-16">
       <div class="card" style="grid-column:1/-1">
         <div class="card-title">Quote di possesso</div>
@@ -3051,11 +3106,35 @@ function openNewDossierModal(dossierId = null) {
 }
 function openNewFundModal(fundId = null) {
   const f = fundId ? S.funds.find(x => x.id === fundId) : null;
+  const linkedValue = f?.linked_portfolio_id ? `portfolio:${f.linked_portfolio_id}`
+                    : f?.linked_other_asset_id ? `asset:${f.linked_other_asset_id}`
+                    : '';
+  const participantOptions = f
+    ? [...new Set(S.fundContributions.filter(x => x.fund_id === f.id).map(x => x.participant))]
+    : [];
   openModal(f ? 'Modifica Fondo' : 'Nuovo Fondo', `
     <form id="modal-form">
       <div class="form-group">
         <label class="form-label">Nome *</label>
         <input name="name" class="form-input" required placeholder="es. Crypto" value="${f?.name || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Collegato a</label>
+        <select name="linked" class="form-input form-select">
+          <option value="">— Nessuno —</option>
+          <optgroup label="Portafogli">
+            ${S.portfolios.map(p => `<option value="portfolio:${p.id}" ${linkedValue === `portfolio:${p.id}` ? 'selected' : ''}>${p.name}</option>`).join('')}
+          </optgroup>
+          <optgroup label="Altri Asset">
+            ${S.otherAssets.map(a => `<option value="asset:${a.id}" ${linkedValue === `asset:${a.id}` ? 'selected' : ''}>${a.title || a.asset_type}</option>`).join('')}
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Partecipante di riferimento</label>
+        <input name="owner_participant" class="form-input" placeholder="es. Salvatore" value="${f?.owner_participant || ''}" list="fund-owner-list" />
+        <datalist id="fund-owner-list">${participantOptions.map(p => `<option value="${p}"></option>`).join('')}</datalist>
+        <p class="text-muted text-sm" style="margin-top:4px">La sua quota % viene scritta automaticamente nel campo "Possesso %" del portafoglio/asset collegato, ogni volta che i versamenti o l'indice FOI cambiano.</p>
       </div>
       <div class="form-group">
         <label class="form-label">Note</label>
@@ -3067,10 +3146,14 @@ function openNewFundModal(fundId = null) {
       </div>
     </form>
   `, async data => {
+    const [linkKind, linkId] = (data.linked || '').split(':');
     const payload = {
       user_id: S.session.user.id,
       name: data.name.trim(),
       notes: data.notes || '',
+      linked_portfolio_id:   linkKind === 'portfolio' ? linkId : null,
+      linked_other_asset_id: linkKind === 'asset'     ? linkId : null,
+      owner_participant: data.owner_participant.trim() || null,
     };
     if (f) await sbUpd('fnz_funds', `id=eq.${f.id}`, payload);
     else   await sbIns('fnz_funds', payload);
