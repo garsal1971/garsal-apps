@@ -62,21 +62,23 @@ BEGIN
     VALUES (v_user_id, 'Crypto', 'Fondo comune per il portafoglio crypto: quote attualizzate al potere d''acquisto del primo versamento tramite indice ISTAT FOI.')
     RETURNING id INTO v_fund_id;
 
+    -- Importo attualizzato al 15/2/2022 (coefficiente = indice_2022 / indice_anno_versamento),
+    -- calcolato dall'app in fnz_foi_index — riportato qui solo come riferimento, non persistito.
     INSERT INTO fnz_fund_contributions (user_id, fund_id, participant, date, amount) VALUES
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-02-15', 100.00),
-      (v_user_id, v_fund_id, 'Ada',         '2022-02-15', 100.00),
-      (v_user_id, v_fund_id, 'Lady Gauss',  '2022-02-15', 100.00),
-      (v_user_id, v_fund_id, 'Filippa',     '2022-02-15', 100.00),
-      (v_user_id, v_fund_id, 'Rosa',        '2022-02-15', 100.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-02-28', 1000.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-03-15', 750.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-04-01', 500.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-05-03', 500.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-05-17', 1000.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-06-07', 400.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-07-03', 500.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2022-09-12', 250.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2023-12-23', 1000.00),
-      (v_user_id, v_fund_id, 'Salvatore',   '2026-07-03', 200.00);
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-02-15', 100.00),   -- attualizzato:   100.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Ada',         '2022-02-15', 100.00),   -- attualizzato:   100.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Lady Gauss',  '2022-02-15', 100.00),   -- attualizzato:   100.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Filippa',     '2022-02-15', 100.00),   -- attualizzato:   100.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Rosa',        '2022-02-15', 100.00),   -- attualizzato:   100.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-02-28', 1000.00),  -- attualizzato: 1'000.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-03-15', 750.00),   -- attualizzato:   750.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-04-01', 500.00),   -- attualizzato:   500.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-05-03', 500.00),   -- attualizzato:   500.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-05-17', 1000.00),  -- attualizzato: 1'000.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-06-07', 400.00),   -- attualizzato:   400.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-07-03', 500.00),   -- attualizzato:   500.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2022-09-12', 250.00),   -- attualizzato:   250.00 (coeff. 1.0000)
+      (v_user_id, v_fund_id, 'Salvatore',   '2023-12-23', 1000.00),  -- attualizzato:   946.97 (coeff. 0.9470)
+      (v_user_id, v_fund_id, 'Salvatore',   '2026-07-03', 200.00);   -- attualizzato:   179.37 (coeff. 0.8968)
   END IF;
 END $$;
