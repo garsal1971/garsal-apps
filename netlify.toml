@@ -4,17 +4,13 @@
   functions = "netlify/functions"
 
 [[redirects]]
-  from = "/"
-  to = "/app-launcher.html"
-  status = 200
-
-[[redirects]]
   from = "/tests/dashboard"
   to = "/test-dashboard.html"
   status = 200
 
-# HTML mai in cache: l'app (WebView) carica la root "/" e deve sempre ricevere
-# l'ultima versione, altrimenti resta su un app-launcher vecchio (login rotto).
+# HTML mai in cache: l'app (WebView) carica la root "/" (servita da index.html,
+# un file fisico ha precedenza sui redirect) e deve sempre ricevere l'ultima
+# versione, altrimenti resta su una versione vecchia (login rotto).
 [[headers]]
   for = "/"
   [headers.values]

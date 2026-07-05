@@ -117,7 +117,7 @@ async function testLauncher(ctx) {
   const APP = 'AppSphere', page = await openPage(ctx, APP);
   log(`\n${'═'.repeat(48)}\n  ${APP}\n${'═'.repeat(48)}`);
   try {
-    await page.goto(`${BASE}/app-launcher.html`, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle', timeout: 30000 });
     await snap(page, '01-launcher');
     pass(APP, 'Pagina caricata');
   } catch(e) { fail(APP, 'Pagina caricata', e); await page.close(); return; }

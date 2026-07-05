@@ -27,15 +27,17 @@ Le app sono progettate per funzionare su:
 
 ```
 garsal-apps/
-├── app-launcher.html    # AppSphere — main entry point / app launcher
+├── index.html           # AppSphere — main entry point / app launcher (served at "/")
 ├── tasks.html           # Tasks v19.17.12 — task management
 ├── habit-tracker.html   # Habit Stack Tracker — habit tracking with gamification
 ├── events-log.html      # Events Log v2.0 — event/activity logging
 ├── weight-quest.html    # Weight Quest v2.4.1 — weight tracking with charts
-└── netlify.toml         # Netlify deployment config (root → app-launcher.html)
+└── netlify.toml         # Netlify deployment config
 ```
 
 There is **no** `package.json`, `node_modules`, `build/`, or `dist/` directory. Every app ships as-is.
+
+**Nota storica**: esisteva anche un `app-launcher.html`, copia quasi identica del launcher usata come `start_url` della PWA installabile. La PWA non è più in uso: il file è stato rimosso e `manifest.json` punta ora a `/` come ogni altro client (browser, app Android).
 
 ---
 
@@ -74,7 +76,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 **weight-quest.html** is the exception — it ships its own minimal inline `SupabaseClient` class (no CDN dependency) and queries Google Fit directly via OAuth.
 
 ### Authentication flow
-1. `app-launcher.html` handles Google OAuth via Supabase Auth
+1. `index.html` handles Google OAuth via Supabase Auth
 2. On successful login, tokens are stored in `sessionStorage`:
    - `sb_token` — Supabase JWT access token
    - `google_token` — raw Google OAuth provider token (for Google Fit API)
@@ -245,7 +247,7 @@ Le migration vengono applicate **automaticamente** al push su `claude/**` tramit
 
 ## App Details
 
-### `app-launcher.html` — AppSphere
+### `index.html` — AppSphere
 - Draggable **bubble/circle UI** — each app is a coloured circle sized proportionally to its `score`
 - Score is computed at load time by calling the Supabase RPC `run_score_query` with the SQL stored in `cm_apps.score_query`
 - Circle placement uses an iterative collision-resolution algorithm (no overlap, viewport-clamped)
@@ -335,12 +337,8 @@ Netlify auto-deploys on push to `master`. Configuration in `netlify.toml`:
 [build]
   publish = "."
   base = "."
-
-[[redirects]]
-  from = "/"
-  to = "/app-launcher.html"
-  status = 200
 ```
+The root `/` is served directly by `index.html` (Netlify serves an existing physical file at a path before applying any redirect rule for that path — a redirect from `/` to another file would never actually fire).
 
 Push to `master` → Netlify picks it up → live within seconds.
 

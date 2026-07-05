@@ -7,7 +7,7 @@
 #   bash server.sh          → porta 8080 (default)
 #   bash server.sh 3000     → porta personalizzata
 #
-# Dopo l'avvio, aprire: http://localhost:<PORT>/app-launcher.html
+# Dopo l'avvio, aprire: http://localhost:<PORT>/
 # ─────────────────────────────────────────────────────────────────────────────
 
 PORT=${1:-8080}
@@ -16,7 +16,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 echo ""
 echo "  AppSphere Dev Server"
 echo "  ───────────────────────────────────────────"
-echo "  URL:   http://localhost:${PORT}/app-launcher.html"
+echo "  URL:   http://localhost:${PORT}/"
 echo "  Root:  ${ROOT}"
 echo "  Env:   DEV (_IS_DEV = true)"
 echo "  ───────────────────────────────────────────"
