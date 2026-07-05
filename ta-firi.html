@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ta Firi? v1.1.6</title>
+    <title>Ta Firi? v1.1.7</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -118,27 +118,38 @@
         .checkin-banner-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
 
         /* Challenge card */
-        .challenge-card { background: var(--card-bg); border: 2px solid var(--border); padding: 1.5rem; margin-bottom: 1.25rem; }
-        .challenge-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
-        .challenge-title { font-size: 1.4rem; font-weight: 900; }
-        .challenge-objective { color: var(--muted); margin-top: 0.2rem; font-size: 1.05rem; }
-        .challenge-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.95rem; color: var(--muted); }
+        .challenge-card {
+            background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px;
+            padding: 1.1rem 1.25rem; margin-bottom: 0.9rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .challenge-card-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+        .challenge-title { font-size: 1.25rem; font-weight: 900; }
+        .challenge-objective { color: var(--muted); margin-top: 0.1rem; font-size: 0.95rem; }
+        .challenge-header-actions { display: flex; align-items: center; gap: 0.4rem; }
+        .challenge-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.4rem; font-size: 0.85rem; color: var(--muted); }
         .challenge-meta span { white-space: nowrap; }
 
-        .badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 700; color: #fff; border-radius: 4px; }
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 700; color: #fff; border-radius: 20px; }
         .badge-active { background: var(--accent); }
         .badge-completed { background: var(--success); }
         .badge-failed { background: var(--danger); }
-        .badge-scoring { background: var(--secondary); padding: 0.15rem 0.5rem; font-size: 0.7rem; }
+        .badge-scoring { background: var(--secondary); padding: 0.2rem 0.65rem; font-size: 0.72rem; }
 
-        .day-grid { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 1rem 0; }
-        .day-pill {
+        .icon-btn {
             width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
-            font-size: 0.75rem; font-weight: 700; border: 2px solid var(--border); background: var(--input-bg);
-            color: var(--muted); cursor: default;
+            border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--muted);
+            font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0;
+        }
+        .icon-btn:hover { background: var(--danger); color: #fff; border-color: var(--danger); transform: scale(1.08); }
+
+        .day-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.75rem 0 0.25rem; }
+        .day-pill {
+            width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; font-weight: 700; border: 2px solid var(--border); background: var(--input-bg);
+            color: var(--muted); cursor: default; transition: transform 0.15s ease, border-color 0.15s ease;
         }
         .day-pill.clickable { cursor: pointer; }
-        .day-pill.clickable:hover { border-color: var(--challenge); }
+        .day-pill.clickable:hover { border-color: var(--challenge); transform: scale(1.15); }
         .day-pill.done { background: var(--success); color: #fff; border-color: var(--success); }
         .day-pill.not-done { background: var(--danger); color: #fff; border-color: var(--danger); }
         .day-pill.pending-past { background: var(--warning); color: #fff; border-color: var(--warning); }
@@ -332,8 +343,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.1.6';
-        const BUILD_TIME  = '2026-07-05T19:00:00Z';
+        const APP_VERSION = 'v1.1.7';
+        const BUILD_TIME  = '2026-07-05T20:15:00Z';
         console.log('%c TA FIRI? ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -741,7 +752,8 @@
                     cls += ' pending-past clickable'; clickable = true;
                 }
                 const onclick = clickable ? `onclick="cycleCheckin('${challenge.id}','${dayDate}','${status}')"` : '';
-                html += `<div class="${cls}" ${onclick} title="${formatDateIt(dayDate)} — ${statusLabel(status)}">${i + 1}</div>`;
+                const content = status === 'done' ? '✓' : status === 'not_done' ? '✕' : (i + 1);
+                html += `<div class="${cls}" ${onclick} title="${formatDateIt(dayDate)} — ${statusLabel(status)}">${content}</div>`;
             }
             html += '</div>';
             return html;
@@ -779,15 +791,15 @@
                                 <div class="challenge-title">${escapeHtml(c.title)}</div>
                                 ${c.objective ? `<div class="challenge-objective">${escapeHtml(c.objective)}</div>` : ''}
                             </div>
-                            <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
+                            <div class="challenge-header-actions">
+                                <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
+                                <button class="icon-btn" onclick="deleteChallenge('${c.id}')" title="Elimina">🗑️</button>
+                            </div>
                         </div>
                         <div class="challenge-meta">
                             <span>📅 ${formatDateIt(c.start_date)} - ${c.duration_days} giorni</span>
                         </div>
                         ${renderDayGrid(c)}
-                        <div class="challenge-actions">
-                            <button class="btn btn-danger btn-sm" onclick="deleteChallenge('${c.id}')">Elimina</button>
-                        </div>
                     </div>
                 `;
             }).join('');
