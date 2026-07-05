@@ -159,29 +159,6 @@ class BlockWindowManager(private val ctx: Context) {
         dismiss()
     }
 
-    /** Bottone a tenuta: richiede la pressione per Config.CHALLENGE_HOLD_MS prima di inviare la risposta. */
-    private fun setupHoldButton(btn: Button, status: String) {
-        var holdRunnable: Runnable? = null
-        btn.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    v.alpha = 0.55f
-                    val r = Runnable { onChallengeResponse(status) }
-                    holdRunnable = r
-                    handler.postDelayed(r, Config.CHALLENGE_HOLD_MS)
-                    true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.alpha = 1f
-                    holdRunnable?.let { handler.removeCallbacks(it) }
-                    holdRunnable = null
-                    true
-                }
-                else -> false
-            }
-        }
-    }
-
     private fun buildView(): View {
         // Verde per le sfide Ta Firi?, rosso per i task (comportamento invariato).
         val bgColor = if (Prefs.isChallengeOnlyBlock(ctx)) "#0F3D24" else "#4A1414"
@@ -260,22 +237,14 @@ class BlockWindowManager(private val ctx: Context) {
             val row = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
             }
-            val btnSi = Button(ctx).apply {
-                text = "✅ SÌ"; textSize = 20f
-                setTextColor(Color.WHITE)
-                setBackgroundColor(Color.parseColor("#16A34A"))
-                setPadding(0, 48, 0, 48)
+            val btnSi = buildHoldConfirmButton(ctx, handler, "SÌ", "#16A34A", Config.CHALLENGE_HOLD_MS) {
+                onChallengeResponse("done")
             }
-            val btnNo = Button(ctx).apply {
-                text = "❌ NO"; textSize = 20f
-                setTextColor(Color.WHITE)
-                setBackgroundColor(Color.parseColor("#DC2626"))
-                setPadding(0, 48, 0, 48)
+            val btnNo = buildHoldConfirmButton(ctx, handler, "NO", "#DC2626", Config.CHALLENGE_HOLD_MS) {
+                onChallengeResponse("not_done")
             }
-            setupHoldButton(btnSi, "done")
-            setupHoldButton(btnNo, "not_done")
-            row.addView(btnSi, LinearLayout.LayoutParams(0, WC, 1f).apply { marginEnd = 12 })
-            row.addView(btnNo, LinearLayout.LayoutParams(0, WC, 1f).apply { marginStart = 12 })
+            row.addView(btnSi, LinearLayout.LayoutParams(0, HOLD_BTN_HEIGHT, 1f).apply { marginEnd = 12 })
+            row.addView(btnNo, LinearLayout.LayoutParams(0, HOLD_BTN_HEIGHT, 1f).apply { marginStart = 12 })
             root.addView(row, lp(MP, top = 20))
         } else {
             tvPinHint = TextView(ctx).apply {
@@ -328,5 +297,6 @@ class BlockWindowManager(private val ctx: Context) {
     companion object {
         private const val MP = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WC = ViewGroup.LayoutParams.WRAP_CONTENT
+        private const val HOLD_BTN_HEIGHT = 170
     }
 }
