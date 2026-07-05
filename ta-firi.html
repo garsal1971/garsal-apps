@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ta Firi? v1.1.9</title>
+    <title>Ta Firi? v1.1.10</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -345,8 +345,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.1.9';
-        const BUILD_TIME  = '2026-07-05T21:00:00Z';
+        const APP_VERSION = 'v1.1.10';
+        const BUILD_TIME  = '2026-07-05T21:10:00Z';
         console.log('%c TA FIRI? ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -849,14 +849,13 @@
                                 ${c.objective ? `<div class="challenge-objective">${escapeHtml(c.objective)}</div>` : ''}
                             </div>
                             <div class="challenge-header-actions">
-                                <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
+                                <span class="badge badge-scoring">${scoringLabel(c.scoring_type)} · 🎯 ${c.total_points}</span>
                                 <button class="icon-btn" onclick="openEditChallengeModal('${c.id}')" title="Modifica">✏️</button>
                                 <button class="icon-btn icon-btn-danger" onclick="deleteChallenge('${c.id}')" title="Elimina">🗑️</button>
                             </div>
                         </div>
                         <div class="challenge-meta">
                             <span>📅 ${formatDateIt(c.start_date)} - ${c.duration_days} giorni</span>
-                            <span>🎯 ${c.total_points} punti</span>
                         </div>
                         ${renderDayGrid(c)}
                     </div>
