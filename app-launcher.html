@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.92</title>
+<title>AppSphere v1.5.98</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1485,7 +1485,7 @@
   <div class="login-card">
     <div class="login-title">AppSphere</div>
     <div id="login-version" style="text-align:center; font-family:'DM Mono',monospace;
-         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">v1.5.91</div>
+         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">v1.5.98</div>
     <div class="login-sub">// il tuo universo di applicazioni</div>
     <button class="google-btn" onclick="loginWithGoogle()">
       <svg class="google-icon" viewBox="0 0 24 24">
@@ -1788,8 +1788,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.92';
-const BUILD_TIME  = '2026-07-05T16:00:00Z';
+const APP_VERSION = 'v1.5.98';
+const BUILD_TIME  = '2026-07-05T15:16:03Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2083,6 +2083,7 @@ function fitFontSize(name, circleSize) {
 
 // ── BUILD DOM ──
 let CURRENT_APPS = [];
+const APPS_CACHE_KEY = 'appsphere_apps_cache';
 
 function render(apps) {
   if (apps) CURRENT_APPS = apps;
@@ -2580,6 +2581,17 @@ function updateHiddenIndicator() {
 async function loadApps() {
   const token = localStorage.getItem('sb_token');
 
+  // Render IMMEDIATO dalla cache: mostra subito le bolle con le ultime
+  // dimensioni/punteggi salvati, senza attendere le query dei punteggi.
+  // Solo se la pagina non ha ancora bolle a schermo (primo caricamento):
+  // se sono già visualizzate non le tocca finché non arrivano i dati freschi.
+  if (!CURRENT_APPS.length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(APPS_CACHE_KEY) || 'null');
+      if (Array.isArray(cached) && cached.length) render(cached);
+    } catch (e) {}
+  }
+
   // Carica anche la sequenza nascosta se non ancora disponibile
   if (!hiddenSeqLength) await loadHiddenSequence();
 
@@ -2648,7 +2660,15 @@ async function loadApps() {
     };
   }));
 
-  render(apps);
+  // Salva in cache per il prossimo avvio (bolle istantanee)
+  try { localStorage.setItem(APPS_CACHE_KEY, JSON.stringify(apps)); } catch (e) {}
+
+  // Ri-disegna solo se i dati freschi differiscono da quelli già mostrati,
+  // così non si rimescolano le posizioni quando i punteggi non sono cambiati
+  // (niente redesign a schermo se la pagina è già visualizzata e nulla è
+  // cambiato — il redesign vero e proprio avviene solo al primo caricamento
+  // o quando i dati sono effettivamente diversi).
+  if (JSON.stringify(apps) !== JSON.stringify(CURRENT_APPS)) render(apps);
   loadDecisionAlerts();
 }
 
