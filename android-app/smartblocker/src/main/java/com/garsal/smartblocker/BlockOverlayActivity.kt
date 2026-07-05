@@ -80,10 +80,12 @@ class BlockOverlayActivity : Activity() {
             else -> ""
         }
 
-        tvPinHint.text = if (state == Prefs.STATE_LOCKED)
-            "⚠️ Rinvii esauriti — solo PIN"
-        else
-            "Oppure sblocca con PIN"
+        if (!Prefs.isChallengeOnlyBlock(this)) {
+            tvPinHint.text = if (state == Prefs.STATE_LOCKED)
+                "⚠️ Rinvii esauriti — solo PIN"
+            else
+                "Oppure sblocca con PIN"
+        }
     }
 
     private fun onSnooze() {
@@ -127,6 +129,45 @@ class BlockOverlayActivity : Activity() {
     private fun updateDots() {
         pinDots.forEachIndexed { i, tv ->
             tv?.text = if (i < pinBuffer.length) "●" else "○"
+        }
+    }
+
+    /** Invia la risposta SÌ/NO della sfida Ta Firi? (tenuta premuta) e sblocca. */
+    private fun onChallengeResponse(status: String) {
+        val entities = Prefs.getBlockEntities(this)
+        startService(Intent(this, BlockerService::class.java).apply {
+            action = BlockerService.ACTION_UNBLOCK
+        })
+        if (entities.isNotEmpty()) {
+            Thread {
+                val api = SupabaseApi(this)
+                entities.forEach { api.completeChallengeCheckin(it.entityId, status) }
+                api.triggerFillQueue()
+            }.start()
+        }
+        finish()
+    }
+
+    /** Bottone a tenuta: richiede la pressione per Config.CHALLENGE_HOLD_MS prima di inviare la risposta. */
+    private fun setupHoldButton(btn: Button, status: String) {
+        var holdRunnable: Runnable? = null
+        btn.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    v.alpha = 0.55f
+                    val r = Runnable { onChallengeResponse(status) }
+                    holdRunnable = r
+                    handler.postDelayed(r, Config.CHALLENGE_HOLD_MS)
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.alpha = 1f
+                    holdRunnable?.let { handler.removeCallbacks(it) }
+                    holdRunnable = null
+                    true
+                }
+                else -> false
+            }
         }
     }
 
@@ -213,62 +254,103 @@ class BlockOverlayActivity : Activity() {
         val divider = View(this).apply { setBackgroundColor(Color.parseColor("#334155")) }
         root.addView(divider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1).apply { topMargin = 32 })
 
-        // Hint PIN
-        tvPinHint = TextView(this).apply {
-            textSize = 13f
-            setTextColor(Color.parseColor("#94A3B8"))
-            gravity = Gravity.CENTER
-        }
-        root.addView(tvPinHint, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 24))
-
-        // Dot PIN
-        val dotsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        for (i in 0..3) {
-            val dot = TextView(this).apply {
-                text = "○"; textSize = 28f
-                setTextColor(Color.parseColor("#A78BFA"))
-                setPadding(16, 0, 16, 0)
+        if (Prefs.isChallengeOnlyBlock(this)) {
+            // Domanda + bottoni a tenuta SÌ/NO (sfide Ta Firi?)
+            val tvQuestion = TextView(this).apply {
+                text = "Hai portato a termine la sfida oggi?"
+                textSize = 15f
+                setTextColor(Color.parseColor("#94A3B8"))
+                gravity = Gravity.CENTER
             }
-            pinDots[i] = dot
-            dotsRow.addView(dot)
-        }
-        root.addView(dotsRow, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 16))
+            root.addView(tvQuestion, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 24))
 
-        // Errore PIN
-        tvPinError = TextView(this).apply {
-            textSize = 13f
-            setTextColor(Color.parseColor("#F87171"))
-            gravity = Gravity.CENTER
-        }
-        root.addView(tvPinError, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 8))
+            val tvHoldHint = TextView(this).apply {
+                text = "Tieni premuto per confermare"
+                textSize = 12f
+                setTextColor(Color.parseColor("#64748B"))
+                gravity = Gravity.CENTER
+            }
+            root.addView(tvHoldHint, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 4))
 
-        // Tastierino PIN (3×4)
-        val keys = listOf("1","2","3","4","5","6","7","8","9","C","0","⌫")
-        val grid = GridLayout(this).apply {
-            columnCount = 3
-            rowCount = 4
-        }
-        keys.forEach { k ->
-            val btn = Button(this).apply {
-                text = k
-                textSize = 20f
-                setTextColor(if (k == "C") Color.parseColor("#F87171") else Color.WHITE)
-                setBackgroundColor(Color.parseColor("#0F172A"))
-                setPadding(0, 0, 0, 0)
-                setOnClickListener { onDigit(k) }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
             }
-            val p = GridLayout.LayoutParams().apply {
-                width = 0
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
-                columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                setMargins(4, 4, 4, 4)
+            val btnSi = Button(this).apply {
+                text = "✅ SÌ"; textSize = 20f
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#16A34A"))
+                setPadding(0, 48, 0, 48)
             }
-            grid.addView(btn, p)
+            val btnNo = Button(this).apply {
+                text = "❌ NO"; textSize = 20f
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#DC2626"))
+                setPadding(0, 48, 0, 48)
+            }
+            setupHoldButton(btnSi, "done")
+            setupHoldButton(btnNo, "not_done")
+            row.addView(btnSi, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 12 })
+            row.addView(btnNo, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 12 })
+            root.addView(row, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 20))
+        } else {
+            // Hint PIN
+            tvPinHint = TextView(this).apply {
+                textSize = 13f
+                setTextColor(Color.parseColor("#94A3B8"))
+                gravity = Gravity.CENTER
+            }
+            root.addView(tvPinHint, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 24))
+
+            // Dot PIN
+            val dotsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            for (i in 0..3) {
+                val dot = TextView(this).apply {
+                    text = "○"; textSize = 28f
+                    setTextColor(Color.parseColor("#A78BFA"))
+                    setPadding(16, 0, 16, 0)
+                }
+                pinDots[i] = dot
+                dotsRow.addView(dot)
+            }
+            root.addView(dotsRow, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 16))
+
+            // Errore PIN
+            tvPinError = TextView(this).apply {
+                textSize = 13f
+                setTextColor(Color.parseColor("#F87171"))
+                gravity = Gravity.CENTER
+            }
+            root.addView(tvPinError, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 8))
+
+            // Tastierino PIN (3×4)
+            val keys = listOf("1","2","3","4","5","6","7","8","9","C","0","⌫")
+            val grid = GridLayout(this).apply {
+                columnCount = 3
+                rowCount = 4
+            }
+            keys.forEach { k ->
+                val btn = Button(this).apply {
+                    text = k
+                    textSize = 20f
+                    setTextColor(if (k == "C") Color.parseColor("#F87171") else Color.WHITE)
+                    setBackgroundColor(Color.parseColor("#0F172A"))
+                    setPadding(0, 0, 0, 0)
+                    setOnClickListener { onDigit(k) }
+                }
+                val p = GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                    setMargins(4, 4, 4, 4)
+                }
+                grid.addView(btn, p)
+            }
+            root.addView(grid, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 16))
         }
-        root.addView(grid, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 16))
 
         return root
     }
