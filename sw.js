@@ -1,8 +1,8 @@
 // AppSphere Service Worker — DISATTIVATO (v2.0.0)
 // Non cacha più nulla. Su 'activate' svuota tutte le cache esistenti e prende
 // il controllo dei client; senza handler 'fetch' il browser usa sempre la rete.
-// Insieme alla disregistrazione fatta da app-launcher.html, questo elimina
-// definitivamente il problema delle versioni vecchie/rotte servite dalla cache.
+// Questo elimina definitivamente il problema delle versioni vecchie/rotte
+// servite dalla cache.
 
 self.addEventListener('install', function() {
   self.skipWaiting();
