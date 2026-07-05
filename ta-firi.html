@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ta Firi? v1.1.5</title>
+    <title>Ta Firi? v1.1.6</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -125,11 +125,11 @@
         .challenge-meta { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.95rem; color: var(--muted); }
         .challenge-meta span { white-space: nowrap; }
 
-        .badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 700; color: #fff; }
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; font-size: 0.85rem; font-weight: 700; color: #fff; border-radius: 4px; }
         .badge-active { background: var(--accent); }
         .badge-completed { background: var(--success); }
         .badge-failed { background: var(--danger); }
-        .badge-scoring { background: var(--secondary); }
+        .badge-scoring { background: var(--secondary); padding: 0.15rem 0.5rem; font-size: 0.7rem; }
 
         .day-grid { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 1rem 0; }
         .day-pill {
@@ -332,8 +332,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.1.5';
-        const BUILD_TIME  = '2026-07-05T16:00:00Z';
+        const APP_VERSION = 'v1.1.6';
+        const BUILD_TIME  = '2026-07-05T19:00:00Z';
         console.log('%c TA FIRI? ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -771,13 +771,7 @@
                 return;
             }
 
-            const today = todayStr();
             container.innerHTML = active.map(c => {
-                const doneDays = (checkinsByChallenge[c.id] || []).filter(k => k.status === 'done').length;
-                const dayNumber = Math.min(
-                    Math.max(1, Math.floor((new Date(today) - new Date(c.start_date)) / 86400000) + 1),
-                    c.duration_days
-                );
                 return `
                     <div class="challenge-card">
                         <div class="challenge-card-header">
@@ -785,14 +779,10 @@
                                 <div class="challenge-title">${escapeHtml(c.title)}</div>
                                 ${c.objective ? `<div class="challenge-objective">${escapeHtml(c.objective)}</div>` : ''}
                             </div>
-                            <span class="badge badge-active">Giorno ${dayNumber}/${c.duration_days}</span>
+                            <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
                         </div>
                         <div class="challenge-meta">
-                            <span>📅 ${formatDateIt(c.start_date)} → ${formatDateIt(c.end_date)}</span>
-                            <span>🔔 ${formatTime(c.checkin_time)}</span>
-                            <span>🎯 In palio: ${c.total_points} punti</span>
-                            <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
-                            <span>✅ ${doneDays}/${c.duration_days} giorni fatti</span>
+                            <span>📅 ${formatDateIt(c.start_date)} - ${c.duration_days} giorni</span>
                         </div>
                         ${renderDayGrid(c)}
                         <div class="challenge-actions">
