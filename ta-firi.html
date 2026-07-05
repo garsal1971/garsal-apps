@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ta Firi? v1.1.7</title>
+    <title>Ta Firi? v1.1.8</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -140,7 +140,8 @@
             border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--muted);
             font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0;
         }
-        .icon-btn:hover { background: var(--danger); color: #fff; border-color: var(--danger); transform: scale(1.08); }
+        .icon-btn:hover { background: var(--challenge); color: #fff; border-color: var(--challenge); transform: scale(1.08); }
+        .icon-btn-danger:hover { background: var(--danger); border-color: var(--danger); }
 
         .day-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.75rem 0 0.25rem; }
         .day-pill {
@@ -291,7 +292,7 @@
     <div class="modal" id="challengeModal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">🎯 Nuova sfida</div>
+                <div class="modal-title" id="challengeModalTitle">🎯 Nuova sfida</div>
                 <span class="modal-close" onclick="closeModal()">&times;</span>
             </div>
             <form id="challengeForm" onsubmit="submitChallengeForm(event)">
@@ -313,6 +314,7 @@
                         <input type="number" id="cfDuration" min="1" value="21" required>
                     </div>
                 </div>
+                <div class="form-hint" id="cfDateDurationHint" style="display:none; margin-top:-0.75rem; margin-bottom:1rem;">Data inizio e durata non sono modificabili dopo la creazione della sfida.</div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Orario avviso check-in *</label>
@@ -333,7 +335,7 @@
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.5rem;">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Annulla</button>
-                    <button type="submit" class="btn btn-primary">Crea sfida</button>
+                    <button type="submit" class="btn btn-primary" id="challengeSubmitBtn">Crea sfida</button>
                 </div>
             </form>
         </div>
@@ -343,8 +345,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.1.7';
-        const BUILD_TIME  = '2026-07-05T20:15:00Z';
+        const APP_VERSION = 'v1.1.8';
+        const BUILD_TIME  = '2026-07-05T20:45:00Z';
         console.log('%c TA FIRI? ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -588,20 +590,48 @@
         }
 
         // ==========================================
-        // CREAZIONE / ELIMINAZIONE SFIDA
+        // CREAZIONE / MODIFICA / ELIMINAZIONE SFIDA
         // ==========================================
+        let editingChallengeId = null;
+
         function openNewChallengeModal() {
+            editingChallengeId = null;
             document.getElementById('challengeForm').reset();
             document.getElementById('cfStartDate').value = todayStr();
             document.getElementById('cfDuration').value = 21;
             document.getElementById('cfCheckinTime').value = '20:00';
             document.getElementById('cfTotalPoints').value = 100;
             document.getElementById('cfScoringType').value = 'all_or_nothing';
+            document.getElementById('cfStartDate').disabled = false;
+            document.getElementById('cfDuration').disabled = false;
+            document.getElementById('cfDateDurationHint').style.display = 'none';
+            document.getElementById('challengeModalTitle').textContent = '🎯 Nuova sfida';
+            document.getElementById('challengeSubmitBtn').textContent = 'Crea sfida';
+            document.getElementById('challengeModal').classList.add('active');
+        }
+
+        function openEditChallengeModal(id) {
+            const c = challenges.find(x => x.id === id);
+            if (!c) return;
+            editingChallengeId = id;
+            document.getElementById('cfTitle').value = c.title;
+            document.getElementById('cfObjective').value = c.objective || '';
+            document.getElementById('cfStartDate').value = c.start_date;
+            document.getElementById('cfDuration').value = c.duration_days;
+            document.getElementById('cfCheckinTime').value = formatTime(c.checkin_time);
+            document.getElementById('cfTotalPoints').value = c.total_points;
+            document.getElementById('cfScoringType').value = c.scoring_type;
+            document.getElementById('cfStartDate').disabled = true;
+            document.getElementById('cfDuration').disabled = true;
+            document.getElementById('cfDateDurationHint').style.display = 'block';
+            document.getElementById('challengeModalTitle').textContent = '✏️ Modifica sfida';
+            document.getElementById('challengeSubmitBtn').textContent = 'Salva modifiche';
             document.getElementById('challengeModal').classList.add('active');
         }
 
         function closeModal() {
             document.getElementById('challengeModal').classList.remove('active');
+            editingChallengeId = null;
         }
 
         async function submitChallengeForm(evt) {
@@ -620,6 +650,33 @@
             }
 
             const endDate = addDaysStr(startDate, duration - 1);
+
+            if (editingChallengeId) {
+                const { data: updated, error } = await supabaseClient.from('sf_challenges').update({
+                    title, objective,
+                    checkin_time: checkinTime,
+                    total_points: totalPoints,
+                    scoring_type: scoringType
+                }).eq('id', editingChallengeId).select().single();
+
+                if (error) { showToast('Errore: ' + error.message); console.error(error); return; }
+
+                // Il promemoria smart_block va agganciato al prossimo giorno ancora
+                // 'pending' (non alla start_date originale, che potrebbe essere passata),
+                // con l'eventuale nuovo orario di check-in — stessa logica di ensureSmartBlockRules.
+                const pendingDays = (checkinsByChallenge[editingChallengeId] || [])
+                    .filter(d => d.status === 'pending')
+                    .sort((a, b) => a.day_date.localeCompare(b.day_date));
+                const today = todayStr();
+                const nextDay = pendingDays.find(d => d.day_date >= today) || pendingDays[0];
+                if (nextDay) await upsertSmartBlockRule({ ...updated, start_date: nextDay.day_date });
+                else await deleteSmartBlockRule(editingChallengeId);
+
+                closeModal();
+                showToast('✅ Sfida aggiornata: ' + title);
+                await loadAll();
+                return;
+            }
 
             const { data: newChallenge, error } = await supabaseClient.from('sf_challenges').insert({
                 title, objective,
@@ -793,7 +850,8 @@
                             </div>
                             <div class="challenge-header-actions">
                                 <span class="badge badge-scoring">${scoringLabel(c.scoring_type)}</span>
-                                <button class="icon-btn" onclick="deleteChallenge('${c.id}')" title="Elimina">🗑️</button>
+                                <button class="icon-btn" onclick="openEditChallengeModal('${c.id}')" title="Modifica">✏️</button>
+                                <button class="icon-btn icon-btn-danger" onclick="deleteChallenge('${c.id}')" title="Elimina">🗑️</button>
                             </div>
                         </div>
                         <div class="challenge-meta">
