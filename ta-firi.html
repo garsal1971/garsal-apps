@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ta Firi? v1.1.2</title>
+    <title>Ta Firi? v1.1.3</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -332,8 +332,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v1.1.2';
-        const BUILD_TIME  = '2026-07-05T13:30:00Z';
+        const APP_VERSION = 'v1.1.3';
+        const BUILD_TIME  = '2026-07-05T14:20:00Z';
         console.log('%c TA FIRI? ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#8E44AD;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -449,19 +449,10 @@
 
         // Forza la rigenerazione immediata di cm_notification_queue invece di attendere
         // il cron di fill-notification-queue (gira ogni 6 ore).
-        async function triggerFillQueue() {
-            try {
-                const token = sbAccessToken;
-                if (!token) return;
-                const resp = await fetch(`${SUPABASE_URL}/functions/v1/fill-notification-queue`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!resp.ok) console.warn('⚠️ triggerFillQueue: risposta non ok', resp.status);
-            } catch (e) {
-                console.error('❌ triggerFillQueue exception:', e);
-            }
-        }
+        // triggerFillQueue rimosso: l'Edge Function non supporta CORS da browser
+        // (stesso limite già documentato in tasks.html). La coda viene popolata
+        // dal cron server-side di fill-notification-queue (ogni 6 ore).
+        function triggerFillQueue() {}
 
         // Rete di sicurezza: crea la regola smart_block per le sfide attive che ne sono prive
         // (sfide create prima di questa funzione, o regola persa per qualche motivo).
