@@ -148,29 +148,6 @@ class BlockOverlayActivity : Activity() {
         finish()
     }
 
-    /** Bottone a tenuta: richiede la pressione per Config.CHALLENGE_HOLD_MS prima di inviare la risposta. */
-    private fun setupHoldButton(btn: Button, status: String) {
-        var holdRunnable: Runnable? = null
-        btn.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    v.alpha = 0.55f
-                    val r = Runnable { onChallengeResponse(status) }
-                    holdRunnable = r
-                    handler.postDelayed(r, Config.CHALLENGE_HOLD_MS)
-                    true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    v.alpha = 1f
-                    holdRunnable?.let { handler.removeCallbacks(it) }
-                    holdRunnable = null
-                    true
-                }
-                else -> false
-            }
-        }
-    }
-
     // ── Layout programmatico ─────────────────────────────────────────────────
 
     private fun buildView(): View {
@@ -276,22 +253,14 @@ class BlockOverlayActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
             }
-            val btnSi = Button(this).apply {
-                text = "✅ SÌ"; textSize = 20f
-                setTextColor(Color.WHITE)
-                setBackgroundColor(Color.parseColor("#16A34A"))
-                setPadding(0, 48, 0, 48)
+            val btnSi = buildHoldConfirmButton(this, handler, "SÌ", "#16A34A", Config.CHALLENGE_HOLD_MS) {
+                onChallengeResponse("done")
             }
-            val btnNo = Button(this).apply {
-                text = "❌ NO"; textSize = 20f
-                setTextColor(Color.WHITE)
-                setBackgroundColor(Color.parseColor("#DC2626"))
-                setPadding(0, 48, 0, 48)
+            val btnNo = buildHoldConfirmButton(this, handler, "NO", "#DC2626", Config.CHALLENGE_HOLD_MS) {
+                onChallengeResponse("not_done")
             }
-            setupHoldButton(btnSi, "done")
-            setupHoldButton(btnNo, "not_done")
-            row.addView(btnSi, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 12 })
-            row.addView(btnNo, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 12 })
+            row.addView(btnSi, LinearLayout.LayoutParams(0, HOLD_BTN_HEIGHT, 1f).apply { marginEnd = 12 })
+            row.addView(btnNo, LinearLayout.LayoutParams(0, HOLD_BTN_HEIGHT, 1f).apply { marginStart = 12 })
             root.addView(row, lp(ViewGroup.LayoutParams.MATCH_PARENT, topMargin = 20))
         } else {
             // Hint PIN
@@ -353,5 +322,9 @@ class BlockOverlayActivity : Activity() {
         }
 
         return root
+    }
+
+    companion object {
+        private const val HOLD_BTN_HEIGHT = 170
     }
 }
