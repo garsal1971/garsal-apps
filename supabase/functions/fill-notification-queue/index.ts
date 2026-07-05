@@ -114,7 +114,16 @@ interface QueueEntry {
 // ---------------------------------------------------------------------------
 // Handler principale
 // ---------------------------------------------------------------------------
+const corsHeaders = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 Deno.serve(async (_req) => {
+  if (_req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
   try {
     const now        = new Date()
     const horizon    = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000)
@@ -367,13 +376,13 @@ Deno.serve(async (_req) => {
 
     return new Response(
       JSON.stringify({ ok: true, total, inserted, deleted, skipped, errors }),
-      { headers: { 'Content-Type': 'application/json' } }
+      { headers: { 'Content-Type': 'application/json', ...corsHeaders } }
     )
   } catch (err) {
     console.error('[fill-queue] fatal:', err)
     return new Response(
       JSON.stringify({ ok: false, error: String(err) }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
     )
   }
 })
