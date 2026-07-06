@@ -409,6 +409,7 @@
       <div id="view-fondo-detail"       class="view"></div>
       <div id="view-progressione"        class="view"></div>
       <div id="view-loans"              class="view"></div>
+      <div id="view-loan-detail"        class="view"></div>
       <div id="view-other-assets"       class="view"></div>
       <div id="view-danaro-rosa"        class="view"></div>
       <div id="view-prodotti"           class="view"></div>
@@ -451,8 +452,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.44';
-const APP_BUILD   = '2026-07-04T15:20:00Z';
+const APP_VERSION = 'v1.0.45';
+const APP_BUILD   = '2026-07-06T00:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -464,7 +465,8 @@ const S = {
   portfolioId: null,
   dossierId: null,
   fundId: null,
-  portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [],
+  portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [], loanRepayments: [],
+  loanId: null,
   otherAssets: [], otherAssetTypes: [],
   funds: [], fundContributions: [], foiIndex: [],
   dashboardSnapshots: [],
@@ -591,13 +593,14 @@ const DEFAULT_TAG_CATS = [
 ];
 /* ── Data loaders ────────────────────────────────────────────── */
 async function loadAll() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
     sbQ('fnz_tag_categories', 'select=*&order=name.asc'),
     sbQ('fnz_dossiers',       'select=*&order=created_at.asc'),
     sbQ('fnz_loans',          'select=*&order=created_at.asc'),
+    sbQ('fnz_loan_repayments','select=*&order=date.asc,created_at.asc'),
     sbQ('fnz_other_assets',   'select=*&order=valuation_date.desc'),
     sbQ('fnz_other_asset_types','select=*&order=name.asc'),
     sbQ('fnz_funds',              'select=*&order=created_at.asc'),
@@ -610,6 +613,7 @@ async function loadAll() {
   S.tagCats      = tagCats;
   S.dossiers     = dossiers;
   S.loans        = loans;
+  S.loanRepayments = loanRepayments;
   S.otherAssets  = otherAssets;
   S.otherAssetTypes = otherAssetTypes;
   S.funds        = funds;
@@ -632,13 +636,14 @@ async function loadAll() {
   await syncFundOwnership();
 }
 async function reload() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
     sbQ('fnz_tag_categories', 'select=*&order=name.asc'),
     sbQ('fnz_dossiers',       'select=*&order=created_at.asc'),
     sbQ('fnz_loans',          'select=*&order=created_at.asc'),
+    sbQ('fnz_loan_repayments','select=*&order=date.asc,created_at.asc'),
     sbQ('fnz_other_assets',   'select=*&order=valuation_date.desc'),
     sbQ('fnz_other_asset_types','select=*&order=name.asc'),
     sbQ('fnz_funds',              'select=*&order=created_at.asc'),
@@ -651,6 +656,7 @@ async function reload() {
   S.tagCats      = tagCats;
   S.dossiers     = dossiers;
   S.loans        = loans;
+  S.loanRepayments = loanRepayments;
   S.otherAssets  = otherAssets;
   S.otherAssetTypes = otherAssetTypes;
   S.funds        = funds;
@@ -868,10 +874,30 @@ function computeLoanValue(loan) {
   } else {
     const C = parseFloat(loan.capitale);
     const i = parseFloat(loan.interesse) / 100;
-    const D = new Date(loan.data_inizio_prestito);
-    const t = (today - D) / (1000 * 60 * 60 * 24 * 365.25);
-    const value = C * Math.pow(1 + i, t) * own;
-    return { value, t };
+    const todayStr = today.toISOString().slice(0, 10);
+    const repayments = (S.loanRepayments || [])
+      .filter(r => r.loan_id === loan.id && r.date <= todayStr)
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
+
+    let balance = C;
+    let cursorStr = loan.data_inizio_prestito;
+    let totalRepaid = 0;
+    const schedule = [];
+    for (const r of repayments) {
+      const days = Math.max(0, (new Date(r.date) - new Date(cursorStr)) / 86400000);
+      const balanceBefore = balance * Math.pow(1 + i, days / 365.25);
+      const amount = parseFloat(r.amount);
+      const balanceAfter = balanceBefore - amount;
+      schedule.push({ ...r, balanceBefore, balanceAfter });
+      balance = balanceAfter;
+      totalRepaid += amount;
+      cursorStr = r.date;
+    }
+    const daysToToday = Math.max(0, (new Date(todayStr) - new Date(cursorStr)) / 86400000);
+    const value = balance * Math.pow(1 + i, daysToToday / 365.25) * own;
+    const t = (today - new Date(loan.data_inizio_prestito)) / (1000 * 60 * 60 * 24 * 365.25);
+    return { value, t, totalRepaid, schedule };
   }
 }
 /* ── Price fetching ─────────────────────────────────────────── */
@@ -2174,9 +2200,65 @@ function renderPrestiti() {
             Valore intero: <strong>${fmtEUR(stats.value / ((parseFloat(l.ownership_percentage) || 100) / 100))}</strong>
           </div>
           ${l.notes ? `<div class="settings-row text-muted text-sm mt-4">${l.notes}</div>` : ''}
+          <button class="btn btn-outline btn-sm mt-12" data-action="view-loan" data-id="${l.id}">Apri →</button>
         </div>`;
         }).join('')}</div>`
     }
+  `);
+}
+function renderLoanDetail() {
+  const loan = S.loans.find(l => l.id === S.loanId);
+  if (!loan) { navigate('loans'); return; }
+  const stats = computeLoanValue(loan);
+  const own = (parseFloat(loan.ownership_percentage) || 100) / 100;
+  setHtml('view-loan-detail', `
+    <div class="view-header">
+      <div class="hstack gap-8">
+        <button class="btn btn-sm btn-outline" data-action="nav" data-view="loans">← Prestiti</button>
+        <div>
+          <h2 class="page-title">${loan.name || (loan.type === 'MUTUO' ? 'Mutuo' : 'Prestito')}</h2>
+          <p class="page-sub">${loan.type} · Possesso ${loan.ownership_percentage || 100}%</p>
+        </div>
+      </div>
+      ${loan.type === 'PRESTITO' ? `<button class="btn btn-primary btn-sm" data-action="new-loan-repayment" data-loan-id="${loan.id}">+ Inserisci rimborso</button>` : ''}
+    </div>
+    <div class="kpi-grid">
+      ${kpi(loan.type === 'MUTUO' ? 'Capitale Residuo (quota)' : 'Debito Attuale (quota)', fmtEUR(stats.value), 'neutral')}
+      ${kpi('Valore intero', fmtEUR(own > 0 ? stats.value / own : stats.value), 'neutral')}
+      ${loan.type === 'MUTUO'
+        ? kpi('Rate pagate', `${stats.paymentsMade}/${loan.totale_rate}`, 'neutral')
+        : kpi('Totale rimborsato', fmtEUR(stats.totalRepaid || 0), 'neutral')}
+    </div>
+    <div class="card mb-16">
+      <div class="card-title">Dettagli</div>
+      ${loan.type === 'MUTUO'
+        ? `<div class="settings-row text-sm">Capitale iniziale: <strong>${fmtEUR(loan.capitale)}</strong> · Rata: <strong>${fmtEURc(loan.rata)}</strong> · Prima rata: <strong>${fmtDate(loan.giorno_prima_rata)}</strong></div>`
+        : `<div class="settings-row text-sm">Capitale iniziale: <strong>${fmtEUR(loan.capitale)}</strong> · Interesse annuo: <strong>${loan.interesse}%</strong> · Inizio: <strong>${fmtDate(loan.data_inizio_prestito)}</strong></div>`}
+      ${loan.notes ? `<div class="settings-row text-muted text-sm mt-4">${loan.notes}</div>` : ''}
+    </div>
+    ${loan.type === 'PRESTITO' ? `
+    <div class="card">
+      <div class="card-title">Rimborsi</div>
+      ${!stats.schedule || stats.schedule.length === 0
+        ? `<div class="empty-sm">Nessun rimborso registrato. Il debito matura a interesse composto dal capitale iniziale.</div>`
+        : `<div class="table-wrap"><table class="table">
+            <thead><tr><th></th><th>Data</th><th>Importo</th><th>Saldo prima</th><th>Saldo dopo</th><th>Nota</th></tr></thead>
+            <tbody>${stats.schedule.map(r => `
+              <tr>
+                <td class="hstack gap-4">
+                  <button class="btn-icon" data-action="edit-loan-repayment" data-id="${r.id}" title="Modifica">✎</button>
+                  <button class="btn-icon btn-icon-danger" data-action="del-loan-repayment" data-id="${r.id}" title="Elimina">✕</button>
+                </td>
+                <td class="mono text-sm">${fmtDate(r.date)}</td>
+                <td class="mono">${fmtEURc(r.amount)}</td>
+                <td class="mono text-muted">${fmtEURc(r.balanceBefore)}</td>
+                <td class="mono fw-600">${fmtEURc(r.balanceAfter)}</td>
+                <td><div class="truncate" style="max-width:160px">${r.notes || '—'}</div></td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>` : ''}
   `);
 }
 function renderOtherAssets() {
@@ -3356,6 +3438,45 @@ function openNewLoanModal(loanId = null) {
     });
   }
 }
+function openNewLoanRepaymentModal(loanId, repaymentId = null) {
+  const r = repaymentId ? S.loanRepayments.find(x => x.id === repaymentId) : null;
+  const targetLoanId = r ? r.loan_id : loanId;
+  const loan = S.loans.find(l => l.id === targetLoanId);
+  if (!loan) return;
+  openModal(r ? 'Modifica rimborso' : `Nuovo rimborso — ${loan.name}`, `
+    <form id="modal-form">
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input name="date" type="date" class="form-input" required value="${r?.date || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo (€) *</label>
+          <input name="amount" type="number" step="0.01" min="0.01" class="form-input mono" required value="${r?.amount || ''}" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nota</label>
+        <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${r?.notes || ''}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${r ? 'Salva' : 'Registra'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      user_id: S.session.user.id,
+      loan_id: loan.id,
+      date: data.date,
+      amount: parseFloat(data.amount),
+      notes: data.notes || '',
+    };
+    if (r) await sbUpd('fnz_loan_repayments', `id=eq.${r.id}`, payload);
+    else   await sbIns('fnz_loan_repayments', payload);
+    await reload(); closeModal();
+  });
+}
 function openOtherAssetModal(assetId = null, preType = null, preTitle = null) {
   const a = assetId ? S.otherAssets.find(x => x.id === assetId) : null;
   const isEdit = !!a;
@@ -3451,7 +3572,8 @@ function navigate(view, param = null) {
   if (view === 'portafoglio-detail') S.portfolioId = param;
   if (view === 'dossier-detail') S.dossierId = param;
   if (view === 'fondo-detail') S.fundId = param;
-  history.pushState({ view, portfolioId: S.portfolioId, dossierId: S.dossierId, fundId: S.fundId }, '');
+  if (view === 'loan-detail') S.loanId = param;
+  history.pushState({ view, portfolioId: S.portfolioId, dossierId: S.dossierId, fundId: S.fundId, loanId: S.loanId }, '');
   render(); window.scrollTo(0, 0);
 }
 function render() {
@@ -3461,7 +3583,8 @@ function render() {
     const match = b.dataset.view === S.view ||
       (S.view === 'portafoglio-detail' && b.dataset.view === 'portafogli') ||
       (S.view === 'dossier-detail' && b.dataset.view === 'dossiers') ||
-      (S.view === 'fondo-detail' && b.dataset.view === 'fondi');
+      (S.view === 'fondo-detail' && b.dataset.view === 'fondi') ||
+      (S.view === 'loan-detail' && b.dataset.view === 'loans');
     b.classList.toggle('active', match);
   });
   switch (S.view) {
@@ -3475,6 +3598,7 @@ function render() {
     case 'fondi':             renderFunds();              break;
     case 'fondo-detail':      renderFundDetail();         break;
     case 'loans':             renderPrestiti();           break;
+    case 'loan-detail':       renderLoanDetail();         break;
     case 'other-assets':       renderOtherAssets();        break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
     case 'prezzi':             renderPrezzi();             break;
@@ -3591,6 +3715,12 @@ document.addEventListener('click', async e => {
     case 'edit-loan':       openNewLoanModal(t.dataset.id); break;
     case 'del-loan':
       if (confirm('Eliminare questo prestito?')) { await sbDel('fnz_loans', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'view-loan':       navigate('loan-detail', t.dataset.id); break;
+    case 'new-loan-repayment':  openNewLoanRepaymentModal(t.dataset.loanId); break;
+    case 'edit-loan-repayment': openNewLoanRepaymentModal(null, t.dataset.id); break;
+    case 'del-loan-repayment':
+      if (confirm('Eliminare questo rimborso?')) { await sbDel('fnz_loan_repayments', `id=eq.${t.dataset.id}`); await reload(); }
       break;
     case 'new-other-asset':  openOtherAssetModal(null, t.dataset.preType || null, t.dataset.preTitle || null); break;
     case 'edit-other-asset': openOtherAssetModal(t.dataset.id); break;
@@ -3833,9 +3963,10 @@ async function boot() {
 const urlErr = new URLSearchParams(location.search).get('error_description');
 window.addEventListener('popstate', e => {
   if (!e.state || !S.session) return;
-  const { view, portfolioId, dossierId } = e.state;
+  const { view, portfolioId, dossierId, fundId, loanId } = e.state;
   if (view === 'portafoglio-detail' && portfolioId !== S.portfolioId) S.ptfFilters = {};
   S.view = view; S.portfolioId = portfolioId || null; S.dossierId = dossierId || null;
+  S.fundId = fundId || null; S.loanId = loanId || null;
   render(); window.scrollTo(0, 0);
 });
 if (urlErr) document.addEventListener('DOMContentLoaded', () => {
