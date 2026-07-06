@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Rosa v1.2.1</title>
+  <title>Situazione Rosa v1.2.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -189,8 +189,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.2.1';
-    const BUILD_TIME  = '2026-06-11T20:45:00Z';
+    const APP_VERSION = 'v1.2.2';
+    const BUILD_TIME  = '2026-07-06T00:00:00Z';
     console.log('%c SITUAZIONE ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#db2777;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -404,15 +404,17 @@
     /* ── Data ── */
     async function loadData() {
       try {
-        const [loans, tx, cats, saldi, assets] = await Promise.all([
+        const [loans, loanRepayments, tx, cats, saldi, assets] = await Promise.all([
           sb('fnz_loans?order=created_at.asc'),
+          sb('fnz_loan_repayments?order=date.asc,created_at.asc'),
           sb('cntrs_transactions?order=data.desc'),
           sb('cntrs_categories?order=name'),
           sb('cntrs_saldi?order=created_at.desc&limit=1'),
           sb('fnz_other_assets?order=valuation_date.desc'),
         ]);
-        
+
         S.loans = loans;
+        S.loanRepayments = loanRepayments;
         S.transactions = tx;
         S.categories = cats;
         S.otherAssets = assets;
@@ -462,10 +464,25 @@
       } else {
         const C = parseFloat(loan.capitale);
         const i = parseFloat(loan.interesse) / 100;
-        const D = new Date(loan.data_inizio_prestito);
-        const t = (today - D) / (1000 * 60 * 60 * 24 * 365.25);
-        const value = C * Math.pow(1 + i, t) * own;
-        return { value, t };
+        const todayStr = today.toISOString().slice(0, 10);
+        const repayments = (S.loanRepayments || [])
+          .filter(r => r.loan_id === loan.id && r.date <= todayStr)
+          .slice()
+          .sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
+
+        let balance = C;
+        let cursorStr = loan.data_inizio_prestito;
+        let totalRepaid = 0;
+        for (const r of repayments) {
+          const days = Math.max(0, (new Date(r.date) - new Date(cursorStr)) / 86400000);
+          balance = balance * Math.pow(1 + i, days / 365.25) - parseFloat(r.amount);
+          totalRepaid += parseFloat(r.amount);
+          cursorStr = r.date;
+        }
+        const daysToToday = Math.max(0, (new Date(todayStr) - new Date(cursorStr)) / 86400000);
+        const value = balance * Math.pow(1 + i, daysToToday / 365.25) * own;
+        const t = (today - new Date(loan.data_inizio_prestito)) / (1000 * 60 * 60 * 24 * 365.25);
+        return { value, t, totalRepaid };
       }
     }
 
