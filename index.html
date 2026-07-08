@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.97</title>
+<title>AppSphere v1.5.98</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="AppSphere">
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <script>
@@ -1548,7 +1549,7 @@
     </div>
     <div id="badge-modal-body"></div>
     <div id="badge-modal-footer">
-      <button id="badge-reload-btn" onclick="closeBadgeSettings(); loadApps();">Ricarica</button>
+      <button id="badge-reload-btn" onclick="closeBadgeSettings(); loadApps(true);">Ricarica</button>
     </div>
   </div>
 </div>
@@ -1660,8 +1661,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.97';
-const BUILD_TIME  = '2026-07-05T16:00:00Z';
+const APP_VERSION = 'v1.5.98';
+const BUILD_TIME  = '2026-07-08T13:42:40Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2424,7 +2425,7 @@ function checkSequence() {
     sessionStorage.setItem('hidden_mode', hiddenMode ? '1' : '0');
     broadcastHiddenMode();
     updateHiddenIndicator();
-    loadApps();
+    loadApps(true);
   }
 }
 
@@ -2446,7 +2447,7 @@ function updateHiddenIndicator() {
 // ── CARICA APP DA SUPABASE ──
 const APPS_CACHE_KEY = 'appsphere_apps_cache';
 
-async function loadApps() {
+async function loadApps(forceRender = false) {
   const token = localStorage.getItem('sb_token');
 
   // Render IMMEDIATO dalla cache: mostra subito le bolle con le ultime
@@ -2512,7 +2513,11 @@ async function loadApps() {
         },
         body: JSON.stringify({ query: row.score_query })
       });
-      if (rpc.ok) score = Number(await rpc.json()) || 0;
+      if (rpc.ok) {
+        score = Number(await rpc.json()) || 0;
+      } else {
+        console.warn('Score query fallita per', row.title, await rpc.text());
+      }
     } catch(e) {
       console.warn('Score query fallita per', row.title, e);
     }
@@ -2530,9 +2535,23 @@ async function loadApps() {
   // Salva in cache per il prossimo avvio (bolle istantanee)
   try { localStorage.setItem(APPS_CACHE_KEY, JSON.stringify(apps)); } catch (e) {}
 
-  // Ri-disegna solo se i dati freschi differiscono da quelli già mostrati,
-  // così non si rimescolano le posizioni quando i punteggi non sono cambiati.
-  if (JSON.stringify(apps) !== JSON.stringify(CURRENT_APPS)) render(apps);
+  // Se le bolle sono già visibili (mostrate dalla cache all'avvio di questa
+  // sessione), NON le ridisegna con i punteggi freschi: il salto visivo a
+  // metà sessione è fastidioso. Il nuovo layout verrà mostrato al prossimo
+  // caricamento della home. Ridisegna subito solo se non c'era ancora nulla
+  // da mostrare, oppure se richiesto esplicitamente da un'azione dell'utente
+  // (pulsante "Ricarica", toggle modalità nascosta).
+  if (forceRender || !CURRENT_APPS.length) {
+    render(apps);
+  } else {
+    // Aggiorna comunque il modello e il totale nel pannello punteggio
+    // (solo testo, nessuna bolla viene spostata o ridimensionata).
+    CURRENT_APPS = apps;
+    const total = apps.reduce((s, a) => s + a.score, 0);
+    const spv = document.getElementById('sp-value');
+    if (spv) spv.textContent = total.toLocaleString('it-IT');
+    updateScorePanel();
+  }
 }
 
 // ── HAMBURGER MENU ──
@@ -3191,7 +3210,10 @@ let _ptsAvailable = 0;
 
 async function fetchPtsSpent() {
   const token = localStorage.getItem('sb_token');
-  if (!token) return 0;
+  // Se il token è scaduto la richiesta fallirebbe comunque con 401: si evita
+  // la chiamata di rete e si torna 0 (il pannello verrà aggiornato non
+  // appena il token viene rinnovato).
+  if (!token || !verifySupabaseToken(token).valid) return 0;
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/cm_rewards_log?select=points_spent`,
     { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
@@ -3474,9 +3496,12 @@ async function init() {
       }
     } catch (e) {}
 
-    let user = await getUserInfo(token);
+    // Se il JWT è già scaduto lo sappiamo localmente (claim 'exp') senza
+    // fare una richiesta di rete destinata a fallire con 403: si passa
+    // direttamente al rinnovo silenzioso.
+    let user = verifySupabaseToken(token).valid ? await getUserInfo(token) : null;
     if (!user) {
-      // JWT scaduto: tenta rinnovo silenzioso prima di mostrare il login
+      // JWT scaduto/non valido: tenta rinnovo silenzioso prima di mostrare il login
       await refreshSession();
       token = localStorage.getItem('sb_token');
       user = token ? await getUserInfo(token) : null;
@@ -3562,7 +3587,7 @@ document.getElementById('hidden-icon').addEventListener('click', () => {
   sessionStorage.setItem('hidden_mode', '0');
   broadcastHiddenMode();
   updateHiddenIndicator();
-  loadApps();
+  loadApps(true);
 });
 
 // ── PWA Service Worker ───────────────────────────────────────────────────────
