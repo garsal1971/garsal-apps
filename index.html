@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.98</title>
+<title>AppSphere v1.5.99</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -85,6 +85,48 @@
     color: rgba(255,255,255,0.75);
     margin-top: 4px;
     pointer-events: none;
+  }
+
+  /* ── FUMETTO AVVISO (es. DecisionKeeper "mostra avviso nella home") ── */
+  .home-alert-bubble {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 10px;
+    max-width: 220px;
+    width: max-content;
+    background: #fff;
+    color: #1F2937;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 2px solid #EE334E;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    cursor: pointer;
+    z-index: 5;
+    animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  .home-alert-bubble::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 7px solid transparent;
+    border-top-color: #EE334E;
+  }
+  .home-alert-bubble::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-3px);
+    border: 5px solid transparent;
+    border-top-color: #fff;
   }
 
   /* ── SCORE PANEL ── */
@@ -1661,8 +1703,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.98';
-const BUILD_TIME  = '2026-07-08T13:42:40Z';
+const APP_VERSION = 'v1.5.99';
+const BUILD_TIME  = '2026-07-08T14:50:15Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2010,6 +2052,9 @@ function render(apps) {
   const spv = document.getElementById('sp-value');
   if (spv) spv.textContent = total.toLocaleString('it-IT');
   updateScorePanel();
+
+  // Il rebuild ha ricreato tutti i nodi: riaggancia il fumetto avviso (se attivo)
+  renderHomeAlertBubble();
 }
 
 // ── DRAG ──
@@ -2355,6 +2400,7 @@ function showApp(user) {
   // Avvia subito il caricamento (render istantaneo dalla cache + fetch in
   // background): le bolle sono già pronte dietro al login mentre sfuma.
   loadApps();
+  loadHomeAlerts();
   setTimeout(() => { ls.style.display = 'none'; }, 500);
 }
 
@@ -2552,6 +2598,61 @@ async function loadApps(forceRender = false) {
     if (spv) spv.textContent = total.toLocaleString('it-IT');
     updateScorePanel();
   }
+}
+
+// ── FUMETTO AVVISO (DecisionKeeper → "Mostra avviso nella home AppSphere") ──
+// Le decisioni con show_home_alert=true compaiono come fumetto agganciato
+// alla bolla di DecisionKeeper. Toccare il fumetto lo chiude solo per questa
+// sessione (ricompare al prossimo caricamento della home finché il flag
+// resta attivo su almeno una decisione).
+let _homeAlertsRaw = [];
+let _homeAlertDismissed = sessionStorage.getItem('appsphere_alert_dismissed') === '1';
+
+async function loadHomeAlerts() {
+  if (_homeAlertDismissed) return;
+  const token = localStorage.getItem('sb_token');
+  if (!token) return;
+  const payload = decodeJwt(token);
+  const uid = payload && payload.sub;
+  if (!uid) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/dc_decisions?select=id,title,is_hidden&user_id=eq.${uid}&show_home_alert=eq.true&status=eq.active&order=created_at.desc`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
+    );
+    if (!res.ok) return;
+    _homeAlertsRaw = await res.json();
+    renderHomeAlertBubble();
+  } catch (e) {
+    console.warn('Avvisi DecisionKeeper non disponibili:', e);
+  }
+}
+
+function renderHomeAlertBubble() {
+  const old = document.querySelector('.home-alert-bubble');
+  if (old) old.remove();
+  if (_homeAlertDismissed || !_homeAlertsRaw.length) return;
+
+  const visible = hiddenMode ? _homeAlertsRaw : _homeAlertsRaw.filter(d => !d.is_hidden);
+  if (!visible.length) return;
+
+  const target = nodes.find(n => n.app && n.app.html_file === 'decisions.html');
+  if (!target) return;
+
+  const extra = visible.length - 1;
+  const bubble = document.createElement('div');
+  bubble.className = 'home-alert-bubble';
+  bubble.textContent = '❗ ' + visible[0].title + (extra > 0 ? ' (+' + extra + ' altre)' : '');
+  bubble.title = 'Tocca per chiudere';
+  bubble.addEventListener('mousedown', e => e.stopPropagation());
+  bubble.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  bubble.addEventListener('click', e => {
+    e.stopPropagation();
+    _homeAlertDismissed = true;
+    sessionStorage.setItem('appsphere_alert_dismissed', '1');
+    bubble.remove();
+  });
+  target.el.appendChild(bubble);
 }
 
 // ── HAMBURGER MENU ──
