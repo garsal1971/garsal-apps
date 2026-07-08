@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.124</title>
+    <title>Weight Quest v3.5.125</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -1255,8 +1255,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.124';
-        var BUILD_TIME  = '2026-07-05T16:25:52Z';
+        var APP_VERSION = 'v3.5.125';
+        var BUILD_TIME  = '2026-07-08T14:35:31Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5545,6 +5545,13 @@
             var el = document.getElementById('statsContent');
             if (!el) return;
             _statAllData = data || []; // cache per i tab Dati e Grafico
+            // Default: range dal 1° gennaio dell'anno corrente sui tab Dati e Grafico
+            // (solo se l'utente non ha già impostato un filtro proprio).
+            var elFrom  = document.getElementById('statFilterFrom');
+            var elCFrom = document.getElementById('statChartFrom');
+            var defaultFrom = new Date().getFullYear() + '-01-01';
+            if (elFrom  && !elFrom.value)  elFrom.value  = defaultFrom;
+            if (elCFrom && !elCFrom.value) elCFrom.value = defaultFrom;
             if (!data || data.length === 0) {
                 el.innerHTML = '<div class="stats-loading">Nessun dato disponibile.</div>';
                 return;
@@ -5693,8 +5700,8 @@
                 document.getElementById('statTabBtn'   + i).className = i === n ? 'btn btn-primary' : 'btn btn-secondary';
                 document.getElementById('statTabPanel' + i).classList.toggle('active', i === n);
             });
-            if (n === 2 && _statAllData.length) renderStatDataTable(_statAllData);
-            if (n === 3 && _statAllData.length) renderStatChart(_statAllData);
+            if (n === 2 && _statAllData.length) applyStatFilter();
+            if (n === 3 && _statAllData.length) applyStatChartFilter();
         }
 
         function openRenpho() {
@@ -5740,9 +5747,9 @@
             renderStatDataTable(filtered);
         }
         function resetStatFilter() {
-            document.getElementById('statFilterFrom').value = '';
+            document.getElementById('statFilterFrom').value = new Date().getFullYear() + '-01-01';
             document.getElementById('statFilterTo').value   = '';
-            renderStatDataTable(_statAllData);
+            applyStatFilter();
         }
 
         // ── Filtri tab 3 ──────────────────────────────────────────
@@ -5755,9 +5762,9 @@
             renderStatChart(filtered);
         }
         function resetStatChartFilter() {
-            document.getElementById('statChartFrom').value = '';
+            document.getElementById('statChartFrom').value = new Date().getFullYear() + '-01-01';
             document.getElementById('statChartTo').value   = '';
-            renderStatChart(_statAllData);
+            applyStatChartFilter();
         }
 
         // ── Tabella dati storici ──────────────────────────────────
@@ -5844,7 +5851,8 @@
                             pointRadius: dense ? 0 : 3,
                             pointHoverRadius: 5,
                             tension: 0.3,
-                            fill: true
+                            fill: true,
+                            hidden: true // default: solo media mobile visibile, clic sulla legenda per mostrarlo
                         },
                         {
                             label: 'Media mobile 7gg',
