@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.109</title>
+<title>AppSphere v1.5.110</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -123,6 +123,17 @@
     font-weight: 800;
     color: #EE334E;
     margin-bottom: 24px;
+  }
+  .home-alert-section-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6B7280;
+    margin: 20px 0 10px;
+  }
+  .home-alert-section-title:first-of-type {
+    margin-top: 0;
   }
   .home-alert-chips {
     display: flex;
@@ -1746,8 +1757,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.109';
-const BUILD_TIME  = '2026-07-10T02:00:00Z';
+const APP_VERSION = 'v1.5.110';
+const BUILD_TIME  = '2026-07-10T02:20:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2647,12 +2658,69 @@ async function loadApps(forceRender = false) {
 // Le decisioni con show_home_alert=true compaiono come fumetto agganciato
 // alla bolla di DecisionKeeper. Toccare il fumetto lo chiude solo per questa
 // sessione (ricompare al prossimo caricamento della home finché il flag
-// resta attivo su almeno una decisione).
-let _homeAlertsRaw = [];
+// resta attivo su almeno un avviso).
+// Fonti aggregate: decisioni DecisionKeeper con show_home_alert=true, task
+// scaduti/di oggi con priorità "urgente". Ogni fonte espone item con lo
+// stesso formato { title, hidden } così la sezione può crescere in futuro
+// (nuove app) senza toccare il rendering del popup.
+let _homeAlertDecisions = [];
+let _homeAlertTasks = [];
 let _homeAlertDismissed = sessionStorage.getItem('appsphere_alert_dismissed') === '1';
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function loadHomeAlertDecisions(uid, headers) {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/dc_decisions?select=id,title,is_hidden&user_id=eq.${uid}&show_home_alert=eq.true&status=eq.active&order=created_at.desc`,
+      { headers }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows.map(d => ({ title: d.title, hidden: !!d.is_hidden }));
+  } catch (e) {
+    console.warn('Avvisi DecisionKeeper non disponibili:', e);
+    return [];
+  }
+}
+
+async function loadHomeAlertUrgentTasks(headers) {
+  try {
+    const prRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cm_priorities?select=id&name=ilike.urgente`,
+      { headers }
+    );
+    if (!prRes.ok) return [];
+    const priorities = await prRes.json();
+    if (!priorities.length) return [];
+    const priorityIds = priorities.map(p => p.id).join(',');
+
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/ts_tasks?select=id,title,type,start_date,next_occurrence_date,status,riservato` +
+      `&status=in.(started,completed,failed,skipped)&priority_id=in.(${priorityIds})&type=neq.free_repeat`,
+      { headers }
+    );
+    if (!res.ok) return [];
+    const rows = await res.json();
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return rows
+      .filter(t => {
+        const dueRaw = t.type === 'single' ? t.start_date : t.next_occurrence_date;
+        if (!dueRaw) return false;
+        const due = new Date(dueRaw);
+        due.setHours(0, 0, 0, 0);
+        return due <= today;
+      })
+      .map(t => ({ title: t.title, hidden: !!t.riservato }));
+  } catch (e) {
+    console.warn('Avvisi task urgenti non disponibili:', e);
+    return [];
+  }
 }
 
 async function loadHomeAlerts() {
@@ -2662,33 +2730,41 @@ async function loadHomeAlerts() {
   const payload = decodeJwt(token);
   const uid = payload && payload.sub;
   if (!uid) return;
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/dc_decisions?select=id,title,is_hidden&user_id=eq.${uid}&show_home_alert=eq.true&status=eq.active&order=created_at.desc`,
-      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
-    );
-    if (!res.ok) return;
-    _homeAlertsRaw = await res.json();
-    renderHomeAlertBubble();
-  } catch (e) {
-    console.warn('Avvisi DecisionKeeper non disponibili:', e);
-  }
+  const headers = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token };
+
+  const [decisions, tasks] = await Promise.all([
+    loadHomeAlertDecisions(uid, headers),
+    loadHomeAlertUrgentTasks(headers)
+  ]);
+  _homeAlertDecisions = decisions;
+  _homeAlertTasks = tasks;
+  renderHomeAlertBubble();
+}
+
+function renderAlertSection(title, items) {
+  const visible = hiddenMode ? items : items.filter(i => !i.hidden);
+  if (!visible.length) return '';
+
+  const MAX_CHIPS = 8;
+  const shown = visible.slice(0, MAX_CHIPS);
+  const extra = visible.length - shown.length;
+
+  return '<div class="home-alert-section-title">' + title + '</div>' +
+    '<div class="home-alert-chips">' +
+    shown.map(i => '<span class="home-alert-chip">' + escapeHtml(i.title) + '</span>').join('') +
+    (extra > 0 ? '<span class="home-alert-chip more">+' + extra + ' altre</span>' : '') +
+    '</div>';
 }
 
 function renderHomeAlertBubble() {
   const old = document.querySelector('.home-alert-overlay');
   if (old) old.remove();
-  if (_homeAlertDismissed || !_homeAlertsRaw.length) return;
+  if (_homeAlertDismissed) return;
 
-  // Il fumetto è indipendente dalla visibilità della bolla DecisionKeeper
-  // (che segue il flag riservato dell'app): va mostrato in entrambe le
-  // modalità, filtrando solo per il flag is_hidden della singola decisione.
-  const visible = hiddenMode ? _homeAlertsRaw : _homeAlertsRaw.filter(d => !d.is_hidden);
-  if (!visible.length) return;
-
-  const MAX_CHIPS = 8;
-  const shown = visible.slice(0, MAX_CHIPS);
-  const extra = visible.length - shown.length;
+  const sectionsHtml =
+    renderAlertSection('🗳️ Decisioni in sospeso', _homeAlertDecisions) +
+    renderAlertSection('⏰ Task urgenti', _homeAlertTasks);
+  if (!sectionsHtml) return;
 
   const dismiss = () => {
     _homeAlertDismissed = true;
@@ -2704,11 +2780,8 @@ function renderHomeAlertBubble() {
   bubble.className = 'home-alert-bubble';
   bubble.addEventListener('click', e => e.stopPropagation());
   bubble.innerHTML =
-    '<div class="home-alert-bubble-title">❗ Decisioni in sospeso</div>' +
-    '<div class="home-alert-chips">' +
-    shown.map(d => '<span class="home-alert-chip">' + escapeHtml(d.title) + '</span>').join('') +
-    (extra > 0 ? '<span class="home-alert-chip more">+' + extra + ' altre</span>' : '') +
-    '</div>' +
+    '<div class="home-alert-bubble-title">❗ Avvisi</div>' +
+    sectionsHtml +
     '<button type="button" class="home-alert-close" title="Chiudi">✕</button>';
 
   bubble.querySelector('.home-alert-close').addEventListener('click', dismiss);
