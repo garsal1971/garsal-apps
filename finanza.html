@@ -452,8 +452,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.46';
-const APP_BUILD   = '2026-07-07T00:00:00Z';
+const APP_VERSION = 'v1.0.47';
+const APP_BUILD   = '2026-07-10T03:15:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -1599,11 +1599,18 @@ function renderDashboard() {
 }
 function renderPortafogli() {
   const stats = portfolioStats();
+  const grandValue     = stats.reduce((s, x) => s + x.totalValue, 0);
+  const grandFullValue = stats.reduce((s, x) => s + (x.totalValue / ((parseFloat(x.portfolio.ownership_percentage) || 100) / 100)), 0);
   setHtml('view-portafogli', `
     <div class="view-header">
       <div><h2 class="page-title">Portafogli</h2><p class="page-sub">Crea e gestisci i tuoi portafogli</p></div>
       <button class="btn btn-primary btn-sm" data-action="new-portfolio">+ Nuovo portafoglio</button>
     </div>
+    ${S.portfolios.length > 0 ? `
+    <div class="kpi-grid">
+      ${kpi('Valore totale quota', fmtEUR(grandValue), 'pos')}
+      ${kpi('Valore totale intero', fmtEUR(grandFullValue), 'neutral')}
+    </div>` : ''}
     ${S.portfolios.length === 0
       ? `<div class="empty-state"><div class="empty-icon">💼</div><p>Nessun portafoglio ancora.<br/>Creane uno per iniziare.</p></div>`
       : `<div class="portfolio-grid">${stats.map(({ portfolio: p, totalValue: tv, dailyChangePct }) => `
