@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.110</title>
+<title>AppSphere v1.5.111</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -905,6 +905,159 @@
   }
   #badge-reload-btn:hover { opacity: 0.8; }
 
+  /* ── PRIORITÀ (cm_priorities) MODAL ── */
+  #priorities-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 8000;
+    align-items: center;
+    justify-content: center;
+  }
+  #priorities-modal-overlay.open { display: flex; }
+  #priorities-modal {
+    background: #fff;
+    border-radius: 14px;
+    border: 2px solid #111;
+    width: min(560px, 94vw);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  #priorities-modal-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #priorities-modal-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111;
+  }
+  #priorities-modal-header span {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #aaa;
+  }
+  #priorities-modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #888;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  #priorities-modal-close:hover { color: #111; }
+  #priorities-modal-body {
+    overflow-y: auto;
+    padding: 16px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .pr-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .pr-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .pr-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #111;
+    flex-shrink: 0;
+    cursor: pointer;
+    position: relative;
+  }
+  .pr-color-input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .pr-name-input {
+    flex: 1;
+    min-width: 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 6px 9px;
+  }
+  .pr-name-input:focus { outline: none; border-color: #0081C8; }
+  .pr-value-input {
+    width: 56px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 6px 6px;
+    text-align: center;
+  }
+  .pr-value-input:focus { outline: none; border-color: #0081C8; }
+  .pr-save-btn, .pr-delete-btn, .pr-add-btn {
+    flex-shrink: 0;
+    padding: 6px 11px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .pr-save-btn {
+    border: 1px solid #0081C8;
+    background: #0081C8;
+    color: #fff;
+  }
+  .pr-delete-btn {
+    border: 1px solid #E74C3C;
+    background: #fff;
+    color: #E74C3C;
+  }
+  .pr-save-btn:hover, .pr-delete-btn:hover { opacity: 0.8; }
+  .pr-save-btn:disabled { opacity: 0.4; cursor: default; }
+  .pr-status {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: #00A651;
+  }
+  .pr-status.err { color: #EE334E; }
+  .pr-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 4px;
+  }
+  .pr-add-btn {
+    border: 1.5px solid #111;
+    background: #111;
+    color: #fff;
+    font-weight: 600;
+  }
+  .pr-add-btn:hover { opacity: 0.85; }
+  #priorities-modal-footer {
+    padding: 12px 22px;
+    border-top: 1px solid #eee;
+    text-align: right;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #aaa;
+  }
+
   /* ── PREMI ── */
   #rewards-overlay {
     display: none;
@@ -1505,6 +1658,7 @@
   <button class="hm-item" onclick="closeHamburgerMenu(); window.open('comandi.html','_blank');">🛠 Comandi</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openProfilo();">👤 Profilo</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openBadgeSettings();">⚙ Badge</button>
+  <button class="hm-item" onclick="closeHamburgerMenu(); openPrioritiesSettings();">🚦 Priorità</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNotifiche();">🔔 Notifiche</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNqv();">⚡ Notifica al Volo</button>
   <button class="hm-item danger" onclick="closeHamburgerMenu(); logout();">↩ Esci</button>
@@ -1650,6 +1804,19 @@
   </div>
 </div>
 
+<!-- PRIORITÀ (cm_priorities) CRUD MODAL -->
+<div id="priorities-modal-overlay">
+  <div id="priorities-modal">
+    <div id="priorities-modal-header">
+      <h2>Priorità</h2>
+      <span>cm_priorities — condivise con Tasks</span>
+      <button id="priorities-modal-close" onclick="closePrioritiesSettings()">✕</button>
+    </div>
+    <div id="priorities-modal-body"></div>
+    <div id="priorities-modal-footer">le modifiche sono immediate</div>
+  </div>
+</div>
+
 <div id="field"></div>
 
 <!-- INSERIMENTO CODICE NASCOSTO -->
@@ -1757,8 +1924,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.110';
-const BUILD_TIME  = '2026-07-10T02:20:00Z';
+const APP_VERSION = 'v1.5.111';
+const BUILD_TIME  = '2026-07-10T02:40:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3436,6 +3603,172 @@ async function saveBadgeQuery(id) {
 // chiudi modale cliccando fuori
 document.getElementById('badge-modal-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeBadgeSettings();
+});
+
+// ── PRIORITÀ (cm_priorities) CRUD ──
+let _prioritiesRows = [];
+
+function renderPrioritiesModalBody() {
+  const body = document.getElementById('priorities-modal-body');
+  const rowsHtml = _prioritiesRows.map(row => {
+    const color = (row.color || '#EE334E').trim();
+    return `
+    <div class="pr-row" data-id="${row.id}">
+      <div class="pr-dot" id="pr-dot-${row.id}" style="background:${color}">
+        <input type="color" class="pr-color-input" id="pr-colorpicker-${row.id}" value="${color}"
+          oninput="document.getElementById('pr-dot-${row.id}').style.background=this.value">
+      </div>
+      <input type="text" class="pr-name-input" id="pr-name-${row.id}" value="${escapeHtml(row.name || '')}">
+      <input type="number" class="pr-value-input" id="pr-value-${row.id}" value="${row.value ?? 0}">
+      <span class="pr-status" id="pr-status-${row.id}"></span>
+      <button class="pr-save-btn" onclick="savePriorityRow('${row.id}')">Salva</button>
+      <button class="pr-delete-btn" onclick="deletePriorityRow('${row.id}')">Elimina</button>
+    </div>`;
+  }).join('');
+
+  const addRowHtml = `
+    <div class="pr-add-row">
+      <div class="pr-dot" id="pr-dot-new" style="background:#EE334E">
+        <input type="color" class="pr-color-input" id="pr-colorpicker-new" value="#EE334E"
+          oninput="document.getElementById('pr-dot-new').style.background=this.value">
+      </div>
+      <input type="text" class="pr-name-input" id="pr-name-new" placeholder="Nome nuova priorità (es. Urgente)">
+      <input type="number" class="pr-value-input" id="pr-value-new" value="0">
+      <span class="pr-status" id="pr-status-new"></span>
+      <button class="pr-add-btn" onclick="addPriorityRow()">+ Aggiungi</button>
+    </div>`;
+
+  body.innerHTML = (rowsHtml || '<div style="padding:8px 0;color:#aaa;font-family:DM Mono,monospace;font-size:12px;">Nessuna priorità configurata.</div>') + addRowHtml;
+}
+
+async function openPrioritiesSettings() {
+  const token = localStorage.getItem('sb_token');
+  const overlay = document.getElementById('priorities-modal-overlay');
+  const body    = document.getElementById('priorities-modal-body');
+  body.innerHTML = '<div style="padding:20px;color:#aaa;font-family:DM Mono,monospace;font-size:12px;">Caricamento…</div>';
+  overlay.classList.add('open');
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/cm_priorities?select=id,name,value,color&order=value.desc`,
+    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
+  );
+  if (!res.ok) {
+    body.innerHTML = '<div style="padding:20px;color:#EE334E;font-family:DM Mono,monospace;font-size:12px;">Errore caricamento priorità.</div>';
+    return;
+  }
+  _prioritiesRows = await res.json();
+  renderPrioritiesModalBody();
+}
+
+function closePrioritiesSettings() {
+  document.getElementById('priorities-modal-overlay').classList.remove('open');
+}
+
+async function savePriorityRow(id) {
+  const token    = localStorage.getItem('sb_token');
+  const nameEl   = document.getElementById('pr-name-' + id);
+  const valueEl  = document.getElementById('pr-value-' + id);
+  const colorEl  = document.getElementById('pr-colorpicker-' + id);
+  const statusEl = document.getElementById('pr-status-' + id);
+  const btn      = nameEl.closest('.pr-row').querySelector('.pr-save-btn');
+
+  btn.disabled = true;
+  statusEl.className = 'pr-status';
+  statusEl.textContent = '';
+
+  const patch = {
+    name: nameEl.value.trim(),
+    value: parseInt(valueEl.value, 10) || 0,
+    color: colorEl.value,
+  };
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/cm_priorities?id=eq.${id}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(patch),
+    }
+  );
+
+  btn.disabled = false;
+  if (res.ok) {
+    statusEl.textContent = '✓ salvato';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  } else {
+    statusEl.className = 'pr-status err';
+    statusEl.textContent = '✗ errore';
+  }
+}
+
+async function deletePriorityRow(id) {
+  if (!confirm('Eliminare questa priorità?')) return;
+  const token = localStorage.getItem('sb_token');
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/cm_priorities?id=eq.${id}`,
+    {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token, 'Prefer': 'return=minimal' },
+    }
+  );
+  if (res.ok) {
+    _prioritiesRows = _prioritiesRows.filter(r => r.id !== id);
+    renderPrioritiesModalBody();
+  } else {
+    alert('Errore durante l\'eliminazione della priorità.');
+  }
+}
+
+async function addPriorityRow() {
+  const token    = localStorage.getItem('sb_token');
+  const nameEl   = document.getElementById('pr-name-new');
+  const valueEl  = document.getElementById('pr-value-new');
+  const colorEl  = document.getElementById('pr-colorpicker-new');
+  const statusEl = document.getElementById('pr-status-new');
+  const name     = nameEl.value.trim();
+
+  if (!name) {
+    statusEl.className = 'pr-status err';
+    statusEl.textContent = 'Inserisci un nome';
+    return;
+  }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/cm_priorities`,
+    {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify({
+        name,
+        value: parseInt(valueEl.value, 10) || 0,
+        color: colorEl.value,
+      }),
+    }
+  );
+
+  if (res.ok) {
+    const rows = await res.json();
+    _prioritiesRows.push(rows[0]);
+    _prioritiesRows.sort((a, b) => (b.value || 0) - (a.value || 0));
+    renderPrioritiesModalBody();
+  } else {
+    statusEl.className = 'pr-status err';
+    statusEl.textContent = '✗ errore';
+  }
+}
+
+document.getElementById('priorities-modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closePrioritiesSettings();
 });
 
 // ── PREMI ──
