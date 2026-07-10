@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.111</title>
+<title>AppSphere v1.5.112</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1924,8 +1924,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.111';
-const BUILD_TIME  = '2026-07-10T02:40:00Z';
+const APP_VERSION = 'v1.5.112';
+const BUILD_TIME  = '2026-07-10T02:55:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3701,8 +3701,11 @@ async function savePriorityRow(id) {
     statusEl.textContent = '✓ salvato';
     setTimeout(() => { statusEl.textContent = ''; }, 2000);
   } else {
+    const errBody = await res.text();
+    console.error('savePriorityRow error', res.status, errBody);
     statusEl.className = 'pr-status err';
-    statusEl.textContent = '✗ errore';
+    statusEl.textContent = '✗ ' + res.status;
+    statusEl.title = errBody;
   }
 }
 
@@ -3720,7 +3723,9 @@ async function deletePriorityRow(id) {
     _prioritiesRows = _prioritiesRows.filter(r => r.id !== id);
     renderPrioritiesModalBody();
   } else {
-    alert('Errore durante l\'eliminazione della priorità.');
+    const errBody = await res.text();
+    console.error('deletePriorityRow error', res.status, errBody);
+    alert('Errore durante l\'eliminazione (' + res.status + '):\n' + errBody);
   }
 }
 
@@ -3762,8 +3767,12 @@ async function addPriorityRow() {
     _prioritiesRows.sort((a, b) => (b.value || 0) - (a.value || 0));
     renderPrioritiesModalBody();
   } else {
+    const errBody = await res.text();
+    console.error('addPriorityRow error', res.status, errBody);
     statusEl.className = 'pr-status err';
-    statusEl.textContent = '✗ errore';
+    statusEl.textContent = '✗ ' + res.status;
+    statusEl.title = errBody;
+    alert('Errore durante l\'aggiunta (' + res.status + '):\n' + errBody);
   }
 }
 
