@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.100</title>
+<title>AppSphere v1.5.101</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1687,8 +1687,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.100';
-const BUILD_TIME  = '2026-07-08T14:58:39Z';
+const APP_VERSION = 'v1.5.101';
+const BUILD_TIME  = '2026-07-10T00:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2617,10 +2617,9 @@ function renderHomeAlertBubble() {
   if (old) old.remove();
   if (_homeAlertDismissed || !_homeAlertsRaw.length) return;
 
-  // Mostra l'avviso solo se DecisionKeeper è tra le app attualmente caricate
-  // (rispetta lo stesso filtro riservato/modalità nascosta delle bolle).
-  if (!CURRENT_APPS.some(a => a.html_file === 'decisions.html')) return;
-
+  // Il fumetto è indipendente dalla visibilità della bolla DecisionKeeper
+  // (che segue il flag riservato dell'app): va mostrato in entrambe le
+  // modalità, filtrando solo per il flag is_hidden della singola decisione.
   const visible = hiddenMode ? _homeAlertsRaw : _homeAlertsRaw.filter(d => !d.is_hidden);
   if (!visible.length) return;
 
