@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.103</title>
+<title>AppSphere v1.5.104</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -92,7 +92,7 @@
     position: fixed;
     top: 66px;
     left: 16px;
-    max-width: 220px;
+    max-width: 260px;
     width: max-content;
     background: #fff;
     color: #1F2937;
@@ -130,12 +130,13 @@
   }
   .home-alert-chips {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 5px;
-    max-height: 84px;
-    overflow-y: auto;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
   .home-alert-chip {
+    flex: 0 0 auto;
     background: #FFF1F3;
     color: #9B1C3A;
     border: 1.5px solid #F7B9C4;
@@ -143,7 +144,7 @@
     padding: 4px 10px;
     font-size: 11.5px;
     font-weight: 700;
-    max-width: 190px;
+    max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1732,8 +1733,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.103';
-const BUILD_TIME  = '2026-07-10T00:30:00Z';
+const APP_VERSION = 'v1.5.104';
+const BUILD_TIME  = '2026-07-10T00:45:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2672,7 +2673,7 @@ function renderHomeAlertBubble() {
   const visible = hiddenMode ? _homeAlertsRaw : _homeAlertsRaw.filter(d => !d.is_hidden);
   if (!visible.length) return;
 
-  const MAX_CHIPS = 4;
+  const MAX_CHIPS = 8;
   const shown = visible.slice(0, MAX_CHIPS);
   const extra = visible.length - shown.length;
 
