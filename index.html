@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.116</title>
+<title>AppSphere v1.5.117</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -159,6 +159,11 @@
     color: #6B7280;
     border-color: #E5E7EB;
     cursor: default;
+  }
+  .home-alert-chip.finanza {
+    background: #ECFDF5;
+    color: #065F46;
+    border-color: #A7F3D0;
   }
   .home-alert-close {
     display: flex;
@@ -1928,8 +1933,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.116';
-const BUILD_TIME  = '2026-07-10T04:25:00Z';
+const APP_VERSION = 'v1.5.117';
+const BUILD_TIME  = '2026-07-10T04:35:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2955,19 +2960,20 @@ async function loadHomeAlerts() {
   renderHomeAlertBubble();
 }
 
-function renderAlertSection(title, items) {
+function renderAlertSection(title, items, extraClass) {
   const visible = hiddenMode ? items : items.filter(i => !i.hidden);
   if (!visible.length) return '';
 
   const MAX_CHIPS = 8;
   const shown = visible.slice(0, MAX_CHIPS);
   const extra = visible.length - shown.length;
+  const chipClass = 'home-alert-chip' + (extraClass ? ' ' + extraClass : '');
 
   return '<div class="home-alert-section-title">' + title + '</div>' +
     '<div class="home-alert-chips">' +
     shown.map(i => i.url
-      ? '<a class="home-alert-chip" href="' + escapeHtml(i.url) + '" onclick="sessionStorage.setItem(\'hidden_mode\', hiddenMode ? \'1\' : \'0\')">' + escapeHtml(i.title) + '</a>'
-      : '<span class="home-alert-chip">' + escapeHtml(i.title) + '</span>'
+      ? '<a class="' + chipClass + '" href="' + escapeHtml(i.url) + '" onclick="sessionStorage.setItem(\'hidden_mode\', hiddenMode ? \'1\' : \'0\')">' + escapeHtml(i.title) + '</a>'
+      : '<span class="' + chipClass + '">' + escapeHtml(i.title) + '</span>'
     ).join('') +
     (extra > 0 ? '<span class="home-alert-chip more">+' + extra + ' altre</span>' : '') +
     '</div>';
@@ -2981,7 +2987,7 @@ function renderHomeAlertBubble() {
   const sectionsHtml =
     renderAlertSection('🗳️ Decisioni in sospeso', _homeAlertDecisions) +
     renderAlertSection('⏰ Task urgenti', _homeAlertTasks) +
-    renderAlertSection('💰 Finanza', _homeAlertFinanza);
+    renderAlertSection('💰 Finanza', _homeAlertFinanza, 'finanza');
   if (!sectionsHtml) return;
 
   // Tap fuori: chiude solo questa visualizzazione, ricompare al prossimo caricamento.
