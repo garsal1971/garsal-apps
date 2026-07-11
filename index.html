@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.115</title>
+<title>AppSphere v1.5.116</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1928,8 +1928,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.115';
-const BUILD_TIME  = '2026-07-10T04:10:00Z';
+const APP_VERSION = 'v1.5.116';
+const BUILD_TIME  = '2026-07-10T04:25:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2825,19 +2825,25 @@ async function loadApps(forceRender = false) {
   }
 }
 
-// ── FUMETTO AVVISO (DecisionKeeper → "Mostra avviso nella home AppSphere") ──
-// Le decisioni con show_home_alert=true compaiono come fumetto agganciato
-// alla bolla di DecisionKeeper. Toccare il fumetto lo chiude solo per questa
-// sessione (ricompare al prossimo caricamento della home finché il flag
-// resta attivo su almeno un avviso).
+// ── POPUP AVVISI (decisioni, task urgenti, totale portafogli) ──
+// Due modi di chiudere il popup, comportamento diverso:
+//  - pulsante "✕": chiusura esplicita, non si ripropone per il resto
+//    della giornata (persistita su localStorage con la data odierna).
+//  - tap fuori dall'area (sullo sfondo): chiusura "leggera", solo per
+//    la visualizzazione corrente. Al prossimo caricamento della home
+//    il popup ricompare regolarmente.
 // Fonti aggregate: decisioni DecisionKeeper con show_home_alert=true, task
-// scaduti/di oggi con priorità "urgente". Ogni fonte espone item con lo
-// stesso formato { title, hidden } così la sezione può crescere in futuro
-// (nuove app) senza toccare il rendering del popup.
+// scaduti/di oggi con priorità "urgente", totale portafogli Finanza. Ogni
+// fonte espone item con lo stesso formato { title, hidden, url } così la
+// sezione può crescere in futuro (nuove app) senza toccare il rendering.
 let _homeAlertDecisions = [];
 let _homeAlertTasks = [];
 let _homeAlertFinanza = [];
-let _homeAlertDismissed = sessionStorage.getItem('appsphere_alert_dismissed') === '1';
+
+function alertDismissedToday() {
+  return localStorage.getItem('appsphere_alert_dismissed_date') === new Date().toISOString().slice(0, 10);
+}
+let _homeAlertDismissed = alertDismissedToday();
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2978,15 +2984,19 @@ function renderHomeAlertBubble() {
     renderAlertSection('💰 Finanza', _homeAlertFinanza);
   if (!sectionsHtml) return;
 
-  const dismiss = () => {
+  // Tap fuori: chiude solo questa visualizzazione, ricompare al prossimo caricamento.
+  const dismissNow = () => overlay.remove();
+
+  // Pulsante "✕": chiusura esplicita, non si ripropone per il resto della giornata.
+  const dismissToday = () => {
+    localStorage.setItem('appsphere_alert_dismissed_date', new Date().toISOString().slice(0, 10));
     _homeAlertDismissed = true;
-    sessionStorage.setItem('appsphere_alert_dismissed', '1');
     overlay.remove();
   };
 
   const overlay = document.createElement('div');
   overlay.className = 'home-alert-overlay';
-  overlay.addEventListener('click', dismiss);
+  overlay.addEventListener('click', dismissNow);
 
   const bubble = document.createElement('div');
   bubble.className = 'home-alert-bubble';
@@ -2994,9 +3004,9 @@ function renderHomeAlertBubble() {
   bubble.innerHTML =
     '<div class="home-alert-bubble-title">❗ Avvisi</div>' +
     sectionsHtml +
-    '<button type="button" class="home-alert-close" title="Chiudi">✕</button>';
+    '<button type="button" class="home-alert-close" title="Chiudi per oggi">✕</button>';
 
-  bubble.querySelector('.home-alert-close').addEventListener('click', dismiss);
+  bubble.querySelector('.home-alert-close').addEventListener('click', dismissToday);
   overlay.appendChild(bubble);
   document.body.appendChild(overlay);
 }
