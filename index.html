@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.114</title>
+<title>AppSphere v1.5.115</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -150,11 +150,15 @@
     font-size: 17px;
     font-weight: 700;
     white-space: normal;
+    text-decoration: none;
+    cursor: pointer;
   }
+  a.home-alert-chip:active { opacity: 0.75; }
   .home-alert-chip.more {
     background: #F3F4F6;
     color: #6B7280;
     border-color: #E5E7EB;
+    cursor: default;
   }
   .home-alert-close {
     display: flex;
@@ -1924,8 +1928,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.114';
-const BUILD_TIME  = '2026-07-10T03:55:00Z';
+const APP_VERSION = 'v1.5.115';
+const BUILD_TIME  = '2026-07-10T04:10:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2852,7 +2856,7 @@ async function loadHomeAlertDecisions(uid, headers) {
     );
     if (!res.ok) return [];
     const rows = await res.json();
-    return rows.map(d => ({ title: d.title, hidden: !!d.is_hidden }));
+    return rows.map(d => ({ title: d.title, hidden: !!d.is_hidden, url: 'decisions.html' }));
   } catch (e) {
     console.warn('Avvisi DecisionKeeper non disponibili:', e);
     return [];
@@ -2889,7 +2893,7 @@ async function loadHomeAlertUrgentTasks(headers) {
         due.setHours(0, 0, 0, 0);
         return due <= today;
       })
-      .map(t => ({ title: t.title, hidden: !!t.riservato }));
+      .map(t => ({ title: t.title, hidden: !!t.riservato, url: 'tasks.html' }));
   } catch (e) {
     console.warn('Avvisi task urgenti non disponibili:', e);
     return [];
@@ -2918,7 +2922,7 @@ async function loadHomeAlertPortfolioTotal(headers) {
       }
     }
 
-    return [{ title: 'Totale portafogli: ' + fmtEuroInt(current) + pctText, hidden: false }];
+    return [{ title: 'Totale portafogli: ' + fmtEuroInt(current) + pctText, hidden: false, url: 'finanza.html' }];
   } catch (e) {
     console.warn('Avviso Finanza non disponibile:', e);
     return [];
@@ -2955,7 +2959,10 @@ function renderAlertSection(title, items) {
 
   return '<div class="home-alert-section-title">' + title + '</div>' +
     '<div class="home-alert-chips">' +
-    shown.map(i => '<span class="home-alert-chip">' + escapeHtml(i.title) + '</span>').join('') +
+    shown.map(i => i.url
+      ? '<a class="home-alert-chip" href="' + escapeHtml(i.url) + '" onclick="sessionStorage.setItem(\'hidden_mode\', hiddenMode ? \'1\' : \'0\')">' + escapeHtml(i.title) + '</a>'
+      : '<span class="home-alert-chip">' + escapeHtml(i.title) + '</span>'
+    ).join('') +
     (extra > 0 ? '<span class="home-alert-chip more">+' + extra + ' altre</span>' : '') +
     '</div>';
 }
