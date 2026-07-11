@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.113</title>
+<title>AppSphere v1.5.114</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1924,8 +1924,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.113';
-const BUILD_TIME  = '2026-07-10T03:40:00Z';
+const APP_VERSION = 'v1.5.114';
+const BUILD_TIME  = '2026-07-10T03:55:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2898,14 +2898,27 @@ async function loadHomeAlertUrgentTasks(headers) {
 
 async function loadHomeAlertPortfolioTotal(headers) {
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali&order=snapshot_date.desc&limit=1`,
-      { headers }
-    );
-    if (!res.ok) return [];
-    const rows = await res.json();
-    if (!rows.length || rows[0].portafogli_totali == null) return [];
-    return [{ title: 'Totale portafogli: ' + fmtEuroInt(parseFloat(rows[0].portafogli_totali)), hidden: false }];
+    const yearStart = new Date().getFullYear() + '-01-01';
+    const [curRes, prevRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali&order=snapshot_date.desc&limit=1`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali&snapshot_date=lt.${yearStart}&order=snapshot_date.desc&limit=1`, { headers })
+    ]);
+    if (!curRes.ok) return [];
+    const curRows = await curRes.json();
+    if (!curRows.length || curRows[0].portafogli_totali == null) return [];
+    const current = parseFloat(curRows[0].portafogli_totali);
+
+    let pctText = '';
+    if (prevRes.ok) {
+      const prevRows = await prevRes.json();
+      const prevVal = prevRows[0]?.portafogli_totali != null ? parseFloat(prevRows[0].portafogli_totali) : null;
+      if (prevVal) {
+        const pct = (current - prevVal) / Math.abs(prevVal) * 100;
+        pctText = ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% da fine anno scorso)';
+      }
+    }
+
+    return [{ title: 'Totale portafogli: ' + fmtEuroInt(current) + pctText, hidden: false }];
   } catch (e) {
     console.warn('Avviso Finanza non disponibile:', e);
     return [];
