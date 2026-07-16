@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Rosa v1.2.4</title>
+  <title>Situazione Rosa v1.2.5</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -45,7 +45,7 @@
     #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
 
     /* ── Login ── */
-    #screen-login { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100dvh - 56px); padding: 24px; }
+    #screen-login, #screen-set-password { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100dvh - 56px); padding: 24px; }
     .login-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
     .login-logo { font-size: 48px; margin-bottom: 16px; }
     .login-card h1 { font-size: 1.5rem; margin-bottom: 8px; }
@@ -120,8 +120,22 @@
         <input type="password" id="login-password" class="magic-input" placeholder="Password (lascia vuoto per il link via email)" autocomplete="current-password" />
         <button type="submit" class="btn-magic">Accedi</button>
       </form>
-      <div id="login-success" class="login-success hidden">✅ Link inviato! Controlla la tua email.</div>
+      <button type="button" id="btn-setup-password" class="btn btn-outline" style="width:100%; margin-top:8px;">Non hai ancora una password? Impostane una</button>
+      <div id="login-success" class="login-success hidden">✅ Controlla la tua email.</div>
       <div id="login-error" class="login-error hidden"></div>
+    </div>
+  </div>
+
+  <div id="screen-set-password" class="hidden">
+    <div class="login-card">
+      <div class="login-logo">🌹</div>
+      <h1>Imposta una password</h1>
+      <p class="text-muted text-sm mb-20">La userai per accedere più velocemente la prossima volta, anche dall'app: una volta impostata non ti verrà richiesta di nuovo.</p>
+      <form id="set-password-form">
+        <input type="password" id="new-password" class="magic-input" placeholder="Nuova password" required minlength="6" autocomplete="new-password" />
+        <button type="submit" class="btn-magic">Salva password</button>
+      </form>
+      <div id="set-password-error" class="login-error hidden"></div>
     </div>
   </div>
 
@@ -199,8 +213,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.2.4';
-    const BUILD_TIME  = '2026-07-16T13:00:00Z';
+    const APP_VERSION = 'v1.2.5';
+    const BUILD_TIME  = '2026-07-16T14:00:00Z';
     console.log('%c SITUAZIONE ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#db2777;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -385,23 +399,35 @@
         if (S.session) localStorage.setItem('garsal_session', JSON.stringify(S.session));
       }
 
-      // 2. Check for session in URL (magic link return)
+      // 2. Check for session in URL (magic link / recovery link return)
       const hash = location.hash.substring(1);
       if (hash.includes('access_token=')) {
         const params = new URLSearchParams(hash);
         const at = params.get('access_token');
         const rt = params.get('refresh_token');
         const expires_in = params.get('expires_in');
+        const type = params.get('type');
 
         const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
           headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${at}` },
         })).json();
 
         if (user && user.id) {
-          S.session = { access_token: at, refresh_token: rt, user, expires_at: Date.now() + parseInt(expires_in) * 1000 };
+          const sess = { access_token: at, refresh_token: rt, user, expires_at: Date.now() + parseInt(expires_in) * 1000 };
+          location.hash = '';
+
+          // Link "imposta password" (recover): non entrare subito, prima
+          // chiedi la nuova password (la sessione la teniamo in sospeso).
+          if (type === 'recovery') {
+            S.pendingRecoverySession = sess;
+            document.getElementById('screen-login').classList.add('hidden');
+            document.getElementById('screen-set-password').classList.remove('hidden');
+            return;
+          }
+
+          S.session = sess;
           localStorage.setItem('garsal_session', JSON.stringify(S.session));
           localStorage.setItem('sb_token', at);
-          location.hash = '';
         }
       } else if (!S.session) {
         try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
@@ -475,7 +501,72 @@
 
     document.getElementById('btn-logout').onclick = () => {
       localStorage.removeItem('garsal_session');
+      nativeCredsClear();
       location.reload();
+    };
+
+    document.getElementById('btn-setup-password').onclick = async () => {
+      const email = document.getElementById('login-email').value.trim().toLowerCase();
+      const errEl = document.getElementById('login-error');
+      const okEl = document.getElementById('login-success');
+      if (!email) {
+        errEl.textContent = 'Inserisci prima la tua email qui sopra.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      const btn = document.getElementById('btn-setup-password');
+      btn.disabled = true;
+      try {
+        const redirectTo = encodeURIComponent(location.origin + location.pathname);
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${redirectTo}`, {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
+        okEl.classList.remove('hidden');
+        errEl.classList.add('hidden');
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    document.getElementById('set-password-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const newPassword = document.getElementById('new-password').value;
+      const btn = e.target.querySelector('button');
+      const errEl = document.getElementById('set-password-error');
+      btn.disabled = true;
+      btn.textContent = 'Salvataggio...';
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          method: 'PUT',
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${S.pendingRecoverySession.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ password: newPassword }),
+        });
+        if (!r.ok) throw new Error((await r.json()).msg || 'Errore impostazione password');
+
+        S.session = S.pendingRecoverySession;
+        localStorage.setItem('garsal_session', JSON.stringify(S.session));
+        localStorage.setItem('sb_token', S.session.access_token);
+        nativeCredsSave(S.session.user.email, newPassword);
+
+        document.getElementById('screen-set-password').classList.add('hidden');
+        await enterApp();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salva password';
+      }
     };
 
     /* ── Data ── */

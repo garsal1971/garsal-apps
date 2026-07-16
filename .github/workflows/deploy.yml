@@ -68,24 +68,8 @@ jobs:
         if: steps.check_changes.outputs.migrations == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
         run: |
           echo "▶ Applying database migrations..."
-
-          # La migration set_owner_password.sql contiene solo un segnaposto:
-          # la password reale non è mai committata, viene iniettata qui dal
-          # secret GitHub OWNER_PASSWORD. Se manca, il deploy si ferma invece
-          # di applicare il segnaposto come password vera.
-          PW_MIGRATION=$(grep -l '__OWNER_PASSWORD_PLACEHOLDER__' supabase/migrations/*.sql 2>/dev/null || true)
-          if [ -n "$PW_MIGRATION" ]; then
-            if [ -z "$OWNER_PASSWORD" ]; then
-              echo "❌ $PW_MIGRATION richiede il secret OWNER_PASSWORD (GitHub → Settings → Secrets and variables → Actions), non ancora configurato."
-              exit 1
-            fi
-            python3 .github/scripts/inject_owner_password.py "$PW_MIGRATION"
-            echo "✅ Password proprietario iniettata nella migration"
-          fi
-
           supabase link --project-ref jajlmmdsjlvzgcxiiypk
 
           # Crea placeholder locali per migration presenti su remote ma assenti in locale.
