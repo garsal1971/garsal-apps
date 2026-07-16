@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.1.4</title>
+  <title>Situazione Teresa v1.2.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -287,8 +287,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.1.4';
-    const BUILD_TIME  = '2026-07-16T15:51:00Z';
+    const APP_VERSION = 'v1.2.0';
+    const BUILD_TIME  = '2026-07-16T15:55:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -324,6 +324,7 @@
       riservaCatMap: {},
       riservaSaldo: null,
       selectedYearRisparmio: new Date().getFullYear(),
+      selectedCategoryRisparmio: null,
       speseTx: [],
       selectedYearSpese: new Date().getFullYear(),
     };
@@ -705,10 +706,17 @@
 
       const current = S.riservaTx.filter(t => (t.anno || new Date(t.data).getFullYear()) === S.selectedYearRisparmio);
       const prior = S.riservaTx.filter(t => (t.anno || new Date(t.data).getFullYear()) < S.selectedYearRisparmio);
-      const priorTot = prior.reduce((s, t) => s + t.importo_voce, 0);
+
+      let filteredCurrent = current;
+      let filteredPrior = prior;
+      if (S.selectedCategoryRisparmio) {
+        filteredCurrent = filteredCurrent.filter(t => catNameRisparmio(t) === S.selectedCategoryRisparmio);
+        filteredPrior = filteredPrior.filter(t => catNameRisparmio(t) === S.selectedCategoryRisparmio);
+      }
+      const priorTot = filteredPrior.reduce((s, t) => s + t.importo_voce, 0);
 
       const tbody = document.getElementById('risp-tx-table-body');
-      let html = current.map(t => `
+      let html = filteredCurrent.map(t => `
         <tr>
           <td class="mono text-sm" data-label="Data">${fmtDate(t.data)}</td>
           <td class="text-muted" data-label="Categoria">${catNameRisparmio(t)}</td>
@@ -720,7 +728,7 @@
         </tr>
       `).join('');
 
-      if (prior.length) {
+      if (filteredPrior.length) {
         html += `
           <tr style="background:var(--c-bg)">
             <td class="mono text-sm" data-label="Data"><strong>Saldo anni precedenti</strong></td>
@@ -750,12 +758,19 @@
       });
       document.getElementById('risp-cat-summary').innerHTML = Object.entries(catTotals)
         .sort((a, b) => b[1] - a[1])
-        .map(([cat, tot]) => `
-          <div class="kpi-card">
+        .map(([cat, tot]) => {
+          const isActive = cat === S.selectedCategoryRisparmio;
+          return `
+          <div class="kpi-card" style="cursor:pointer;${isActive ? 'outline:2px solid var(--c-primary);outline-offset:-2px' : ''}" onclick="filterByCategoryRisparmio('${cat.replace(/'/g, "\\'")}')">
             <div class="kpi-label">${cat}</div>
             <div class="kpi-value mono" style="font-size:1.1rem">${fmtEUR(tot)}</div>
-          </div>
-        `).join('') || '<div class="text-muted text-sm">Nessun movimento per questo anno</div>';
+          </div>`;
+        }).join('') || '<div class="text-muted text-sm">Nessun movimento per questo anno</div>';
+    }
+
+    function filterByCategoryRisparmio(cat) {
+      S.selectedCategoryRisparmio = S.selectedCategoryRisparmio === cat ? null : cat;
+      renderRisparmio();
     }
 
     /* ── Conto Spese Teresa ── */
