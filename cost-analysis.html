@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.2</title>
+    <title>Analisi Costi v1.0.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -501,6 +501,21 @@
     </div>
 </div>
 
+<!-- ====== MODAL: CONFLITTI PERSONA ====== -->
+<div class="modal" id="personConflictModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="personConflictTitle">Transazioni da verificare</h2>
+            <span class="modal-close" onclick="closePersonConflictModal()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:1rem;">Queste transazioni hanno già una persona assegnata diversa da quella suggerita dalla rianalisi. Scegli se riassegnare o mantenere quella attuale.</p>
+        <div id="personConflictList" style="max-height:50vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-secondary" style="flex:1;" onclick="closePersonConflictModal()">Chiudi</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -515,8 +530,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.2';
-    var BUILD_TIME  = '2026-07-16T21:15:00Z';
+    var APP_VERSION = 'v1.0.3';
+    var BUILD_TIME  = '2026-07-16T21:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1326,10 +1341,12 @@
     }
 
     // Riapplica l'algoritmo di categorizzazione (merchant appreso + regole) e l'assegnazione
-    // persona a tutte le transazioni esistenti, aggiungendo tag/persona mancanti senza toccare
-    // quelli già presenti. Per la persona, se una transazione senza persona ha la stessa
-    // descrizione normalizzata di una transazione già assegnata (manualmente o da regola),
-    // eredita quella persona.
+    // persona a tutte le transazioni esistenti. Categorie: aggiunge i tag mancanti senza mai
+    // toccare quelli già presenti (multi-tag, nessun conflitto possibile). Persona: le
+    // transazioni senza persona ereditano quella suggerita (da regola o da altre transazioni
+    // con la stessa descrizione normalizzata); quelle che hanno GIÀ una persona diversa da
+    // quella suggerita NON vengono sovrascritte automaticamente, ma segnalate all'utente in un
+    // riepilogo per la riassegnazione manuale.
     async function reanalyzeAllTransactions() {
         if (!transactions.length) return;
         showProcessing(`🔄 Rianalisi transazioni esistenti... 0/${transactions.length}`);
@@ -1344,6 +1361,7 @@
 
         const newCategoryRows = [];
         const personUpdates = [];
+        const personConflicts = [];
         for (let i = 0; i < transactions.length; i++) {
             const t = transactions[i];
             const { categoryIds, catSource, personId, personSource } = categorizeRow(t.description);
@@ -1352,13 +1370,17 @@
                 newCategoryRows.push({ transaction_id: t.id, category_id: cid, source: catSource });
             });
 
+            const key = normalizeMerchant(t.description);
+            const suggestedPersonId = personId || personByMerchant[key] || null;
+            const suggestedSource = personId ? personSource : (suggestedPersonId ? 'learned' : null);
+
             if (!t.person_id) {
-                if (personId) {
-                    personUpdates.push({ id: t.id, person_id: personId, person_source: personSource });
-                } else {
-                    const learnedPersonId = personByMerchant[normalizeMerchant(t.description)];
-                    if (learnedPersonId) personUpdates.push({ id: t.id, person_id: learnedPersonId, person_source: 'learned' });
-                }
+                if (suggestedPersonId) personUpdates.push({ id: t.id, person_id: suggestedPersonId, person_source: suggestedSource });
+            } else if (suggestedPersonId && suggestedPersonId !== t.person_id) {
+                personConflicts.push({
+                    txId: t.id, description: t.description, date: t.date, amount: t.amount,
+                    currentPersonId: t.person_id, suggestedPersonId, suggestedSource
+                });
             }
 
             if (i % 25 === 0 || i === transactions.length - 1) {
@@ -1401,6 +1423,70 @@
         showToast(totalChanges
             ? `✅ ${newCategoryRows.length} tag categoria e ${personUpdates.length} persone aggiornati su transazioni esistenti`
             : '✅ Rianalisi completata, nessuna nuova corrispondenza');
+
+        if (personConflicts.length) openPersonConflictModal(personConflicts);
+    }
+
+    // ==========================================
+    // CONFLITTI PERSONA (segnalazione riassegnazione)
+    // ==========================================
+    let _personConflicts = [];
+
+    function openPersonConflictModal(conflicts) {
+        _personConflicts = conflicts;
+        renderPersonConflictList();
+        document.getElementById('personConflictModal').classList.add('active');
+        showToast(`⚠️ ${conflicts.length} transazion${conflicts.length === 1 ? 'e' : 'i'} da verificare`);
+    }
+
+    function renderPersonConflictList() {
+        document.getElementById('personConflictTitle').textContent =
+            `${_personConflicts.length} transazion${_personConflicts.length === 1 ? 'e' : 'i'} da verificare`;
+        const list = document.getElementById('personConflictList');
+        if (!_personConflicts.length) {
+            list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nessuna transazione da verificare.</p></div>';
+            return;
+        }
+        list.innerHTML = _personConflicts.map((c, i) => {
+            const curP = people.find(p => p.id === c.currentPersonId);
+            const sugP = people.find(p => p.id === c.suggestedPersonId);
+            return `<div class="card">
+                <div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">${formatDateIt(c.date)} · ${fmtEUR(c.amount)}</div>
+                <div style="font-weight:700;margin-bottom:.5rem;">${c.description || ''}</div>
+                <div style="font-size:.85rem;margin-bottom:.6rem;">Attuale: <strong>${curP ? curP.name : '—'}</strong> · Suggerita: <strong>${sugP ? sugP.name : '—'}</strong></div>
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                    <button class="btn btn-small btn-primary" onclick="applyPersonConflict(${i})">Riassegna a ${sugP ? sugP.name : '—'}</button>
+                    <button class="btn btn-small btn-secondary" onclick="dismissPersonConflict(${i})">Mantieni ${curP ? curP.name : '—'}</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function applyPersonConflict(i) {
+        const c = _personConflicts[i];
+        if (!c) return;
+        const { error } = await sb.from('ca_transactions').update({ person_id: c.suggestedPersonId, person_source: c.suggestedSource }).eq('id', c.txId);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        const t = transactions.find(x => x.id === c.txId);
+        if (t) { t.person_id = c.suggestedPersonId; t.person_source = c.suggestedSource; }
+        _personConflicts.splice(i, 1);
+        renderPersonConflictList();
+        renderTransactionsList();
+        renderDashboard();
+        showToast('✅ Persona riassegnata');
+        if (!_personConflicts.length) closePersonConflictModal();
+    }
+
+    function dismissPersonConflict(i) {
+        _personConflicts.splice(i, 1);
+        renderPersonConflictList();
+        if (!_personConflicts.length) closePersonConflictModal();
+    }
+
+    function closePersonConflictModal() {
+        document.getElementById('personConflictModal').classList.remove('active');
+        _personConflicts = [];
     }
 
     // ==========================================
