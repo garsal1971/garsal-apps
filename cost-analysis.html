@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.3</title>
+    <title>Analisi Costi v1.0.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -478,6 +478,7 @@
             <span class="modal-close" onclick="closeTagEditor()">✕</span>
         </div>
         <div id="tagEditorList" style="max-height:50vh;overflow-y:auto;"></div>
+        <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.75rem;" onclick="openCategoryModalFromTagEditor()">+ Nuova categoria/sotto-categoria</button>
         <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
             <button class="btn btn-primary" style="flex:1;" onclick="saveTagEditor()">Salva</button>
             <button class="btn btn-secondary" onclick="closeTagEditor()">Annulla</button>
@@ -530,8 +531,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.3';
-    var BUILD_TIME  = '2026-07-16T21:45:00Z';
+    var APP_VERSION = 'v1.0.4';
+    var BUILD_TIME  = '2026-07-16T22:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -696,28 +697,62 @@
         }).join('');
     }
 
+    // Palette di colori facilmente distinguibili: ogni categoria/sotto-categoria ne ha uno univoco.
+    const CATEGORY_COLOR_PALETTE = [
+        '#EE334E', '#0081C8', '#00A651', '#FCB131', '#6C5CE7', '#00B894',
+        '#F39C12', '#E74C3C', '#2563EB', '#9B59B6', '#16A085', '#D35400',
+        '#C0392B', '#2980B9', '#8E44AD', '#27AE60', '#F1C40F', '#7F8C8D',
+        '#FF6B9D', '#00CEC9'
+    ];
+    function pickUnusedColor() {
+        const used = new Set(categories.map(c => (c.color || '').toUpperCase()));
+        const free = CATEGORY_COLOR_PALETTE.find(c => !used.has(c.toUpperCase()));
+        if (free) return free;
+        let color, attempts = 0;
+        do { color = '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'); attempts++; }
+        while (used.has(color.toUpperCase()) && attempts < 30);
+        return color;
+    }
+
     function openCategoryModal(id, presetParentId) {
         document.getElementById('editCategoryId').value = id || '';
         const cat = id ? categories.find(c => c.id === id) : null;
         document.getElementById('categoryModalTitle').textContent = cat ? 'Modifica Categoria' : 'Nuova Categoria';
         document.getElementById('categoryName').value = cat ? cat.name : '';
         document.getElementById('categoryIcon').value = cat ? (cat.icon || '') : '';
-        document.getElementById('categoryColor').value = cat ? (cat.color || '#2563EB') : '#2563EB';
+        document.getElementById('categoryColor').value = cat ? (cat.color || pickUnusedColor()) : pickUnusedColor();
         const parentSel = document.getElementById('categoryParent');
         parentSel.innerHTML = '<option value="">— Nessuna (categoria principale) —</option>' +
             topCategories().filter(c => c.id !== id).map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
         parentSel.value = cat ? (cat.parent_id || '') : (presetParentId || '');
         document.getElementById('categoryModal').classList.add('active');
     }
-    function closeCategoryModal() { document.getElementById('categoryModal').classList.remove('active'); }
+
+    // Se il modale categoria è stato aperto dal tag editor (_tagEditorTxId ancora impostato),
+    // alla chiusura si torna al tag editor con l'elenco aggiornato.
+    function closeCategoryModal() {
+        document.getElementById('categoryModal').classList.remove('active');
+        if (_tagEditorTxId) {
+            renderTagEditorList();
+            document.getElementById('tagEditorModal').classList.add('active');
+        }
+    }
+
+    function openCategoryModalFromTagEditor() {
+        document.getElementById('tagEditorModal').classList.remove('active');
+        openCategoryModal(null);
+    }
 
     async function saveCategory(e) {
         e.preventDefault();
         const id = document.getElementById('editCategoryId').value;
+        const color = document.getElementById('categoryColor').value;
+        const colorTaken = categories.some(c => c.id !== id && (c.color || '').toUpperCase() === color.toUpperCase());
+        if (colorTaken) { alert('Questo colore è già usato da un\'altra categoria o sotto-categoria. Scegline uno diverso.'); return; }
         const payload = {
             name: document.getElementById('categoryName').value.trim(),
             icon: document.getElementById('categoryIcon').value.trim(),
-            color: document.getElementById('categoryColor').value,
+            color: color,
             parent_id: document.getElementById('categoryParent').value || null,
             user_id: currentUserId()
         };
@@ -727,10 +762,10 @@
         else { ({ error } = await sb.from('ca_categories').insert(payload)); }
         if (handleAuthError(error)) return;
         if (error) { alert('Errore: ' + error.message); return; }
-        closeCategoryModal();
         await loadCategories();
         renderCategories();
         showToast('✅ Categoria salvata');
+        closeCategoryModal();
     }
 
     async function deleteCategory(id) {
@@ -1307,15 +1342,35 @@
     let _tagEditorTxId = null;
     function openTagEditor(txId) {
         _tagEditorTxId = txId;
-        const current = new Set(getTxCategoryIds(txId));
-        const list = document.getElementById('tagEditorList');
-        list.innerHTML = categories.map(c => `
-            <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;cursor:pointer;">
-                <input type="checkbox" value="${c.id}" ${current.has(c.id) ? 'checked' : ''}>
-                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
-            </label>`).join('');
+        renderTagEditorList();
         document.getElementById('tagEditorModal').classList.add('active');
     }
+
+    // Elenco categorie organizzato ad albero (categoria principale + sotto-categorie indentate),
+    // ciascuna con il proprio colore univoco.
+    function renderTagEditorList() {
+        if (!_tagEditorTxId) return;
+        const current = new Set(getTxCategoryIds(_tagEditorTxId));
+        const list = document.getElementById('tagEditorList');
+        const tops = topCategories();
+        if (!tops.length) {
+            list.innerHTML = '<div style="opacity:.5;font-size:.85rem;padding:.5rem 0;">Nessuna categoria. Creane una con il bottone qui sotto.</div>';
+            return;
+        }
+        const checkboxRow = (c, indent) => `
+            <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0 .35rem ${indent}rem;cursor:pointer;">
+                <input type="checkbox" value="${c.id}" ${current.has(c.id) ? 'checked' : ''}>
+                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+            </label>`;
+        list.innerHTML = tops.map(c => {
+            const kids = childCategories(c.id);
+            return `<div style="margin-bottom:.4rem;border-bottom:1px solid var(--border);">
+                ${checkboxRow(c, 0)}
+                ${kids.map(k => checkboxRow(k, 1.6)).join('')}
+            </div>`;
+        }).join('');
+    }
+
     function closeTagEditor() { document.getElementById('tagEditorModal').classList.remove('active'); _tagEditorTxId = null; }
 
     async function saveTagEditor() {
