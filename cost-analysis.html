@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.6</title>
+    <title>Analisi Costi v1.0.7</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -160,6 +160,12 @@
         .mgmt-event-actions { display: flex; gap: 0.4rem; }
 
         /* ===== TRANSACTION ROW ===== */
+        .tx-group { margin-bottom: 1.25rem; }
+        .tx-group-header {
+            font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px; font-size: 0.85rem;
+            color: var(--accent); padding: 0.3rem 0; border-bottom: 2px solid var(--accent); margin-bottom: 0.6rem;
+        }
+        .tx-group-count { font-weight: 700; color: var(--muted); text-transform: none; letter-spacing: normal; }
         .tx-row { border: 1px solid var(--border); padding: 0.85rem; margin-bottom: 0.6rem; background: white; }
         .tx-top { display: flex; justify-content: space-between; gap: 0.5rem; }
         .tx-desc { font-weight: 700; }
@@ -547,8 +553,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.6';
-    var BUILD_TIME  = '2026-07-16T23:00:00Z';
+    var APP_VERSION = 'v1.0.7';
+    var BUILD_TIME  = '2026-07-16T23:20:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1351,6 +1357,32 @@
         renderTransactionsList();
     }
 
+    function renderTxRow(t) {
+        const catIds = getTxCategoryIds(t.id);
+        const chips = catIds.map(cid => {
+            const c = categories.find(x => x.id === cid);
+            return `<span class="chip active" style="cursor:default;">${c ? categoryLabel(c) : '?'} <span style="cursor:pointer;" onclick="removeTxCategory('${t.id}','${cid}')">✕</span></span>`;
+        }).join('');
+        const personOptions = ['<option value="">— Persona —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+        return `
+        <div class="tx-row">
+            <div class="tx-top">
+                <span class="tx-desc">${t.description || '(senza descrizione)'}</span>
+                <span class="tx-amount mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
+            </div>
+            <div class="tx-meta">${formatDateIt(t.date)} ${t.type ? '· ' + t.type : ''}</div>
+            <div class="filter-chips" style="margin:.6rem 0 0;">
+                ${chips}
+                <span class="chip" onclick="openTagEditor('${t.id}')">+ tag</span>
+            </div>
+            <div style="margin-top:.5rem;">
+                <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
+            </div>
+        </div>`;
+    }
+
+    // Elenco raggruppato per titolo (descrizione): il gruppo con più transazioni dallo
+    // stesso titolo viene mostrato per primo, NON in ordine alfabetico.
     function renderTransactionsList() {
         const list = filteredTransactions();
         const countEl = document.getElementById('transactionsCount');
@@ -1363,27 +1395,20 @@
             container.innerHTML = '<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione trovata.</p></div>';
             return;
         }
-        container.innerHTML = list.map(t => {
-            const catIds = getTxCategoryIds(t.id);
-            const chips = catIds.map(cid => {
-                const c = categories.find(x => x.id === cid);
-                return `<span class="chip active" style="cursor:default;">${c ? categoryLabel(c) : '?'} <span style="cursor:pointer;" onclick="removeTxCategory('${t.id}','${cid}')">✕</span></span>`;
-            }).join('');
-            const personOptions = ['<option value="">— Persona —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+
+        const groups = {};
+        list.forEach(t => {
+            const key = (t.description || '').trim() || '(senza descrizione)';
+            (groups[key] = groups[key] || []).push(t);
+        });
+        const sortedGroups = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+
+        container.innerHTML = sortedGroups.map(([title, items]) => {
+            const sortedItems = [...items].sort((a, b) => b.date.localeCompare(a.date));
             return `
-            <div class="tx-row">
-                <div class="tx-top">
-                    <span class="tx-desc">${t.description || '(senza descrizione)'}</span>
-                    <span class="tx-amount mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
-                </div>
-                <div class="tx-meta">${formatDateIt(t.date)} ${t.type ? '· ' + t.type : ''}</div>
-                <div class="filter-chips" style="margin:.6rem 0 0;">
-                    ${chips}
-                    <span class="chip" onclick="openTagEditor('${t.id}')">+ tag</span>
-                </div>
-                <div style="margin-top:.5rem;">
-                    <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
-                </div>
+            <div class="tx-group">
+                <div class="tx-group-header">${title} <span class="tx-group-count">× ${items.length}</span></div>
+                ${sortedItems.map(renderTxRow).join('')}
             </div>`;
         }).join('');
     }
