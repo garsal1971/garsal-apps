@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.0.0</title>
+  <title>Situazione Teresa v1.1.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -47,6 +47,19 @@
 
     #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
     #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+    .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+
+    /* ── Layout / Navigazione ── */
+    .app-layout { display: flex; min-height: calc(100dvh - 56px); }
+    .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: .92rem; font-weight: 600; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #ede9fe; color: var(--c-primary); }
+    .view { display: none; }
+    .view.active { display: block; }
 
     /* ── Login ── */
     #screen-login, #screen-set-password { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100dvh - 56px); padding: 24px; }
@@ -103,6 +116,12 @@
       .table-wrap .table td:before { content: attr(data-label); font-weight: 700; font-size: .7rem; color: var(--c-muted); text-transform: uppercase; display: block; margin-bottom: 2px; }
       .table-wrap .table td.text-right { text-align: left; }
     }
+
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; width: 240px; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+    }
   </style>
 </head>
 <body>
@@ -113,6 +132,7 @@
     </div>
     <div id="user-info" class="hidden" style="color:#fff; font-size:12px; font-family:var(--font-mono);"></div>
     <button id="btn-logout" class="btn btn-outline btn-sm hidden" style="color:#fff; border-color:rgba(255,255,255,0.3);">Esci</button>
+    <button id="btn-hamburger" class="btn-hamburger hidden" aria-label="Apri menu"><span></span><span></span><span></span></button>
   </div>
 
   <div id="screen-login">
@@ -154,9 +174,15 @@
   </div>
 
   <div id="screen-app" class="hidden">
-    <main class="app-main">
+    <div id="mobile-nav-overlay"></div>
+    <div class="app-layout">
+      <nav class="sidebar" id="sidebar">
+        <button class="nav-item active" data-view="risparmio">🏡 Conto Risparmio</button>
+        <button class="nav-item" data-view="spese">💰 Conto Spese</button>
+      </nav>
+      <main class="app-main">
 
-      <!-- ── Conto Risparmio Teresa ── -->
+      <div id="view-risparmio" class="view active">
       <div class="hstack gap-8 mb-20" style="justify-content: space-between;">
         <h2 class="section-title" style="margin-bottom:0">🏡 Conto Risparmio Teresa</h2>
         <select id="year-select-risparmio" class="year-select"></select>
@@ -191,8 +217,10 @@
         </div>
       </div>
 
-      <!-- ── Conto Spese Teresa ── -->
-      <div class="hstack gap-8 mb-20" style="justify-content: space-between; border-top: 2px solid var(--c-border); padding-top: 32px;">
+      </div>
+
+      <div id="view-spese" class="view">
+      <div class="hstack gap-8 mb-20" style="justify-content: space-between;">
         <h2 class="section-title" style="margin-bottom:0">💰 Conto Spese Teresa</h2>
       </div>
 
@@ -252,12 +280,14 @@
         </div>
       </div>
 
-    </main>
+      </div>
+      </main>
+    </div>
   </div>
 
   <script>
-    const APP_VERSION = 'v1.0.0';
-    const BUILD_TIME  = '2026-07-16T14:01:00Z';
+    const APP_VERSION = 'v1.1.0';
+    const BUILD_TIME  = '2026-07-16T15:13:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -372,6 +402,7 @@
       document.getElementById('screen-app').classList.add('hidden');
       document.getElementById('btn-logout').classList.add('hidden');
       document.getElementById('user-info').classList.add('hidden');
+      document.getElementById('btn-hamburger').classList.add('hidden');
     }
 
     /* ── Credenziali salvate nell'app Android (Android Keystore) ──
@@ -426,8 +457,32 @@
       document.getElementById('btn-logout').classList.remove('hidden');
       document.getElementById('user-info').textContent = S.session.user.email;
       document.getElementById('user-info').classList.remove('hidden');
+      document.getElementById('btn-hamburger').classList.remove('hidden');
       loadData();
     }
+
+    /* ── Navigazione tra le due sezioni ── */
+    function navigate(view) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(`view-${view}`)?.classList.add('active');
+      document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('mobile-nav-overlay').classList.remove('open');
+    }
+
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => navigate(btn.dataset.view));
+    });
+
+    document.getElementById('btn-hamburger').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('mobile-nav-overlay').classList.toggle('open');
+    });
+    document.getElementById('mobile-nav-overlay').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('mobile-nav-overlay').classList.remove('open');
+    });
 
     async function handleAuth() {
       // 1. Token condiviso da AppSphere launcher (sb_token in localStorage)
