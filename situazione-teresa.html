@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.6.0</title>
+  <title>Situazione Teresa v1.7.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -286,8 +286,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.6.0';
-    const BUILD_TIME  = '2026-07-16T16:33:00Z';
+    const APP_VERSION = 'v1.7.0';
+    const BUILD_TIME  = '2026-07-16T16:38:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -326,6 +326,7 @@
       selectedCategoryRisparmio: null,
       speseTx: [],
       selectedYearSpese: new Date().getFullYear(),
+      selectedPersonaSpese: null,
     };
 
     const fmtEUR = v => {
@@ -871,14 +872,15 @@
       sel.innerHTML = anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('');
       sel.onchange = (e) => { S.selectedYearSpese = parseInt(e.target.value); renderSpese(); };
 
+      const activeOutline = 'outline:2px solid var(--c-primary);outline-offset:-2px';
       document.getElementById('kpi-spese-anno').innerHTML = `
-        <div class="kpi-card"><div class="kpi-label">Versato Teresa (${annoSel})</div><div class="kpi-value mono teresa">${fmtEUR(q.versatoTeresa)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Versato Salvatore (${annoSel})</div><div class="kpi-value mono salvatore">${fmtEUR(q.versatoSalva)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Speso ${annoSel}</div><div class="kpi-value mono">${fmtEUR(q.totaleSpeso)}</div></div>
+        <div class="kpi-card" style="cursor:pointer;${S.selectedPersonaSpese === 'TERESA' ? activeOutline : ''}" onclick="filterSpesePersona('TERESA')"><div class="kpi-label">Versato Teresa (${annoSel})</div><div class="kpi-value mono teresa">${fmtEUR(q.versatoTeresa)}</div></div>
+        <div class="kpi-card" style="cursor:pointer;${S.selectedPersonaSpese === 'SALVATORE' ? activeOutline : ''}" onclick="filterSpesePersona('SALVATORE')"><div class="kpi-label">Versato Salvatore (${annoSel})</div><div class="kpi-value mono salvatore">${fmtEUR(q.versatoSalva)}</div></div>
+        <div class="kpi-card" style="cursor:pointer;${!S.selectedPersonaSpese ? activeOutline : ''}" onclick="filterSpesePersona(null)"><div class="kpi-label">Speso ${annoSel}</div><div class="kpi-value mono">${fmtEUR(q.totaleSpeso)}</div></div>
         <div class="kpi-card"><div class="kpi-label">${q.diffTeresa >= 0 ? 'Salvatore Debito' : 'Teresa Debito'}</div><div class="kpi-value mono ${q.diffTeresa >= 0 ? 'pos' : 'neg'}">${fmtEUR(Math.abs(q.diffTeresa))}</div></div>
       `;
 
-      const txs = S.speseTx.filter(t => t.anno === annoSel);
+      const txs = S.speseTx.filter(t => t.anno === annoSel && (!S.selectedPersonaSpese || t.persona === S.selectedPersonaSpese));
       document.getElementById('spese-tx-list').innerHTML = txs.map(t => `
         <div class="tx-row" onclick="openSpeseDetail('${t.id}')">
           ${personaIcon(t.persona)}
@@ -887,6 +889,11 @@
           <span class="tx-importo">${fmtEUR(t.importo)}</span>
         </div>
       `).join('') || '<div style="text-align:center;padding:40px;" class="text-muted">Nessun movimento per questo anno</div>';
+    }
+
+    function filterSpesePersona(persona) {
+      S.selectedPersonaSpese = (persona && S.selectedPersonaSpese === persona) ? null : persona;
+      renderSpese();
     }
 
     function personaIcon(p) {
