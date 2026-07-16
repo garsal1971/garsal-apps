@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Situazione Teresa v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f6fb;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-primary:   #7c3aed; /* Teresa */
+      --c-primary-h: #6d28d9;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --c-teresa:    #dc2626;
+      --c-salvatore: #16a34a;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; padding-top: 56px; }
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .pos    { color: var(--c-success); }
+    .neg    { color: var(--c-danger); }
+    .hstack  { display: flex; align-items: center; }
+    .gap-8   { gap: 8px; }
+    .mt-12   { margin-top: 12px; }
+    .mb-20   { margin-bottom: 20px; }
+    .text-muted { color: var(--c-muted); }
+    .text-sm { font-size: .82rem; }
+    .text-lg { font-size: 1.15rem; }
+    .fw-600 { font-weight: 600; }
+    .fw-700 { font-weight: 700; }
+    .text-right { text-align: right; }
+
+    #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
+    #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+
+    /* ── Login ── */
+    #screen-login, #screen-set-password { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100dvh - 56px); padding: 24px; }
+    .login-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
+    .login-logo { font-size: 48px; margin-bottom: 16px; }
+    .login-card h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .magic-input { width: 100%; padding: 12px; margin-bottom: 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .95rem; outline: none; }
+    .btn-magic { width: 100%; padding: 12px; background: var(--c-primary); color: #fff; border: none; border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; }
+    .login-success { margin-top: 16px; color: var(--c-success); font-size: .9rem; }
+    .login-error { margin-top: 16px; color: var(--c-danger); font-size: .9rem; }
+
+    /* ── Main ── */
+    .app-main { padding: 24px 28px; max-width: 1200px; margin: 0 auto; }
+    .section-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; text-align: right; }
+    .kpi-value.teresa { color: var(--c-teresa); }
+    .kpi-value.salvatore { color: var(--c-salvatore); }
+
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 24px; }
+    .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; padding: 0 10px 9px; white-space: nowrap; }
+    .table td { padding: 10px 10px; border-top: 1px solid var(--c-border); }
+    .table tfoot th { padding: 10px 10px; border-top: 2px solid var(--c-text); }
+
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-teresa    { background: #fee2e2; color: #991b1b; }
+    .badge-salvatore { background: #dcfce7; color: #166534; }
+    .badge-bonifico  { background: #eef2ff; color: #3730a3; }
+    .badge-altro     { background: #fef3c7; color: #92400e; }
+    .badge-mensa     { background: #f0f9ff; color: #0369a1; }
+
+    .year-select { padding: 7px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; outline: none; background: var(--c-surface); cursor: pointer; }
+
+    .btn { padding: 8px 14px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .85rem; font-weight: 600; cursor: pointer; border: none; transition: background .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: transparent; border: 1px solid var(--c-border); color: var(--c-text); }
+    .btn-outline:hover { background: var(--c-bg); }
+    .btn-sm { padding: 4px 8px; font-size: .82rem; }
+
+    @media (max-width: 640px) {
+      .app-main { padding: 12px; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+      .kpi-value { font-size: 1.2rem; }
+      .table-wrap .table thead { display: none; }
+      .table-wrap .table tr { display: block; margin-bottom: 12px; border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 12px; }
+      .table-wrap .table td { display: block; border: none; padding: 4px 0; text-align: left; }
+      .table-wrap .table td:before { content: attr(data-label); font-weight: 700; font-size: .7rem; color: var(--c-muted); text-transform: uppercase; display: block; margin-bottom: 2px; }
+      .table-wrap .table td.text-right { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <div id="garsal-top-bar">
+    <div style="display:flex;align-items:center;gap:8px;flex:1;">
+      <span style="width:24px;height:24px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;">🌷</span>
+      <div id="garsal-top-bar-text">Situazione Teresa</div>
+    </div>
+    <div id="user-info" class="hidden" style="color:#fff; font-size:12px; font-family:var(--font-mono);"></div>
+    <button id="btn-logout" class="btn btn-outline btn-sm hidden" style="color:#fff; border-color:rgba(255,255,255,0.3);">Esci</button>
+  </div>
+
+  <div id="screen-login">
+    <div class="login-card">
+      <div class="login-logo">🌷</div>
+      <h1>Bentornata Teresa</h1>
+      <p class="text-muted text-sm mb-20">Inserisci la tua email per accedere alla tua situazione finanziaria.</p>
+      <form id="login-form">
+        <input type="email" id="login-email" class="magic-input" placeholder="La tua email" required />
+        <input type="password" id="login-password" class="magic-input" placeholder="Password (lascia vuoto per il link via email)" autocomplete="current-password" />
+        <button type="submit" class="btn-magic">Accedi</button>
+      </form>
+      <button type="button" id="btn-setup-password" class="btn btn-outline" style="width:100%; margin-top:8px;">Non hai ancora una password? Impostane una</button>
+      <div id="login-success" class="login-success hidden">✅ Controlla la tua email.</div>
+      <div id="login-error" class="login-error hidden"></div>
+    </div>
+
+    <div class="login-card" id="apk-download-card" style="margin-top:16px;">
+      <div class="card-title" style="margin-bottom:8px;">📱 App Android</div>
+      <p class="text-muted text-sm" style="line-height:1.6; margin-bottom:12px;">
+        Scarica l'app per accedere da telefono senza dover effettuare il login ogni volta:
+        la prima volta inserisci email e password, poi resterai sempre connessa.
+      </p>
+      <a href="/releases/SituazioneTeresa-latest.apk" download="SituazioneTeresa.apk" class="btn-magic" style="display:inline-flex; align-items:center; justify-content:center; text-decoration:none;">⬇ Scarica APK</a>
+    </div>
+  </div>
+
+  <div id="screen-set-password" class="hidden">
+    <div class="login-card">
+      <div class="login-logo">🌷</div>
+      <h1>Imposta una password</h1>
+      <p class="text-muted text-sm mb-20">La userai per accedere più velocemente la prossima volta, anche dall'app: una volta impostata non ti verrà richiesta di nuovo.</p>
+      <form id="set-password-form">
+        <input type="password" id="new-password" class="magic-input" placeholder="Nuova password" required minlength="6" autocomplete="new-password" />
+        <button type="submit" class="btn-magic">Salva password</button>
+      </form>
+      <div id="set-password-error" class="login-error hidden"></div>
+    </div>
+  </div>
+
+  <div id="screen-app" class="hidden">
+    <main class="app-main">
+
+      <!-- ── Conto Risparmio Teresa ── -->
+      <div class="hstack gap-8 mb-20" style="justify-content: space-between;">
+        <h2 class="section-title" style="margin-bottom:0">🏡 Conto Risparmio Teresa</h2>
+        <select id="year-select-risparmio" class="year-select"></select>
+      </div>
+
+      <div class="kpi-grid" id="kpi-risparmio">
+        <div class="kpi-card"><div class="kpi-label">Totale Movimenti</div><div class="kpi-value mono" id="risp-tot-voce">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Saldo al <span id="risp-saldo-date" style="font-weight:400;"></span></div><div class="kpi-value mono" id="risp-tot-saldo">€0,00</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Riepilogo per Categoria</div>
+        <div id="risp-cat-summary" class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); margin-bottom:0;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Movimenti</div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Categoria</th>
+                <th class="text-right">Importo</th>
+                <th>Descrizione</th>
+              </tr>
+            </thead>
+            <tbody id="risp-tx-table-body">
+              <tr><td colspan="4" style="text-align:center; padding:40px;" class="text-muted">Caricamento movimenti...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Conto Spese Teresa ── -->
+      <div class="hstack gap-8 mb-20" style="justify-content: space-between; border-top: 2px solid var(--c-border); padding-top: 32px;">
+        <h2 class="section-title" style="margin-bottom:0">💰 Conto Spese Teresa</h2>
+      </div>
+
+      <div class="kpi-grid" id="kpi-spese-tot">
+        <div class="kpi-card"><div class="kpi-label">Versato Teresa (Tot)</div><div class="kpi-value mono teresa" id="spese-versato-teresa">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Versato Salvatore (Tot)</div><div class="kpi-value mono salvatore" id="spese-versato-salvatore">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Totale Speso (Tot)</div><div class="kpi-value mono" id="spese-totale">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label" id="spese-diff-label">Saldo Teresa</div><div class="kpi-value mono" id="spese-diff">€0,00</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Riepilogo Storico per Periodi</div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th class="text-right">Versato Teresa</th>
+                <th class="text-right">Versato Salvatore</th>
+                <th class="text-right">Totale Speso</th>
+                <th class="text-right">Quota Teresa</th>
+                <th class="text-right">Quota Salvatore</th>
+                <th class="text-right">Saldo Teresa</th>
+              </tr>
+            </thead>
+            <tbody id="spese-periodi-body"></tbody>
+            <tfoot id="spese-periodi-foot"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="hstack gap-8 mb-20" style="justify-content: space-between;">
+        <h3 class="section-title" style="margin-bottom:0; font-size:1.15rem;">Dettaglio Annuale</h3>
+        <select id="year-select-spese" class="year-select"></select>
+      </div>
+
+      <div class="kpi-grid" id="kpi-spese-anno"></div>
+
+      <div class="card">
+        <div class="card-title">Movimenti</div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Persona</th>
+                <th>Tipo</th>
+                <th>Data</th>
+                <th class="text-right">Importo</th>
+                <th>Causale</th>
+                <th>Descrizione</th>
+              </tr>
+            </thead>
+            <tbody id="spese-tx-table-body">
+              <tr><td colspan="6" style="text-align:center; padding:40px;" class="text-muted">Caricamento movimenti...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    const APP_VERSION = 'v1.0.0';
+    const BUILD_TIME  = '2026-07-16T14:01:00Z';
+    console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+        'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+    const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+    // Accessi ospite configurati nella tabella cm_guest_access
+    // (email → pagina). Il proprietario accede sempre. La vera
+    // protezione dei dati è comunque lato server, via RLS su Supabase.
+    const PAGE_NAME   = 'situazione-teresa.html';
+    const OWNER_EMAIL = 'garsal1971@gmail.com';
+
+    // Verifica se l'utente loggato può usare questa pagina: legge la
+    // propria riga in cm_guest_access (RLS mostra solo le proprie)
+    async function checkPageAccess(session) {
+      const email = (session.user?.email || '').toLowerCase();
+      if (email === OWNER_EMAIL) return true;
+      try {
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/cm_guest_access?select=page&page=eq.${encodeURIComponent(PAGE_NAME)}&limit=1`,
+          { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session.access_token}` } }
+        );
+        if (!r.ok) return false;
+        return (await r.json()).length > 0;
+      } catch { return false; }
+    }
+
+    let S = {
+      session: null,
+      riservaTx: [],
+      riservaCats: [],
+      riservaCatMap: {},
+      riservaSaldo: null,
+      selectedYearRisparmio: new Date().getFullYear(),
+      speseTx: [],
+      selectedYearSpese: new Date().getFullYear(),
+    };
+
+    const fmtEUR = v => {
+      if (v == null) return '—';
+      const n = Math.round(v);
+      return (n < 0 ? '-' : '') + Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €';
+    };
+    const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+
+    const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+    const sb = async (path, method = 'GET', body = null) => {
+      const options = {
+        method,
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${tok()}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        }
+      };
+      if (body) options.body = JSON.stringify(body);
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+      if (r.status === 401 && S.session?.refresh_token) {
+        const ns = await refreshSession(S.session);
+        if (ns) {
+          options.headers['Authorization'] = `Bearer ${ns.access_token}`;
+          const r2 = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, options);
+          if (r2.ok) return r2.json();
+        }
+        logout();
+        throw new Error('Sessione scaduta');
+      }
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.message || r.statusText);
+      }
+      return r.json();
+    };
+
+    /* ── Auth ── */
+    async function initFromSbToken(token) {
+      try {
+        const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+        })).json();
+        if (user?.id) {
+          return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+        }
+      } catch {}
+      return null;
+    }
+
+    async function refreshSession(session) {
+      if (!session?.refresh_token) return null;
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: session.refresh_token }),
+        });
+        if (!r.ok) return null;
+        const d = await r.json();
+        const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+        S.session = ns;
+        localStorage.setItem('garsal_session', JSON.stringify(ns));
+        return ns;
+      } catch { return null; }
+    }
+
+    function logout() {
+      localStorage.removeItem('garsal_session');
+      localStorage.removeItem('sb_token');
+      S.session = null;
+      nativeCredsClear();
+      document.getElementById('screen-login').classList.remove('hidden');
+      document.getElementById('screen-app').classList.add('hidden');
+      document.getElementById('btn-logout').classList.add('hidden');
+      document.getElementById('user-info').classList.add('hidden');
+    }
+
+    /* ── Credenziali salvate nell'app Android (Android Keystore) ──
+       Il bridge window.AndroidCreds esiste solo dentro la WebView
+       dell'app: nel browser queste funzioni non fanno nulla. */
+    function nativeCredsSave(email, password) {
+      try { window.AndroidCreds?.saveCredentials(email, password); } catch {}
+    }
+    function nativeCredsGet() {
+      try { return window.AndroidCreds ? JSON.parse(window.AndroidCreds.getCredentials() || '{}') : {}; }
+      catch { return {}; }
+    }
+    function nativeCredsClear() {
+      try { window.AndroidCreds?.clearCredentials(); } catch {}
+    }
+
+    async function loginWithPassword(email, password) {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error_description || err.msg || 'Credenziali non valide');
+      }
+      const d = await r.json();
+      return { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    }
+
+    // Mostra la dashboard per la sessione corrente (S.session), oppure
+    // fa logout se non è più valida/autorizzata.
+    async function enterApp() {
+      if (S.session.expires_at && Date.now() > S.session.expires_at - 60000) {
+        const ns = await refreshSession(S.session);
+        if (!ns) { logout(); return; }
+      }
+
+      // Questa pagina è riservata al proprietario e agli ospiti
+      // autorizzati in cm_guest_access
+      const allowed = await checkPageAccess(S.session);
+      if (!allowed) {
+        logout();
+        const errEl = document.getElementById('login-error');
+        errEl.textContent = 'Questo account non è autorizzato ad accedere a questa pagina.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('screen-login').classList.add('hidden');
+      document.getElementById('screen-app').classList.remove('hidden');
+      document.getElementById('btn-logout').classList.remove('hidden');
+      document.getElementById('user-info').textContent = S.session.user.email;
+      document.getElementById('user-info').classList.remove('hidden');
+      loadData();
+    }
+
+    async function handleAuth() {
+      // 1. Token condiviso da AppSphere launcher (sb_token in localStorage)
+      const sbToken = localStorage.getItem('sb_token');
+      if (sbToken && !S.session) {
+        S.session = await initFromSbToken(sbToken);
+        if (S.session) localStorage.setItem('garsal_session', JSON.stringify(S.session));
+      }
+
+      // 2. Check for session in URL (magic link / recovery link return)
+      const hash = location.hash.substring(1);
+      if (hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash);
+        const at = params.get('access_token');
+        const rt = params.get('refresh_token');
+        const expires_in = params.get('expires_in');
+        const type = params.get('type');
+
+        const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${at}` },
+        })).json();
+
+        if (user && user.id) {
+          const sess = { access_token: at, refresh_token: rt, user, expires_at: Date.now() + parseInt(expires_in) * 1000 };
+          location.hash = '';
+
+          // Link "imposta password" (recover): non entrare subito, prima
+          // chiedi la nuova password (la sessione la teniamo in sospeso).
+          if (type === 'recovery') {
+            S.pendingRecoverySession = sess;
+            document.getElementById('screen-login').classList.add('hidden');
+            document.getElementById('screen-set-password').classList.remove('hidden');
+            return;
+          }
+
+          S.session = sess;
+          localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          localStorage.setItem('sb_token', at);
+        }
+      } else if (!S.session) {
+        try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
+      }
+
+      // 3. Nessuna sessione salvata: se l'app Android ha delle credenziali
+      // in memoria (Android Keystore), prova un login silenzioso.
+      if (!S.session) {
+        const creds = nativeCredsGet();
+        if (creds.email && creds.password) {
+          try {
+            S.session = await loginWithPassword(creds.email, creds.password);
+            localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          } catch { nativeCredsClear(); }
+        }
+      }
+
+      if (S.session) await enterApp();
+    }
+
+    document.getElementById('login-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim().toLowerCase();
+      const password = document.getElementById('login-password').value;
+      const btn = e.target.querySelector('button');
+      const errEl = document.getElementById('login-error');
+      const okEl = document.getElementById('login-success');
+      btn.disabled = true;
+
+      // Password compilata → login diretto email+password.
+      // Password vuota → comportamento storico: invia il link via email.
+      if (password) {
+        btn.textContent = 'Accesso in corso...';
+        try {
+          S.session = await loginWithPassword(email, password);
+          localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          nativeCredsSave(email, password);
+          errEl.classList.add('hidden');
+          await enterApp();
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove('hidden');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Accedi';
+        }
+        return;
+      }
+
+      btn.textContent = 'Invio in corso...';
+      try {
+        // create_user:false → questo form non può creare nuovi account;
+        // redirect_to come query param (è ciò che GoTrue legge davvero)
+        const redirectTo = encodeURIComponent(location.origin + location.pathname);
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/otp?redirect_to=${redirectTo}`, {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, create_user: false }),
+        });
+        if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
+        okEl.classList.remove('hidden');
+        errEl.classList.add('hidden');
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Accedi';
+      }
+    };
+
+    document.getElementById('btn-logout').onclick = () => {
+      localStorage.removeItem('garsal_session');
+      nativeCredsClear();
+      location.reload();
+    };
+
+    document.getElementById('btn-setup-password').onclick = async () => {
+      const email = document.getElementById('login-email').value.trim().toLowerCase();
+      const errEl = document.getElementById('login-error');
+      const okEl = document.getElementById('login-success');
+      if (!email) {
+        errEl.textContent = 'Inserisci prima la tua email qui sopra.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      const btn = document.getElementById('btn-setup-password');
+      btn.disabled = true;
+      try {
+        const redirectTo = encodeURIComponent(location.origin + location.pathname);
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${redirectTo}`, {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
+        okEl.classList.remove('hidden');
+        errEl.classList.add('hidden');
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    document.getElementById('set-password-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const newPassword = document.getElementById('new-password').value;
+      const btn = e.target.querySelector('button');
+      const errEl = document.getElementById('set-password-error');
+      btn.disabled = true;
+      btn.textContent = 'Salvataggio...';
+      try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+          method: 'PUT',
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${S.pendingRecoverySession.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ password: newPassword }),
+        });
+        if (!r.ok) throw new Error((await r.json()).msg || 'Errore impostazione password');
+
+        S.session = S.pendingRecoverySession;
+        localStorage.setItem('garsal_session', JSON.stringify(S.session));
+        localStorage.setItem('sb_token', S.session.access_token);
+        nativeCredsSave(S.session.user.email, newPassword);
+
+        document.getElementById('screen-set-password').classList.add('hidden');
+        await enterApp();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salva password';
+      }
+    };
+
+    /* ── Data ── */
+    async function loadData() {
+      try {
+        const [riservaTx, riservaCats, riservaSaldi, speseTx] = await Promise.all([
+          sb('cntrs_transactions_terr?order=data.desc'),
+          sb('cntrs_categories_terr?order=name'),
+          sb('cntrs_saldi_terr?order=created_at.desc&limit=1'),
+          sb('acct_transactions?order=data.desc,created_at.desc'),
+        ]);
+
+        S.riservaTx = riservaTx;
+        S.riservaCats = riservaCats;
+        S.riservaCatMap = Object.fromEntries(riservaCats.map(c => [c.id, c.name]));
+        S.riservaSaldo = riservaSaldi && riservaSaldi.length ? riservaSaldi[0] : null;
+        S.speseTx = speseTx;
+
+        render();
+      } catch (e) {
+        console.error('Errore caricamento:', e);
+      }
+    }
+
+    function render() {
+      renderRisparmio();
+      renderSpese();
+    }
+
+    /* ── Conto Risparmio Teresa ── */
+    function catNameRisparmio(t) {
+      return S.riservaCatMap[t.category_id] || '(nessuna)';
+    }
+
+    function renderRisparmio() {
+      const anni = [...new Set(S.riservaTx.map(t => t.anno || new Date(t.data).getFullYear()))].sort((a, b) => b - a);
+      if (!anni.includes(S.selectedYearRisparmio)) S.selectedYearRisparmio = anni[0] || new Date().getFullYear();
+
+      const sel = document.getElementById('year-select-risparmio');
+      sel.innerHTML = anni.map(a => `<option value="${a}" ${a === S.selectedYearRisparmio ? 'selected' : ''}>${a}</option>`).join('');
+      sel.onchange = (e) => { S.selectedYearRisparmio = parseInt(e.target.value); renderRisparmio(); };
+
+      const current = S.riservaTx.filter(t => (t.anno || new Date(t.data).getFullYear()) === S.selectedYearRisparmio);
+      const prior = S.riservaTx.filter(t => (t.anno || new Date(t.data).getFullYear()) < S.selectedYearRisparmio);
+      const priorTot = prior.reduce((s, t) => s + t.importo_voce, 0);
+
+      const tbody = document.getElementById('risp-tx-table-body');
+      let html = current.map(t => `
+        <tr>
+          <td class="mono text-sm" data-label="Data">${fmtDate(t.data)}</td>
+          <td class="text-muted" data-label="Categoria">${catNameRisparmio(t)}</td>
+          <td class="text-right mono fw-600" data-label="Importo">${fmtEUR(t.importo_voce)}</td>
+          <td data-label="Descrizione">
+            <div class="fw-600">${t.descrizione}</div>
+            ${t.note ? `<div class="text-muted text-sm">${t.note}</div>` : ''}
+          </td>
+        </tr>
+      `).join('');
+
+      if (prior.length) {
+        html += `
+          <tr style="background:var(--c-bg)">
+            <td class="mono text-sm" data-label="Data"><strong>Saldo anni precedenti</strong></td>
+            <td data-label="Categoria"></td>
+            <td class="text-right mono fw-600" data-label="Importo">${fmtEUR(priorTot)}</td>
+            <td data-label="Descrizione"></td>
+          </tr>`;
+      }
+
+      tbody.innerHTML = html || '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--c-muted)">Nessun movimento per questo anno</td></tr>';
+
+      const allVoce = S.riservaTx.reduce((s, t) => s + t.importo_voce, 0);
+      document.getElementById('risp-tot-voce').textContent = fmtEUR(allVoce);
+
+      if (S.riservaSaldo) {
+        document.getElementById('risp-tot-saldo').textContent = fmtEUR(S.riservaSaldo.saldo_contabile);
+        document.getElementById('risp-saldo-date').textContent = fmtDate(S.riservaSaldo.data);
+      } else {
+        document.getElementById('risp-tot-saldo').textContent = '—';
+        document.getElementById('risp-saldo-date').textContent = '(nessun saldo)';
+      }
+
+      const catTotals = {};
+      current.forEach(t => {
+        const cat = catNameRisparmio(t);
+        catTotals[cat] = (catTotals[cat] || 0) + t.importo_voce;
+      });
+      document.getElementById('risp-cat-summary').innerHTML = Object.entries(catTotals)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cat, tot]) => `
+          <div class="kpi-card">
+            <div class="kpi-label">${cat}</div>
+            <div class="kpi-value mono" style="font-size:1.1rem">${fmtEUR(tot)}</div>
+          </div>
+        `).join('') || '<div class="text-muted text-sm">Nessun movimento per questo anno</div>';
+    }
+
+    /* ── Conto Spese Teresa ── */
+    function calcolaQuote(anno) {
+      const txs = S.speseTx.filter(t => t.anno === anno);
+      const bonTeresa = txs.filter(t => t.tipo === 'BONIFICO' && t.persona === 'TERESA').reduce((s, t) => s + +t.importo, 0);
+      const bonSalva = txs.filter(t => t.tipo === 'BONIFICO' && t.persona === 'SALVATORE').reduce((s, t) => s + +t.importo, 0);
+      const altTeresa = txs.filter(t => t.tipo === 'ALTRO' && t.persona === 'TERESA').reduce((s, t) => s + +t.importo, 0);
+      const altSalva = txs.filter(t => t.tipo === 'ALTRO' && t.persona === 'SALVATORE').reduce((s, t) => s + +t.importo, 0);
+      const mensa = txs.filter(t => t.tipo === 'MENSA').reduce((s, t) => s + +t.importo, 0);
+      const versatoTeresa = bonTeresa + altTeresa;
+      const versatoSalva = bonSalva + altSalva + mensa;
+      const totaleSpeso = versatoTeresa + versatoSalva;
+      const quotaTeresa = anno <= 2023 ? totaleSpeso * 2 / 5 : totaleSpeso / 3;
+      const quotaSalva = totaleSpeso - quotaTeresa;
+      const diffTeresa = versatoTeresa - quotaTeresa;
+      const diffSalva = versatoSalva - quotaSalva;
+      return { anno, bonTeresa, bonSalva, altTeresa, altSalva, mensa, versatoTeresa, versatoSalva, totaleSpeso, quotaTeresa, quotaSalva, diffTeresa, diffSalva };
+    }
+
+    function getAnniSpese() {
+      return [...new Set(S.speseTx.map(t => t.anno))].sort((a, b) => b - a);
+    }
+
+    function calcolaTotaliGenerali() {
+      const anni = getAnniSpese();
+      const initTot = () => ({ versatoTeresa: 0, versatoSalva: 0, totaleSpeso: 0, quotaTeresa: 0, quotaSalva: 0, diffTeresa: 0 });
+      const p1 = initTot(); // <= 2023
+      const p2 = initTot(); // >= 2024
+      const tot = initTot();
+      for (const a of anni) {
+        const q = calcolaQuote(a);
+        const target = a <= 2023 ? p1 : p2;
+        [target, tot].forEach(t => {
+          t.versatoTeresa += q.versatoTeresa;
+          t.versatoSalva += q.versatoSalva;
+          t.totaleSpeso += q.totaleSpeso;
+          t.quotaTeresa += q.quotaTeresa;
+          t.quotaSalva += q.quotaSalva;
+          t.diffTeresa += q.diffTeresa;
+        });
+      }
+      return { p1, p2, tot };
+    }
+
+    function badgePersonaSpese(p) { return p === 'TERESA' ? '<span class="badge badge-teresa">Teresa</span>' : '<span class="badge badge-salvatore">Salvatore</span>'; }
+    function badgeTipoSpese(t) { return t === 'BONIFICO' ? '<span class="badge badge-bonifico">Bonifico</span>' : t === 'MENSA' ? '<span class="badge badge-mensa">Mensa</span>' : '<span class="badge badge-altro">Altro</span>'; }
+
+    function renderSpese() {
+      const anni = getAnniSpese();
+      if (!S.selectedYearSpese || !anni.includes(S.selectedYearSpese)) S.selectedYearSpese = anni[0] || new Date().getFullYear();
+      const annoSel = S.selectedYearSpese;
+      const q = calcolaQuote(annoSel);
+      const tot = calcolaTotaliGenerali();
+
+      document.getElementById('spese-versato-teresa').textContent = fmtEUR(tot.tot.versatoTeresa);
+      document.getElementById('spese-versato-salvatore').textContent = fmtEUR(tot.tot.versatoSalva);
+      document.getElementById('spese-totale').textContent = fmtEUR(tot.tot.totaleSpeso);
+      document.getElementById('spese-diff-label').textContent = tot.tot.diffTeresa >= 0 ? 'Salvatore Debito' : 'Teresa Debito';
+      const diffEl = document.getElementById('spese-diff');
+      diffEl.textContent = fmtEUR(Math.abs(tot.tot.diffTeresa));
+      diffEl.className = 'kpi-value mono ' + (tot.tot.diffTeresa >= 0 ? 'pos' : 'neg');
+
+      const rowPeriodo = (label, sub, t) => `
+        <tr>
+          <td><strong>${label}</strong> <span class="text-muted text-sm">${sub}</span></td>
+          <td class="text-right mono">${fmtEUR(t.versatoTeresa)}</td>
+          <td class="text-right mono">${fmtEUR(t.versatoSalva)}</td>
+          <td class="text-right mono">${fmtEUR(t.totaleSpeso)}</td>
+          <td class="text-right mono teresa">${fmtEUR(t.quotaTeresa)}</td>
+          <td class="text-right mono salvatore">${fmtEUR(t.quotaSalva)}</td>
+          <td class="text-right mono ${t.diffTeresa >= 0 ? 'pos' : 'neg'}">${t.diffTeresa >= 0 ? '+' : ''}${fmtEUR(t.diffTeresa)}</td>
+        </tr>`;
+      document.getElementById('spese-periodi-body').innerHTML =
+        rowPeriodo('Fino al 2023', '(40/60)', tot.p1) + rowPeriodo('Dal 2024', '(1/3 - 2/3)', tot.p2);
+      document.getElementById('spese-periodi-foot').innerHTML = `
+        <tr>
+          <th>GRAN TOTALE</th>
+          <th class="text-right mono">${fmtEUR(tot.tot.versatoTeresa)}</th>
+          <th class="text-right mono">${fmtEUR(tot.tot.versatoSalva)}</th>
+          <th class="text-right mono">${fmtEUR(tot.tot.totaleSpeso)}</th>
+          <th class="text-right mono teresa">${fmtEUR(tot.tot.quotaTeresa)}</th>
+          <th class="text-right mono salvatore">${fmtEUR(tot.tot.quotaSalva)}</th>
+          <th class="text-right mono ${tot.tot.diffTeresa >= 0 ? 'pos' : 'neg'}">${tot.tot.diffTeresa >= 0 ? '+' : ''}${fmtEUR(tot.tot.diffTeresa)}</th>
+        </tr>`;
+
+      const sel = document.getElementById('year-select-spese');
+      sel.innerHTML = anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('');
+      sel.onchange = (e) => { S.selectedYearSpese = parseInt(e.target.value); renderSpese(); };
+
+      document.getElementById('kpi-spese-anno').innerHTML = `
+        <div class="kpi-card"><div class="kpi-label">Versato Teresa (${annoSel})</div><div class="kpi-value mono teresa">${fmtEUR(q.versatoTeresa)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Versato Salvatore (${annoSel})</div><div class="kpi-value mono salvatore">${fmtEUR(q.versatoSalva)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Speso ${annoSel}</div><div class="kpi-value mono">${fmtEUR(q.totaleSpeso)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">${q.diffTeresa >= 0 ? 'Salvatore Debito' : 'Teresa Debito'}</div><div class="kpi-value mono ${q.diffTeresa >= 0 ? 'pos' : 'neg'}">${fmtEUR(Math.abs(q.diffTeresa))}</div></div>
+      `;
+
+      const txs = S.speseTx.filter(t => t.anno === annoSel);
+      document.getElementById('spese-tx-table-body').innerHTML = txs.map(t => `
+        <tr>
+          <td data-label="Persona">${badgePersonaSpese(t.persona)}</td>
+          <td data-label="Tipo">${badgeTipoSpese(t.tipo)}</td>
+          <td class="mono text-sm" data-label="Data">${fmtDate(t.data)}</td>
+          <td class="text-right mono fw-600" data-label="Importo">${fmtEUR(t.importo)}</td>
+          <td class="text-muted text-sm" data-label="Causale">${t.causale || '—'}</td>
+          <td class="text-muted text-sm" data-label="Descrizione">${t.descrizione || '—'}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--c-muted)">Nessun movimento per questo anno</td></tr>';
+    }
+
+    if (navigator.userAgent.includes('SituazioneTeresaApp')) {
+      document.getElementById('apk-download-card')?.remove();
+    }
+
+    handleAuth();
+  </script>
+</body>
+</html>
