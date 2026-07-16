@@ -1,0 +1,112 @@
+name: Build Situazione Rosa APK
+
+on:
+  push:
+    branches:
+      - master
+      - 'claude/**'
+    paths:
+      - 'android-app/situazione-rosa/**'
+      - '.github/workflows/build-situazione-rosa-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        run: |
+          SDKMANAGER=$(find "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools" \
+            -name "sdkmanager" -type f 2>/dev/null | sort | tail -1)
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" 2>&1 || true
+          fi
+
+      - name: Prepara keystore
+        id: keystore
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode \
+              > android-app/situazione-rosa/sr.keystore
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"                  >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"            >> $GITHUB_ENV
+            echo "generated=false" >> $GITHUB_OUTPUT
+            echo "✅ Keystore dai secrets — build release con firma fissa"
+          else
+            KS_PASS="SituazioneRosa2026"
+            keytool -genkeypair -v \
+              -keystore android-app/situazione-rosa/sr.keystore \
+              -alias situazionerosa \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=SituazioneRosa, O=Garsal, C=IT"
+            echo "KEYSTORE_PASSWORD=$KS_PASS"    >> $GITHUB_ENV
+            echo "KEY_ALIAS=situazionerosa"      >> $GITHUB_ENV
+            echo "KEY_PASSWORD=$KS_PASS"         >> $GITHUB_ENV
+            echo "generated=true" >> $GITHUB_OUTPUT
+            echo "⚠️  KEYSTORE_BASE64 non configurato: keystore usa-e-getta, i futuri aggiornamenti richiederanno disinstallare l'APK precedente. Configura i 4 secrets condivisi (già usati da GarsalApps/SmartBlocker) per una firma stabile."
+          fi
+
+      - name: Make gradlew executable
+        run: chmod +x android-app/situazione-rosa/gradlew
+
+      - name: Build APK release
+        working-directory: android-app/situazione-rosa
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="${{ github.workspace }}/android-app/situazione-rosa/sr.keystore" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      - name: Salva APK e versione
+        run: |
+          VERSION=$(grep versionName android-app/situazione-rosa/app/build.gradle \
+            | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          cp android-app/situazione-rosa/app/build/outputs/apk/release/app-release.apk \
+            /tmp/SituazioneRosa-latest.apk
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SituazioneRosa-v${{ env.VERSION }}
+          path: /tmp/SituazioneRosa-latest.apk
+          retention-days: 30
+
+      - name: Pubblica APK su master
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin master
+          git checkout master
+          git reset --hard origin/master
+
+          mkdir -p releases
+          cp /tmp/SituazioneRosa-latest.apk releases/SituazioneRosa-latest.apk
+
+          git add releases/SituazioneRosa-latest.apk
+          git diff --staged --quiet \
+            && echo "APK non cambiato, skip commit" \
+            && exit 0
+
+          git commit -m "build: aggiorna SituazioneRosa APK v${{ env.VERSION }} [skip actions]"
+          git push origin master
