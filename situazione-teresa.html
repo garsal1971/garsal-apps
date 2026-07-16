@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.3.0</title>
+  <title>Situazione Teresa v1.4.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -234,19 +234,7 @@
 
       <div class="card">
         <div class="card-title">Riepilogo Storico per Periodi</div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Voce</th>
-                <th class="text-right">Fino al 2023<br><span style="font-weight:400;text-transform:none;">(2/5 - 3/5)</span></th>
-                <th class="text-right">Dal 2024<br><span style="font-weight:400;text-transform:none;">(1/3 - 2/3)</span></th>
-                <th class="text-right">Gran Totale</th>
-              </tr>
-            </thead>
-            <tbody id="spese-periodi-body"></tbody>
-          </table>
-        </div>
+        <div id="spese-periodi-cards" class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); margin-bottom:0;"></div>
       </div>
 
       <div class="hstack gap-8 mb-20" style="justify-content: space-between;">
@@ -283,8 +271,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.3.0';
-    const BUILD_TIME  = '2026-07-16T16:01:00Z';
+    const APP_VERSION = 'v1.4.0';
+    const BUILD_TIME  = '2026-07-16T16:07:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -830,30 +818,39 @@
       diffEl.textContent = fmtEUR(Math.abs(tot.tot.diffTeresa));
       diffEl.className = 'kpi-value mono ' + (tot.tot.diffTeresa >= 0 ? 'pos' : 'neg');
 
-      // Tabella "trasposta": una riga per voce, una colonna per periodo
-      // (così sul mobile ogni voce diventa una card con i 3 periodi
-      // etichettati, invece di una card per periodo con 6 valori muti).
-      const rowMetrica = (label, v1, v2, vtot, cls = '') => `
-        <tr>
-          <td data-label="Voce"><strong>${label}</strong></td>
-          <td class="text-right mono ${cls}" data-label="Fino al 2023 (2/5-3/5)">${fmtEUR(v1)}</td>
-          <td class="text-right mono ${cls}" data-label="Dal 2024 (1/3-2/3)">${fmtEUR(v2)}</td>
-          <td class="text-right mono fw-600 ${cls}" data-label="Gran Totale">${fmtEUR(vtot)}</td>
-        </tr>`;
-      const rowSaldo = (label, v1, v2, vtot) => `
-        <tr>
-          <td data-label="Voce"><strong>${label}</strong></td>
-          <td class="text-right mono ${v1 >= 0 ? 'pos' : 'neg'}" data-label="Fino al 2023 (2/5-3/5)">${v1 >= 0 ? '+' : ''}${fmtEUR(v1)}</td>
-          <td class="text-right mono ${v2 >= 0 ? 'pos' : 'neg'}" data-label="Dal 2024 (1/3-2/3)">${v2 >= 0 ? '+' : ''}${fmtEUR(v2)}</td>
-          <td class="text-right mono fw-600 ${vtot >= 0 ? 'pos' : 'neg'}" data-label="Gran Totale">${vtot >= 0 ? '+' : ''}${fmtEUR(vtot)}</td>
-        </tr>`;
-      document.getElementById('spese-periodi-body').innerHTML =
-        rowMetrica('Versato Teresa', tot.p1.versatoTeresa, tot.p2.versatoTeresa, tot.tot.versatoTeresa) +
-        rowMetrica('Versato Salvatore', tot.p1.versatoSalva, tot.p2.versatoSalva, tot.tot.versatoSalva) +
-        rowMetrica('Totale Speso', tot.p1.totaleSpeso, tot.p2.totaleSpeso, tot.tot.totaleSpeso) +
-        rowMetrica('Quota Teresa', tot.p1.quotaTeresa, tot.p2.quotaTeresa, tot.tot.quotaTeresa, 'teresa') +
-        rowMetrica('Quota Salvatore', tot.p1.quotaSalva, tot.p2.quotaSalva, tot.tot.quotaSalva, 'salvatore') +
-        rowSaldo('Saldo Teresa', tot.p1.diffTeresa, tot.p2.diffTeresa, tot.tot.diffTeresa);
+      // Card in stile KPI (una per voce) invece di una tabella: più
+      // leggibile sia su desktop sia su mobile, con i 3 periodi in una
+      // mini-griglia interna anziché in colonne di tabella strette.
+      const periodSub = (label, val, cls) => `
+        <div>
+          <div class="text-muted" style="font-size:.66rem;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px;line-height:1.3;">${label}</div>
+          <div class="mono fw-600 ${cls}" style="font-size:.92rem;">${val}</div>
+        </div>`;
+      const metricCard = (label, v1, v2, vtot, cls = '') => `
+        <div class="kpi-card">
+          <div class="kpi-label" style="text-align:left;margin-bottom:10px;">${label}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            ${periodSub('Fino al 2023<br>(2/5-3/5)', fmtEUR(v1), cls)}
+            ${periodSub('Dal 2024<br>(1/3-2/3)', fmtEUR(v2), cls)}
+            ${periodSub('Gran Totale', fmtEUR(vtot), cls + ' fw-700')}
+          </div>
+        </div>`;
+      const metricCardSaldo = (label, v1, v2, vtot) => `
+        <div class="kpi-card">
+          <div class="kpi-label" style="text-align:left;margin-bottom:10px;">${label}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            ${periodSub('Fino al 2023<br>(2/5-3/5)', (v1 >= 0 ? '+' : '') + fmtEUR(v1), v1 >= 0 ? 'pos' : 'neg')}
+            ${periodSub('Dal 2024<br>(1/3-2/3)', (v2 >= 0 ? '+' : '') + fmtEUR(v2), v2 >= 0 ? 'pos' : 'neg')}
+            ${periodSub('Gran Totale', (vtot >= 0 ? '+' : '') + fmtEUR(vtot), (vtot >= 0 ? 'pos' : 'neg') + ' fw-700')}
+          </div>
+        </div>`;
+      document.getElementById('spese-periodi-cards').innerHTML =
+        metricCard('Versato Teresa', tot.p1.versatoTeresa, tot.p2.versatoTeresa, tot.tot.versatoTeresa) +
+        metricCard('Versato Salvatore', tot.p1.versatoSalva, tot.p2.versatoSalva, tot.tot.versatoSalva) +
+        metricCard('Totale Speso', tot.p1.totaleSpeso, tot.p2.totaleSpeso, tot.tot.totaleSpeso) +
+        metricCard('Quota Teresa', tot.p1.quotaTeresa, tot.p2.quotaTeresa, tot.tot.quotaTeresa, 'teresa') +
+        metricCard('Quota Salvatore', tot.p1.quotaSalva, tot.p2.quotaSalva, tot.tot.quotaSalva, 'salvatore') +
+        metricCardSaldo('Saldo Teresa', tot.p1.diffTeresa, tot.p2.diffTeresa, tot.tot.diffTeresa);
 
       const sel = document.getElementById('year-select-spese');
       sel.innerHTML = anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('');
