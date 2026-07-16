@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Rosa v1.2.2</title>
+  <title>Situazione Rosa v1.2.3</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -185,12 +185,22 @@
         </div>
       </div>
 
+      <div class="card" id="apk-download-card">
+        <div class="card-title">📱 App Android</div>
+        <p class="text-muted text-sm" style="line-height:1.6; margin-bottom:12px;">
+          Scarica l'app per accedere da telefono senza dover effettuare il login ogni volta:
+          la prima volta apri il link ricevuto via email scegliendo "Situazione Rosa" invece del browser,
+          poi resterai sempre connessa.
+        </p>
+        <a href="/releases/SituazioneRosa-latest.apk" download="SituazioneRosa.apk" class="btn btn-primary" style="display:inline-flex; text-decoration:none;">⬇ Scarica APK</a>
+      </div>
+
     </main>
   </div>
 
   <script>
-    const APP_VERSION = 'v1.2.2';
-    const BUILD_TIME  = '2026-07-06T00:00:00Z';
+    const APP_VERSION = 'v1.2.3';
+    const BUILD_TIME  = '2026-07-16T00:00:00Z';
     console.log('%c SITUAZIONE ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#db2777;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -663,6 +673,10 @@
             <div class="kpi-value mono" style="font-size:1.1rem">${fmtEUR(tot)}</div>
           </div>
         `).join('');
+    }
+
+    if (navigator.userAgent.includes('SituazioneRosaApp')) {
+      document.getElementById('apk-download-card')?.remove();
     }
 
     handleAuth();
