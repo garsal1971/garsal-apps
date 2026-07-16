@@ -59,6 +59,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Bridge per le credenziali salvate in modo cifrato (Android Keystore):
+        // la pagina lo usa per rientrare da sola se la sessione è scaduta.
+        webView.addJavascriptInterface(CredentialsBridge(this), "AndroidCreds")
+
         // Se l'app è stata aperta dal link "magic link" ricevuto via email
         // (intent-filter VIEW su garsal.netlify.app/situazione-rosa.html),
         // carica quell'URL così com'è: contiene #access_token=... che la

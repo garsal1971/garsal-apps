@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Rosa v1.2.3</title>
+  <title>Situazione Rosa v1.2.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -117,7 +117,8 @@
       <p class="text-muted text-sm mb-20">Inserisci la tua email per accedere alla tua situazione finanziaria.</p>
       <form id="login-form">
         <input type="email" id="login-email" class="magic-input" placeholder="La tua email" required />
-        <button type="submit" class="btn-magic">Invia Link di Accesso</button>
+        <input type="password" id="login-password" class="magic-input" placeholder="Password (lascia vuoto per il link via email)" autocomplete="current-password" />
+        <button type="submit" class="btn-magic">Accedi</button>
       </form>
       <div id="login-success" class="login-success hidden">✅ Link inviato! Controlla la tua email.</div>
       <div id="login-error" class="login-error hidden"></div>
@@ -189,8 +190,7 @@
         <div class="card-title">📱 App Android</div>
         <p class="text-muted text-sm" style="line-height:1.6; margin-bottom:12px;">
           Scarica l'app per accedere da telefono senza dover effettuare il login ogni volta:
-          la prima volta apri il link ricevuto via email scegliendo "Situazione Rosa" invece del browser,
-          poi resterai sempre connessa.
+          la prima volta inserisci email e password, poi resterai sempre connessa.
         </p>
         <a href="/releases/SituazioneRosa-latest.apk" download="SituazioneRosa.apk" class="btn btn-primary" style="display:inline-flex; text-decoration:none;">⬇ Scarica APK</a>
       </div>
@@ -199,8 +199,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.2.3';
-    const BUILD_TIME  = '2026-07-16T00:00:00Z';
+    const APP_VERSION = 'v1.2.4';
+    const BUILD_TIME  = '2026-07-16T13:00:00Z';
     console.log('%c SITUAZIONE ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#db2777;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -315,10 +315,66 @@
       localStorage.removeItem('garsal_session');
       localStorage.removeItem('sb_token');
       S.session = null;
+      nativeCredsClear();
       document.getElementById('screen-login').classList.remove('hidden');
       document.getElementById('screen-app').classList.add('hidden');
       document.getElementById('btn-logout').classList.add('hidden');
       document.getElementById('user-info').classList.add('hidden');
+    }
+
+    /* ── Credenziali salvate nell'app Android (Android Keystore) ──
+       Il bridge window.AndroidCreds esiste solo dentro la WebView
+       dell'app: nel browser queste funzioni non fanno nulla. */
+    function nativeCredsSave(email, password) {
+      try { window.AndroidCreds?.saveCredentials(email, password); } catch {}
+    }
+    function nativeCredsGet() {
+      try { return window.AndroidCreds ? JSON.parse(window.AndroidCreds.getCredentials() || '{}') : {}; }
+      catch { return {}; }
+    }
+    function nativeCredsClear() {
+      try { window.AndroidCreds?.clearCredentials(); } catch {}
+    }
+
+    async function loginWithPassword(email, password) {
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error_description || err.msg || 'Credenziali non valide');
+      }
+      const d = await r.json();
+      return { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    }
+
+    // Mostra la dashboard per la sessione corrente (S.session), oppure
+    // fa logout se non è più valida/autorizzata.
+    async function enterApp() {
+      if (S.session.expires_at && Date.now() > S.session.expires_at - 60000) {
+        const ns = await refreshSession(S.session);
+        if (!ns) { logout(); return; }
+      }
+
+      // Questa pagina è riservata al proprietario e agli ospiti
+      // autorizzati in cm_guest_access
+      const allowed = await checkPageAccess(S.session);
+      if (!allowed) {
+        logout();
+        const errEl = document.getElementById('login-error');
+        errEl.textContent = 'Questo account non è autorizzato ad accedere a questa pagina.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('screen-login').classList.add('hidden');
+      document.getElementById('screen-app').classList.remove('hidden');
+      document.getElementById('btn-logout').classList.remove('hidden');
+      document.getElementById('user-info').textContent = S.session.user.email;
+      document.getElementById('user-info').classList.remove('hidden');
+      loadData();
     }
 
     async function handleAuth() {
@@ -336,11 +392,11 @@
         const at = params.get('access_token');
         const rt = params.get('refresh_token');
         const expires_in = params.get('expires_in');
-        
+
         const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
           headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${at}` },
         })).json();
-        
+
         if (user && user.id) {
           S.session = { access_token: at, refresh_token: rt, user, expires_at: Date.now() + parseInt(expires_in) * 1000 };
           localStorage.setItem('garsal_session', JSON.stringify(S.session));
@@ -351,40 +407,51 @@
         try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
       }
 
-      if (S.session) {
-        // Check if expired
-        if (S.session.expires_at && Date.now() > S.session.expires_at - 60000) {
-          const ns = await refreshSession(S.session);
-          if (!ns) { logout(); return; }
+      // 3. Nessuna sessione salvata: se l'app Android ha delle credenziali
+      // in memoria (Android Keystore), prova un login silenzioso.
+      if (!S.session) {
+        const creds = nativeCredsGet();
+        if (creds.email && creds.password) {
+          try {
+            S.session = await loginWithPassword(creds.email, creds.password);
+            localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          } catch { nativeCredsClear(); }
         }
-
-        // Questa pagina è riservata al proprietario e agli ospiti
-        // autorizzati in cm_guest_access
-        const allowed = await checkPageAccess(S.session);
-        if (!allowed) {
-          logout();
-          const errEl = document.getElementById('login-error');
-          errEl.textContent = 'Questo account non è autorizzato ad accedere a questa pagina.';
-          errEl.classList.remove('hidden');
-          return;
-        }
-
-        document.getElementById('screen-login').classList.add('hidden');
-        document.getElementById('screen-app').classList.remove('hidden');
-        document.getElementById('btn-logout').classList.remove('hidden');
-        document.getElementById('user-info').textContent = S.session.user.email;
-        document.getElementById('user-info').classList.remove('hidden');
-        loadData();
       }
+
+      if (S.session) await enterApp();
     }
 
     document.getElementById('login-form').onsubmit = async (e) => {
       e.preventDefault();
       const email = document.getElementById('login-email').value.trim().toLowerCase();
+      const password = document.getElementById('login-password').value;
       const btn = e.target.querySelector('button');
+      const errEl = document.getElementById('login-error');
+      const okEl = document.getElementById('login-success');
       btn.disabled = true;
-      btn.textContent = 'Invio in corso...';
 
+      // Password compilata → login diretto email+password.
+      // Password vuota → comportamento storico: invia il link via email.
+      if (password) {
+        btn.textContent = 'Accesso in corso...';
+        try {
+          S.session = await loginWithPassword(email, password);
+          localStorage.setItem('garsal_session', JSON.stringify(S.session));
+          nativeCredsSave(email, password);
+          errEl.classList.add('hidden');
+          await enterApp();
+        } catch (err) {
+          errEl.textContent = err.message;
+          errEl.classList.remove('hidden');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Accedi';
+        }
+        return;
+      }
+
+      btn.textContent = 'Invio in corso...';
       try {
         // create_user:false → questo form non può creare nuovi account;
         // redirect_to come query param (è ciò che GoTrue legge davvero)
@@ -395,14 +462,14 @@
           body: JSON.stringify({ email, create_user: false }),
         });
         if (!r.ok) throw new Error((await r.json()).msg || 'Errore invio email');
-        document.getElementById('login-success').classList.remove('hidden');
-        document.getElementById('login-error').classList.add('hidden');
+        okEl.classList.remove('hidden');
+        errEl.classList.add('hidden');
       } catch (err) {
-        document.getElementById('login-error').textContent = err.message;
-        document.getElementById('login-error').classList.remove('hidden');
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Invia Link di Accesso';
+        btn.textContent = 'Accedi';
       }
     };
 
