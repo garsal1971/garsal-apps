@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.1</title>
+    <title>Analisi Costi v1.0.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -515,8 +515,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.1';
-    var BUILD_TIME  = '2026-07-16T20:30:00Z';
+    var APP_VERSION = 'v1.0.2';
+    var BUILD_TIME  = '2026-07-16T21:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1275,6 +1275,8 @@
         const t = transactions.find(x => x.id === txId);
         if (t) { t.person_id = personId || null; t.person_source = 'manual'; }
         showToast('✅ Persona aggiornata');
+        // La persona appena assegnata può valere anche per altre transazioni già importate
+        if (personId) await reanalyzeAllTransactions();
     }
 
     async function removeTxCategory(txId, categoryId) {
@@ -1323,34 +1325,81 @@
         if (toAdd.length) await reanalyzeAllTransactions();
     }
 
-    // Riapplica l'algoritmo di categorizzazione (merchant appreso + regole) a tutte le
-    // transazioni esistenti, aggiungendo i tag mancanti senza toccare quelli già presenti.
+    // Riapplica l'algoritmo di categorizzazione (merchant appreso + regole) e l'assegnazione
+    // persona a tutte le transazioni esistenti, aggiungendo tag/persona mancanti senza toccare
+    // quelli già presenti. Per la persona, se una transazione senza persona ha la stessa
+    // descrizione normalizzata di una transazione già assegnata (manualmente o da regola),
+    // eredita quella persona.
     async function reanalyzeAllTransactions() {
         if (!transactions.length) return;
         showProcessing(`🔄 Rianalisi transazioni esistenti... 0/${transactions.length}`);
-        const newRows = [];
+
+        const personByMerchant = {};
+        transactions.forEach(t => {
+            if (t.person_id) {
+                const key = normalizeMerchant(t.description);
+                if (key && !personByMerchant[key]) personByMerchant[key] = t.person_id;
+            }
+        });
+
+        const newCategoryRows = [];
+        const personUpdates = [];
         for (let i = 0; i < transactions.length; i++) {
             const t = transactions[i];
-            const { categoryIds, catSource } = categorizeRow(t.description);
+            const { categoryIds, catSource, personId, personSource } = categorizeRow(t.description);
             const existing = new Set(getTxCategoryIds(t.id));
             categoryIds.filter(cid => !existing.has(cid)).forEach(cid => {
-                newRows.push({ transaction_id: t.id, category_id: cid, source: catSource });
+                newCategoryRows.push({ transaction_id: t.id, category_id: cid, source: catSource });
             });
+
+            if (!t.person_id) {
+                if (personId) {
+                    personUpdates.push({ id: t.id, person_id: personId, person_source: personSource });
+                } else {
+                    const learnedPersonId = personByMerchant[normalizeMerchant(t.description)];
+                    if (learnedPersonId) personUpdates.push({ id: t.id, person_id: learnedPersonId, person_source: 'learned' });
+                }
+            }
+
             if (i % 25 === 0 || i === transactions.length - 1) {
                 showProcessing(`🔄 Rianalisi transazioni esistenti... ${i + 1}/${transactions.length}`);
                 await new Promise(r => setTimeout(r, 0)); // lascia respirare la UI
             }
         }
-        if (newRows.length) {
-            const { error } = await sb.from('ca_transaction_categories').insert(newRows);
+
+        if (newCategoryRows.length) {
+            const { error } = await sb.from('ca_transaction_categories').insert(newCategoryRows);
             if (handleAuthError(error)) { hideProcessing(); return; }
-            if (!error) txCategories.push(...newRows);
+            if (!error) txCategories.push(...newCategoryRows);
         }
+
+        if (personUpdates.length) {
+            const byGroup = new Map();
+            personUpdates.forEach(u => {
+                const key = u.person_id + '|' + u.person_source;
+                if (!byGroup.has(key)) byGroup.set(key, { person_id: u.person_id, person_source: u.person_source, ids: [] });
+                byGroup.get(key).ids.push(u.id);
+            });
+            for (const group of byGroup.values()) {
+                const { error } = await sb.from('ca_transactions')
+                    .update({ person_id: group.person_id, person_source: group.person_source })
+                    .in('id', group.ids);
+                if (handleAuthError(error)) { hideProcessing(); return; }
+                if (!error) {
+                    group.ids.forEach(id => {
+                        const t = transactions.find(x => x.id === id);
+                        if (t) { t.person_id = group.person_id; t.person_source = group.person_source; }
+                    });
+                }
+            }
+        }
+
         hideProcessing();
         renderTransactionsList();
         renderDashboard();
-        showToast(newRows.length
-            ? `✅ ${newRows.length} tag aggiunti automaticamente su transazioni esistenti`
+        const totalChanges = newCategoryRows.length + personUpdates.length;
+        showToast(totalChanges
+            ? `✅ ${newCategoryRows.length} tag categoria e ${personUpdates.length} persone aggiornati su transazioni esistenti`
             : '✅ Rianalisi completata, nessuna nuova corrispondenza');
     }
 
