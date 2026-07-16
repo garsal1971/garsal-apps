@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.5</title>
+    <title>Analisi Costi v1.0.6</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -518,6 +518,21 @@
     </div>
 </div>
 
+<!-- ====== MODAL: TRANSAZIONI DI UNA CATEGORIA ====== -->
+<div class="modal" id="categoryTransactionsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="categoryTransactionsTitle">Transazioni</h2>
+            <span class="modal-close" onclick="closeCategoryTransactionsModal()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:1rem;">Raggruppate per titolo, dal più numeroso.</p>
+        <div id="categoryTransactionsList" style="max-height:60vh;overflow-y:auto;"></div>
+        <div style="margin-top:1.25rem;">
+            <button class="btn btn-secondary" style="width:100%;" onclick="closeCategoryTransactionsModal()">Chiudi</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -532,8 +547,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.5';
-    var BUILD_TIME  = '2026-07-16T22:30:00Z';
+    var APP_VERSION = 'v1.0.6';
+    var BUILD_TIME  = '2026-07-16T23:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -674,11 +689,13 @@
         }
         container.innerHTML = tops.map(c => {
             const kids = childCategories(c.id);
+            const cCount = categoryTransactionCount(c.id);
             return `
             <div class="mgmt-group-card">
                 <div class="mgmt-group-header">
-                    <div class="mgmt-group-title"><span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}</div>
+                    <div class="mgmt-group-title"><span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)} <span style="font-weight:400;color:var(--muted);font-size:.85rem;">(${cCount})</span></div>
                     <div class="mgmt-event-actions">
+                        <button class="btn btn-small btn-ghost" onclick="openCategoryTransactionsModal('${c.id}')" title="Vedi transazioni">📄</button>
                         <button class="btn btn-small btn-secondary" onclick="openCategoryModal(null, '${c.id}')">+ Sotto</button>
                         <button class="btn btn-small btn-secondary" onclick="openCategoryModal('${c.id}')">✏️</button>
                         <button class="btn btn-small btn-danger" onclick="deleteCategory('${c.id}')">🗑️</button>
@@ -687,8 +704,9 @@
                 <div class="mgmt-group-body">
                     ${kids.length ? kids.map(k => `
                         <div class="mgmt-event-row">
-                            <div class="mgmt-event-info"><span class="mgmt-group-dot" style="background:${k.color || '#999'}"></span><span class="mgmt-event-name">${categoryLabel(k)}</span></div>
+                            <div class="mgmt-event-info"><span class="mgmt-group-dot" style="background:${k.color || '#999'}"></span><span class="mgmt-event-name">${categoryLabel(k)}</span> <span style="color:var(--muted);font-size:.8rem;">(${categoryTransactionCount(k.id)})</span></div>
                             <div class="mgmt-event-actions">
+                                <button class="btn btn-small btn-ghost" onclick="openCategoryTransactionsModal('${k.id}')" title="Vedi transazioni">📄</button>
                                 <button class="btn btn-small btn-secondary" onclick="openCategoryModal('${k.id}')">✏️</button>
                                 <button class="btn btn-small btn-danger" onclick="deleteCategory('${k.id}')">🗑️</button>
                             </div>
@@ -697,6 +715,52 @@
             </div>`;
         }).join('');
     }
+
+    function categoryTransactionCount(categoryId) {
+        return txCategories.filter(tc => tc.category_id === categoryId).length;
+    }
+
+    // Mostra le transazioni di una categoria/sotto-categoria, raggruppate per titolo
+    // (descrizione), con il gruppo più numeroso per primo.
+    function openCategoryTransactionsModal(categoryId) {
+        const cat = categories.find(c => c.id === categoryId);
+        if (!cat) return;
+        const txIds = new Set(txCategories.filter(tc => tc.category_id === categoryId).map(tc => tc.transaction_id));
+        const txs = transactions.filter(t => txIds.has(t.id));
+        document.getElementById('categoryTransactionsTitle').textContent = `${categoryLabel(cat)} (${txs.length})`;
+
+        const groups = {};
+        txs.forEach(t => {
+            const key = (t.description || '').trim() || '(senza descrizione)';
+            (groups[key] = groups[key] || []).push(t);
+        });
+        const sortedGroups = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+
+        const list = document.getElementById('categoryTransactionsList');
+        if (!sortedGroups.length) {
+            list.innerHTML = '<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione in questa categoria.</p></div>';
+        } else {
+            list.innerHTML = sortedGroups.map(([title, items]) => {
+                const total = items.reduce((s, t) => s + t.amount, 0);
+                const sortedItems = [...items].sort((a, b) => b.date.localeCompare(a.date));
+                return `<div class="mgmt-group-card">
+                    <div class="mgmt-group-header">
+                        <div class="mgmt-group-title" style="font-size:1rem;">${title} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${items.length}</span></div>
+                        <span class="mono ${total < 0 ? 'pts-neg' : 'pts-pos'}" style="font-weight:700;">${fmtEUR(total)}</span>
+                    </div>
+                    <div class="mgmt-group-body">
+                        ${sortedItems.map(t => `
+                            <div class="mgmt-event-row">
+                                <span>${formatDateIt(t.date)}</span>
+                                <span class="mono">${fmtEUR(t.amount)}</span>
+                            </div>`).join('')}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+        document.getElementById('categoryTransactionsModal').classList.add('active');
+    }
+    function closeCategoryTransactionsModal() { document.getElementById('categoryTransactionsModal').classList.remove('active'); }
 
     // Palette di colori facilmente distinguibili: ogni categoria/sotto-categoria ne ha uno univoco.
     const CATEGORY_COLOR_PALETTE = [
