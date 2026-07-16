@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisi Costi v1.0.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #6C5CE7;
+            --success: #00B894;
+            --warning: #F39C12;
+            --danger: #E74C3C;
+            --dark: #1F2937;
+            --light: #FFFFFF;
+            --muted: #6B7280;
+            --accent: #2563EB;
+            --border: #E5E7EB;
+            --card-bg: #FFFFFF;
+            --input-bg: #F9FAFB;
+            --font-mono: 'Space Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Darker Grotesque', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        .mono { font-family: var(--font-mono); }
+
+        /* ── GARSAL TOP BAR ── */
+        #garsal-top-bar {
+            position: fixed; top: 0; left: 0; right: 0; height: 56px;
+            background: #0081C8; display: flex; align-items: center;
+            padding: 0 20px; gap: 10px; z-index: 3000;
+        }
+        #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+
+        /* ===== LAYOUT ===== */
+        .app-container { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+
+        .sidebar { background: #F3F4F6; padding: 1.0rem 0.75rem; border-right: 1px solid var(--border); }
+
+        .logo {
+            font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700;
+            color: var(--accent); margin-bottom: 3rem; text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        .nav-menu { display: flex; flex-direction: column; }
+
+        .nav-item {
+            padding: 0.5rem 0.6rem; margin-bottom: 0.5rem; cursor: pointer;
+            transition: all 0.3s ease; font-size: 1.1rem; font-weight: 500; position: relative;
+        }
+        .nav-item:hover { background: rgba(255, 255, 255, 0.1); transform: translateX(5px); }
+        .nav-item.active { background: var(--primary); color: #fff; }
+
+        @media (min-width: 769px) {
+            .sidebar { display: block !important; position: relative !important; left: 0 !important; }
+            .nav-item::after { content: " " attr(data-text); }
+        }
+
+        /* ===== MAIN ===== */
+        .main-content { padding: 1.5rem; overflow-y: auto; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: .75rem; }
+
+        .page-title {
+            font-size: 2.3rem; font-weight: 900;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+
+        /* ===== BUTTONS ===== */
+        .btn {
+            padding: 0.45rem 0.9rem; border: none; cursor: pointer;
+            font-family: 'Darker Grotesque', sans-serif; font-size: 1rem; font-weight: 700;
+            transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .btn:hover { transform: translateY(-2px); opacity: 0.9; }
+        .btn:active { transform: translateY(0); }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-secondary { background: var(--border); color: var(--dark); }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-accent { background: var(--accent); color: white; }
+        .btn-small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+        .btn-ghost { background: transparent; border: 2px solid var(--border); color: var(--dark); }
+        .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ===== CARDS ===== */
+        .card { background: var(--card-bg); padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border); transition: all 0.2s; }
+        .card:hover { border-color: #d1d5db; }
+
+        /* ===== FORMS ===== */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; margin-bottom: 0.4rem; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--dark); }
+        .form-input, .form-select, .form-textarea {
+            width: 100%; padding: 0.5rem 0.65rem; border: 2px solid var(--border);
+            background: var(--input-bg); color: var(--dark); font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.05rem; transition: border-color 0.2s;
+        }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--accent); background: white; }
+        .form-hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+        input[type="color"].form-input { height: 48px; cursor: pointer; padding: 4px; }
+
+        /* ===== MODAL ===== */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); z-index: 2000;
+            align-items: center; justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content { background: white; padding: 1.5rem; max-width: 560px; width: 92%; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .modal-title { font-size: 1.6rem; font-weight: 900; color: var(--accent); }
+        .modal-close { font-size: 1.8rem; cursor: pointer; color: var(--muted); transition: all 0.2s; line-height: 1; }
+        .modal-close:hover { color: var(--danger); transform: rotate(90deg); }
+
+        /* ===== STATS STRIP ===== */
+        .stats-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+        .stat-box { padding: 0.75rem; border: 1px solid var(--border); text-align: center; background: var(--card-bg); }
+        .stat-val { font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; line-height: 1; }
+        .stat-lbl { font-size: 0.68rem; text-transform: uppercase; opacity: 0.6; margin-top: 0.3rem; letter-spacing: 0.5px; }
+
+        .pts-pos { color: var(--success); }
+        .pts-neg { color: var(--danger); }
+
+        /* ===== FILTER CHIPS / TAGS ===== */
+        .filter-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+        .chip {
+            padding: 0.25rem 0.7rem; border: 2px solid var(--border); font-size: 0.8rem; font-weight: 700;
+            cursor: pointer; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.3px; background: white;
+        }
+        .chip:hover { border-color: var(--accent); color: var(--accent); }
+        .chip.active { border-color: var(--primary); background: var(--primary); color: white; }
+
+        /* ===== MANAGEMENT CARDS (categorie/regole) ===== */
+        .mgmt-group-card { border: 1px solid var(--border); margin-bottom: 1.25rem; background: white; }
+        .mgmt-group-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+        .mgmt-group-title { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; font-size: 1.1rem; }
+        .mgmt-group-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+        .mgmt-group-body { padding: 0.75rem 1rem; }
+        .mgmt-event-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+        .mgmt-event-row:last-child { border-bottom: none; }
+        .mgmt-event-info { display: flex; align-items: center; gap: 0.6rem; }
+        .mgmt-event-name { font-weight: 600; font-size: 1rem; }
+        .mgmt-event-actions { display: flex; gap: 0.4rem; }
+
+        /* ===== TRANSACTION ROW ===== */
+        .tx-row { border: 1px solid var(--border); padding: 0.85rem; margin-bottom: 0.6rem; background: white; }
+        .tx-top { display: flex; justify-content: space-between; gap: 0.5rem; }
+        .tx-desc { font-weight: 700; }
+        .tx-amount { font-weight: 700; white-space: nowrap; }
+        .tx-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; }
+
+        /* ===== TOP ROW BARS (dashboard) ===== */
+        .top-event-row { margin-bottom: 0.75rem; }
+        .top-event-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+        .top-event-bar { height: 8px; background: var(--border); }
+        .top-event-bar-fill { height: 100%; transition: width 0.6s ease; }
+
+        /* ===== IMPORT DROPZONE ===== */
+        .dropzone { text-align: center; padding: 2.5rem 1.5rem; border: 2px dashed var(--border); }
+        .dropzone.dragover { border-color: var(--accent); background: rgba(37,99,235,0.05); }
+
+        /* ===== TOAST ===== */
+        .toast {
+            position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--dark); color: white;
+            padding: 0.9rem 1.4rem; z-index: 9999; font-weight: 700; font-size: 1rem;
+            border-left: 4px solid var(--success); transform: translateY(80px); opacity: 0;
+            transition: all 0.3s ease; max-width: 320px;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        /* ===== EMPTY STATE ===== */
+        .empty-state { text-align: center; padding: 3rem 1rem; opacity: 0.5; }
+        .empty-state .empty-icon { font-size: 3rem; margin-bottom: 0.75rem; }
+
+        .chart-wrap { position: relative; height: 280px; }
+
+        /* ===== MOBILE ===== */
+        @media (max-width: 768px) {
+            .app-container { grid-template-columns: 1fr; }
+            .sidebar {
+                display: flex !important; position: fixed !important; top: 56px !important; left: 0 !important;
+                right: 0 !important; width: 100% !important; height: auto !important; background: #F3F4F6 !important;
+                border-bottom: 2px solid var(--border) !important; border-right: none !important;
+                padding: 0.1rem 0 !important; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .logo { display: none !important; }
+            .nav-menu { display: flex !important; flex-direction: row !important; width: 100% !important; justify-content: space-around !important; align-items: center !important; gap: 0.2rem !important; margin: 0 !important; }
+            .nav-item { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; padding: 0.2rem 0.1rem !important; margin: 0 !important; font-size: 1.6rem !important; min-width: 0 !important; flex: 1 !important; text-align: center !important; transform: none !important; }
+            .nav-item:hover { transform: none !important; }
+            .nav-item::after { content: none !important; }
+            .main-content { padding: 0 0.75rem 1rem !important; padding-top: 4.5rem !important; }
+            .stats-strip { grid-template-columns: repeat(2, 1fr); }
+            .page-title { font-size: 1.7rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- GARSAL TOP BAR -->
+    <div id="garsal-top-bar">
+        <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+            <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
+            <div id="garsal-top-bar-text">Garsal Apps</div>
+        </a>
+    </div>
+
+    <!-- AUTH OVERLAY -->
+    <div id="authOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,15,30,0.97); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:1.5rem; font-family:inherit;">
+        <div style="font-size:3.5rem;">🔐</div>
+        <h2 style="color:#fff; margin:0; font-size:1.4rem; font-weight:700;">Accesso richiesto</h2>
+        <p style="color:#aaa; margin:0; text-align:center; max-width:320px; line-height:1.6;">Apri <strong style="color:#FF3366;">Analisi Costi</strong> da AppSphere per accedere con il tuo account Google.</p>
+        <a href="/" style="margin-top:0.5rem; padding:0.8rem 2rem; background:#FF3366; color:#fff; border-radius:10px; text-decoration:none; font-weight:700; font-size:0.95rem;">Vai ad AppSphere</a>
+    </div>
+
+<div class="app-container">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="logo">Analisi Costi</div>
+        <nav class="nav-menu">
+            <div class="nav-item active" onclick="showPage('dashboardPage', this)" data-text="Dashboard">📊</div>
+            <div class="nav-item" onclick="showPage('importPage', this)" data-text="Import">⬆️</div>
+            <div class="nav-item" onclick="showPage('transactionsPage', this)" data-text="Transazioni">💳</div>
+            <div class="nav-item" onclick="showPage('categoriesPage', this)" data-text="Categorie">🏷️</div>
+            <div class="nav-item" onclick="showPage('peoplePage', this)" data-text="Persone">👤</div>
+            <div class="nav-item" onclick="showPage('rulesPage', this)" data-text="Regole">🧩</div>
+        </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+
+        <!-- ====== DASHBOARD ====== -->
+        <div class="page active" id="dashboardPage">
+            <div class="page-header">
+                <h1 class="page-title">Dashboard</h1>
+                <select class="form-select" style="width:auto;" onchange="onDashPeriodChange(this)">
+                    <option value="month" selected>Questo mese</option>
+                    <option value="prevMonth">Mese scorso</option>
+                    <option value="3m">Ultimi 3 mesi</option>
+                    <option value="year">Quest'anno</option>
+                    <option value="all">Tutto</option>
+                </select>
+            </div>
+
+            <div class="stats-strip">
+                <div class="stat-box"><div class="stat-val pts-neg" id="dashTotSpeso">€0</div><div class="stat-lbl">Speso</div></div>
+                <div class="stat-box"><div class="stat-val pts-pos" id="dashTotEntrate">€0</div><div class="stat-lbl">Entrate</div></div>
+                <div class="stat-box"><div class="stat-val" style="color:var(--accent)" id="dashTotTx">0</div><div class="stat-lbl">Transazioni</div></div>
+                <div class="stat-box"><div class="stat-val" style="color:var(--warning)" id="dashUncategorized">0</div><div class="stat-lbl">Da categorizzare</div></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom:1rem;">Spesa per categoria</h3>
+                <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom:1rem;">Andamento mensile</h3>
+                <div class="chart-wrap" style="height:220px;"><canvas id="monthChart"></canvas></div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom:1rem;">Spesa per persona</h3>
+                <div id="personBreakdown"></div>
+            </div>
+        </div>
+
+        <!-- ====== IMPORT ====== -->
+        <div class="page" id="importPage">
+            <div class="page-header"><h1 class="page-title">Import Revolut</h1></div>
+            <div class="dropzone card" id="importDropzone">
+                <div style="font-size:2.5rem;margin-bottom:.5rem;">⬆️</div>
+                <p style="margin-bottom:1rem;">Carica il file CSV esportato da Revolut</p>
+                <input type="file" id="csvFileInput" accept=".csv,text/csv" style="display:none;" onchange="onCsvFileSelected(event)">
+                <button class="btn btn-primary" onclick="document.getElementById('csvFileInput').click()">Scegli File CSV</button>
+            </div>
+            <div class="form-hint" style="margin-top:1rem;">
+                Le transazioni vengono categorizzate automaticamente in base alle regole e ai merchant già appresi da correzioni precedenti. Quelle senza corrispondenza restano "da categorizzare" nella sezione Transazioni. Le transazioni con stessa data e importo di una già esistente vengono messe in revisione prima dell'import.
+            </div>
+        </div>
+
+        <!-- ====== TRANSAZIONI ====== -->
+        <div class="page" id="transactionsPage">
+            <div class="page-header"><h1 class="page-title">Transazioni</h1></div>
+            <div class="card">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+                    <input type="text" class="form-input" id="txFilterText" placeholder="Cerca descrizione..." oninput="onTxFilterChange()">
+                    <select class="form-select" id="txFilterCategory" onchange="onTxFilterChange()"></select>
+                    <select class="form-select" id="txFilterPerson" onchange="onTxFilterChange()"></select>
+                    <div style="display:flex;gap:.5rem;">
+                        <input type="date" class="form-input" id="txFilterFrom" onchange="onTxFilterChange()">
+                        <input type="date" class="form-input" id="txFilterTo" onchange="onTxFilterChange()">
+                    </div>
+                </div>
+            </div>
+            <div id="transactionsList"></div>
+        </div>
+
+        <!-- ====== CATEGORIE ====== -->
+        <div class="page" id="categoriesPage">
+            <div class="page-header">
+                <h1 class="page-title">Categorie</h1>
+                <button class="btn btn-primary" onclick="openCategoryModal(null)">+ Nuova Categoria</button>
+            </div>
+            <div id="categoriesList"></div>
+        </div>
+
+        <!-- ====== PERSONE ====== -->
+        <div class="page" id="peoplePage">
+            <div class="page-header">
+                <h1 class="page-title">Persone</h1>
+                <button class="btn btn-primary" onclick="openPersonModal(null)">+ Nuova Persona</button>
+            </div>
+            <div id="peopleList"></div>
+        </div>
+
+        <!-- ====== REGOLE ====== -->
+        <div class="page" id="rulesPage">
+            <div class="page-header">
+                <h1 class="page-title">Regole</h1>
+            </div>
+
+            <div class="page-header" style="margin-bottom:0.75rem;">
+                <h3>Categoria (una descrizione può matchare più regole → più tag)</h3>
+                <button class="btn btn-small btn-primary" onclick="openRuleModal(null)">+ Regola</button>
+            </div>
+            <div id="categoryRulesList" style="margin-bottom:2rem;"></div>
+
+            <div class="page-header" style="margin-bottom:0.75rem;">
+                <h3>Persona (prima regola che matcha vince)</h3>
+                <button class="btn btn-small btn-primary" onclick="openPersonRuleModal(null)">+ Regola</button>
+            </div>
+            <div id="personRulesList"></div>
+        </div>
+
+    </main>
+</div>
+
+<!-- ====== MODAL: CATEGORIA ====== -->
+<div class="modal" id="categoryModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="categoryModalTitle">Nuova Categoria</h2>
+            <span class="modal-close" onclick="closeCategoryModal()">✕</span>
+        </div>
+        <form onsubmit="saveCategory(event)">
+            <input type="hidden" id="editCategoryId">
+            <div class="form-group">
+                <label class="form-label">Nome *</label>
+                <input type="text" class="form-input" id="categoryName" required placeholder="Es: Spesa, Trasporti, Bollette...">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+                <div class="form-group">
+                    <label class="form-label">Icona (emoji)</label>
+                    <input type="text" class="form-input" id="categoryIcon" placeholder="🛒" maxlength="4">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Colore</label>
+                    <input type="color" class="form-input" id="categoryColor" value="#2563EB">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Categoria padre</label>
+                <select class="form-select" id="categoryParent"></select>
+                <div class="form-hint">Lascia vuoto per una categoria principale, oppure scegli una categoria padre per creare una sotto-categoria.</div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Categoria</button>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL: PERSONA ====== -->
+<div class="modal" id="personModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="personModalTitle">Nuova Persona</h2>
+            <span class="modal-close" onclick="closePersonModal()">✕</span>
+        </div>
+        <form onsubmit="savePerson(event)">
+            <input type="hidden" id="editPersonId">
+            <div class="form-group">
+                <label class="form-label">Nome *</label>
+                <input type="text" class="form-input" id="personName" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Colore</label>
+                <input type="color" class="form-input" id="personColor" value="#2563EB">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Persona</button>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL: REGOLA CATEGORIA ====== -->
+<div class="modal" id="ruleModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="ruleModalTitle">Nuova Regola Categoria</h2>
+            <span class="modal-close" onclick="closeRuleModal()">✕</span>
+        </div>
+        <form onsubmit="saveRule(event)">
+            <input type="hidden" id="editRuleId">
+            <div class="form-group">
+                <label class="form-label">Testo da cercare nella descrizione *</label>
+                <input type="text" class="form-input" id="rulePattern" required placeholder="Es: ESSELUNGA">
+                <div class="form-hint">Confronto case-insensitive, sottostringa della descrizione della transazione.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Categoria *</label>
+                <select class="form-select" id="ruleCategory" required></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Priorità</label>
+                <input type="number" class="form-input" id="rulePriority" value="0">
+                <div class="form-hint">Non determina la vittoria (più regole possono applicarsi insieme), usata solo per ordinare la lista.</div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Regola</button>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL: REGOLA PERSONA ====== -->
+<div class="modal" id="personRuleModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="personRuleModalTitle">Nuova Regola Persona</h2>
+            <span class="modal-close" onclick="closePersonRuleModal()">✕</span>
+        </div>
+        <form onsubmit="savePersonRule(event)">
+            <input type="hidden" id="editPersonRuleId">
+            <div class="form-group">
+                <label class="form-label">Testo da cercare nella descrizione *</label>
+                <input type="text" class="form-input" id="personRulePattern" required placeholder="Es: TERESA">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Persona *</label>
+                <select class="form-select" id="personRulePerson" required></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Priorità</label>
+                <input type="number" class="form-input" id="personRulePriority" value="0">
+                <div class="form-hint">A parità di match vince la priorità più alta (una sola persona per transazione).</div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Regola</button>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL: EDITOR TAG CATEGORIA ====== -->
+<div class="modal" id="tagEditorModal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Categorie transazione</h2>
+            <span class="modal-close" onclick="closeTagEditor()">✕</span>
+        </div>
+        <div id="tagEditorList" style="max-height:50vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="saveTagEditor()">Salva</button>
+            <button class="btn btn-secondary" onclick="closeTagEditor()">Annulla</button>
+        </div>
+    </div>
+</div>
+
+<!-- ====== MODAL: REVISIONE IMPORT ====== -->
+<div class="modal" id="importReviewModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="importReviewTitle">Verifica duplicati</h2>
+            <span class="modal-close" onclick="closeImportReview()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:1rem;">Seleziona le transazioni che vuoi importare comunque (stessa data e importo di una già presente).</p>
+        <div id="importReviewList" style="max-height:50vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmImportReview()">Importa selezionate</button>
+            <button class="btn btn-secondary" onclick="closeImportReview()">Ignora tutte</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    // ==========================================
+    // VERSION
+    // ==========================================
+    var APP_VERSION = 'v1.0.0';
+    var BUILD_TIME  = '2026-07-16T19:00:00Z';
+    console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+        'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+        'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+    // ==========================================
+    // SUPABASE — client inizializzato dopo auth
+    // ==========================================
+    const _DEV_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0'];
+    const _IS_DEV = _DEV_HOSTS.includes(window.location.hostname)
+                 || (window.location.hostname.endsWith('.netlify.app')
+                    && window.location.hostname.startsWith('dev--'));
+    const SUPABASE_URL = _IS_DEV
+        ? 'https://hcmmywitrbmcsmytjbaf.supabase.co'
+        : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+    const SUPABASE_KEY = _IS_DEV
+        ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbW15d2l0cmJtY3NteXRqYmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3ODE1NDUsImV4cCI6MjA4OTM1NzU0NX0.pAtj6THjWXibrMulU1IVGH-BFx4YkjkNT_x07lNUfWE'
+        : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+    let sb            = null; // inizializzato in initWithToken()
+    let sbAccessToken = null;
+
+    function initWithToken(token) {
+        if (sb) return;
+        sbAccessToken = token;
+        localStorage.setItem('sb_token', token);
+        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth:   { persistSession: false, autoRefreshToken: false },
+            global: { headers: { Authorization: 'Bearer ' + token } }
+        });
+        console.log('✅ Supabase autenticato (Analisi Costi ' + APP_VERSION + ')');
+        document.getElementById('authOverlay').style.display = 'none';
+        startApp();
+    }
+
+    function handleAuthError(error) {
+        if (!error) return false;
+        const msg = (error.message || '').toLowerCase();
+        const isAuthError = error.status === 401
+            || msg.includes('jwt expired')
+            || msg.includes('invalid jwt')
+            || msg.includes('not authenticated')
+            || msg.includes('pgjwt');
+        if (!isAuthError) return false;
+        console.warn('🔒 Token scaduto — sessione invalidata');
+        sb = null;
+        sbAccessToken = null;
+        localStorage.removeItem('sb_token');
+        document.getElementById('authOverlay').style.display = 'flex';
+        return true;
+    }
+
+    function decodeJWT(token) {
+        try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); }
+        catch(e) { return null; }
+    }
+
+    function currentUserId() { return decodeJWT(sbAccessToken)?.sub; }
+
+    // ==========================================
+    // DATA STORE
+    // ==========================================
+    let categories = [];
+    let people = [];
+    let rules = [];
+    let personRules = [];
+    let transactions = [];
+    let txCategories = [];
+    let merchantMap = [];
+    let merchantMapCategories = [];
+
+    // ==========================================
+    // UTIL
+    // ==========================================
+    function fmtEUR(v) { return (v || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }); }
+    function formatDateIt(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
+    function categoryLabel(c) { return (c.icon ? c.icon + ' ' : '') + c.name; }
+
+    function showToast(msg, isError) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast show' + (isError ? ' error' : '');
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ==========================================
+    // PAGES / NAV
+    // ==========================================
+    function showPage(pageId, navEl) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        if (navEl) navEl.classList.add('active');
+        renderPageContent(pageId);
+    }
+
+    function renderActivePage() {
+        const activePage = document.querySelector('.page.active');
+        renderPageContent(activePage ? activePage.id : 'dashboardPage');
+    }
+
+    function renderPageContent(pageId) {
+        switch (pageId) {
+            case 'dashboardPage':     renderDashboard(); break;
+            case 'transactionsPage':  renderTransactions(); break;
+            case 'categoriesPage':    renderCategories(); break;
+            case 'peoplePage':        renderPeople(); break;
+            case 'rulesPage':         renderRules(); break;
+        }
+    }
+
+    // ==========================================
+    // CATEGORIE
+    // ==========================================
+    async function loadCategories() {
+        const { data, error } = await sb.from('ca_categories').select('*').order('name');
+        if (handleAuthError(error)) return;
+        if (error) { console.error(error); return; }
+        categories = data || [];
+    }
+
+    function topCategories() { return categories.filter(c => !c.parent_id); }
+    function childCategories(parentId) { return categories.filter(c => c.parent_id === parentId); }
+
+    function renderCategories() {
+        const container = document.getElementById('categoriesList');
+        const tops = topCategories();
+        if (!tops.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessuna categoria. Creane una per iniziare.</p></div>';
+            return;
+        }
+        container.innerHTML = tops.map(c => {
+            const kids = childCategories(c.id);
+            return `
+            <div class="mgmt-group-card">
+                <div class="mgmt-group-header">
+                    <div class="mgmt-group-title"><span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}</div>
+                    <div class="mgmt-event-actions">
+                        <button class="btn btn-small btn-secondary" onclick="openCategoryModal(null, '${c.id}')">+ Sotto</button>
+                        <button class="btn btn-small btn-secondary" onclick="openCategoryModal('${c.id}')">✏️</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteCategory('${c.id}')">🗑️</button>
+                    </div>
+                </div>
+                <div class="mgmt-group-body">
+                    ${kids.length ? kids.map(k => `
+                        <div class="mgmt-event-row">
+                            <div class="mgmt-event-info"><span class="mgmt-group-dot" style="background:${k.color || '#999'}"></span><span class="mgmt-event-name">${categoryLabel(k)}</span></div>
+                            <div class="mgmt-event-actions">
+                                <button class="btn btn-small btn-secondary" onclick="openCategoryModal('${k.id}')">✏️</button>
+                                <button class="btn btn-small btn-danger" onclick="deleteCategory('${k.id}')">🗑️</button>
+                            </div>
+                        </div>`).join('') : '<div style="opacity:.5;font-size:.85rem;padding:.4rem 0;">Nessuna sotto-categoria</div>'}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function openCategoryModal(id, presetParentId) {
+        document.getElementById('editCategoryId').value = id || '';
+        const cat = id ? categories.find(c => c.id === id) : null;
+        document.getElementById('categoryModalTitle').textContent = cat ? 'Modifica Categoria' : 'Nuova Categoria';
+        document.getElementById('categoryName').value = cat ? cat.name : '';
+        document.getElementById('categoryIcon').value = cat ? (cat.icon || '') : '';
+        document.getElementById('categoryColor').value = cat ? (cat.color || '#2563EB') : '#2563EB';
+        const parentSel = document.getElementById('categoryParent');
+        parentSel.innerHTML = '<option value="">— Nessuna (categoria principale) —</option>' +
+            topCategories().filter(c => c.id !== id).map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
+        parentSel.value = cat ? (cat.parent_id || '') : (presetParentId || '');
+        document.getElementById('categoryModal').classList.add('active');
+    }
+    function closeCategoryModal() { document.getElementById('categoryModal').classList.remove('active'); }
+
+    async function saveCategory(e) {
+        e.preventDefault();
+        const id = document.getElementById('editCategoryId').value;
+        const payload = {
+            name: document.getElementById('categoryName').value.trim(),
+            icon: document.getElementById('categoryIcon').value.trim(),
+            color: document.getElementById('categoryColor').value,
+            parent_id: document.getElementById('categoryParent').value || null,
+            user_id: currentUserId()
+        };
+        if (!payload.name) return;
+        let error;
+        if (id) { ({ error } = await sb.from('ca_categories').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_categories').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeCategoryModal();
+        await loadCategories();
+        renderCategories();
+        showToast('✅ Categoria salvata');
+    }
+
+    async function deleteCategory(id) {
+        if (!confirm('Eliminare questa categoria? Le sotto-categorie e i tag associati verranno rimossi.')) return;
+        const { error } = await sb.from('ca_categories').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        await loadCategories();
+        await loadTransactions();
+        renderCategories();
+        showToast('🗑️ Categoria eliminata');
+    }
+
+    // ==========================================
+    // PERSONE
+    // ==========================================
+    async function loadPeople() {
+        const { data, error } = await sb.from('ca_people').select('*').order('name');
+        if (handleAuthError(error)) return;
+        if (error) { console.error(error); return; }
+        people = data || [];
+    }
+
+    function renderPeople() {
+        const container = document.getElementById('peopleList');
+        if (!people.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>Nessuna persona. Creane una per iniziare.</p></div>';
+            return;
+        }
+        container.innerHTML = people.map(p => `
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:.6rem;font-weight:700;">
+                    <span class="mgmt-group-dot" style="background:${p.color || '#999'}"></span>${p.name}
+                </div>
+                <div class="mgmt-event-actions">
+                    <button class="btn btn-small btn-secondary" onclick="openPersonModal('${p.id}')">✏️</button>
+                    <button class="btn btn-small btn-danger" onclick="deletePerson('${p.id}')">🗑️</button>
+                </div>
+            </div>`).join('');
+    }
+
+    function openPersonModal(id) {
+        document.getElementById('editPersonId').value = id || '';
+        const p = id ? people.find(x => x.id === id) : null;
+        document.getElementById('personModalTitle').textContent = p ? 'Modifica Persona' : 'Nuova Persona';
+        document.getElementById('personName').value = p ? p.name : '';
+        document.getElementById('personColor').value = p ? (p.color || '#2563EB') : '#2563EB';
+        document.getElementById('personModal').classList.add('active');
+    }
+    function closePersonModal() { document.getElementById('personModal').classList.remove('active'); }
+
+    async function savePerson(e) {
+        e.preventDefault();
+        const id = document.getElementById('editPersonId').value;
+        const payload = { name: document.getElementById('personName').value.trim(), color: document.getElementById('personColor').value, user_id: currentUserId() };
+        if (!payload.name) return;
+        let error;
+        if (id) { ({ error } = await sb.from('ca_people').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_people').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closePersonModal();
+        await loadPeople();
+        renderPeople();
+        showToast('✅ Persona salvata');
+    }
+
+    async function deletePerson(id) {
+        if (!confirm('Eliminare questa persona?')) return;
+        const { error } = await sb.from('ca_people').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        await loadPeople();
+        await loadTransactions();
+        renderPeople();
+        showToast('🗑️ Persona eliminata');
+    }
+
+    // ==========================================
+    // REGOLE
+    // ==========================================
+    async function loadRules() {
+        const { data, error } = await sb.from('ca_rules').select('*').order('priority', { ascending: false });
+        if (handleAuthError(error)) return;
+        rules = data || [];
+    }
+    async function loadPersonRules() {
+        const { data, error } = await sb.from('ca_person_rules').select('*').order('priority', { ascending: false });
+        if (handleAuthError(error)) return;
+        personRules = data || [];
+    }
+
+    function renderRules() {
+        const catContainer = document.getElementById('categoryRulesList');
+        catContainer.innerHTML = !rules.length
+            ? '<div class="empty-state"><div class="empty-icon">🧩</div><p>Nessuna regola categoria.</p></div>'
+            : rules.map(r => {
+                const cat = categories.find(c => c.id === r.category_id);
+                return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;">
+                    <div><span class="mono" style="font-weight:700;">"${r.pattern}"</span> → ${cat ? categoryLabel(cat) : '—'} <span style="opacity:.5;font-size:.8rem;">(priorità ${r.priority || 0})</span></div>
+                    <div class="mgmt-event-actions">
+                        <button class="btn btn-small btn-secondary" onclick="openRuleModal('${r.id}')">✏️</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteRule('${r.id}')">🗑️</button>
+                    </div>
+                </div>`;
+            }).join('');
+
+        const personContainer = document.getElementById('personRulesList');
+        personContainer.innerHTML = !personRules.length
+            ? '<div class="empty-state"><div class="empty-icon">🧩</div><p>Nessuna regola persona.</p></div>'
+            : personRules.map(r => {
+                const p = people.find(x => x.id === r.person_id);
+                return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;">
+                    <div><span class="mono" style="font-weight:700;">"${r.pattern}"</span> → ${p ? p.name : '—'} <span style="opacity:.5;font-size:.8rem;">(priorità ${r.priority || 0})</span></div>
+                    <div class="mgmt-event-actions">
+                        <button class="btn btn-small btn-secondary" onclick="openPersonRuleModal('${r.id}')">✏️</button>
+                        <button class="btn btn-small btn-danger" onclick="deletePersonRule('${r.id}')">🗑️</button>
+                    </div>
+                </div>`;
+            }).join('');
+    }
+
+    function openRuleModal(id) {
+        document.getElementById('editRuleId').value = id || '';
+        const r = id ? rules.find(x => x.id === id) : null;
+        document.getElementById('ruleModalTitle').textContent = r ? 'Modifica Regola' : 'Nuova Regola Categoria';
+        document.getElementById('rulePattern').value = r ? r.pattern : '';
+        document.getElementById('rulePriority').value = r ? (r.priority || 0) : 0;
+        const sel = document.getElementById('ruleCategory');
+        sel.innerHTML = categories.map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
+        sel.value = r ? r.category_id : (categories[0]?.id || '');
+        document.getElementById('ruleModal').classList.add('active');
+    }
+    function closeRuleModal() { document.getElementById('ruleModal').classList.remove('active'); }
+
+    async function saveRule(e) {
+        e.preventDefault();
+        const id = document.getElementById('editRuleId').value;
+        const payload = {
+            pattern: document.getElementById('rulePattern').value.trim(),
+            category_id: document.getElementById('ruleCategory').value,
+            priority: parseInt(document.getElementById('rulePriority').value) || 0,
+            user_id: currentUserId()
+        };
+        if (!payload.pattern || !payload.category_id) return;
+        let error;
+        if (id) { ({ error } = await sb.from('ca_rules').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_rules').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeRuleModal();
+        await loadRules();
+        renderRules();
+        showToast('✅ Regola salvata');
+    }
+
+    async function deleteRule(id) {
+        if (!confirm('Eliminare questa regola?')) return;
+        const { error } = await sb.from('ca_rules').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        await loadRules();
+        renderRules();
+        showToast('🗑️ Regola eliminata');
+    }
+
+    function openPersonRuleModal(id) {
+        document.getElementById('editPersonRuleId').value = id || '';
+        const r = id ? personRules.find(x => x.id === id) : null;
+        document.getElementById('personRuleModalTitle').textContent = r ? 'Modifica Regola' : 'Nuova Regola Persona';
+        document.getElementById('personRulePattern').value = r ? r.pattern : '';
+        document.getElementById('personRulePriority').value = r ? (r.priority || 0) : 0;
+        const sel = document.getElementById('personRulePerson');
+        sel.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        sel.value = r ? r.person_id : (people[0]?.id || '');
+        document.getElementById('personRuleModal').classList.add('active');
+    }
+    function closePersonRuleModal() { document.getElementById('personRuleModal').classList.remove('active'); }
+
+    async function savePersonRule(e) {
+        e.preventDefault();
+        const id = document.getElementById('editPersonRuleId').value;
+        const payload = {
+            pattern: document.getElementById('personRulePattern').value.trim(),
+            person_id: document.getElementById('personRulePerson').value,
+            priority: parseInt(document.getElementById('personRulePriority').value) || 0,
+            user_id: currentUserId()
+        };
+        if (!payload.pattern || !payload.person_id) return;
+        let error;
+        if (id) { ({ error } = await sb.from('ca_person_rules').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_person_rules').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closePersonRuleModal();
+        await loadPersonRules();
+        renderRules();
+        showToast('✅ Regola salvata');
+    }
+
+    async function deletePersonRule(id) {
+        if (!confirm('Eliminare questa regola?')) return;
+        const { error } = await sb.from('ca_person_rules').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        await loadPersonRules();
+        renderRules();
+        showToast('🗑️ Regola eliminata');
+    }
+
+    // ==========================================
+    // MERCHANT MAP (apprendimento)
+    // ==========================================
+    async function loadMerchantMap() {
+        const { data: mm, error: e1 } = await sb.from('ca_merchant_map').select('*');
+        if (handleAuthError(e1)) return;
+        const { data: mmc, error: e2 } = await sb.from('ca_merchant_map_categories').select('*');
+        if (handleAuthError(e2)) return;
+        merchantMap = mm || [];
+        merchantMapCategories = mmc || [];
+    }
+
+    function normalizeMerchant(desc) {
+        return (desc || '').toUpperCase().trim().replace(/\s+/g, ' ').replace(/[*#]?\s*\d{3,}$/, '').trim();
+    }
+
+    async function learnMerchantCategories(description, categoryIds) {
+        const key = normalizeMerchant(description);
+        if (!key) return;
+        let mm = merchantMap.find(m => m.merchant_key === key);
+        if (!mm) {
+            const { data, error } = await sb.from('ca_merchant_map').insert({ user_id: currentUserId(), merchant_key: key }).select().single();
+            if (handleAuthError(error) || error) return;
+            mm = data;
+            merchantMap.push(mm);
+        } else {
+            await sb.from('ca_merchant_map').update({ updated_at: new Date().toISOString() }).eq('id', mm.id);
+        }
+        await sb.from('ca_merchant_map_categories').delete().eq('merchant_map_id', mm.id);
+        merchantMapCategories = merchantMapCategories.filter(c => c.merchant_map_id !== mm.id);
+        if (categoryIds.length) {
+            const rows = categoryIds.map(cid => ({ merchant_map_id: mm.id, category_id: cid }));
+            await sb.from('ca_merchant_map_categories').insert(rows);
+            merchantMapCategories.push(...rows);
+        }
+    }
+
+    // ==========================================
+    // CATEGORIZZAZIONE (algoritmo)
+    // ==========================================
+    function matchesPattern(description, pattern) {
+        return (description || '').toUpperCase().includes((pattern || '').toUpperCase());
+    }
+
+    function categorizeRow(description) {
+        const key = normalizeMerchant(description);
+        const mm = merchantMap.find(m => m.merchant_key === key);
+        let categoryIds = [], catSource = 'uncategorized';
+        if (mm) {
+            categoryIds = merchantMapCategories.filter(c => c.merchant_map_id === mm.id).map(c => c.category_id);
+            if (categoryIds.length) catSource = 'learned';
+        }
+        if (!categoryIds.length) {
+            const matched = rules.filter(r => matchesPattern(description, r.pattern));
+            if (matched.length) { categoryIds = [...new Set(matched.map(r => r.category_id))]; catSource = 'rule'; }
+        }
+        let personId = null, personSource = 'unassigned';
+        const sortedPersonRules = [...personRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+        const pMatch = sortedPersonRules.find(r => matchesPattern(description, r.pattern));
+        if (pMatch) { personId = pMatch.person_id; personSource = 'rule'; }
+        return { categoryIds, catSource, personId, personSource };
+    }
+
+    async function insertTransactionRow(item) {
+        const { categoryIds, catSource, personId, personSource } = categorizeRow(item.description);
+        const { data, error } = await sb.from('ca_transactions').insert({
+            user_id: currentUserId(),
+            date: item.date, amount: item.amount, currency: item.currency,
+            description: item.description, type: item.type,
+            person_id: personId, person_source: personSource,
+            raw: item.raw
+        }).select().single();
+        if (handleAuthError(error)) return null;
+        if (error) { console.error('Errore import transazione:', error, item); return null; }
+        if (categoryIds.length) {
+            const rows = categoryIds.map(cid => ({ transaction_id: data.id, category_id: cid, source: catSource }));
+            await sb.from('ca_transaction_categories').insert(rows);
+        }
+        return data;
+    }
+
+    // ==========================================
+    // CSV PARSING & IMPORT REVOLUT
+    // ==========================================
+    function parseCSV(text, delim) {
+        const rows = [];
+        let i = 0, line = [], field = '', inQuotes = false;
+        const next = () => { line.push(field); field = ''; };
+        const nl = () => { next(); if (line.some(f => f !== '')) rows.push(line); line = []; };
+        while (i < text.length) {
+            const ch = text[i];
+            if (inQuotes) {
+                if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; } }
+                else field += ch;
+            } else {
+                if (ch === '"') inQuotes = true;
+                else if (ch === delim) next();
+                else if (ch === '\n') nl();
+                else if (ch === '\r') { /* skip */ }
+                else field += ch;
+            }
+            i++;
+        }
+        nl();
+        return rows;
+    }
+
+    function findColIdx(header, names) {
+        for (const n of names) { const i = header.indexOf(n.toLowerCase()); if (i !== -1) return i; }
+        return -1;
+    }
+
+    async function onCsvFileSelected(e) {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        showToast('⏳ Import in corso...');
+        try { await handleRevolutFile(file); }
+        catch (err) { console.error(err); alert('Errore durante l\'import: ' + err.message); }
+    }
+
+    async function handleRevolutFile(file) {
+        const text = (await file.text()).trim().replace(/^﻿/, '');
+        const firstLine = text.split('\n')[0];
+        const delim = firstLine.includes(';') ? ';' : ',';
+        const rows = parseCSV(text, delim);
+        if (rows.length < 2) { alert('File vuoto o non valido.'); return; }
+        const header = rows[0].map(h => h.trim().toLowerCase());
+        const idx = {
+            type: findColIdx(header, ['Type', 'Tipo']),
+            date: findColIdx(header, ['Started Date', 'Data di inizio', 'Completed Date', 'Data di completamento', 'Date', 'Data']),
+            amount: findColIdx(header, ['Amount', 'Importo']),
+            currency: findColIdx(header, ['Currency', 'Valuta']),
+            desc: findColIdx(header, ['Description', 'Descrizione']),
+            state: findColIdx(header, ['State', 'Stato'])
+        };
+        if (idx.amount === -1 || idx.date === -1) {
+            alert('Formato CSV Revolut non riconosciuto.\n\nAssicurati che il file contenga le colonne: Tipo, Data, Importo, Descrizione, Stato.');
+            return;
+        }
+        const items = [];
+        for (const r of rows.slice(1)) {
+            if (!r.length || r.every(f => f === '')) continue;
+            const state = (idx.state !== -1 ? (r[idx.state] || '') : 'COMPLETED').toUpperCase();
+            if (state && state !== 'COMPLETED' && state !== 'COMPLETATO') continue;
+            const dateRaw = (r[idx.date] || '').split(' ')[0].split('T')[0];
+            if (!dateRaw) continue;
+            const amount = parseFloat((r[idx.amount] || '0').replace(',', '.'));
+            if (Number.isNaN(amount)) continue;
+            items.push({
+                date: dateRaw,
+                amount: amount,
+                currency: idx.currency !== -1 ? r[idx.currency] : null,
+                description: idx.desc !== -1 ? r[idx.desc] : '',
+                type: idx.type !== -1 ? r[idx.type] : null,
+                raw: Object.fromEntries(header.map((h, i) => [h, r[i]]))
+            });
+        }
+        await importItemsWithReview(items);
+    }
+
+    function findImportConflicts(items) {
+        const byKey = new Map();
+        for (const t of transactions) {
+            const key = `${t.date}|${t.amount}`;
+            if (!byKey.has(key)) byKey.set(key, []);
+            byKey.get(key).push(t);
+        }
+        const autoItems = [], conflicts = [];
+        for (const item of items) {
+            const key = `${item.date}|${item.amount}`;
+            if (byKey.has(key)) conflicts.push({ item, matches: byKey.get(key) });
+            else autoItems.push(item);
+        }
+        return { autoItems, conflicts };
+    }
+
+    async function importItemsWithReview(items) {
+        if (!items.length) { alert('Nessuna transazione valida trovata nel file.'); return; }
+        const { autoItems, conflicts } = findImportConflicts(items);
+        let imported = 0;
+        for (const item of autoItems) { if (await insertTransactionRow(item)) imported++; }
+        if (!conflicts.length) {
+            await loadTransactions();
+            renderActivePage();
+            alert(`✅ Importazione completata!\n\nCaricate: ${imported}`);
+            return;
+        }
+        await loadTransactions();
+        openImportReview(conflicts, imported);
+    }
+
+    let _reviewState = null;
+    function openImportReview(conflicts, autoImported) {
+        _reviewState = { conflicts, autoImported };
+        const list = document.getElementById('importReviewList');
+        list.innerHTML = conflicts.map((c, i) => `
+            <div class="card">
+                <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;">
+                    <input type="checkbox" id="review-chk-${i}" style="margin-top:4px;">
+                    <div style="flex:1;">
+                        <div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">${formatDateIt(c.item.date)} · ${fmtEUR(c.item.amount)}</div>
+                        <div style="font-weight:700;">${c.item.description || ''}</div>
+                        <div style="font-size:.8rem;color:var(--muted);margin-top:.3rem;">Già presente: ${c.matches.map(m => m.description || '').join(', ')}</div>
+                    </div>
+                </label>
+            </div>`).join('');
+        document.getElementById('importReviewTitle').textContent =
+            `Verifica ${conflicts.length} transazion${conflicts.length === 1 ? 'e' : 'i'} con stessa data e importo`;
+        document.getElementById('importReviewModal').classList.add('active');
+    }
+    function closeImportReview() {
+        document.getElementById('importReviewModal').classList.remove('active');
+        if (_reviewState) alert(`Importazione completata!\n\nCaricate automaticamente: ${_reviewState.autoImported}\nIgnorate: ${_reviewState.conflicts.length}`);
+        _reviewState = null;
+        loadTransactions().then(renderActivePage);
+    }
+    async function confirmImportReview() {
+        if (!_reviewState) return;
+        const { conflicts, autoImported } = _reviewState;
+        const selected = conflicts.filter((c, i) => document.getElementById(`review-chk-${i}`)?.checked).map(c => c.item);
+        document.getElementById('importReviewModal').classList.remove('active');
+        let confirmedImported = 0;
+        for (const item of selected) { if (await insertTransactionRow(item)) confirmedImported++; }
+        const skipped = conflicts.length - selected.length;
+        _reviewState = null;
+        await loadTransactions();
+        renderActivePage();
+        alert(`✅ Importazione completata!\n\nCaricate automaticamente: ${autoImported}\nConfermate manualmente: ${confirmedImported}\nIgnorate: ${skipped}`);
+    }
+
+    // ==========================================
+    // TRANSAZIONI
+    // ==========================================
+    let txFilters = { text: '', categoryId: '', personId: '', from: '', to: '' };
+
+    async function loadTransactions() {
+        const { data: txs, error: e1 } = await sb.from('ca_transactions').select('*').order('date', { ascending: false });
+        if (handleAuthError(e1)) return;
+        const { data: tcs, error: e2 } = await sb.from('ca_transaction_categories').select('*');
+        if (handleAuthError(e2)) return;
+        transactions = txs || [];
+        txCategories = tcs || [];
+    }
+
+    function getTxCategoryIds(txId) { return txCategories.filter(tc => tc.transaction_id === txId).map(tc => tc.category_id); }
+
+    function filteredTransactions() {
+        return transactions.filter(t => {
+            if (txFilters.text && !(t.description || '').toLowerCase().includes(txFilters.text.toLowerCase())) return false;
+            if (txFilters.categoryId) {
+                const ids = getTxCategoryIds(t.id);
+                if (txFilters.categoryId === '__none__') { if (ids.length) return false; }
+                else if (!ids.includes(txFilters.categoryId)) return false;
+            }
+            if (txFilters.personId && t.person_id !== txFilters.personId) return false;
+            if (txFilters.from && t.date < txFilters.from) return false;
+            if (txFilters.to && t.date > txFilters.to) return false;
+            return true;
+        });
+    }
+
+    function renderTransactionFilters() {
+        const catSel = document.getElementById('txFilterCategory');
+        catSel.innerHTML = '<option value="">Tutte le categorie</option><option value="__none__">Da categorizzare</option>' +
+            categories.map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
+        catSel.value = txFilters.categoryId;
+        const perSel = document.getElementById('txFilterPerson');
+        perSel.innerHTML = '<option value="">Tutte le persone</option>' + people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        perSel.value = txFilters.personId;
+    }
+
+    function onTxFilterChange() {
+        txFilters.text = document.getElementById('txFilterText').value;
+        txFilters.categoryId = document.getElementById('txFilterCategory').value;
+        txFilters.personId = document.getElementById('txFilterPerson').value;
+        txFilters.from = document.getElementById('txFilterFrom').value;
+        txFilters.to = document.getElementById('txFilterTo').value;
+        renderTransactionsList();
+    }
+
+    function renderTransactions() {
+        renderTransactionFilters();
+        renderTransactionsList();
+    }
+
+    function renderTransactionsList() {
+        const list = filteredTransactions();
+        const container = document.getElementById('transactionsList');
+        if (!list.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione trovata.</p></div>';
+            return;
+        }
+        container.innerHTML = list.map(t => {
+            const catIds = getTxCategoryIds(t.id);
+            const chips = catIds.map(cid => {
+                const c = categories.find(x => x.id === cid);
+                return `<span class="chip active" style="cursor:default;">${c ? categoryLabel(c) : '?'} <span style="cursor:pointer;" onclick="removeTxCategory('${t.id}','${cid}')">✕</span></span>`;
+            }).join('');
+            const personOptions = ['<option value="">— Persona —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+            return `
+            <div class="tx-row">
+                <div class="tx-top">
+                    <span class="tx-desc">${t.description || '(senza descrizione)'}</span>
+                    <span class="tx-amount mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
+                </div>
+                <div class="tx-meta">${formatDateIt(t.date)} ${t.type ? '· ' + t.type : ''}</div>
+                <div class="filter-chips" style="margin:.6rem 0 0;">
+                    ${chips}
+                    <span class="chip" onclick="openTagEditor('${t.id}')">+ tag</span>
+                </div>
+                <div style="margin-top:.5rem;">
+                    <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function setTxPerson(txId, personId) {
+        const { error } = await sb.from('ca_transactions').update({ person_id: personId || null, person_source: 'manual' }).eq('id', txId);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        const t = transactions.find(x => x.id === txId);
+        if (t) { t.person_id = personId || null; t.person_source = 'manual'; }
+        showToast('✅ Persona aggiornata');
+    }
+
+    async function removeTxCategory(txId, categoryId) {
+        const { error } = await sb.from('ca_transaction_categories').delete().eq('transaction_id', txId).eq('category_id', categoryId);
+        if (handleAuthError(error)) return;
+        txCategories = txCategories.filter(tc => !(tc.transaction_id === txId && tc.category_id === categoryId));
+        const t = transactions.find(x => x.id === txId);
+        await learnMerchantCategories(t?.description, getTxCategoryIds(txId));
+        renderTransactionsList();
+        renderDashboard();
+    }
+
+    let _tagEditorTxId = null;
+    function openTagEditor(txId) {
+        _tagEditorTxId = txId;
+        const current = new Set(getTxCategoryIds(txId));
+        const list = document.getElementById('tagEditorList');
+        list.innerHTML = categories.map(c => `
+            <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;cursor:pointer;">
+                <input type="checkbox" value="${c.id}" ${current.has(c.id) ? 'checked' : ''}>
+                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+            </label>`).join('');
+        document.getElementById('tagEditorModal').classList.add('active');
+    }
+    function closeTagEditor() { document.getElementById('tagEditorModal').classList.remove('active'); _tagEditorTxId = null; }
+
+    async function saveTagEditor() {
+        if (!_tagEditorTxId) return;
+        const txId = _tagEditorTxId;
+        const checked = Array.from(document.querySelectorAll('#tagEditorList input:checked')).map(i => i.value);
+        const before = new Set(getTxCategoryIds(txId));
+        const after = new Set(checked);
+        const toAdd = checked.filter(id => !before.has(id));
+        const toRemove = [...before].filter(id => !after.has(id));
+        if (toRemove.length) await sb.from('ca_transaction_categories').delete().eq('transaction_id', txId).in('category_id', toRemove);
+        if (toAdd.length) await sb.from('ca_transaction_categories').insert(toAdd.map(cid => ({ transaction_id: txId, category_id: cid, source: 'manual' })));
+        txCategories = txCategories.filter(tc => tc.transaction_id !== txId);
+        checked.forEach(cid => txCategories.push({ transaction_id: txId, category_id: cid, source: 'manual' }));
+        const t = transactions.find(x => x.id === txId);
+        await learnMerchantCategories(t?.description, checked);
+        closeTagEditor();
+        renderTransactionsList();
+        renderDashboard();
+        showToast('✅ Categorie aggiornate');
+    }
+
+    // ==========================================
+    // DASHBOARD
+    // ==========================================
+    let dashPeriod = 'month';
+    let categoryChartInstance = null;
+    let monthChartInstance = null;
+
+    function toISODate(d) { return d.toISOString().slice(0, 10); }
+
+    function periodRange(period) {
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth();
+        if (period === 'month') return { from: new Date(y, m, 1), to: new Date(y, m + 1, 0) };
+        if (period === 'prevMonth') return { from: new Date(y, m - 1, 1), to: new Date(y, m, 0) };
+        if (period === '3m') return { from: new Date(y, m - 2, 1), to: new Date(y, m + 1, 0) };
+        if (period === 'year') return { from: new Date(y, 0, 1), to: new Date(y, 11, 31) };
+        return { from: null, to: null };
+    }
+
+    function dashboardTransactions() {
+        const { from, to } = periodRange(dashPeriod);
+        return transactions.filter(t => {
+            if (from && t.date < toISODate(from)) return false;
+            if (to && t.date > toISODate(to)) return false;
+            return true;
+        });
+    }
+
+    function onDashPeriodChange(sel) { dashPeriod = sel.value; renderDashboard(); }
+
+    function renderDashboard() {
+        const txs = dashboardTransactions();
+        const spese = txs.filter(t => t.amount < 0);
+        const entrate = txs.filter(t => t.amount > 0);
+        const totSpeso = spese.reduce((s, t) => s + Math.abs(t.amount), 0);
+        const totEntrate = entrate.reduce((s, t) => s + t.amount, 0);
+        const uncategorized = txs.filter(t => !getTxCategoryIds(t.id).length).length;
+
+        document.getElementById('dashTotSpeso').textContent = fmtEUR(-totSpeso);
+        document.getElementById('dashTotEntrate').textContent = fmtEUR(totEntrate);
+        document.getElementById('dashTotTx').textContent = txs.length;
+        document.getElementById('dashUncategorized').textContent = uncategorized;
+
+        renderCategoryChart(spese);
+        renderMonthChart();
+        renderPersonBreakdown(spese);
+    }
+
+    function renderCategoryChart(spese) {
+        const totals = {};
+        spese.forEach(t => {
+            const ids = getTxCategoryIds(t.id);
+            if (!ids.length) { totals['__none__'] = (totals['__none__'] || 0) + Math.abs(t.amount); return; }
+            ids.forEach(cid => { totals[cid] = (totals[cid] || 0) + Math.abs(t.amount); });
+        });
+        const labels = [], data = [], colors = [];
+        Object.entries(totals).sort((a, b) => b[1] - a[1]).forEach(([cid, val]) => {
+            if (cid === '__none__') { labels.push('Da categorizzare'); colors.push('#9CA3AF'); }
+            else { const c = categories.find(x => x.id === cid); labels.push(c ? categoryLabel(c) : '?'); colors.push(c?.color || '#2563EB'); }
+            data.push(Number(val.toFixed(2)));
+        });
+        const ctx = document.getElementById('categoryChart');
+        if (categoryChartInstance) { categoryChartInstance.destroy(); categoryChartInstance = null; }
+        if (!labels.length) return;
+        categoryChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data, backgroundColor: colors }] },
+            options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+        });
+    }
+
+    function renderMonthChart() {
+        const now = new Date();
+        const months = [];
+        for (let i = 5; i >= 0; i--) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
+        const labels = months.map(d => d.toLocaleDateString('it-IT', { month: 'short', year: '2-digit' }));
+        const data = months.map(d => {
+            const y = d.getFullYear(), m = d.getMonth();
+            const from = toISODate(new Date(y, m, 1)), to = toISODate(new Date(y, m + 1, 0));
+            return Number(transactions.filter(t => t.amount < 0 && t.date >= from && t.date <= to).reduce((s, t) => s + Math.abs(t.amount), 0).toFixed(2));
+        });
+        const ctx = document.getElementById('monthChart');
+        if (monthChartInstance) { monthChartInstance.destroy(); monthChartInstance = null; }
+        monthChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label: 'Speso', data, backgroundColor: '#FF3366' }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    function renderPersonBreakdown(spese) {
+        const totals = {};
+        spese.forEach(t => { const key = t.person_id || '__none__'; totals[key] = (totals[key] || 0) + Math.abs(t.amount); });
+        const container = document.getElementById('personBreakdown');
+        const entries = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+        if (!entries.length) { container.innerHTML = '<div style="opacity:.5;font-size:.85rem;">Nessun dato nel periodo.</div>'; return; }
+        const max = Math.max(...entries.map(e => e[1]));
+        container.innerHTML = entries.map(([pid, val]) => {
+            const p = pid === '__none__' ? null : people.find(x => x.id === pid);
+            const label = p ? p.name : 'Non assegnato';
+            const color = p ? (p.color || '#2563EB') : '#9CA3AF';
+            const pct = max ? (val / max * 100) : 0;
+            return `<div class="top-event-row">
+                <div class="top-event-info"><span>${label}</span><span class="mono">${fmtEUR(-val)}</span></div>
+                <div class="top-event-bar"><div class="top-event-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+            </div>`;
+        }).join('');
+    }
+
+    // ==========================================
+    // INIT
+    // ==========================================
+    async function startApp() {
+        showToast('⏳ Caricamento dati...');
+        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap()]);
+        await loadTransactions();
+        renderActivePage();
+        showToast('✅ Dati caricati');
+    }
+
+    // AUTH — token da launcher via postMessage o localStorage
+    window.addEventListener('message', (e) => {
+        if (!e.data) return;
+        if (e.data.type === 'SB_TOKEN' && e.data.token) {
+            console.log('✅ SB_TOKEN ricevuto dal launcher (Analisi Costi)');
+            initWithToken(e.data.token);
+        }
+    });
+
+    const _authChannel = new BroadcastChannel('appsphere_auth');
+    _authChannel.onmessage = (e) => {
+        if (!e.data) return;
+        if (e.data.type === 'LOGOUT') {
+            sb = null;
+            sbAccessToken = null;
+            localStorage.removeItem('sb_token');
+            document.getElementById('authOverlay').style.display = 'flex';
+            console.log('🔒 Sessione invalidata da AppSphere (logout)');
+        } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+            const newToken = e.data.sbToken;
+            localStorage.setItem('sb_token', newToken);
+            sbAccessToken = newToken;
+            if (sb) {
+                sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                    auth:   { persistSession: false, autoRefreshToken: false },
+                    global: { headers: { Authorization: 'Bearer ' + newToken } }
+                });
+            }
+            console.log('🔄 Token rinnovato silenziosamente (AppSphere)');
+        }
+    };
+
+    window.addEventListener('load', () => {
+        const stored = localStorage.getItem('sb_token');
+        if (stored) {
+            initWithToken(stored);
+        } else {
+            document.getElementById('authOverlay').style.display = 'flex';
+            console.warn('⚠️ Nessun SB_TOKEN — attendo dal launcher (AppSphere)');
+        }
+    });
+</script>
+</body>
+</html>
