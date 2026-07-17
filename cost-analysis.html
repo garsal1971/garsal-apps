@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.9</title>
+    <title>Analisi Costi v1.0.10</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -573,8 +573,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.9';
-    var BUILD_TIME  = '2026-07-17T12:15:00Z';
+    var APP_VERSION = 'v1.0.10';
+    var BUILD_TIME  = '2026-07-17T13:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1669,8 +1669,32 @@
     // categorizzare vengono fatte più chiamate in sequenza.
     const AI_BATCH_SIZE = 40;
 
+    // Categorie "foglia": sotto-categorie, oppure categorie principali che non hanno
+    // sotto-categorie proprie. Se una categoria principale ha figli, i figli sono le uniche
+    // opzioni selezionabili — la principale resta solo un contenitore, non va suggerita.
+    function leafCategories() {
+        return categories.filter(c => !categories.some(other => other.parent_id === c.id));
+    }
+
+    // Nome completo "Principale > Sotto-categoria" (o solo il nome se non ha padre), usato
+    // per dare contesto all'AI senza dover risolvere gli id lato edge function.
+    function categoryFullName(id) {
+        const c = categories.find(x => x.id === id);
+        if (!c) return '';
+        if (!c.parent_id) return c.name;
+        const parent = categories.find(x => x.id === c.parent_id);
+        return parent ? `${parent.name} > ${c.name}` : c.name;
+    }
+
     async function suggestCategoriesWithAI() {
-        if (!categories.length) { alert('Crea prima almeno una categoria.'); return; }
+        const leaves = leafCategories();
+        if (!leaves.length) { alert('Crea prima almeno una categoria (o sotto-categoria) selezionabile.'); return; }
+
+        // Regole già definite manualmente: passate all'AI come riferimento sullo stile di categorizzazione
+        const ruleHints = rules
+            .map(r => ({ pattern: r.pattern, categoryName: categoryFullName(r.category_id) }))
+            .filter(r => r.categoryName)
+            .slice(0, 150);
 
         // Un rappresentante per ogni merchant normalizzato ancora senza categoria
         const seen = new Map();
@@ -1703,7 +1727,8 @@
                     },
                     body: JSON.stringify({
                         descriptions: batch.map(u => u.description),
-                        categories: categories.map(c => ({ id: c.id, name: c.name }))
+                        categories: leaves.map(c => ({ id: c.id, name: categoryFullName(c.id) })),
+                        rules: ruleHints
                     })
                 });
                 const data = await res.json();

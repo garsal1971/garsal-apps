@@ -7,6 +7,10 @@
 // batch grandi. Rimosso response_format:"json_object" (la validazione server-side di Groq
 // falliva con "json_validate_failed" su batch grandi); parsing lato nostro con fallback
 // tollerante invece che un errore secco.
+// v3 — 2026-07-17: il client ora passa solo le categorie "foglia" (sotto-categorie, o
+// principali senza sotto-categorie) — le categorie principali con figli non sono più
+// un'opzione selezionabile. Aggiunto un elenco opzionale di regole già definite
+// dall'utente, passato come riferimento nel prompt.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,7 +52,11 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { descriptions?: string[]; categories?: { id: string; name: string }[] };
+  let body: {
+    descriptions?: string[];
+    categories?: { id: string; name: string }[];
+    rules?: { pattern: string; categoryName: string }[];
+  };
   try {
     body = await req.json();
   } catch {
@@ -62,6 +70,9 @@ Deno.serve(async (req) => {
     .filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
     .slice(0, 60); // batch piccoli: meno token di output, meno rischio di JSON troncato
   const categories = body.categories || [];
+  const rules = (body.rules || [])
+    .filter((r) => r && typeof r.pattern === 'string' && typeof r.categoryName === 'string')
+    .slice(0, 150);
 
   if (!descriptions.length || !categories.length) {
     return new Response(
@@ -74,12 +85,17 @@ Deno.serve(async (req) => {
   // più corto e affidabile. L'id reale viene rimappato qui sotto dopo la risposta.
   const categoryList = categories.map((c, i) => `${i}: ${c.name}`).join('\n');
   const descList = descriptions.map((d, i) => `${i}: ${d}`).join('\n');
+  const rulesSection = rules.length
+    ? `\nRegole già definite manualmente dall'utente (usale come riferimento per capire il suo stile di categorizzazione, non sono vincolanti):\n${rules
+        .map((r) => `"${r.pattern}" → ${r.categoryName}`)
+        .join('\n')}\n`
+    : '';
 
   const prompt = `Sei un assistente che categorizza transazioni bancarie personali (spese/entrate) in base alla descrizione/nome del merchant.
 
 Categorie disponibili (indice: nome):
 ${categoryList}
-
+${rulesSection}
 Descrizioni da classificare (indice: descrizione):
 ${descList}
 
