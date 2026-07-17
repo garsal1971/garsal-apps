@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.8</title>
+    <title>Analisi Costi v1.0.9</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -190,6 +190,7 @@
             transition: all 0.3s ease; max-width: 320px;
         }
         .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.error { border-left-color: var(--danger); }
 
         /* ===== EMPTY STATE ===== */
         .empty-state { text-align: center; padding: 3rem 1rem; opacity: 0.5; }
@@ -572,8 +573,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.8';
-    var BUILD_TIME  = '2026-07-17T09:00:00Z';
+    var APP_VERSION = 'v1.0.9';
+    var BUILD_TIME  = '2026-07-17T12:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1663,6 +1664,11 @@
     // ==========================================
     let _aiSuggestions = []; // [{ description, categoryId, count }]
 
+    // Batch piccoli (max 40 descrizioni a chiamata): meno token di output dal modello,
+    // meno rischio che la risposta JSON venga troncata/malformata. Con molti merchant da
+    // categorizzare vengono fatte più chiamate in sequenza.
+    const AI_BATCH_SIZE = 40;
+
     async function suggestCategoriesWithAI() {
         if (!categories.length) { alert('Crea prima almeno una categoria.'); return; }
 
@@ -1678,38 +1684,55 @@
         const uncategorized = [...seen.values()];
         if (!uncategorized.length) { showToast('Nessuna transazione da categorizzare'); return; }
 
-        showProcessing(`🤖 Analisi AI di ${uncategorized.length} merchant...`);
-        try {
-            const res = await fetch(SUPABASE_URL + '/functions/v1/categorize-transactions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
-                    'apikey': SUPABASE_KEY
-                },
-                body: JSON.stringify({
-                    descriptions: uncategorized.map(u => u.description),
-                    categories: categories.map(c => ({ id: c.id, name: c.name }))
-                })
-            });
-            const data = await res.json();
-            hideProcessing();
-            if (!res.ok || data.error) {
-                alert('Errore AI: ' + (data?.error?.message || res.status) + '\n\nVerifica che GROQ_API_KEY sia configurata nei Supabase Secrets.');
-                return;
+        const batches = [];
+        for (let i = 0; i < uncategorized.length; i += AI_BATCH_SIZE) batches.push(uncategorized.slice(i, i + AI_BATCH_SIZE));
+
+        const allResults = [];
+        let failedBatches = 0;
+        for (let b = 0; b < batches.length; b++) {
+            const label = batches.length > 1 ? ` (batch ${b + 1}/${batches.length})` : '';
+            showProcessing(`🤖 Analisi AI di ${uncategorized.length} merchant...${label}`);
+            const batch = batches[b];
+            try {
+                const res = await fetch(SUPABASE_URL + '/functions/v1/categorize-transactions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                        'apikey': SUPABASE_KEY
+                    },
+                    body: JSON.stringify({
+                        descriptions: batch.map(u => u.description),
+                        categories: categories.map(c => ({ id: c.id, name: c.name }))
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    console.error('Batch AI fallito:', data?.error?.message || res.status);
+                    failedBatches++;
+                    continue;
+                }
+                (data.results || []).forEach((r, i) => allResults.push({ ...r, count: batch[i]?.count || 1 }));
+            } catch (e) {
+                console.error('Errore batch AI:', e);
+                failedBatches++;
             }
-            const withCounts = (data.results || []).map((r, i) => ({ ...r, count: uncategorized[i]?.count || 1 }));
-            _aiSuggestions = withCounts.filter(r => r.categoryId);
-            const noMatch = withCounts.length - _aiSuggestions.length;
-            if (!_aiSuggestions.length) {
-                showToast(noMatch ? `AI: nessuna categoria adatta trovata per ${noMatch} merchant` : 'Nessun suggerimento');
-                return;
-            }
-            openAiSuggestionsModal();
-        } catch (e) {
-            hideProcessing();
-            alert('Errore chiamata AI: ' + e.message);
         }
+        hideProcessing();
+
+        _aiSuggestions = allResults.filter(r => r.categoryId);
+        const noMatch = allResults.length - _aiSuggestions.length;
+
+        if (failedBatches) {
+            const msg = `⚠️ ${failedBatches} richiest${failedBatches === 1 ? 'a' : 'e'} AI su ${batches.length} fallit${failedBatches === 1 ? 'a' : 'e'}`
+                + (_aiSuggestions.length ? ` — ${_aiSuggestions.length} suggerimenti comunque disponibili` : '. Verifica che GROQ_API_KEY sia configurata correttamente nei Supabase Secrets.');
+            showToast(msg, true);
+        }
+        if (!_aiSuggestions.length) {
+            if (!failedBatches) showToast(noMatch ? `AI: nessuna categoria adatta trovata per ${noMatch} merchant` : 'Nessun suggerimento');
+            return;
+        }
+        openAiSuggestionsModal();
     }
 
     function openAiSuggestionsModal() {
