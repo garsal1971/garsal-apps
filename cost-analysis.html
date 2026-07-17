@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.7</title>
+    <title>Analisi Costi v1.0.8</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -311,7 +311,10 @@
 
         <!-- ====== TRANSAZIONI ====== -->
         <div class="page" id="transactionsPage">
-            <div class="page-header"><h1 class="page-title">Transazioni</h1></div>
+            <div class="page-header">
+                <h1 class="page-title">Transazioni</h1>
+                <button class="btn btn-accent btn-small" onclick="suggestCategoriesWithAI()">🤖 Suggerisci con AI</button>
+            </div>
             <div class="card">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
                     <input type="text" class="form-input" id="txFilterText" placeholder="Cerca descrizione..." oninput="onTxFilterChange()">
@@ -539,6 +542,22 @@
     </div>
 </div>
 
+<!-- ====== MODAL: SUGGERIMENTI AI ====== -->
+<div class="modal" id="aiSuggestionsModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="aiSuggestionsTitle">Suggerimenti AI</h2>
+            <span class="modal-close" onclick="closeAiSuggestionsModal()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:1rem;">Verifica i suggerimenti prima di applicarli: verranno assegnati a tutte le transazioni con lo stesso titolo e memorizzati per i prossimi import.</p>
+        <div id="aiSuggestionsList" style="max-height:55vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="applyAllAiSuggestions()">Applica tutte</button>
+            <button class="btn btn-secondary" onclick="closeAiSuggestionsModal()">Chiudi</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -553,8 +572,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.7';
-    var BUILD_TIME  = '2026-07-16T23:20:00Z';
+    var APP_VERSION = 'v1.0.8';
+    var BUILD_TIME  = '2026-07-17T09:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1637,6 +1656,121 @@
     function closePersonConflictModal() {
         document.getElementById('personConflictModal').classList.remove('active');
         _personConflicts = [];
+    }
+
+    // ==========================================
+    // SUGGERIMENTI CATEGORIA CON AI (Groq, edge function categorize-transactions)
+    // ==========================================
+    let _aiSuggestions = []; // [{ description, categoryId, count }]
+
+    async function suggestCategoriesWithAI() {
+        if (!categories.length) { alert('Crea prima almeno una categoria.'); return; }
+
+        // Un rappresentante per ogni merchant normalizzato ancora senza categoria
+        const seen = new Map();
+        transactions.forEach(t => {
+            if (getTxCategoryIds(t.id).length) return; // già categorizzata
+            const key = normalizeMerchant(t.description);
+            if (!key) return;
+            if (!seen.has(key)) seen.set(key, { description: t.description, count: 0 });
+            seen.get(key).count++;
+        });
+        const uncategorized = [...seen.values()];
+        if (!uncategorized.length) { showToast('Nessuna transazione da categorizzare'); return; }
+
+        showProcessing(`🤖 Analisi AI di ${uncategorized.length} merchant...`);
+        try {
+            const res = await fetch(SUPABASE_URL + '/functions/v1/categorize-transactions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                    'apikey': SUPABASE_KEY
+                },
+                body: JSON.stringify({
+                    descriptions: uncategorized.map(u => u.description),
+                    categories: categories.map(c => ({ id: c.id, name: c.name }))
+                })
+            });
+            const data = await res.json();
+            hideProcessing();
+            if (!res.ok || data.error) {
+                alert('Errore AI: ' + (data?.error?.message || res.status) + '\n\nVerifica che GROQ_API_KEY sia configurata nei Supabase Secrets.');
+                return;
+            }
+            const withCounts = (data.results || []).map((r, i) => ({ ...r, count: uncategorized[i]?.count || 1 }));
+            _aiSuggestions = withCounts.filter(r => r.categoryId);
+            const noMatch = withCounts.length - _aiSuggestions.length;
+            if (!_aiSuggestions.length) {
+                showToast(noMatch ? `AI: nessuna categoria adatta trovata per ${noMatch} merchant` : 'Nessun suggerimento');
+                return;
+            }
+            openAiSuggestionsModal();
+        } catch (e) {
+            hideProcessing();
+            alert('Errore chiamata AI: ' + e.message);
+        }
+    }
+
+    function openAiSuggestionsModal() {
+        renderAiSuggestionsList();
+        document.getElementById('aiSuggestionsModal').classList.add('active');
+    }
+
+    function renderAiSuggestionsList() {
+        document.getElementById('aiSuggestionsTitle').textContent = `${_aiSuggestions.length} suggeriment${_aiSuggestions.length === 1 ? 'o' : 'i'} AI`;
+        const list = document.getElementById('aiSuggestionsList');
+        if (!_aiSuggestions.length) {
+            list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nessun suggerimento residuo.</p></div>';
+            return;
+        }
+        list.innerHTML = _aiSuggestions.map((s, i) => {
+            const options = categories.map(c => `<option value="${c.id}" ${c.id === s.categoryId ? 'selected' : ''}>${categoryLabel(c)}</option>`).join('');
+            return `<div class="card">
+                <div style="font-weight:700;margin-bottom:.4rem;">${s.description} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${s.count}</span></div>
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                    <select class="form-select" style="width:auto;flex:1;min-width:140px;" id="ai-sel-${i}">${options}</select>
+                    <button class="btn btn-small btn-primary" onclick="applyAiSuggestion(${i})">Applica</button>
+                    <button class="btn btn-small btn-secondary" onclick="dismissAiSuggestion(${i})">Ignora</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function applyAiSuggestion(i) {
+        const s = _aiSuggestions[i];
+        if (!s) return;
+        const chosenCategoryId = document.getElementById(`ai-sel-${i}`)?.value || s.categoryId;
+        const key = normalizeMerchant(s.description);
+        const matchingTx = transactions.filter(t => !getTxCategoryIds(t.id).length && normalizeMerchant(t.description) === key);
+        const rows = matchingTx.map(t => ({ transaction_id: t.id, category_id: chosenCategoryId, source: 'ai' }));
+        if (rows.length) {
+            const { error } = await sb.from('ca_transaction_categories').insert(rows);
+            if (handleAuthError(error)) return;
+            if (!error) txCategories.push(...rows);
+        }
+        await learnMerchantCategories(s.description, [chosenCategoryId]);
+        _aiSuggestions.splice(i, 1);
+        renderAiSuggestionsList();
+        renderTransactionsList();
+        renderDashboard();
+        showToast(`✅ ${matchingTx.length} transazioni categorizzate`);
+        if (!_aiSuggestions.length) closeAiSuggestionsModal();
+    }
+
+    async function applyAllAiSuggestions() {
+        while (_aiSuggestions.length) { await applyAiSuggestion(0); }
+    }
+
+    function dismissAiSuggestion(i) {
+        _aiSuggestions.splice(i, 1);
+        renderAiSuggestionsList();
+        if (!_aiSuggestions.length) closeAiSuggestionsModal();
+    }
+
+    function closeAiSuggestionsModal() {
+        document.getElementById('aiSuggestionsModal').classList.remove('active');
+        _aiSuggestions = [];
     }
 
     // ==========================================
