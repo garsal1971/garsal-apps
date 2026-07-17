@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.10</title>
+    <title>Analisi Costi v1.0.11</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -552,6 +552,7 @@
         </div>
         <p class="form-hint" style="margin-bottom:1rem;">Verifica i suggerimenti prima di applicarli: verranno assegnati a tutte le transazioni con lo stesso titolo e memorizzati per i prossimi import.</p>
         <div id="aiSuggestionsList" style="max-height:55vh;overflow-y:auto;"></div>
+        <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.75rem;" onclick="openCategoryModalFromAiSuggestions()">+ Nuova categoria/sotto-categoria</button>
         <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
             <button class="btn btn-primary" style="flex:1;" onclick="applyAllAiSuggestions()">Applica tutte</button>
             <button class="btn btn-secondary" onclick="closeAiSuggestionsModal()">Chiudi</button>
@@ -573,8 +574,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.10';
-    var BUILD_TIME  = '2026-07-17T13:00:00Z';
+    var APP_VERSION = 'v1.0.11';
+    var BUILD_TIME  = '2026-07-17T14:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -819,18 +820,28 @@
         document.getElementById('categoryModal').classList.add('active');
     }
 
-    // Se il modale categoria è stato aperto dal tag editor (_tagEditorTxId ancora impostato),
-    // alla chiusura si torna al tag editor con l'elenco aggiornato.
+    // Se il modale categoria è stato aperto dal tag editor o dai suggerimenti AI, alla
+    // chiusura si torna a quel modale con l'elenco/combo aggiornati.
     function closeCategoryModal() {
         document.getElementById('categoryModal').classList.remove('active');
         if (_tagEditorTxId) {
             renderTagEditorList();
             document.getElementById('tagEditorModal').classList.add('active');
+        } else if (_aiSuggestionsReturnPending) {
+            _aiSuggestionsReturnPending = false;
+            renderAiSuggestionsList();
+            document.getElementById('aiSuggestionsModal').classList.add('active');
         }
     }
 
     function openCategoryModalFromTagEditor() {
         document.getElementById('tagEditorModal').classList.remove('active');
+        openCategoryModal(null);
+    }
+
+    function openCategoryModalFromAiSuggestions() {
+        _aiSuggestionsReturnPending = true;
+        document.getElementById('aiSuggestionsModal').classList.remove('active');
         openCategoryModal(null);
     }
 
@@ -1663,6 +1674,34 @@
     // SUGGERIMENTI CATEGORIA CON AI (Groq, edge function categorize-transactions)
     // ==========================================
     let _aiSuggestions = []; // [{ description, categoryId, count }]
+    let _aiSuggestionsReturnPending = false; // torna al modale AI dopo aver creato una categoria al volo
+
+    // Combo unica con le categorie foglia selezionabili: le categorie principali senza
+    // sotto-categorie compaiono come opzioni dirette, le sotto-categorie sono raggruppate
+    // per padre con <optgroup> — così si vede subito categoria/sotto-categoria e si sceglie
+    // rapidamente senza dover leggere nomi ripetuti tipo "Padre > Figlia" riga per riga.
+    function categorySelectOptionsHtml(selectedId) {
+        const leaves = leafCategories();
+        const topLeaves = leaves.filter(c => !c.parent_id);
+        const byParent = new Map();
+        leaves.filter(c => c.parent_id).forEach(c => {
+            if (!byParent.has(c.parent_id)) byParent.set(c.parent_id, []);
+            byParent.get(c.parent_id).push(c);
+        });
+        let html = '<option value="">— Nessuna categoria —</option>';
+        topLeaves.forEach(c => {
+            html += `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${categoryLabel(c)}</option>`;
+        });
+        byParent.forEach((kids, parentId) => {
+            const parent = categories.find(x => x.id === parentId);
+            html += `<optgroup label="${parent ? parent.name : '?'}">`;
+            kids.forEach(k => {
+                html += `<option value="${k.id}" ${k.id === selectedId ? 'selected' : ''}>${categoryLabel(k)}</option>`;
+            });
+            html += '</optgroup>';
+        });
+        return html;
+    }
 
     // Batch piccoli (max 40 descrizioni a chiamata): meno token di output dal modello,
     // meno rischio che la risposta JSON venga troncata/malformata. Con molti merchant da
@@ -1772,23 +1811,22 @@
             list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nessun suggerimento residuo.</p></div>';
             return;
         }
-        list.innerHTML = _aiSuggestions.map((s, i) => {
-            const options = categories.map(c => `<option value="${c.id}" ${c.id === s.categoryId ? 'selected' : ''}>${categoryLabel(c)}</option>`).join('');
-            return `<div class="card">
+        list.innerHTML = _aiSuggestions.map((s, i) => `<div class="card">
                 <div style="font-weight:700;margin-bottom:.4rem;">${s.description} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${s.count}</span></div>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                    <select class="form-select" style="width:auto;flex:1;min-width:140px;" id="ai-sel-${i}">${options}</select>
+                    <select class="form-select" style="width:auto;flex:1;min-width:160px;" id="ai-sel-${i}">${categorySelectOptionsHtml(s.categoryId)}</select>
                     <button class="btn btn-small btn-primary" onclick="applyAiSuggestion(${i})">Applica</button>
                     <button class="btn btn-small btn-secondary" onclick="dismissAiSuggestion(${i})">Ignora</button>
                 </div>
-            </div>`;
-        }).join('');
+            </div>`).join('');
     }
 
     async function applyAiSuggestion(i) {
         const s = _aiSuggestions[i];
         if (!s) return;
-        const chosenCategoryId = document.getElementById(`ai-sel-${i}`)?.value || s.categoryId;
+        const sel = document.getElementById(`ai-sel-${i}`);
+        const chosenCategoryId = sel ? sel.value : s.categoryId;
+        if (!chosenCategoryId) { showToast('Seleziona una categoria oppure usa "Ignora"', true); return; }
         const key = normalizeMerchant(s.description);
         const matchingTx = transactions.filter(t => !getTxCategoryIds(t.id).length && normalizeMerchant(t.description) === key);
         const rows = matchingTx.map(t => ({ transaction_id: t.id, category_id: chosenCategoryId, source: 'ai' }));
@@ -1807,7 +1845,13 @@
     }
 
     async function applyAllAiSuggestions() {
-        while (_aiSuggestions.length) { await applyAiSuggestion(0); }
+        // Se una riga è stata lasciata su "— Nessuna categoria —" applyAiSuggestion(0) non la
+        // rimuove (per non applicare per sbaglio): in quel caso la saltiamo per evitare un loop.
+        while (_aiSuggestions.length) {
+            const before = _aiSuggestions.length;
+            await applyAiSuggestion(0);
+            if (_aiSuggestions.length === before) dismissAiSuggestion(0);
+        }
     }
 
     function dismissAiSuggestion(i) {
