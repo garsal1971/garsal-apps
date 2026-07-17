@@ -1,13 +1,36 @@
 // Supabase Edge Function: suggerisce la categoria di spesa più adatta per un elenco di
 // descrizioni di transazioni (Analisi Costi), usando Groq (free tier, modelli Llama).
 // Nessun costo — richiede GROQ_API_KEY nei Supabase Secrets.
-// v1 — 2026-07-17
+//
+// v2 — 2026-07-17: il modello restituisce l'INDICE della categoria (non l'id UUID) per
+// ridurre drasticamente i token di output — meno rischio di JSON troncato/malformato su
+// batch grandi. Rimosso response_format:"json_object" (la validazione server-side di Groq
+// falliva con "json_validate_failed" su batch grandi); parsing lato nostro con fallback
+// tollerante invece che un errore secco.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+function extractJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Il modello a volte aggiunge testo/markdown attorno al JSON: prova a isolarlo.
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -37,7 +60,7 @@ Deno.serve(async (req) => {
 
   const descriptions = (body.descriptions || [])
     .filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
-    .slice(0, 200);
+    .slice(0, 60); // batch piccoli: meno token di output, meno rischio di JSON troncato
   const categories = body.categories || [];
 
   if (!descriptions.length || !categories.length) {
@@ -47,19 +70,23 @@ Deno.serve(async (req) => {
     );
   }
 
-  const categoryList = categories.map((c) => `${c.id}: ${c.name}`).join('\n');
+  // Il modello ragiona sull'INDICE numerico della categoria (non l'id UUID): output molto
+  // più corto e affidabile. L'id reale viene rimappato qui sotto dopo la risposta.
+  const categoryList = categories.map((c, i) => `${i}: ${c.name}`).join('\n');
   const descList = descriptions.map((d, i) => `${i}: ${d}`).join('\n');
 
   const prompt = `Sei un assistente che categorizza transazioni bancarie personali (spese/entrate) in base alla descrizione/nome del merchant.
 
-Categorie disponibili (id: nome):
+Categorie disponibili (indice: nome):
 ${categoryList}
 
 Descrizioni da classificare (indice: descrizione):
 ${descList}
 
-Per ciascuna descrizione scegli l'id della categoria più adatta tra quelle elencate sopra. Se nessuna categoria è chiaramente adatta, usa null.
-Rispondi SOLO con un oggetto JSON dove ogni chiave è l'indice (come stringa) e il valore è l'id categoria scelto (o null). Nessun testo aggiuntivo, nessuna spiegazione.`;
+Per ciascuna descrizione scegli l'INDICE della categoria più adatta tra quelle elencate sopra. Se nessuna categoria è chiaramente adatta, usa null.
+Rispondi SOLO con un oggetto JSON compatto, senza markdown né spiegazioni, con questa forma esatta:
+{"0": 2, "1": null, "2": 0}
+dove ogni chiave è l'indice della descrizione e il valore è l'indice della categoria scelta (o null).`;
 
   try {
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -71,8 +98,8 @@ Rispondi SOLO con un oggetto JSON dove ogni chiave è l'indice (come stringa) e 
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
         temperature: 0,
+        max_tokens: 2048,
       }),
     });
 
@@ -85,17 +112,13 @@ Rispondi SOLO con un oggetto JSON dove ogni chiave è l'indice (come stringa) e 
     }
 
     const content: string = data?.choices?.[0]?.message?.content || '{}';
-    let parsed: Record<string, string | null> = {};
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      parsed = {};
-    }
+    const parsed = (extractJson(content) as Record<string, number | string | null> | null) || {};
 
-    const validIds = new Set(categories.map((c) => c.id));
     const results = descriptions.map((description, i) => {
-      const catId = parsed[String(i)];
-      return { description, categoryId: catId && validIds.has(catId) ? catId : null };
+      const raw = parsed[String(i)];
+      const catIdx = typeof raw === 'number' ? raw : (typeof raw === 'string' ? parseInt(raw, 10) : NaN);
+      const cat = Number.isInteger(catIdx) && catIdx >= 0 && catIdx < categories.length ? categories[catIdx] : null;
+      return { description, categoryId: cat ? cat.id : null };
     });
 
     return new Response(JSON.stringify({ results }), {
