@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.11</title>
+    <title>Analisi Costi v1.0.12</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -574,8 +574,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.11';
-    var BUILD_TIME  = '2026-07-17T14:00:00Z';
+    var APP_VERSION = 'v1.0.12';
+    var BUILD_TIME  = '2026-07-17T14:20:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1678,8 +1678,10 @@
 
     // Combo unica con le categorie foglia selezionabili: le categorie principali senza
     // sotto-categorie compaiono come opzioni dirette, le sotto-categorie sono raggruppate
-    // per padre con <optgroup> — così si vede subito categoria/sotto-categoria e si sceglie
-    // rapidamente senza dover leggere nomi ripetuti tipo "Padre > Figlia" riga per riga.
+    // per padre con <optgroup> per scorrerle più comode da aperte. L'<optgroup> però non è
+    // visibile quando il menu è chiuso (limite nativo dei <select>): il testo di ogni
+    // sotto-categoria include quindi anche il nome del padre, così categoria/sotto-categoria
+    // si legge subito anche a combo chiusa, senza doverla aprire.
     function categorySelectOptionsHtml(selectedId) {
         const leaves = leafCategories();
         const topLeaves = leaves.filter(c => !c.parent_id);
@@ -1694,9 +1696,10 @@
         });
         byParent.forEach((kids, parentId) => {
             const parent = categories.find(x => x.id === parentId);
-            html += `<optgroup label="${parent ? parent.name : '?'}">`;
+            const parentName = parent ? parent.name : '?';
+            html += `<optgroup label="${parentName}">`;
             kids.forEach(k => {
-                html += `<option value="${k.id}" ${k.id === selectedId ? 'selected' : ''}>${categoryLabel(k)}</option>`;
+                html += `<option value="${k.id}" ${k.id === selectedId ? 'selected' : ''}>${parentName} › ${categoryLabel(k)}</option>`;
             });
             html += '</optgroup>';
         });
