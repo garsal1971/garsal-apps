@@ -1,11 +1,18 @@
-// Supabase Edge Function: terzo stadio della categorizzazione (dopo merchant-map/regole e AI
-// testuale) — per i merchant che l'AI non è riuscita a categorizzare da sola, cerca il nome su
-// OpenStreetMap Nominatim (gratis, nessuna chiave richiesta) aggiungendo la città indicata, e
-// usa il tipo di locale trovato (es. farmacia, ristorante, supermercato) come indizio aggiuntivo
-// per un'ultima classificazione con Groq.
+// Supabase Edge Function: categorizza le transazioni (Analisi Costi) cercando prima ogni
+// merchant su OpenStreetMap Nominatim (gratis, nessuna chiave richiesta) aggiungendo la città
+// indicata, e passando il tipo di locale trovato (es. farmacia, ristorante, supermercato) come
+// indizio a Groq insieme alla descrizione, per un'unica classificazione finale.
 //
-// Nominatim usage policy: max 1 richiesta/secondo e User-Agent identificativo obbligatori.
-// v1 — 2026-07-17
+// Nominatim usage policy: max 1 richiesta/secondo e User-Agent identificativo obbligatori —
+// per questo il batch è tenuto piccolo (max 6 descrizioni a chiamata).
+//
+// v1 — 2026-07-17: prima versione, usata come stadio di fallback dopo un primo passaggio AI
+// testuale (categorize-transactions).
+// v2 — 2026-07-18: diventa lo stadio principale — la ricerca geografica parte sempre per prima
+// su ogni merchant, poi Groq classifica usando anche l'eventuale indizio trovato. Aggiunto il
+// supporto alle regole già definite dall'utente (come in categorize-transactions), e il campo
+// "source" per risultato distingue se è stato usato un indizio geografico ('geo') o solo il
+// testo della descrizione ('text').
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,7 +73,12 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { descriptions?: string[]; categories?: { id: string; name: string }[]; city?: string };
+  let body: {
+    descriptions?: string[];
+    categories?: { id: string; name: string }[];
+    rules?: { pattern: string; categoryName: string }[];
+    city?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -82,6 +94,9 @@ Deno.serve(async (req) => {
     .filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
     .slice(0, 6);
   const categories = body.categories || [];
+  const rules = (body.rules || [])
+    .filter((r) => r && typeof r.pattern === 'string' && typeof r.categoryName === 'string')
+    .slice(0, 150);
   const city = (body.city || '').trim();
 
   if (!descriptions.length || !categories.length) {
@@ -91,6 +106,7 @@ Deno.serve(async (req) => {
     );
   }
 
+  // Ricerca geografica in sequenza, con pausa per rispettare il limite di 1 richiesta/secondo.
   const hints: (string | null)[] = [];
   for (let i = 0; i < descriptions.length; i++) {
     const query = city ? `${descriptions[i]} ${city}` : descriptions[i];
@@ -98,24 +114,21 @@ Deno.serve(async (req) => {
     if (i < descriptions.length - 1) await new Promise((r) => setTimeout(r, 1100));
   }
 
-  if (!hints.some((h) => h !== null)) {
-    // Nessun indizio geografico trovato per nessuno: non ha senso richiamare il modello.
-    return new Response(
-      JSON.stringify({ results: descriptions.map((d) => ({ description: d, categoryId: null, source: 'geo' })) }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
   const categoryList = categories.map((c, i) => `${i}: ${c.name}`).join('\n');
   const descList = descriptions
     .map((d, i) => `${i}: ${d}${hints[i] ? ` (indizio geografico: ${hints[i]})` : ''}`)
     .join('\n');
+  const rulesSection = rules.length
+    ? `\nRegole già definite manualmente dall'utente (usale come riferimento per capire il suo stile di categorizzazione, non sono vincolanti):\n${rules
+        .map((r) => `"${r.pattern}" → ${r.categoryName}`)
+        .join('\n')}\n`
+    : '';
 
   const prompt = `Sei un assistente che categorizza transazioni bancarie personali (spese/entrate) in base alla descrizione del merchant. Per alcune descrizioni è disponibile anche un indizio da una ricerca geografica (tipo di locale trovato su OpenStreetMap, in inglese: es. amenity/pharmacy, shop/supermarket).
 
 Categorie disponibili (indice: nome):
 ${categoryList}
-
+${rulesSection}
 Descrizioni da classificare (indice: descrizione, con eventuale indizio geografico):
 ${descList}
 
@@ -154,7 +167,7 @@ dove ogni chiave è l'indice della descrizione e il valore è l'indice della cat
       const raw = parsed[String(i)];
       const catIdx = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseInt(raw, 10) : NaN;
       const cat = Number.isInteger(catIdx) && catIdx >= 0 && catIdx < categories.length ? categories[catIdx] : null;
-      return { description, categoryId: cat ? cat.id : null, source: 'geo' };
+      return { description, categoryId: cat ? cat.id : null, source: hints[i] ? 'geo' : 'text' };
     });
 
     return new Response(JSON.stringify({ results }), {
