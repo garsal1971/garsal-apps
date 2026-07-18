@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.12</title>
+    <title>Analisi Costi v1.0.13</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -574,8 +574,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.12';
-    var BUILD_TIME  = '2026-07-17T14:20:00Z';
+    var APP_VERSION = 'v1.0.13';
+    var BUILD_TIME  = '2026-07-17T15:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1711,6 +1711,18 @@
     // categorizzare vengono fatte più chiamate in sequenza.
     const AI_BATCH_SIZE = 40;
 
+    // Terzo stadio (dopo merchant-map/regole e AI testuale): ricerca geografica su Nominatim
+    // per i merchant ancora incerti. Batch molto più piccolo: Nominatim consente 1
+    // richiesta/secondo e la edge function ha un budget di tempo limitato.
+    const GEO_BATCH_SIZE = 6;
+    const GEO_LOOKUP_CITY = 'Bologna';
+
+    function chunk(arr, size) {
+        const out = [];
+        for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+        return out;
+    }
+
     // Categorie "foglia": sotto-categorie, oppure categorie principali che non hanno
     // sotto-categorie proprie. Se una categoria principale ha figli, i figli sono le uniche
     // opzioni selezionabili — la principale resta solo un contenitore, non va suggerita.
@@ -1750,8 +1762,7 @@
         const uncategorized = [...seen.values()];
         if (!uncategorized.length) { showToast('Nessuna transazione da categorizzare'); return; }
 
-        const batches = [];
-        for (let i = 0; i < uncategorized.length; i += AI_BATCH_SIZE) batches.push(uncategorized.slice(i, i + AI_BATCH_SIZE));
+        const batches = chunk(uncategorized, AI_BATCH_SIZE);
 
         const allResults = [];
         let failedBatches = 0;
@@ -1779,10 +1790,52 @@
                     failedBatches++;
                     continue;
                 }
-                (data.results || []).forEach((r, i) => allResults.push({ ...r, count: batch[i]?.count || 1 }));
+                (data.results || []).forEach((r, i) => allResults.push({ ...r, count: batch[i]?.count || 1, source: 'text' }));
             } catch (e) {
                 console.error('Errore batch AI:', e);
                 failedBatches++;
+            }
+        }
+
+        // STADIO 3: per i merchant ancora senza categoria, prova con una ricerca geografica
+        // (Nominatim + città) come indizio aggiuntivo per un'ultima classificazione.
+        const stillUncertain = allResults.filter(r => !r.categoryId);
+        let failedGeoBatches = 0;
+        if (stillUncertain.length) {
+            const geoBatches = chunk(stillUncertain, GEO_BATCH_SIZE);
+            for (let b = 0; b < geoBatches.length; b++) {
+                const label = geoBatches.length > 1 ? ` (batch ${b + 1}/${geoBatches.length})` : '';
+                showProcessing(`🌍 Ricerca geografica su ${GEO_LOOKUP_CITY} per ${stillUncertain.length} merchant incerti...${label}`);
+                const batch = geoBatches[b];
+                try {
+                    const res = await fetch(SUPABASE_URL + '/functions/v1/geo-lookup-transactions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                            'apikey': SUPABASE_KEY
+                        },
+                        body: JSON.stringify({
+                            descriptions: batch.map(u => u.description),
+                            categories: leaves.map(c => ({ id: c.id, name: categoryFullName(c.id) })),
+                            city: GEO_LOOKUP_CITY
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || data.error) {
+                        console.error('Batch geo fallito:', data?.error?.message || res.status);
+                        failedGeoBatches++;
+                        continue;
+                    }
+                    (data.results || []).forEach((r) => {
+                        if (!r.categoryId) return;
+                        const target = allResults.find(x => x.description === r.description && !x.categoryId);
+                        if (target) { target.categoryId = r.categoryId; target.source = 'geo'; }
+                    });
+                } catch (e) {
+                    console.error('Errore batch geo:', e);
+                    failedGeoBatches++;
+                }
             }
         }
         hideProcessing();
@@ -1790,13 +1843,16 @@
         _aiSuggestions = allResults.filter(r => r.categoryId);
         const noMatch = allResults.length - _aiSuggestions.length;
 
-        if (failedBatches) {
-            const msg = `⚠️ ${failedBatches} richiest${failedBatches === 1 ? 'a' : 'e'} AI su ${batches.length} fallit${failedBatches === 1 ? 'a' : 'e'}`
+        if (failedBatches || failedGeoBatches) {
+            const parts = [];
+            if (failedBatches) parts.push(`${failedBatches} richiest${failedBatches === 1 ? 'a' : 'e'} AI su ${batches.length}`);
+            if (failedGeoBatches) parts.push(`${failedGeoBatches} ricerc${failedGeoBatches === 1 ? 'a' : 'he'} geografiche fallite`);
+            const msg = `⚠️ ${parts.join(', ')}`
                 + (_aiSuggestions.length ? ` — ${_aiSuggestions.length} suggerimenti comunque disponibili` : '. Verifica che GROQ_API_KEY sia configurata correttamente nei Supabase Secrets.');
             showToast(msg, true);
         }
         if (!_aiSuggestions.length) {
-            if (!failedBatches) showToast(noMatch ? `AI: nessuna categoria adatta trovata per ${noMatch} merchant` : 'Nessun suggerimento');
+            if (!failedBatches && !failedGeoBatches) showToast(noMatch ? `Nessuna categoria adatta trovata per ${noMatch} merchant (anche dopo la ricerca geografica)` : 'Nessun suggerimento');
             return;
         }
         openAiSuggestionsModal();
@@ -1815,7 +1871,7 @@
             return;
         }
         list.innerHTML = _aiSuggestions.map((s, i) => `<div class="card">
-                <div style="font-weight:700;margin-bottom:.4rem;">${s.description} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${s.count}</span></div>
+                <div style="font-weight:700;margin-bottom:.4rem;">${s.description} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${s.count}</span>${s.source === 'geo' ? ' <span title="Trovato con ricerca geografica" style="font-size:.8rem;">🌍</span>' : ''}</div>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                     <select class="form-select" style="width:auto;flex:1;min-width:160px;" id="ai-sel-${i}">${categorySelectOptionsHtml(s.categoryId)}</select>
                     <button class="btn btn-small btn-primary" onclick="applyAiSuggestion(${i})">Applica</button>
@@ -1832,7 +1888,7 @@
         if (!chosenCategoryId) { showToast('Seleziona una categoria oppure usa "Ignora"', true); return; }
         const key = normalizeMerchant(s.description);
         const matchingTx = transactions.filter(t => !getTxCategoryIds(t.id).length && normalizeMerchant(t.description) === key);
-        const rows = matchingTx.map(t => ({ transaction_id: t.id, category_id: chosenCategoryId, source: 'ai' }));
+        const rows = matchingTx.map(t => ({ transaction_id: t.id, category_id: chosenCategoryId, source: s.source === 'geo' ? 'geo' : 'ai' }));
         if (rows.length) {
             const { error } = await sb.from('ca_transaction_categories').insert(rows);
             if (handleAuthError(error)) return;
