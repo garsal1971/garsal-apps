@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.25</title>
+    <title>Analisi Costi v1.0.26</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -669,8 +669,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.25';
-    var BUILD_TIME  = '2026-07-19T23:00:00Z';
+    var APP_VERSION = 'v1.0.26';
+    var BUILD_TIME  = '2026-07-19T23:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -739,6 +739,10 @@
     let txCategories = [];
     let merchantMap = [];
     let merchantMapCategories = [];
+    let merchantPersonMap = [];
+    // Transazioni marcate "solo questa transazione": la prossima modifica (tag o "per chi")
+    // non viene salvata nella mappa di apprendimento né propagata/rianalizzata sulle altre.
+    let _onlyThisTxIds = new Set();
     let bankConnections = [];
     let cardPersonMap = [];
     let mccCategoryMap = [];
@@ -1638,6 +1642,12 @@
         merchantMapCategories = mmc || [];
     }
 
+    async function loadMerchantPersonMap() {
+        const { data, error } = await sb.from('ca_merchant_person_map').select('*');
+        if (handleAuthError(error)) return;
+        merchantPersonMap = data || [];
+    }
+
     function normalizeMerchant(desc) {
         return (desc || '').toUpperCase().trim().replace(/\s+/g, ' ').replace(/[*#]?\s*\d{3,}$/, '').trim();
     }
@@ -1661,6 +1671,20 @@
             await sb.from('ca_merchant_map_categories').insert(rows);
             merchantMapCategories.push(...rows);
         }
+    }
+
+    async function learnMerchantPerson(description, personId) {
+        const key = normalizeMerchant(description);
+        if (!key) return;
+        if (personId) {
+            const { error } = await sb.from('ca_merchant_person_map')
+                .upsert({ user_id: currentUserId(), merchant_key: key, person_id: personId, updated_at: new Date().toISOString() }, { onConflict: 'user_id,merchant_key' });
+            if (handleAuthError(error)) return;
+        } else {
+            const { error } = await sb.from('ca_merchant_person_map').delete().eq('user_id', currentUserId()).eq('merchant_key', key);
+            if (handleAuthError(error)) return;
+        }
+        await loadMerchantPersonMap();
     }
 
     // ==========================================
@@ -1688,10 +1712,17 @@
             const matched = rules.filter(r => matchesPattern(description, r.pattern));
             if (matched.length) { categoryIds = [...new Set(matched.map(r => r.category_id))]; catSource = 'rule'; }
         }
+        // "Per chi" — priorità al merchant appreso (correzione manuale precedente, salvo il
+        // caso "solo questa transazione"), poi alle regole parola-chiave, come per la categoria.
         let personId = null, personSource = 'unassigned';
-        const sortedPersonRules = [...personRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
-        const pMatch = sortedPersonRules.find(r => matchesPattern(description, r.pattern));
-        if (pMatch) { personId = pMatch.person_id; personSource = 'rule'; }
+        const personKey = normalizeMerchant(description);
+        const mpm = merchantPersonMap.find(m => m.merchant_key === personKey);
+        if (mpm) { personId = mpm.person_id; personSource = 'learned'; }
+        if (!personId) {
+            const sortedPersonRules = [...personRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+            const pMatch = sortedPersonRules.find(r => matchesPattern(description, r.pattern));
+            if (pMatch) { personId = pMatch.person_id; personSource = 'rule'; }
+        }
         return { categoryIds, catSource, personId, personSource };
     }
 
@@ -1977,7 +2008,15 @@
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxSpender('${t.id}', this.value)">${spenderOptions}</select>
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
             </div>
+            <label style="margin-top:.4rem;display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);cursor:pointer;" title="Se attivo, le modifiche a tag e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
+                <input type="checkbox" ${_onlyThisTxIds.has(t.id) ? 'checked' : ''} onchange="toggleOnlyThisTx('${t.id}', this.checked)">
+                🔒 Solo questa transazione (non imparare/propagare)
+            </label>
         </div>`;
+    }
+
+    function toggleOnlyThisTx(txId, checked) {
+        if (checked) _onlyThisTxIds.add(txId); else _onlyThisTxIds.delete(txId);
     }
 
     // Elenco raggruppato per titolo (descrizione): il gruppo con più transazioni dallo
@@ -2019,7 +2058,9 @@
         const t = transactions.find(x => x.id === txId);
         if (t) { t.person_id = personId || null; t.person_source = 'manual'; }
         showToast('✅ Persona aggiornata');
-        // La persona appena assegnata può valere anche per altre transazioni già importate
+        if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
+        // La persona appena assegnata vale anche per il merchant (transazioni future comprese)
+        await learnMerchantPerson(t?.description, personId || null);
         if (personId) await reanalyzeAllTransactions();
     }
 
@@ -2039,8 +2080,10 @@
         const { error } = await sb.from('ca_transaction_categories').delete().eq('transaction_id', txId).eq('category_id', categoryId);
         if (handleAuthError(error)) return;
         txCategories = txCategories.filter(tc => !(tc.transaction_id === txId && tc.category_id === categoryId));
-        const t = transactions.find(x => x.id === txId);
-        await learnMerchantCategories(t?.description, getTxCategoryIds(txId));
+        if (!_onlyThisTxIds.has(txId)) {
+            const t = transactions.find(x => x.id === txId);
+            await learnMerchantCategories(t?.description, getTxCategoryIds(txId));
+        }
         renderTransactionsList();
         renderDashboard();
     }
@@ -2091,12 +2134,13 @@
         if (toAdd.length) await sb.from('ca_transaction_categories').insert(toAdd.map(cid => ({ transaction_id: txId, category_id: cid, source: 'manual' })));
         txCategories = txCategories.filter(tc => tc.transaction_id !== txId);
         checked.forEach(cid => txCategories.push({ transaction_id: txId, category_id: cid, source: 'manual' }));
-        const t = transactions.find(x => x.id === txId);
-        await learnMerchantCategories(t?.description, checked);
         closeTagEditor();
         renderTransactionsList();
         renderDashboard();
         showToast('✅ Categorie aggiornate');
+        if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
+        const t = transactions.find(x => x.id === txId);
+        await learnMerchantCategories(t?.description, checked);
         // Una nuova categoria appresa può valere anche per altre transazioni già importate
         if (toAdd.length) await reanalyzeAllTransactions();
     }
@@ -2572,7 +2616,7 @@
     // ==========================================
     async function startApp() {
         showToast('⏳ Caricamento dati...');
-        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap()]);
+        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMerchantPersonMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap()]);
         await loadTransactions();
         renderActivePage();
         showToast('✅ Dati caricati');
