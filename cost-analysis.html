@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.26</title>
+    <title>Analisi Costi v1.0.27</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -655,6 +655,18 @@
     </div>
 </div>
 
+<!-- ====== MODAL: DATO GREZZO (RAW) ====== -->
+<div class="modal" id="rawDataModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Dato grezzo (RAW)</h2>
+            <span class="modal-close" onclick="closeRawDataModal()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:.75rem;">Riga originale così come arrivata dalla banca (Enable Banking) o dal file CSV importato, senza nessuna elaborazione dell'app.</p>
+        <pre id="rawDataContent" class="mono" style="background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:1rem;max-height:60vh;overflow:auto;font-size:.8rem;white-space:pre-wrap;word-break:break-word;"></pre>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -669,8 +681,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.26';
-    var BUILD_TIME  = '2026-07-19T23:30:00Z';
+    var APP_VERSION = 'v1.0.27';
+    var BUILD_TIME  = '2026-07-19T23:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2004,9 +2016,10 @@
                 ${chips}
                 <span class="chip" onclick="openTagEditor('${t.id}')">+ tag</span>
             </div>
-            <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+            <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxSpender('${t.id}', this.value)">${spenderOptions}</select>
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
+                ${t.raw ? `<button type="button" class="btn btn-small btn-ghost" onclick="openRawDataModal('${t.id}')" title="Vedi il dato grezzo originale (banca o CSV)">🔍 RAW</button>` : ''}
             </div>
             <label style="margin-top:.4rem;display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);cursor:pointer;" title="Se attivo, le modifiche a tag e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
                 <input type="checkbox" ${_onlyThisTxIds.has(t.id) ? 'checked' : ''} onchange="toggleOnlyThisTx('${t.id}', this.checked)">
@@ -2018,6 +2031,13 @@
     function toggleOnlyThisTx(txId, checked) {
         if (checked) _onlyThisTxIds.add(txId); else _onlyThisTxIds.delete(txId);
     }
+
+    function openRawDataModal(txId) {
+        const t = transactions.find(x => x.id === txId);
+        document.getElementById('rawDataContent').textContent = t && t.raw ? JSON.stringify(t.raw, null, 2) : '(nessun dato grezzo salvato per questa transazione)';
+        document.getElementById('rawDataModal').classList.add('active');
+    }
+    function closeRawDataModal() { document.getElementById('rawDataModal').classList.remove('active'); }
 
     // Elenco raggruppato per titolo (descrizione): il gruppo con più transazioni dallo
     // stesso titolo viene mostrato per primo, NON in ordine alfabetico.
