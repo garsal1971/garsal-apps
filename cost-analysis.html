@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.15</title>
+    <title>Analisi Costi v1.0.16</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -534,11 +534,16 @@
             <input type="hidden" id="editBankConnectionId">
             <div class="form-group">
                 <label class="form-label">Banca *</label>
-                <select class="form-select" id="bankConnectionAspsp" required>
+                <select class="form-select" id="bankConnectionAspsp" required onchange="onBankConnectionAspspChange()">
                     <option value="Revolut">Revolut</option>
                     <option value="N26">N26</option>
                     <option value="Altro">Altro</option>
                 </select>
+            </div>
+            <div class="form-group" id="bankConnectionCountryGroup">
+                <label class="form-label">Paese (codice ASPSP) *</label>
+                <input type="text" class="form-input" id="bankConnectionCountry" maxlength="2" style="text-transform:uppercase;" placeholder="Es: LT">
+                <div class="form-hint">Codice paese a 2 lettere usato da Enable Banking per identificare la banca nel suo catalogo — verifica il valore esatto nel loro portale se il collegamento fallisce.</div>
             </div>
             <div class="form-group">
                 <label class="form-label">Nome conto</label>
@@ -549,12 +554,12 @@
                 <select class="form-select" id="bankConnectionOwner" required></select>
                 <div class="form-hint">Ogni transazione sincronizzata da questo conto viene attribuita automaticamente a questa persona.</div>
             </div>
-            <div class="form-group">
+            <div class="form-group" id="bankConnectionExpiryGroup">
                 <label class="form-label">Consenso valido fino al</label>
                 <input type="date" class="form-input" id="bankConnectionConsentExpiry">
-                <div class="form-hint">Facoltativo per ora — verrà popolato automaticamente dal collegamento reale (fase 2).</div>
+                <div class="form-hint">Popolato automaticamente dal collegamento reale — modificabile solo qui per correzioni manuali.</div>
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Conto</button>
+            <button type="submit" class="btn btn-primary" style="width:100%;" id="bankConnectionSubmitBtn">Salva Conto</button>
         </form>
     </div>
 </div>
@@ -652,8 +657,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.15';
-    var BUILD_TIME  = '2026-07-18T12:00:00Z';
+    var APP_VERSION = 'v1.0.16';
+    var BUILD_TIME  = '2026-07-18T13:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1272,16 +1277,30 @@
         }).join('');
     }
 
+    // Codice paese ASPSP di default per banca — modificabile nel form se Enable Banking
+    // si aspetta un valore diverso nel proprio catalogo.
+    const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', N26: 'DE', Altro: '' };
+
+    function onBankConnectionAspspChange() {
+        const aspsp = document.getElementById('bankConnectionAspsp').value;
+        document.getElementById('bankConnectionCountry').value = ASPSP_DEFAULT_COUNTRY[aspsp] || '';
+    }
+
     function openBankConnectionModal(id) {
         document.getElementById('editBankConnectionId').value = id || '';
         const bc = id ? bankConnections.find(x => x.id === id) : null;
         document.getElementById('bankConnectionModalTitle').textContent = bc ? 'Modifica Conto Collegato' : 'Nuovo Conto Collegato';
         document.getElementById('bankConnectionAspsp').value = bc ? bc.aspsp_name : 'Revolut';
+        onBankConnectionAspspChange();
         document.getElementById('bankConnectionDisplayName').value = bc ? (bc.display_name || '') : '';
         const sel = document.getElementById('bankConnectionOwner');
         sel.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         sel.value = bc ? (bc.owner_person_id || '') : (people[0]?.id || '');
         document.getElementById('bankConnectionConsentExpiry').value = bc && bc.consent_expires_at ? bc.consent_expires_at.slice(0, 10) : '';
+        // Per un conto nuovo il paese va indicato per avviare il collegamento reale; per uno
+        // già collegato/manuale si può solo correggere i dati locali (owner, nome, scadenza).
+        document.getElementById('bankConnectionCountryGroup').style.display = bc ? 'none' : 'block';
+        document.getElementById('bankConnectionSubmitBtn').textContent = bc ? 'Salva Conto' : 'Collega Conto (apre la banca)';
         document.getElementById('bankConnectionModal').classList.add('active');
     }
     function closeBankConnectionModal() { document.getElementById('bankConnectionModal').classList.remove('active'); }
@@ -1290,24 +1309,55 @@
         e.preventDefault();
         if (!people.length) { alert('Crea prima almeno una persona (Persone → + Nuova Persona).'); return; }
         const id = document.getElementById('editBankConnectionId').value;
-        const expiry = document.getElementById('bankConnectionConsentExpiry').value;
-        const payload = {
-            aspsp_name: document.getElementById('bankConnectionAspsp').value,
-            display_name: document.getElementById('bankConnectionDisplayName').value.trim() || null,
-            owner_person_id: document.getElementById('bankConnectionOwner').value,
-            consent_expires_at: expiry ? new Date(expiry).toISOString() : null,
-            user_id: currentUserId()
-        };
-        if (!payload.owner_person_id) return;
-        let error;
-        if (id) { ({ error } = await sb.from('ca_bank_connections').update(payload).eq('id', id)); }
-        else { ({ error } = await sb.from('ca_bank_connections').insert(payload)); }
-        if (handleAuthError(error)) return;
-        if (error) { alert('Errore: ' + error.message); return; }
-        closeBankConnectionModal();
-        await loadBankConnections();
-        renderBankConnections();
-        showToast('✅ Conto salvato');
+        const ownerPersonId = document.getElementById('bankConnectionOwner').value;
+        if (!ownerPersonId) return;
+
+        if (id) {
+            // Modifica di un conto esistente: solo campi locali, nessuna nuova richiesta di consenso.
+            const expiry = document.getElementById('bankConnectionConsentExpiry').value;
+            const payload = {
+                display_name: document.getElementById('bankConnectionDisplayName').value.trim() || null,
+                owner_person_id: ownerPersonId,
+                consent_expires_at: expiry ? new Date(expiry).toISOString() : null
+            };
+            const { error } = await sb.from('ca_bank_connections').update(payload).eq('id', id);
+            if (handleAuthError(error)) return;
+            if (error) { alert('Errore: ' + error.message); return; }
+            closeBankConnectionModal();
+            await loadBankConnections();
+            renderBankConnections();
+            showToast('✅ Conto salvato');
+            return;
+        }
+
+        // Nuovo conto: avvia il vero collegamento via Enable Banking (redirect alla banca).
+        const aspspName = document.getElementById('bankConnectionAspsp').value;
+        const country = document.getElementById('bankConnectionCountry').value.trim().toUpperCase();
+        if (!country) { alert('Indica il codice paese della banca (2 lettere).'); return; }
+        const displayName = document.getElementById('bankConnectionDisplayName').value.trim();
+
+        showProcessing('🏦 Avvio collegamento con la banca...');
+        try {
+            const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                    'apikey': SUPABASE_KEY
+                },
+                body: JSON.stringify({ aspspName, country, ownerPersonId, displayName })
+            });
+            const data = await res.json();
+            hideProcessing();
+            if (!res.ok || data.error) {
+                alert('Errore avvio collegamento: ' + (data?.error?.message || res.status));
+                return;
+            }
+            window.location.href = data.url; // reindirizza alla banca per il consenso
+        } catch (err) {
+            hideProcessing();
+            alert('Errore chiamata: ' + err.message);
+        }
     }
 
     async function deleteBankConnection(id) {
@@ -1319,10 +1369,31 @@
         showToast('🗑️ Conto eliminato');
     }
 
-    function syncBankConnectionNow(id) {
-        // Fase 2: chiamerà una edge function Enable Banking per scaricare le nuove transazioni.
-        // Per ora le credenziali dell'app non sono configurate.
-        showToast('Sincronizzazione automatica non ancora attiva — richiede le credenziali Enable Banking (fase 2)', true);
+    async function syncBankConnectionNow(id) {
+        showProcessing('🔄 Sincronizzazione in corso...');
+        try {
+            const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                    'apikey': SUPABASE_KEY
+                },
+                body: JSON.stringify({ bankConnectionId: id })
+            });
+            const data = await res.json();
+            hideProcessing();
+            if (!res.ok || data.error) {
+                alert('Errore sincronizzazione: ' + (data?.error?.message || res.status));
+                return;
+            }
+            await loadTransactions();
+            renderActivePage();
+            showToast(`✅ Sincronizzazione completata — ${data.imported} nuove transazioni`);
+        } catch (err) {
+            hideProcessing();
+            alert('Errore chiamata: ' + err.message);
+        }
     }
 
     // ==========================================
@@ -2309,7 +2380,22 @@
         }
     };
 
+    // Esito del collegamento conto Enable Banking (redirect di ritorno dopo il consenso in banca)
+    function handleBankConnectRedirectResult() {
+        const params = new URLSearchParams(window.location.search);
+        const result = params.get('bank_connect');
+        if (!result) return;
+        const message = params.get('bank_connect_message');
+        if (result === 'success') showToast('✅ Conto collegato con successo');
+        else showToast('⚠️ Collegamento conto non riuscito' + (message ? ': ' + message : ''), true);
+        params.delete('bank_connect');
+        params.delete('bank_connect_message');
+        const newQuery = params.toString();
+        history.replaceState(null, '', window.location.pathname + (newQuery ? '?' + newQuery : ''));
+    }
+
     window.addEventListener('load', () => {
+        handleBankConnectRedirectResult();
         const stored = localStorage.getItem('sb_token');
         if (stored) {
             initWithToken(stored);
