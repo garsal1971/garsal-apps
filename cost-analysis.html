@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.22</title>
+    <title>Analisi Costi v1.0.23</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -385,6 +385,10 @@
             </div>
             <p class="form-hint" style="margin-bottom:1rem;">Sync automatico via Enable Banking (PSD2) — in questa fase i conti si registrano manualmente; il collegamento diretto e la sincronizzazione automatica arrivano quando saranno configurate le credenziali dell'app.</p>
             <div id="bankConnectionsList"></div>
+
+            <h2 class="page-title" style="font-size:1.05rem;margin-top:2rem;">Carte — attribuzione "chi ha speso"</h2>
+            <p class="form-hint" style="margin-bottom:1rem;">Ogni carta trovata nelle transazioni sincronizzate può essere assegnata a una persona: le transazioni fatte con quella carta verranno attribuite automaticamente a lei. Le carte non assegnate (o le transazioni senza carta, es. bonifici/ricariche) vengono attribuite a <strong>NUCLEO</strong>.</p>
+            <div id="cardMappingList"></div>
         </div>
 
     </main>
@@ -663,8 +667,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.22';
-    var BUILD_TIME  = '2026-07-19T21:45:00Z';
+    var APP_VERSION = 'v1.0.23';
+    var BUILD_TIME  = '2026-07-19T22:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -734,6 +738,7 @@
     let merchantMap = [];
     let merchantMapCategories = [];
     let bankConnections = [];
+    let cardPersonMap = [];
     let mccCategoryMap = [];
 
     // ==========================================
@@ -782,7 +787,7 @@
             case 'categoriesPage':    renderCategories(); break;
             case 'peoplePage':        renderPeople(); break;
             case 'rulesPage':         renderRules(); break;
-            case 'bankConnectionsPage': renderBankConnections(); break;
+            case 'bankConnectionsPage': renderBankConnections(); renderCardMappingList(); break;
         }
     }
 
@@ -1064,6 +1069,38 @@
         bankConnections = data || [];
     }
 
+    async function loadCardPersonMap() {
+        const { data, error } = await sb.from('ca_card_person_map').select('*');
+        if (handleAuthError(error)) return;
+        cardPersonMap = data || [];
+    }
+
+    // Trova (o crea) la persona "NUCLEO", usata come attribuzione di default per le
+    // transazioni senza carta riconosciuta (bonifici, ricariche, ecc.) o con una carta
+    // non ancora assegnata a nessuno in ca_card_person_map.
+    async function ensureNucleoPerson() {
+        let nucleo = people.find(p => p.name === 'NUCLEO');
+        if (nucleo) return nucleo.id;
+        const { data, error } = await sb.from('ca_people').insert({ name: 'NUCLEO', color: '#6B7280', user_id: currentUserId() }).select().single();
+        if (handleAuthError(error)) return null;
+        if (error) { console.error(error); return null; }
+        people.push(data);
+        return data.id;
+    }
+
+    // Estrae issuer + ultime cifre della carta usata dal JSON grezzo Enable Banking
+    // (debtor_account_additional_identification), se presente.
+    function extractCardKey(raw) {
+        const list = raw && raw.debtor_account_additional_identification;
+        const card = Array.isArray(list) && list.length ? list[0] : null;
+        if (!card || !card.issuer || !card.identification) return null;
+        return { issuer: card.issuer, identification: card.identification };
+    }
+
+    function findCardMapping(issuer, identification) {
+        return cardPersonMap.find(m => m.card_issuer === issuer && m.card_identification === identification);
+    }
+
     function renderRules() {
         const catContainer = document.getElementById('categoryRulesList');
         catContainer.innerHTML = !rules.length
@@ -1283,6 +1320,91 @@
         }).join('');
     }
 
+    // ==========================================
+    // CARTE — attribuzione "chi ha speso" per carta usata (bank_sync)
+    // ==========================================
+    function distinctCards() {
+        const map = new Map();
+        transactions.forEach(t => {
+            if (t.import_source !== 'bank_sync' || !t.raw) return;
+            const key = extractCardKey(t.raw);
+            if (!key) return;
+            const mapKey = key.issuer + '|' + key.identification;
+            if (!map.has(mapKey)) map.set(mapKey, { issuer: key.issuer, identification: key.identification, count: 0, example: t.description });
+            map.get(mapKey).count++;
+        });
+        return Array.from(map.values()).sort((a, b) => b.count - a.count);
+    }
+
+    function renderCardMappingList() {
+        const container = document.getElementById('cardMappingList');
+        if (!container) return;
+        const cards = distinctCards();
+        if (!cards.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna carta trovata nelle transazioni sincronizzate.</p></div>';
+            return;
+        }
+        container.innerHTML = cards.map(c => {
+            const mapping = findCardMapping(c.issuer, c.identification);
+            const options = '<option value="">— NUCLEO (non assegnata) —</option>' +
+                people.filter(p => p.name !== 'NUCLEO').map(p => `<option value="${p.id}" ${mapping && mapping.person_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('');
+            return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;">
+                <div>
+                    <div style="font-weight:700;">${c.issuer} · •••• ${c.identification}</div>
+                    <div class="tx-meta">${c.count} transazioni · es. "${c.example || '—'}"</div>
+                </div>
+                <select class="form-input" style="width:auto;" onchange="assignCardPerson('${c.issuer}', '${c.identification}', this.value)">${options}</select>
+            </div>`;
+        }).join('');
+    }
+
+    async function assignCardPerson(issuer, identification, personId) {
+        showProcessing('💳 Aggiornamento attribuzione carta...');
+        let error;
+        if (personId) {
+            ({ error } = await sb.from('ca_card_person_map')
+                .upsert({ card_issuer: issuer, card_identification: identification, person_id: personId, user_id: currentUserId() }, { onConflict: 'user_id,card_issuer,card_identification' }));
+        } else {
+            ({ error } = await sb.from('ca_card_person_map').delete().eq('card_issuer', issuer).eq('card_identification', identification));
+        }
+        if (handleAuthError(error)) { hideProcessing(); return; }
+        if (error) { hideProcessing(); alert('Errore: ' + error.message); return; }
+        await loadCardPersonMap();
+        await reattributeSpenderByCard();
+        hideProcessing();
+        renderCardMappingList();
+        showToast('✅ Attribuzione carta aggiornata');
+    }
+
+    // Riapplica l'attribuzione "chi ha speso" a tutte le transazioni bank_sync già importate,
+    // in base alla mappatura carta→persona corrente. Chiamata dopo ogni sync e dopo ogni
+    // modifica in ca_card_person_map, così le transazioni già presenti si allineano subito
+    // a una nuova assegnazione carta→persona.
+    async function reattributeSpenderByCard() {
+        const nucleoId = await ensureNucleoPerson();
+        if (!nucleoId) return;
+        const updates = [];
+        transactions.forEach(t => {
+            if (t.import_source !== 'bank_sync' || !t.raw) return;
+            const key = extractCardKey(t.raw);
+            const mapping = key ? findCardMapping(key.issuer, key.identification) : null;
+            const targetPersonId = mapping ? mapping.person_id : nucleoId;
+            if (t.spender_person_id !== targetPersonId) updates.push({ id: t.id, spender_person_id: targetPersonId });
+        });
+        if (!updates.length) return;
+        const byPerson = new Map();
+        updates.forEach(u => {
+            if (!byPerson.has(u.spender_person_id)) byPerson.set(u.spender_person_id, []);
+            byPerson.get(u.spender_person_id).push(u.id);
+        });
+        for (const [personId, ids] of byPerson) {
+            const { error } = await sb.from('ca_transactions').update({ spender_person_id: personId }).in('id', ids);
+            if (handleAuthError(error)) return;
+            if (!error) ids.forEach(id => { const t = transactions.find(x => x.id === id); if (t) t.spender_person_id = personId; });
+        }
+        renderActivePage();
+    }
+
     // Codice paese ASPSP di default per banca — modificabile nel form se Enable Banking
     // si aspetta un valore diverso nel proprio catalogo.
     const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', N26: 'DE', Altro: '' };
@@ -1438,6 +1560,7 @@
                 alert('Errore sincronizzazione: ' + (data?.error?.message || res.status));
                 return;
             }
+            await loadPeople(); // il sync può aver creato la persona NUCLEO al primo giro
             await loadTransactions();
             renderActivePage();
             const oldestInfo = data.oldestDate
@@ -1446,7 +1569,10 @@
             alert(`✅ Sincronizzazione completata\n\nNuove transazioni importate: ${data.imported}${oldestInfo}`);
             // Il sync applica solo la categorizzazione MCC (server-side); qui in più
             // applichiamo merchant appreso/regole alle transazioni ancora senza categoria.
-            if (data.imported > 0) await reanalyzeAllTransactions();
+            if (data.imported > 0) {
+                await reanalyzeAllTransactions();
+                await reattributeSpenderByCard(); // allinea eventuali nuove carte già mappate
+            }
         } catch (err) {
             hideProcessing();
             alert('Errore chiamata: ' + err.message);
@@ -2399,7 +2525,7 @@
     // ==========================================
     async function startApp() {
         showToast('⏳ Caricamento dati...');
-        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMccMap(), loadBankConnections()]);
+        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap()]);
         await loadTransactions();
         renderActivePage();
         showToast('✅ Dati caricati');

@@ -1,17 +1,18 @@
-// Supabase Edge Function: scarica le transazioni nuove per un conto collegato via Enable
-// Banking (GET /accounts/{id}/transactions), le deduplica per external_id, applica la
-// categorizzazione MCC (deterministica — merchant appreso/regole/AI restano al client, che
-// le applica in automatico ad ogni caricamento sulle transazioni ancora senza categoria) e le
-// inserisce con spender_person_id preso dal proprietario del conto.
+// Supabase Edge Function: scarica tutte le transazioni (con paginazione) per un conto
+// collegato via Enable Banking (GET /accounts/{id}/transactions), le deduplica per
+// external_id, applica la categorizzazione MCC (deterministica — merchant appreso/regole/AI
+// restano al client, applicati dopo ogni sync) e le inserisce con spender_person_id attribuito
+// in base alla carta usata (ca_card_person_map), con fallback alla persona "NUCLEO" per le
+// transazioni senza carta riconosciuta o con carta non ancora assegnata.
 //
 // NOTA: i nomi esatti dei campi nella risposta di /transactions non sono stati verificati con
-// una chiamata reale (non testabile da questo ambiente) — l'estrazione prova più varianti di
-// nome campo comuni allo standard Berlin Group NextGenPSD2 su cui si basa Enable Banking, e la
-// riga CSV/JSON originale viene comunque salvata per intero in ca_transactions.raw così nulla
-// va perso anche se un campo non viene riconosciuto correttamente al primo giro.
+// una chiamata reale prima del primo sync effettivo — l'estrazione prova più varianti di nome
+// campo comuni allo standard Berlin Group NextGenPSD2 su cui si basa Enable Banking, e la
+// riga JSON originale viene comunque salvata per intero in ca_transactions.raw così nulla va
+// perso anche se un campo non viene riconosciuto correttamente al primo giro.
 //
 // Richiede i Supabase Secrets: ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY.
-// v1 — 2026-07-18
+// v1 — 2026-07-18 · v2 — 2026-07-19: paginazione completa + attribuzione spender per carta
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -205,7 +206,14 @@ Deno.serve(async (req) => {
       const mcc = (pick(tx, 'merchant_category_code', 'merchantCategoryCode', 'mcc') as string) || null;
       const bankTxCode = pick(tx, 'bank_transaction_code', 'bankTransactionCode') as any;
       const type = (bankTxCode && (pick(bankTxCode, 'code') as string)) || null;
-      return { date, amount, currency, description, externalId, mcc, type, raw: tx };
+      // Carta usata (issuer + ultime cifre), quando presente — usata per attribuire "chi ha
+      // speso" in automatico (vedi ca_card_person_map), utile sui conti condivisi dove ogni
+      // intestatario ha la propria carta.
+      const cardIdList = pick(tx, 'debtor_account_additional_identification', 'debtorAccountAdditionalIdentification') as any[];
+      const card = Array.isArray(cardIdList) && cardIdList.length ? cardIdList[0] : null;
+      const cardIssuer = (card && (pick(card, 'issuer') as string)) || null;
+      const cardIdentification = (card && (pick(card, 'identification') as string)) || null;
+      return { date, amount, currency, description, externalId, mcc, type, cardIssuer, cardIdentification, raw: tx };
     }).filter((t) => t.date && t.externalId);
 
     if (!rows.length) {
@@ -213,21 +221,51 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ imported: 0 }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const insertRows = rows.map((t) => ({
-      user_id: userId,
-      date: t.date,
-      amount: t.amount,
-      currency: t.currency,
-      description: t.description,
-      type: t.type,
-      spender_person_id: connection.owner_person_id,
-      person_source: 'unassigned',
-      bank_connection_id: bankConnectionId,
-      external_id: t.externalId,
-      mcc: t.mcc,
-      import_source: 'bank_sync',
-      raw: t.raw,
-    }));
+    const { data: cardMap } = await supabase
+      .from('ca_card_person_map')
+      .select('card_issuer, card_identification, person_id')
+      .eq('user_id', userId);
+
+    // "Chi ha speso" è attribuito in base alla carta usata (ca_card_person_map). Le
+    // transazioni senza carta riconosciuta o con una carta non ancora assegnata a nessuno
+    // vanno alla persona "NUCLEO" (creata al bisogno) invece che al proprietario fisso del
+    // conto — utile sui conti condivisi dove più persone usano carte diverse sullo stesso IBAN.
+    let { data: nucleo } = await supabase
+      .from('ca_people')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('name', 'NUCLEO')
+      .maybeSingle();
+    if (!nucleo) {
+      const { data: createdNucleo } = await supabase
+        .from('ca_people')
+        .insert({ user_id: userId, name: 'NUCLEO', color: '#6B7280' })
+        .select('id')
+        .single();
+      nucleo = createdNucleo;
+    }
+    const nucleoId = nucleo?.id || connection.owner_person_id || null;
+
+    const insertRows = rows.map((t) => {
+      const mapping = t.cardIssuer && t.cardIdentification
+        ? (cardMap || []).find((m) => m.card_issuer === t.cardIssuer && m.card_identification === t.cardIdentification)
+        : null;
+      return {
+        user_id: userId,
+        date: t.date,
+        amount: t.amount,
+        currency: t.currency,
+        description: t.description,
+        type: t.type,
+        spender_person_id: mapping ? mapping.person_id : nucleoId,
+        person_source: 'unassigned',
+        bank_connection_id: bankConnectionId,
+        external_id: t.externalId,
+        mcc: t.mcc,
+        import_source: 'bank_sync',
+        raw: t.raw,
+      };
+    });
 
     const { data: inserted, error: insertError } = await supabase
       .from('ca_transactions')
