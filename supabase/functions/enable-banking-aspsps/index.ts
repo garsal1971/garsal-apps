@@ -101,7 +101,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const filtered = (query ? allResults.filter((a) => a.name.toLowerCase().includes(query)) : allResults).slice(0, 50);
+    const cap = country ? 200 : 50; // un paese esplicito è una vera sfoglia dell'elenco, non solo un tentativo automatico
+    const filtered = (query ? allResults.filter((a) => a.name.toLowerCase().includes(query)) : allResults)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, cap);
 
     return new Response(
       JSON.stringify({ results: filtered, searchedCountries: countriesToTry, totalFound: allResults.length }),
