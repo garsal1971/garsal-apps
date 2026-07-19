@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.24</title>
+    <title>Analisi Costi v1.0.25</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -407,14 +407,16 @@
                 <label class="form-label">Nome *</label>
                 <input type="text" class="form-input" id="categoryName" required placeholder="Es: Spesa, Trasporti, Bollette...">
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
-                <div class="form-group">
-                    <label class="form-label">Icona (emoji)</label>
-                    <input type="text" class="form-input" id="categoryIcon" placeholder="🛒" maxlength="4">
-                </div>
-                <div class="form-group" id="categoryColorGroup">
-                    <label class="form-label">Colore</label>
-                    <input type="color" class="form-input" id="categoryColor" value="#2563EB">
+            <div class="form-group">
+                <label class="form-label">Icona (emoji)</label>
+                <input type="text" class="form-input" id="categoryIcon" placeholder="🛒" maxlength="4">
+            </div>
+            <div class="form-group" id="categoryColorGroup">
+                <label class="form-label">Colore</label>
+                <div id="categoryColorSwatches" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem;"></div>
+                <div style="display:flex;align-items:center;gap:.5rem;">
+                    <input type="color" id="categoryColor" value="#2563EB" style="width:44px;height:36px;padding:2px;border:2px solid var(--border);border-radius:8px;cursor:pointer;" oninput="renderCategoryColorSwatches(this.value)">
+                    <span class="form-hint" style="margin:0;">oppure scegli un colore personalizzato</span>
                 </div>
             </div>
             <div class="form-group">
@@ -667,8 +669,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.24';
-    var BUILD_TIME  = '2026-07-19T22:40:00Z';
+    var APP_VERSION = 'v1.0.25';
+    var BUILD_TIME  = '2026-07-19T23:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -903,7 +905,9 @@
         '#EE334E', '#0081C8', '#00A651', '#FCB131', '#6C5CE7', '#00B894',
         '#F39C12', '#E74C3C', '#2563EB', '#9B59B6', '#16A085', '#D35400',
         '#C0392B', '#2980B9', '#8E44AD', '#27AE60', '#F1C40F', '#7F8C8D',
-        '#FF6B9D', '#00CEC9'
+        '#FF6B9D', '#00CEC9', '#E84393', '#0984E3', '#6AB04C', '#EB4D4B',
+        '#F0932B', '#22A6B3', '#B33771', '#3C6382', '#78E08F', '#82589F',
+        '#CD6133', '#4A69BD', '#B71540', '#079992', '#FA8231', '#A29BFE'
     ];
     function pickUnusedColor() {
         const used = new Set(topCategories().map(c => (c.color || '').toUpperCase()));
@@ -913,6 +917,23 @@
         do { color = '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'); attempts++; }
         while (used.has(color.toUpperCase()) && attempts < 30);
         return color;
+    }
+
+    // Mostra la palette come griglia di swatch cliccabili (più ampia e comoda della sola
+    // finestra colore nativa del browser), evidenziando quello attualmente selezionato.
+    function renderCategoryColorSwatches(selected) {
+        const container = document.getElementById('categoryColorSwatches');
+        if (!container) return;
+        const sel = (selected || '').toUpperCase();
+        container.innerHTML = CATEGORY_COLOR_PALETTE.map(color => {
+            const isSelected = color.toUpperCase() === sel;
+            return `<span onclick="selectCategoryColor('${color}')" title="${color}" style="width:26px;height:26px;border-radius:50%;background:${color};cursor:pointer;display:inline-block;box-sizing:border-box;border:${isSelected ? '3px solid var(--dark)' : '2px solid transparent'};"></span>`;
+        }).join('');
+        document.getElementById('categoryColor').value = selected || CATEGORY_COLOR_PALETTE[0];
+    }
+    function selectCategoryColor(color) {
+        document.getElementById('categoryColor').value = color;
+        renderCategoryColorSwatches(color);
     }
 
     // Mostra il selettore colore solo per le categorie principali (parent vuoto);
@@ -928,7 +949,7 @@
         document.getElementById('categoryModalTitle').textContent = cat ? 'Modifica Categoria' : 'Nuova Categoria';
         document.getElementById('categoryName').value = cat ? cat.name : '';
         document.getElementById('categoryIcon').value = cat ? (cat.icon || '') : '';
-        document.getElementById('categoryColor').value = (cat && !cat.parent_id) ? (cat.color || pickUnusedColor()) : pickUnusedColor();
+        renderCategoryColorSwatches((cat && !cat.parent_id) ? (cat.color || pickUnusedColor()) : pickUnusedColor());
         const parentSel = document.getElementById('categoryParent');
         parentSel.innerHTML = '<option value="">— Nessuna (categoria principale) —</option>' +
             topCategories().filter(c => c.id !== id).map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
