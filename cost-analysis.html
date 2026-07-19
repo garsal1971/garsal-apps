@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.16</title>
+    <title>Analisi Costi v1.0.17</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -532,18 +532,23 @@
         </div>
         <form onsubmit="saveBankConnection(event)">
             <input type="hidden" id="editBankConnectionId">
+            <div class="form-group" id="bankConnectionSearchGroup">
+                <label class="form-label">Cerca banca nel catalogo Enable Banking</label>
+                <div style="display:flex;gap:.5rem;">
+                    <input type="text" class="form-input" id="bankConnectionSearchQuery" placeholder="Es: Revolut" style="flex:1;">
+                    <button type="button" class="btn btn-secondary" onclick="searchAspsps()">🔍 Cerca</button>
+                </div>
+                <div id="bankConnectionSearchResults" style="margin-top:.5rem;"></div>
+                <div class="form-hint">Il nome deve combaciare esattamente col catalogo di Enable Banking — cerca e clicca il risultato giusto invece di scriverlo a mano.</div>
+            </div>
             <div class="form-group">
-                <label class="form-label">Banca *</label>
-                <select class="form-select" id="bankConnectionAspsp" required onchange="onBankConnectionAspspChange()">
-                    <option value="Revolut">Revolut</option>
-                    <option value="N26">N26</option>
-                    <option value="Altro">Altro</option>
-                </select>
+                <label class="form-label">Banca (nome esatto ASPSP) *</label>
+                <input type="text" class="form-input" id="bankConnectionAspsp" required placeholder="Es: Revolut">
             </div>
             <div class="form-group" id="bankConnectionCountryGroup">
                 <label class="form-label">Paese (codice ASPSP) *</label>
                 <input type="text" class="form-input" id="bankConnectionCountry" maxlength="2" style="text-transform:uppercase;" placeholder="Es: LT">
-                <div class="form-hint">Codice paese a 2 lettere usato da Enable Banking per identificare la banca nel suo catalogo — verifica il valore esatto nel loro portale se il collegamento fallisce.</div>
+                <div class="form-hint">Codice paese a 2 lettere usato da Enable Banking per identificare la banca nel suo catalogo.</div>
             </div>
             <div class="form-group">
                 <label class="form-label">Nome conto</label>
@@ -657,8 +662,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.16';
-    var BUILD_TIME  = '2026-07-18T13:30:00Z';
+    var APP_VERSION = 'v1.0.17';
+    var BUILD_TIME  = '2026-07-19T17:10:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1281,29 +1286,71 @@
     // si aspetta un valore diverso nel proprio catalogo.
     const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', N26: 'DE', Altro: '' };
 
-    function onBankConnectionAspspChange() {
-        const aspsp = document.getElementById('bankConnectionAspsp').value;
-        document.getElementById('bankConnectionCountry').value = ASPSP_DEFAULT_COUNTRY[aspsp] || '';
-    }
-
     function openBankConnectionModal(id) {
         document.getElementById('editBankConnectionId').value = id || '';
         const bc = id ? bankConnections.find(x => x.id === id) : null;
         document.getElementById('bankConnectionModalTitle').textContent = bc ? 'Modifica Conto Collegato' : 'Nuovo Conto Collegato';
-        document.getElementById('bankConnectionAspsp').value = bc ? bc.aspsp_name : 'Revolut';
-        onBankConnectionAspspChange();
+        const defaultAspsp = bc ? bc.aspsp_name : 'Revolut';
+        document.getElementById('bankConnectionAspsp').value = defaultAspsp;
+        document.getElementById('bankConnectionSearchQuery').value = '';
+        document.getElementById('bankConnectionSearchResults').innerHTML = '';
+        document.getElementById('bankConnectionCountry').value = bc ? '' : (ASPSP_DEFAULT_COUNTRY[defaultAspsp] || '');
         document.getElementById('bankConnectionDisplayName').value = bc ? (bc.display_name || '') : '';
         const sel = document.getElementById('bankConnectionOwner');
         sel.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         sel.value = bc ? (bc.owner_person_id || '') : (people[0]?.id || '');
         document.getElementById('bankConnectionConsentExpiry').value = bc && bc.consent_expires_at ? bc.consent_expires_at.slice(0, 10) : '';
-        // Per un conto nuovo il paese va indicato per avviare il collegamento reale; per uno
-        // già collegato/manuale si può solo correggere i dati locali (owner, nome, scadenza).
+        // Ricerca banca, campo aspsp libero e paese servono solo per avviare un nuovo
+        // collegamento; modificando un conto già collegato si toccano solo i dati locali.
+        document.getElementById('bankConnectionSearchGroup').style.display = bc ? 'none' : 'block';
+        document.getElementById('bankConnectionAspsp').disabled = !!bc;
         document.getElementById('bankConnectionCountryGroup').style.display = bc ? 'none' : 'block';
         document.getElementById('bankConnectionSubmitBtn').textContent = bc ? 'Salva Conto' : 'Collega Conto (apre la banca)';
         document.getElementById('bankConnectionModal').classList.add('active');
     }
     function closeBankConnectionModal() { document.getElementById('bankConnectionModal').classList.remove('active'); }
+
+    async function searchAspsps() {
+        const query = document.getElementById('bankConnectionSearchQuery').value.trim();
+        const resultsEl = document.getElementById('bankConnectionSearchResults');
+        if (!query) { resultsEl.innerHTML = ''; return; }
+        resultsEl.innerHTML = '<div class="form-hint">Ricerca in corso...</div>';
+        try {
+            const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-aspsps', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                    'apikey': SUPABASE_KEY
+                },
+                body: JSON.stringify({ query })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                resultsEl.innerHTML = `<div class="form-hint" style="color:var(--danger);">Errore: ${data?.error?.message || res.status}</div>`;
+                return;
+            }
+            const results = data.results || [];
+            if (!results.length) {
+                resultsEl.innerHTML = '<div class="form-hint">Nessun risultato.</div>';
+                return;
+            }
+            resultsEl.innerHTML = results.map((r, i) =>
+                `<div class="chip" style="display:inline-block;margin:.2rem .3rem 0 0;" onclick="selectAspspResult(${i})">${r.name} (${r.country})</div>`
+            ).join('');
+            window._aspspSearchResults = results;
+        } catch (err) {
+            resultsEl.innerHTML = `<div class="form-hint" style="color:var(--danger);">Errore: ${err.message}</div>`;
+        }
+    }
+
+    function selectAspspResult(i) {
+        const r = (window._aspspSearchResults || [])[i];
+        if (!r) return;
+        document.getElementById('bankConnectionAspsp').value = r.name;
+        document.getElementById('bankConnectionCountry').value = r.country;
+        showToast('✅ Banca selezionata: ' + r.name);
+    }
 
     async function saveBankConnection(e) {
         e.preventDefault();
