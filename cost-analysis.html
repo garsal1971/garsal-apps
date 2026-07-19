@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.23</title>
+    <title>Analisi Costi v1.0.24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -412,15 +412,15 @@
                     <label class="form-label">Icona (emoji)</label>
                     <input type="text" class="form-input" id="categoryIcon" placeholder="🛒" maxlength="4">
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="categoryColorGroup">
                     <label class="form-label">Colore</label>
                     <input type="color" class="form-input" id="categoryColor" value="#2563EB">
                 </div>
             </div>
             <div class="form-group">
                 <label class="form-label">Categoria padre</label>
-                <select class="form-select" id="categoryParent"></select>
-                <div class="form-hint">Lascia vuoto per una categoria principale, oppure scegli una categoria padre per creare una sotto-categoria.</div>
+                <select class="form-select" id="categoryParent" onchange="onCategoryParentChange()"></select>
+                <div class="form-hint" id="categoryParentHint">Lascia vuoto per una categoria principale, oppure scegli una categoria padre per creare una sotto-categoria.</div>
             </div>
             <button type="submit" class="btn btn-primary" style="width:100%;">Salva Categoria</button>
         </form>
@@ -667,8 +667,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.23';
-    var BUILD_TIME  = '2026-07-19T22:15:00Z';
+    var APP_VERSION = 'v1.0.24';
+    var BUILD_TIME  = '2026-07-19T22:40:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -747,6 +747,16 @@
     function fmtEUR(v) { return (v || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }); }
     function formatDateIt(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
     function categoryLabel(c) { return (c.icon ? c.icon + ' ' : '') + c.name; }
+    // Il colore appartiene solo alle categorie principali; le sotto-categorie ereditano
+    // sempre il colore della propria categoria padre.
+    function categoryColor(c) {
+        if (!c) return '#999';
+        if (c.parent_id) {
+            const parent = categories.find(x => x.id === c.parent_id);
+            return (parent && parent.color) || '#999';
+        }
+        return c.color || '#999';
+    }
 
     function showToast(msg, isError) {
         const t = document.getElementById('toast');
@@ -828,7 +838,7 @@
                 <div class="mgmt-group-body">
                     ${kids.length ? kids.map(k => `
                         <div class="mgmt-event-row">
-                            <div class="mgmt-event-info"><span class="mgmt-group-dot" style="background:${k.color || '#999'}"></span><span class="mgmt-event-name">${categoryLabel(k)}</span> <span style="color:var(--muted);font-size:.8rem;">(${categoryTransactionCount(k.id)})</span></div>
+                            <div class="mgmt-event-info"><span class="mgmt-group-dot" style="background:${categoryColor(k)}"></span><span class="mgmt-event-name">${categoryLabel(k)}</span> <span style="color:var(--muted);font-size:.8rem;">(${categoryTransactionCount(k.id)})</span></div>
                             <div class="mgmt-event-actions">
                                 <button class="btn btn-small btn-ghost" onclick="openCategoryTransactionsModal('${k.id}')" title="Vedi transazioni">📄</button>
                                 <button class="btn btn-small btn-secondary" onclick="openCategoryModal('${k.id}')">✏️</button>
@@ -886,7 +896,9 @@
     }
     function closeCategoryTransactionsModal() { document.getElementById('categoryTransactionsModal').classList.remove('active'); }
 
-    // Palette di colori facilmente distinguibili: ogni categoria/sotto-categoria ne ha uno univoco.
+    // Palette di colori facilmente distinguibili: solo le categorie principali ne hanno uno
+    // univoco. Le sotto-categorie non hanno un colore proprio, ereditano quello del padre
+    // (vedi categoryColor()).
     const CATEGORY_COLOR_PALETTE = [
         '#EE334E', '#0081C8', '#00A651', '#FCB131', '#6C5CE7', '#00B894',
         '#F39C12', '#E74C3C', '#2563EB', '#9B59B6', '#16A085', '#D35400',
@@ -894,7 +906,7 @@
         '#FF6B9D', '#00CEC9'
     ];
     function pickUnusedColor() {
-        const used = new Set(categories.map(c => (c.color || '').toUpperCase()));
+        const used = new Set(topCategories().map(c => (c.color || '').toUpperCase()));
         const free = CATEGORY_COLOR_PALETTE.find(c => !used.has(c.toUpperCase()));
         if (free) return free;
         let color, attempts = 0;
@@ -903,17 +915,25 @@
         return color;
     }
 
+    // Mostra il selettore colore solo per le categorie principali (parent vuoto);
+    // le sotto-categorie ereditano il colore del padre e non lo mostrano.
+    function onCategoryParentChange() {
+        const isSub = !!document.getElementById('categoryParent').value;
+        document.getElementById('categoryColorGroup').style.display = isSub ? 'none' : 'block';
+    }
+
     function openCategoryModal(id, presetParentId) {
         document.getElementById('editCategoryId').value = id || '';
         const cat = id ? categories.find(c => c.id === id) : null;
         document.getElementById('categoryModalTitle').textContent = cat ? 'Modifica Categoria' : 'Nuova Categoria';
         document.getElementById('categoryName').value = cat ? cat.name : '';
         document.getElementById('categoryIcon').value = cat ? (cat.icon || '') : '';
-        document.getElementById('categoryColor').value = cat ? (cat.color || pickUnusedColor()) : pickUnusedColor();
+        document.getElementById('categoryColor').value = (cat && !cat.parent_id) ? (cat.color || pickUnusedColor()) : pickUnusedColor();
         const parentSel = document.getElementById('categoryParent');
         parentSel.innerHTML = '<option value="">— Nessuna (categoria principale) —</option>' +
             topCategories().filter(c => c.id !== id).map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
         parentSel.value = cat ? (cat.parent_id || '') : (presetParentId || '');
+        onCategoryParentChange();
         document.getElementById('categoryModal').classList.add('active');
     }
 
@@ -945,14 +965,20 @@
     async function saveCategory(e) {
         e.preventDefault();
         const id = document.getElementById('editCategoryId').value;
+        const parentId = document.getElementById('categoryParent').value || null;
+        const isSub = !!parentId;
+        // Il colore appartiene solo alle categorie principali: le sotto-categorie non ne
+        // salvano uno proprio, lo ereditano dal padre a runtime (categoryColor()).
         const color = document.getElementById('categoryColor').value;
-        const colorTaken = categories.some(c => c.id !== id && (c.color || '').toUpperCase() === color.toUpperCase());
-        if (colorTaken) { alert('Questo colore è già usato da un\'altra categoria o sotto-categoria. Scegline uno diverso.'); return; }
+        if (!isSub) {
+            const colorTaken = topCategories().some(c => c.id !== id && (c.color || '').toUpperCase() === color.toUpperCase());
+            if (colorTaken) { alert('Questo colore è già usato da un\'altra categoria principale. Scegline uno diverso.'); return; }
+        }
         const payload = {
             name: document.getElementById('categoryName').value.trim(),
             icon: document.getElementById('categoryIcon').value.trim(),
-            color: color,
-            parent_id: document.getElementById('categoryParent').value || null,
+            color: isSub ? null : color,
+            parent_id: parentId,
             user_id: currentUserId()
         };
         if (!payload.name) return;
@@ -2019,7 +2045,7 @@
         const checkboxRow = (c, indent) => `
             <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0 .35rem ${indent}rem;cursor:pointer;">
                 <input type="checkbox" value="${c.id}" ${current.has(c.id) ? 'checked' : ''}>
-                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+                <span class="mgmt-group-dot" style="background:${categoryColor(c)}"></span>${categoryLabel(c)}
             </label>`;
         list.innerHTML = tops.map(c => {
             const kids = childCategories(c.id);
@@ -2469,7 +2495,7 @@
         const labels = [], data = [], colors = [];
         Object.entries(totals).sort((a, b) => b[1] - a[1]).forEach(([cid, val]) => {
             if (cid === '__none__') { labels.push('Da categorizzare'); colors.push('#9CA3AF'); }
-            else { const c = categories.find(x => x.id === cid); labels.push(c ? categoryLabel(c) : '?'); colors.push(c?.color || '#2563EB'); }
+            else { const c = categories.find(x => x.id === cid); labels.push(c ? categoryLabel(c) : '?'); colors.push(c ? categoryColor(c) : '#2563EB'); }
             data.push(Number(val.toFixed(2)));
         });
         const ctx = document.getElementById('categoryChart');
