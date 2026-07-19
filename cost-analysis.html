@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.21</title>
+    <title>Analisi Costi v1.0.22</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -663,8 +663,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.21';
-    var BUILD_TIME  = '2026-07-19T21:30:00Z';
+    var APP_VERSION = 'v1.0.22';
+    var BUILD_TIME  = '2026-07-19T21:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1440,8 +1440,10 @@
             }
             await loadTransactions();
             renderActivePage();
-            const oldestInfo = data.oldestDate ? ` · storico fino al ${formatDateIt(data.oldestDate)} (${data.totalFetched} transazioni lette dalla banca su ${data.pages} pagine)` : '';
-            showToast(`✅ Sincronizzazione completata — ${data.imported} nuove transazioni${oldestInfo}`);
+            const oldestInfo = data.oldestDate
+                ? `\nStorico recuperato fino al: ${formatDateIt(data.oldestDate)}\nTransazioni lette dalla banca: ${data.totalFetched} (su ${data.pages} pagine)`
+                : '';
+            alert(`✅ Sincronizzazione completata\n\nNuove transazioni importate: ${data.imported}${oldestInfo}`);
             // Il sync applica solo la categorizzazione MCC (server-side); qui in più
             // applichiamo merchant appreso/regole alle transazioni ancora senza categoria.
             if (data.imported > 0) await reanalyzeAllTransactions();
