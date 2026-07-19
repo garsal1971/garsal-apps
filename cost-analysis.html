@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.14</title>
+    <title>Analisi Costi v1.0.15</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -248,6 +248,7 @@
             <div class="nav-item" onclick="showPage('categoriesPage', this)" data-text="Categorie">🏷️</div>
             <div class="nav-item" onclick="showPage('peoplePage', this)" data-text="Persone">👤</div>
             <div class="nav-item" onclick="showPage('rulesPage', this)" data-text="Regole">🧩</div>
+            <div class="nav-item" onclick="showPage('bankConnectionsPage', this)" data-text="Conti Collegati">🏦</div>
         </nav>
     </aside>
 
@@ -321,6 +322,7 @@
                     <input type="text" class="form-input" id="txFilterText" placeholder="Cerca descrizione..." oninput="onTxFilterChange()">
                     <select class="form-select" id="txFilterCategory" onchange="onTxFilterChange()"></select>
                     <select class="form-select" id="txFilterPerson" onchange="onTxFilterChange()"></select>
+                    <select class="form-select" id="txFilterSpender" onchange="onTxFilterChange()"></select>
                     <div style="display:flex;gap:.5rem;">
                         <input type="date" class="form-input" id="txFilterFrom" onchange="onTxFilterChange()">
                         <input type="date" class="form-input" id="txFilterTo" onchange="onTxFilterChange()">
@@ -365,7 +367,24 @@
                 <h3>Persona (prima regola che matcha vince)</h3>
                 <button class="btn btn-small btn-primary" onclick="openPersonRuleModal(null)">+ Regola</button>
             </div>
-            <div id="personRulesList"></div>
+            <div id="personRulesList" style="margin-bottom:2rem;"></div>
+
+            <div class="page-header" style="margin-bottom:0.75rem;">
+                <h3>Codici MCC (merchant category code)</h3>
+                <button class="btn btn-small btn-primary" onclick="openMccModal(null)">+ Mapping</button>
+            </div>
+            <p class="form-hint" style="margin-bottom:.75rem;">Il codice MCC arriva dalle transazioni sincronizzate dalla banca (non dal CSV manuale) ed è il primo criterio di categorizzazione, prima di merchant appresi, regole e AI.</p>
+            <div id="mccMapList"></div>
+        </div>
+
+        <!-- ====== CONTI COLLEGATI ====== -->
+        <div class="page" id="bankConnectionsPage">
+            <div class="page-header">
+                <h1 class="page-title">Conti Collegati</h1>
+                <button class="btn btn-primary" onclick="openBankConnectionModal(null)">+ Collega conto</button>
+            </div>
+            <p class="form-hint" style="margin-bottom:1rem;">Sync automatico via Enable Banking (PSD2) — in questa fase i conti si registrano manualmente; il collegamento diretto e la sincronizzazione automatica arrivano quando saranno configurate le credenziali dell'app.</p>
+            <div id="bankConnectionsList"></div>
         </div>
 
     </main>
@@ -481,6 +500,65 @@
     </div>
 </div>
 
+<!-- ====== MODAL: MAPPING MCC ====== -->
+<div class="modal" id="mccModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="mccModalTitle">Nuovo Mapping MCC</h2>
+            <span class="modal-close" onclick="closeMccModal()">✕</span>
+        </div>
+        <form onsubmit="saveMcc(event)">
+            <input type="hidden" id="editMccId">
+            <div class="form-group">
+                <label class="form-label">Codice MCC *</label>
+                <input type="text" class="form-input" id="mccCode" required placeholder="Es: 5812" maxlength="10">
+                <div class="form-hint">Codice a 4 cifre standard (es. 5812 = ristoranti), fornito dalla banca sulle transazioni sincronizzate.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Categoria *</label>
+                <select class="form-select" id="mccCategory" required></select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Mapping</button>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL: CONTO COLLEGATO ====== -->
+<div class="modal" id="bankConnectionModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="bankConnectionModalTitle">Nuovo Conto Collegato</h2>
+            <span class="modal-close" onclick="closeBankConnectionModal()">✕</span>
+        </div>
+        <form onsubmit="saveBankConnection(event)">
+            <input type="hidden" id="editBankConnectionId">
+            <div class="form-group">
+                <label class="form-label">Banca *</label>
+                <select class="form-select" id="bankConnectionAspsp" required>
+                    <option value="Revolut">Revolut</option>
+                    <option value="N26">N26</option>
+                    <option value="Altro">Altro</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Nome conto</label>
+                <input type="text" class="form-input" id="bankConnectionDisplayName" placeholder="Es: Revolut personale">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Proprietario (chi ha speso) *</label>
+                <select class="form-select" id="bankConnectionOwner" required></select>
+                <div class="form-hint">Ogni transazione sincronizzata da questo conto viene attribuita automaticamente a questa persona.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Consenso valido fino al</label>
+                <input type="date" class="form-input" id="bankConnectionConsentExpiry">
+                <div class="form-hint">Facoltativo per ora — verrà popolato automaticamente dal collegamento reale (fase 2).</div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Conto</button>
+        </form>
+    </div>
+</div>
+
 <!-- ====== MODAL: EDITOR TAG CATEGORIA ====== -->
 <div class="modal" id="tagEditorModal">
     <div class="modal-content" style="max-width:420px;">
@@ -574,8 +652,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.14';
-    var BUILD_TIME  = '2026-07-18T10:15:00Z';
+    var APP_VERSION = 'v1.0.15';
+    var BUILD_TIME  = '2026-07-18T12:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -644,6 +722,8 @@
     let txCategories = [];
     let merchantMap = [];
     let merchantMapCategories = [];
+    let bankConnections = [];
+    let mccCategoryMap = [];
 
     // ==========================================
     // UTIL
@@ -691,6 +771,7 @@
             case 'categoriesPage':    renderCategories(); break;
             case 'peoplePage':        renderPeople(); break;
             case 'rulesPage':         renderRules(); break;
+            case 'bankConnectionsPage': renderBankConnections(); break;
         }
     }
 
@@ -960,6 +1041,18 @@
         personRules = data || [];
     }
 
+    async function loadMccMap() {
+        const { data, error } = await sb.from('ca_mcc_category_map').select('*').order('mcc');
+        if (handleAuthError(error)) return;
+        mccCategoryMap = data || [];
+    }
+
+    async function loadBankConnections() {
+        const { data, error } = await sb.from('ca_bank_connections').select('*').order('created_at', { ascending: false });
+        if (handleAuthError(error)) return;
+        bankConnections = data || [];
+    }
+
     function renderRules() {
         const catContainer = document.getElementById('categoryRulesList');
         catContainer.innerHTML = !rules.length
@@ -988,6 +1081,8 @@
                     </div>
                 </div>`;
             }).join('');
+
+        renderMccMapList();
     }
 
     function openRuleModal(id) {
@@ -1077,6 +1172,160 @@
     }
 
     // ==========================================
+    // MAPPING MCC (merchant category code)
+    // ==========================================
+    function renderMccMapList() {
+        const container = document.getElementById('mccMapList');
+        container.innerHTML = !mccCategoryMap.length
+            ? '<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessun mapping MCC.</p></div>'
+            : mccCategoryMap.map(m => {
+                const cat = categories.find(c => c.id === m.category_id);
+                return `<div class="card" style="display:flex;align-items:center;justify-content:space-between;">
+                    <div><span class="mono" style="font-weight:700;">${m.mcc}</span> → ${cat ? categoryLabel(cat) : '—'}</div>
+                    <div class="mgmt-event-actions">
+                        <button class="btn btn-small btn-secondary" onclick="openMccModal('${m.id}')">✏️</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteMcc('${m.id}')">🗑️</button>
+                    </div>
+                </div>`;
+            }).join('');
+    }
+
+    function openMccModal(id) {
+        document.getElementById('editMccId').value = id || '';
+        const m = id ? mccCategoryMap.find(x => x.id === id) : null;
+        document.getElementById('mccModalTitle').textContent = m ? 'Modifica Mapping' : 'Nuovo Mapping MCC';
+        document.getElementById('mccCode').value = m ? m.mcc : '';
+        const sel = document.getElementById('mccCategory');
+        sel.innerHTML = categories.map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
+        sel.value = m ? m.category_id : (categories[0]?.id || '');
+        document.getElementById('mccModal').classList.add('active');
+    }
+    function closeMccModal() { document.getElementById('mccModal').classList.remove('active'); }
+
+    async function saveMcc(e) {
+        e.preventDefault();
+        const id = document.getElementById('editMccId').value;
+        const payload = {
+            mcc: document.getElementById('mccCode').value.trim(),
+            category_id: document.getElementById('mccCategory').value,
+            user_id: currentUserId()
+        };
+        if (!payload.mcc || !payload.category_id) return;
+        let error;
+        if (id) { ({ error } = await sb.from('ca_mcc_category_map').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_mcc_category_map').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeMccModal();
+        await loadMccMap();
+        renderMccMapList();
+        showToast('✅ Mapping salvato');
+    }
+
+    async function deleteMcc(id) {
+        if (!confirm('Eliminare questo mapping?')) return;
+        const { error } = await sb.from('ca_mcc_category_map').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        await loadMccMap();
+        renderMccMapList();
+        showToast('🗑️ Mapping eliminato');
+    }
+
+    // ==========================================
+    // CONTI COLLEGATI (Enable Banking — fase 1: registrazione manuale)
+    // ==========================================
+    function renderBankConnections() {
+        const container = document.getElementById('bankConnectionsList');
+        if (!bankConnections.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏦</div><p>Nessun conto collegato.</p></div>';
+            return;
+        }
+        const todayIso = new Date().toISOString().slice(0, 10);
+        container.innerHTML = bankConnections.map(bc => {
+            const owner = people.find(p => p.id === bc.owner_person_id);
+            let statusBadge = '<span class="chip" style="cursor:default;border-color:var(--muted);">Nessuna scadenza impostata</span>';
+            if (bc.consent_expires_at) {
+                const expiryDate = bc.consent_expires_at.slice(0, 10);
+                const expired = expiryDate < todayIso;
+                const daysLeft = Math.round((new Date(expiryDate) - new Date(todayIso)) / 86400000);
+                const soon = !expired && daysLeft <= 14;
+                const color = expired ? 'var(--danger)' : (soon ? 'var(--warning)' : 'var(--success)');
+                const label = expired ? `Consenso scaduto (${formatDateIt(expiryDate)})` : `Consenso valido fino al ${formatDateIt(expiryDate)}`;
+                statusBadge = `<span class="chip" style="cursor:default;border-color:${color};color:${color};">${label}</span>`;
+            }
+            return `<div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">
+                    <div>
+                        <div style="font-weight:700;">${bc.aspsp_name}${bc.display_name ? ' — ' + bc.display_name : ''}</div>
+                        <div class="tx-meta">Proprietario: ${owner ? owner.name : '—'} · Stato: ${bc.status}</div>
+                    </div>
+                    <div class="mgmt-event-actions">
+                        <button class="btn btn-small btn-secondary" onclick="openBankConnectionModal('${bc.id}')">✏️</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteBankConnection('${bc.id}')">🗑️</button>
+                    </div>
+                </div>
+                <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+                    ${statusBadge}
+                    <button class="btn btn-small btn-ghost" onclick="syncBankConnectionNow('${bc.id}')">🔄 Sincronizza ora</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function openBankConnectionModal(id) {
+        document.getElementById('editBankConnectionId').value = id || '';
+        const bc = id ? bankConnections.find(x => x.id === id) : null;
+        document.getElementById('bankConnectionModalTitle').textContent = bc ? 'Modifica Conto Collegato' : 'Nuovo Conto Collegato';
+        document.getElementById('bankConnectionAspsp').value = bc ? bc.aspsp_name : 'Revolut';
+        document.getElementById('bankConnectionDisplayName').value = bc ? (bc.display_name || '') : '';
+        const sel = document.getElementById('bankConnectionOwner');
+        sel.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        sel.value = bc ? (bc.owner_person_id || '') : (people[0]?.id || '');
+        document.getElementById('bankConnectionConsentExpiry').value = bc && bc.consent_expires_at ? bc.consent_expires_at.slice(0, 10) : '';
+        document.getElementById('bankConnectionModal').classList.add('active');
+    }
+    function closeBankConnectionModal() { document.getElementById('bankConnectionModal').classList.remove('active'); }
+
+    async function saveBankConnection(e) {
+        e.preventDefault();
+        if (!people.length) { alert('Crea prima almeno una persona (Persone → + Nuova Persona).'); return; }
+        const id = document.getElementById('editBankConnectionId').value;
+        const expiry = document.getElementById('bankConnectionConsentExpiry').value;
+        const payload = {
+            aspsp_name: document.getElementById('bankConnectionAspsp').value,
+            display_name: document.getElementById('bankConnectionDisplayName').value.trim() || null,
+            owner_person_id: document.getElementById('bankConnectionOwner').value,
+            consent_expires_at: expiry ? new Date(expiry).toISOString() : null,
+            user_id: currentUserId()
+        };
+        if (!payload.owner_person_id) return;
+        let error;
+        if (id) { ({ error } = await sb.from('ca_bank_connections').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_bank_connections').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeBankConnectionModal();
+        await loadBankConnections();
+        renderBankConnections();
+        showToast('✅ Conto salvato');
+    }
+
+    async function deleteBankConnection(id) {
+        if (!confirm('Eliminare questo conto collegato? Le transazioni già importate da questo conto non vengono toccate.')) return;
+        const { error } = await sb.from('ca_bank_connections').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        await loadBankConnections();
+        renderBankConnections();
+        showToast('🗑️ Conto eliminato');
+    }
+
+    function syncBankConnectionNow(id) {
+        // Fase 2: chiamerà una edge function Enable Banking per scaricare le nuove transazioni.
+        // Per ora le credenziali dell'app non sono configurate.
+        showToast('Sincronizzazione automatica non ancora attiva — richiede le credenziali Enable Banking (fase 2)', true);
+    }
+
+    // ==========================================
     // MERCHANT MAP (apprendimento)
     // ==========================================
     async function loadMerchantMap() {
@@ -1120,13 +1369,19 @@
         return (description || '').toUpperCase().includes((pattern || '').toUpperCase());
     }
 
-    function categorizeRow(description) {
-        const key = normalizeMerchant(description);
-        const mm = merchantMap.find(m => m.merchant_key === key);
+    function categorizeRow(description, mcc) {
         let categoryIds = [], catSource = 'uncategorized';
-        if (mm) {
-            categoryIds = merchantMapCategories.filter(c => c.merchant_map_id === mm.id).map(c => c.category_id);
-            if (categoryIds.length) catSource = 'learned';
+        if (mcc) {
+            const mccMatch = mccCategoryMap.find(m => m.mcc === mcc);
+            if (mccMatch) { categoryIds = [mccMatch.category_id]; catSource = 'mcc'; }
+        }
+        if (!categoryIds.length) {
+            const key = normalizeMerchant(description);
+            const mm = merchantMap.find(m => m.merchant_key === key);
+            if (mm) {
+                categoryIds = merchantMapCategories.filter(c => c.merchant_map_id === mm.id).map(c => c.category_id);
+                if (categoryIds.length) catSource = 'learned';
+            }
         }
         if (!categoryIds.length) {
             const matched = rules.filter(r => matchesPattern(description, r.pattern));
@@ -1140,12 +1395,17 @@
     }
 
     async function insertTransactionRow(item) {
-        const { categoryIds, catSource, personId, personSource } = categorizeRow(item.description);
+        const { categoryIds, catSource, personId, personSource } = categorizeRow(item.description, item.mcc);
         const { data, error } = await sb.from('ca_transactions').insert({
             user_id: currentUserId(),
             date: item.date, amount: item.amount, currency: item.currency,
             description: item.description, type: item.type,
             person_id: personId, person_source: personSource,
+            spender_person_id: item.spenderPersonId || null,
+            bank_connection_id: item.bankConnectionId || null,
+            external_id: item.externalId || null,
+            mcc: item.mcc || null,
+            import_source: item.importSource || 'csv',
             raw: item.raw
         }).select().single();
         if (handleAuthError(error)) return null;
@@ -1320,7 +1580,7 @@
     // ==========================================
     // TRANSAZIONI
     // ==========================================
-    let txFilters = { text: '', categoryId: '', personId: '', from: '', to: '' };
+    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '' };
 
     async function loadTransactions() {
         const { data: txs, error: e1 } = await sb.from('ca_transactions').select('*').order('date', { ascending: false });
@@ -1358,6 +1618,7 @@
                 else if (!ids.includes(txFilters.categoryId)) return false;
             }
             if (txFilters.personId && t.person_id !== txFilters.personId) return false;
+            if (txFilters.spenderId && t.spender_person_id !== txFilters.spenderId) return false;
             if (txFilters.from && t.date < txFilters.from) return false;
             if (txFilters.to && t.date > txFilters.to) return false;
             return true;
@@ -1370,14 +1631,18 @@
             categories.map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
         catSel.value = txFilters.categoryId;
         const perSel = document.getElementById('txFilterPerson');
-        perSel.innerHTML = '<option value="">Tutte le persone</option>' + people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        perSel.innerHTML = '<option value="">Tutte (per chi)</option>' + people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         perSel.value = txFilters.personId;
+        const spenderSel = document.getElementById('txFilterSpender');
+        spenderSel.innerHTML = '<option value="">Tutti (chi ha speso)</option>' + people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        spenderSel.value = txFilters.spenderId;
     }
 
     function onTxFilterChange() {
         txFilters.text = document.getElementById('txFilterText').value;
         txFilters.categoryId = document.getElementById('txFilterCategory').value;
         txFilters.personId = document.getElementById('txFilterPerson').value;
+        txFilters.spenderId = document.getElementById('txFilterSpender').value;
         txFilters.from = document.getElementById('txFilterFrom').value;
         txFilters.to = document.getElementById('txFilterTo').value;
         renderTransactionsList();
@@ -1394,7 +1659,8 @@
             const c = categories.find(x => x.id === cid);
             return `<span class="chip active" style="cursor:default;">${c ? categoryLabel(c) : '?'} <span style="cursor:pointer;" onclick="removeTxCategory('${t.id}','${cid}')">✕</span></span>`;
         }).join('');
-        const personOptions = ['<option value="">— Persona —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+        const personOptions = ['<option value="">— Per chi —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+        const spenderOptions = ['<option value="">— Chi ha speso —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.spender_person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
         return `
         <div class="tx-row">
             <div class="tx-top">
@@ -1406,7 +1672,8 @@
                 ${chips}
                 <span class="chip" onclick="openTagEditor('${t.id}')">+ tag</span>
             </div>
-            <div style="margin-top:.5rem;">
+            <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+                <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxSpender('${t.id}', this.value)">${spenderOptions}</select>
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
             </div>
         </div>`;
@@ -1453,6 +1720,18 @@
         showToast('✅ Persona aggiornata');
         // La persona appena assegnata può valere anche per altre transazioni già importate
         if (personId) await reanalyzeAllTransactions();
+    }
+
+    // "Chi ha speso" — di norma arriva in automatico dal conto di origine (sync bancario);
+    // qui si corregge manualmente caso per caso, senza propagarla ad altre transazioni: a
+    // differenza del merchant, non è detto che lo stesso negozio implichi la stessa persona.
+    async function setTxSpender(txId, spenderPersonId) {
+        const { error } = await sb.from('ca_transactions').update({ spender_person_id: spenderPersonId || null }).eq('id', txId);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        const t = transactions.find(x => x.id === txId);
+        if (t) t.spender_person_id = spenderPersonId || null;
+        showToast('✅ "Chi ha speso" aggiornato');
     }
 
     async function removeTxCategory(txId, categoryId) {
@@ -1545,7 +1824,7 @@
         const personConflicts = [];
         for (let i = 0; i < transactions.length; i++) {
             const t = transactions[i];
-            const { categoryIds, catSource, personId, personSource } = categorizeRow(t.description);
+            const { categoryIds, catSource, personId, personSource } = categorizeRow(t.description, t.mcc);
             const existing = new Set(getTxCategoryIds(t.id));
             categoryIds.filter(cid => !existing.has(cid)).forEach(cid => {
                 newCategoryRows.push({ transaction_id: t.id, category_id: cid, source: catSource });
@@ -1992,7 +2271,7 @@
     // ==========================================
     async function startApp() {
         showToast('⏳ Caricamento dati...');
-        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap()]);
+        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMccMap(), loadBankConnections()]);
         await loadTransactions();
         renderActivePage();
         showToast('✅ Dati caricati');
