@@ -163,17 +163,34 @@ Deno.serve(async (req) => {
 
     const rows = rawTransactions.map((tx: any) => {
       const amountRaw = pick(tx, 'transaction_amount', 'transactionAmount') as any;
-      const amount = parseFloat(pick(amountRaw, 'amount') as string) || 0;
+      const absAmount = Math.abs(parseFloat(pick(amountRaw, 'amount') as string) || 0);
+      // Enable Banking restituisce sempre l'importo assoluto, con la direzione a parte in
+      // credit_debit_indicator (DBIT = uscita, CRDT = entrata). Il resto dell'app usa il segno
+      // per distinguere spese/entrate (amount < 0 = spesa), quindi va applicato qui.
+      const indicator = (pick(tx, 'credit_debit_indicator', 'creditDebitIndicator') as string) || '';
+      const amount = indicator === 'CRDT' ? absAmount : -absAmount;
       const currency = (pick(amountRaw, 'currency') as string) || null;
-      const description =
-        (pick(tx, 'remittance_information_unstructured', 'remittanceInformationUnstructured') as string) ||
-        (pick(tx, 'creditor_name', 'creditorName') as string) ||
-        (pick(tx, 'debtor_name', 'debtorName') as string) ||
-        '';
+      const remittanceInfo = pick(
+        tx,
+        'remittance_information',
+        'remittanceInformation',
+        'remittance_information_unstructured',
+        'remittanceInformationUnstructured'
+      );
+      const remittanceText = Array.isArray(remittanceInfo)
+        ? remittanceInfo.join(' ')
+        : ((remittanceInfo as string) || '');
+      const creditor = pick(tx, 'creditor') as any;
+      const debtor = pick(tx, 'debtor') as any;
+      const creditorName = (creditor && (pick(creditor, 'name') as string)) || '';
+      const debtorName = (debtor && (pick(debtor, 'name') as string)) || '';
+      const description = remittanceText || creditorName || debtorName || '';
       const date = (pick(tx, 'booking_date', 'bookingDate', 'value_date', 'valueDate') as string) || null;
       const externalId = (pick(tx, 'entry_reference', 'entryReference', 'transaction_id', 'transactionId') as string) || null;
       const mcc = (pick(tx, 'merchant_category_code', 'merchantCategoryCode', 'mcc') as string) || null;
-      return { date, amount, currency, description, externalId, mcc, raw: tx };
+      const bankTxCode = pick(tx, 'bank_transaction_code', 'bankTransactionCode') as any;
+      const type = (bankTxCode && (pick(bankTxCode, 'code') as string)) || null;
+      return { date, amount, currency, description, externalId, mcc, type, raw: tx };
     }).filter((t) => t.date && t.externalId);
 
     if (!rows.length) {
@@ -187,7 +204,7 @@ Deno.serve(async (req) => {
       amount: t.amount,
       currency: t.currency,
       description: t.description,
-      type: 'bank_sync',
+      type: t.type,
       spender_person_id: connection.owner_person_id,
       person_source: 'unassigned',
       bank_connection_id: bankConnectionId,
