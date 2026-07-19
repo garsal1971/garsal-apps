@@ -72,28 +72,39 @@ Deno.serve(async (req) => {
   const query = (body.query || '').trim().toLowerCase();
   const country = (body.country || '').trim().toUpperCase();
 
+  // Il catalogo /aspsps di Enable Banking va interrogato per paese: senza "country" l'API
+  // sembra restituire solo un sottoinsieme di default (es. le banche del paese associato
+  // all'app), non l'intero elenco europeo — per questo "Revolut" (LT) non emergeva mentre
+  // banche italiane come UniCredit sì. Se manca un paese esplicito, proviamo in sequenza
+  // alcuni paesi comuni per i fintech pan-europei più diffusi (Revolut=LT, N26=DE) più
+  // quello eventualmente indicato dall'utente.
+  const countriesToTry = country ? [country] : ['LT', 'DE', 'IT', 'GB', 'FR', 'ES'];
+
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
-    const res = await fetch(`${ENABLE_BANKING_API_BASE}/aspsps`, {
-      headers: { Authorization: 'Bearer ' + jwt },
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return new Response(
-        JSON.stringify({ error: { message: 'Errore Enable Banking: ' + (data?.message || res.status) } }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const seen = new Set<string>();
+    const allResults: any[] = [];
+
+    for (const c of countriesToTry) {
+      const res = await fetch(`${ENABLE_BANKING_API_BASE}/aspsps?country=${encodeURIComponent(c)}`, {
+        headers: { Authorization: 'Bearer ' + jwt },
+      });
+      if (!res.ok) continue; // un paese che fallisce non deve bloccare gli altri tentativi
+      const data = await res.json();
+      const list: any[] = Array.isArray(data.aspsps) ? data.aspsps : Array.isArray(data) ? data : [];
+      for (const a of list) {
+        const name = String(a.name || a.brand_name || a.bank_name || '');
+        const key = name + '|' + (a.country || c);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        allResults.push({ name, country: a.country || c, logo: a.logo || null });
+      }
     }
 
-    const all: any[] = Array.isArray(data.aspsps) ? data.aspsps : Array.isArray(data) ? data : [];
-    const filtered = all.filter((a) => {
-      const nameMatch = !query || String(a.name || '').toLowerCase().includes(query);
-      const countryMatch = !country || String(a.country || '').toUpperCase() === country;
-      return nameMatch && countryMatch;
-    }).slice(0, 50);
+    const filtered = (query ? allResults.filter((a) => a.name.toLowerCase().includes(query)) : allResults).slice(0, 50);
 
     return new Response(
-      JSON.stringify({ results: filtered.map((a) => ({ name: a.name, country: a.country, logo: a.logo || null })) }),
+      JSON.stringify({ results: filtered, searchedCountries: countriesToTry, totalFound: allResults.length }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

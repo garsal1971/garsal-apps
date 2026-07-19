@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.17</title>
+    <title>Analisi Costi v1.0.18</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -535,11 +535,12 @@
             <div class="form-group" id="bankConnectionSearchGroup">
                 <label class="form-label">Cerca banca nel catalogo Enable Banking</label>
                 <div style="display:flex;gap:.5rem;">
-                    <input type="text" class="form-input" id="bankConnectionSearchQuery" placeholder="Es: Revolut" style="flex:1;">
+                    <input type="text" class="form-input" id="bankConnectionSearchQuery" placeholder="Es: Revolut" style="flex:2;">
+                    <input type="text" class="form-input" id="bankConnectionSearchCountry" placeholder="Paese (es. LT)" maxlength="2" style="text-transform:uppercase;flex:1;">
                     <button type="button" class="btn btn-secondary" onclick="searchAspsps()">🔍 Cerca</button>
                 </div>
                 <div id="bankConnectionSearchResults" style="margin-top:.5rem;"></div>
-                <div class="form-hint">Il nome deve combaciare esattamente col catalogo di Enable Banking — cerca e clicca il risultato giusto invece di scriverlo a mano.</div>
+                <div class="form-hint">Il catalogo va cercato per paese: senza indicarlo provo automaticamente LT/DE/IT/GB/FR/ES. Se non trovi la banca, indica tu il paese esatto (dal portale Enable Banking) e ricerca di nuovo.</div>
             </div>
             <div class="form-group">
                 <label class="form-label">Banca (nome esatto ASPSP) *</label>
@@ -662,8 +663,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.17';
-    var BUILD_TIME  = '2026-07-19T17:10:00Z';
+    var APP_VERSION = 'v1.0.18';
+    var BUILD_TIME  = '2026-07-19T17:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1293,6 +1294,7 @@
         const defaultAspsp = bc ? bc.aspsp_name : 'Revolut';
         document.getElementById('bankConnectionAspsp').value = defaultAspsp;
         document.getElementById('bankConnectionSearchQuery').value = '';
+        document.getElementById('bankConnectionSearchCountry').value = '';
         document.getElementById('bankConnectionSearchResults').innerHTML = '';
         document.getElementById('bankConnectionCountry').value = bc ? '' : (ASPSP_DEFAULT_COUNTRY[defaultAspsp] || '');
         document.getElementById('bankConnectionDisplayName').value = bc ? (bc.display_name || '') : '';
@@ -1312,6 +1314,7 @@
 
     async function searchAspsps() {
         const query = document.getElementById('bankConnectionSearchQuery').value.trim();
+        const country = document.getElementById('bankConnectionSearchCountry').value.trim();
         const resultsEl = document.getElementById('bankConnectionSearchResults');
         if (!query) { resultsEl.innerHTML = ''; return; }
         resultsEl.innerHTML = '<div class="form-hint">Ricerca in corso...</div>';
@@ -1323,7 +1326,7 @@
                     'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
                     'apikey': SUPABASE_KEY
                 },
-                body: JSON.stringify({ query })
+                body: JSON.stringify({ query, country })
             });
             const data = await res.json();
             if (!res.ok || data.error) {
@@ -1332,7 +1335,8 @@
             }
             const results = data.results || [];
             if (!results.length) {
-                resultsEl.innerHTML = '<div class="form-hint">Nessun risultato.</div>';
+                const searched = (data.searchedCountries || []).join(', ');
+                resultsEl.innerHTML = `<div class="form-hint">Nessun risultato (cercato in: ${searched || 'nessun paese'}, ${data.totalFound || 0} banche totali trovate in quei paesi). Prova a indicare tu il paese esatto.</div>`;
                 return;
             }
             resultsEl.innerHTML = results.map((r, i) =>
