@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.18</title>
+    <title>Analisi Costi v1.0.19</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -533,14 +533,14 @@
         <form onsubmit="saveBankConnection(event)">
             <input type="hidden" id="editBankConnectionId">
             <div class="form-group" id="bankConnectionSearchGroup">
-                <label class="form-label">Cerca banca nel catalogo Enable Banking</label>
+                <label class="form-label">Sfoglia banche per paese (catalogo Enable Banking)</label>
                 <div style="display:flex;gap:.5rem;">
-                    <input type="text" class="form-input" id="bankConnectionSearchQuery" placeholder="Es: Revolut" style="flex:2;">
-                    <input type="text" class="form-input" id="bankConnectionSearchCountry" placeholder="Paese (es. LT)" maxlength="2" style="text-transform:uppercase;flex:1;">
-                    <button type="button" class="btn btn-secondary" onclick="searchAspsps()">🔍 Cerca</button>
+                    <input type="text" class="form-input" id="bankConnectionSearchCountry" placeholder="Paese * (es. LT, IT, DE)" maxlength="2" style="text-transform:uppercase;flex:1;">
+                    <input type="text" class="form-input" id="bankConnectionSearchQuery" placeholder="Filtra per nome (opzionale)" style="flex:2;">
+                    <button type="button" class="btn btn-secondary" onclick="searchAspsps()">🔍 Mostra banche</button>
                 </div>
-                <div id="bankConnectionSearchResults" style="margin-top:.5rem;"></div>
-                <div class="form-hint">Il catalogo va cercato per paese: senza indicarlo provo automaticamente LT/DE/IT/GB/FR/ES. Se non trovi la banca, indica tu il paese esatto (dal portale Enable Banking) e ricerca di nuovo.</div>
+                <div id="bankConnectionSearchResults" style="margin-top:.5rem;max-height:200px;overflow-y:auto;"></div>
+                <div class="form-hint">Indica il paese e vedi l'elenco delle banche disponibili lì — clicca quella giusta. Senza paese provo a indovinare tra LT/DE/IT/GB/FR/ES.</div>
             </div>
             <div class="form-group">
                 <label class="form-label">Banca (nome esatto ASPSP) *</label>
@@ -663,8 +663,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.18';
-    var BUILD_TIME  = '2026-07-19T17:45:00Z';
+    var APP_VERSION = 'v1.0.19';
+    var BUILD_TIME  = '2026-07-19T18:10:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1316,7 +1316,7 @@
         const query = document.getElementById('bankConnectionSearchQuery').value.trim();
         const country = document.getElementById('bankConnectionSearchCountry').value.trim();
         const resultsEl = document.getElementById('bankConnectionSearchResults');
-        if (!query) { resultsEl.innerHTML = ''; return; }
+        if (!query && !country) { resultsEl.innerHTML = '<div class="form-hint">Indica almeno il paese.</div>'; return; }
         resultsEl.innerHTML = '<div class="form-hint">Ricerca in corso...</div>';
         try {
             const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-aspsps', {
