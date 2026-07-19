@@ -146,15 +146,30 @@ Deno.serve(async (req) => {
 
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
-    const txRes = await fetch(`${ENABLE_BANKING_API_BASE}/accounts/${connection.account_id}/transactions`, {
-      headers: { Authorization: 'Bearer ' + jwt },
-    });
-    const txData = await txRes.json();
-    if (!txRes.ok) {
-      throw new Error('Errore Enable Banking: ' + (txData?.message || txRes.status));
-    }
 
-    const rawTransactions: unknown[] = Array.isArray(txData.transactions) ? txData.transactions : [];
+    // Recupera TUTTO lo storico disponibile seguendo la paginazione (continuation_key) —
+    // senza questo la sync prendeva solo la prima pagina di risultati, perdendo silenziosamente
+    // le transazioni più vecchie quando il conto ne ha più di quante ne stiano in una pagina.
+    // MAX_PAGES è un tetto di sicurezza contro loop infiniti in caso di risposta anomala.
+    const MAX_PAGES = 50;
+    const rawTransactions: unknown[] = [];
+    let continuationKey: string | null = null;
+    let pageCount = 0;
+    do {
+      const url = new URL(`${ENABLE_BANKING_API_BASE}/accounts/${connection.account_id}/transactions`);
+      if (continuationKey) url.searchParams.set('continuation_key', continuationKey);
+      const txRes = await fetch(url.toString(), {
+        headers: { Authorization: 'Bearer ' + jwt },
+      });
+      const txData = await txRes.json();
+      if (!txRes.ok) {
+        throw new Error('Errore Enable Banking: ' + (txData?.message || txRes.status));
+      }
+      const page: unknown[] = Array.isArray(txData.transactions) ? txData.transactions : [];
+      rawTransactions.push(...page);
+      continuationKey = txData.continuation_key || null;
+      pageCount++;
+    } while (continuationKey && pageCount < MAX_PAGES);
 
     const { data: mccMap } = await supabase
       .from('ca_mcc_category_map')
@@ -230,13 +245,20 @@ Deno.serve(async (req) => {
       await supabase.from('ca_transaction_categories').insert(categoryRows);
     }
 
+    const oldestDate = rows.reduce((min, t) => (!min || t.date < min ? t.date : min), null as string | null);
+
     await supabase.from('ca_sync_log').update({
       finished_at: new Date().toISOString(),
       status: 'success',
       imported_count: inserted?.length || 0,
     }).eq('id', syncLog?.id);
 
-    return new Response(JSON.stringify({ imported: inserted?.length || 0 }), {
+    return new Response(JSON.stringify({
+      imported: inserted?.length || 0,
+      totalFetched: rawTransactions.length,
+      pages: pageCount,
+      oldestDate,
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
