@@ -202,12 +202,12 @@ Deno.serve(async (req) => {
       const debtorName = (debtor && (pick(debtor, 'name') as string)) || '';
       const description = remittanceText || creditorName || debtorName || '';
       // Per confrontare con la descrizione del CSV Revolut (colonna "Description"): corrisponde
-      // al secondo elemento di remittance_information quando ce ne sono almeno due (es. bonifici/
-      // ricariche: ["nota utente","Payment from ..."]), altrimenti al primo (es. pagamenti carta,
-      // dove c'è un solo elemento con il nome del merchant).
+      // SEMPRE e SOLO al secondo elemento di remittance_information (es. ["ILIAD-cymmdo-1","Iliad"]
+      // -> "Iliad"), mai al primo. Se non esiste un secondo elemento, resta vuota: in quel caso la
+      // descrizione non serve a disambiguare (si prosegue solo con il confronto data+importo).
       const matchDescription = Array.isArray(remittanceInfo) && remittanceInfo.length > 1
         ? String(remittanceInfo[1] || '')
-        : (Array.isArray(remittanceInfo) && remittanceInfo.length ? String(remittanceInfo[0] || '') : description);
+        : '';
       const date = (pick(tx, 'booking_date', 'bookingDate', 'value_date', 'valueDate') as string) || null;
       const externalId = (pick(tx, 'entry_reference', 'entryReference', 'transaction_id', 'transactionId') as string) || null;
       const mcc = (pick(tx, 'merchant_category_code', 'merchantCategoryCode', 'mcc') as string) || null;
@@ -281,8 +281,8 @@ Deno.serve(async (req) => {
     const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
     for (const row of rows) {
       let matches = candidatePool.filter((c) => c.date === row.date && Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON);
-      if (matches.length > 1) {
-        const desc = (row.matchDescription || '').trim().toLowerCase();
+      const desc = (row.matchDescription || '').trim().toLowerCase();
+      if (matches.length > 1 && desc) {
         const narrowed = matches.filter((c) => (c.description || '').trim().toLowerCase() === desc);
         if (narrowed.length === 1) matches = narrowed;
       }
