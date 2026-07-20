@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.35</title>
+    <title>Analisi Costi v1.0.36</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -585,6 +585,7 @@
             <h2 class="modal-title">Categorie transazione</h2>
             <span class="modal-close" onclick="closeTagEditor()">✕</span>
         </div>
+        <input type="text" class="form-input" id="tagEditorSearch" placeholder="Cerca categoria..." oninput="filterTagEditorList()" autocomplete="off" style="margin-bottom:.5rem;">
         <div id="tagEditorList" style="max-height:50vh;overflow-y:auto;"></div>
         <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.75rem;" onclick="openCategoryModalFromTagEditor()">+ Nuova categoria/sotto-categoria</button>
         <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
@@ -737,8 +738,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.35';
-    var BUILD_TIME  = '2026-07-20T14:50:00Z';
+    var APP_VERSION = 'v1.0.36';
+    var BUILD_TIME  = '2026-07-20T15:05:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1042,6 +1043,8 @@
     function closeCategoryModal() {
         document.getElementById('categoryModal').classList.remove('active');
         if (_tagEditorTxId) {
+            const search = document.getElementById('tagEditorSearch');
+            if (search) search.value = ''; // altrimenti una ricerca lasciata a metà nasconde la categoria appena creata
             renderTagEditorList();
             // Riseleziona subito la categoria appena creata/modificata sulla transazione in corso.
             if (_lastSavedCategoryId) {
@@ -2428,12 +2431,16 @@
     let _tagEditorTxId = null;
     function openTagEditor(txId) {
         _tagEditorTxId = txId;
+        const search = document.getElementById('tagEditorSearch');
+        if (search) search.value = '';
         renderTagEditorList();
         document.getElementById('tagEditorModal').classList.add('active');
     }
 
     // Elenco categorie organizzato ad albero (categoria principale + sotto-categorie indentate),
-    // ciascuna con il proprio colore univoco.
+    // ciascuna con il proprio colore ereditato. Costruisce SEMPRE tutte le checkbox (anche quelle
+    // che la ricerca nasconderà): filterTagEditorList() nasconde/mostra le righe senza mai
+    // ricreare le checkbox, per non perdere le selezioni già fatte mentre si scrive nella ricerca.
     function renderTagEditorList() {
         if (!_tagEditorTxId) return;
         const current = new Set(getTxCategoryIds(_tagEditorTxId));
@@ -2444,17 +2451,40 @@
             return;
         }
         const checkboxRow = (c, indent) => `
-            <label style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0 .35rem ${indent}rem;cursor:pointer;">
+            <label class="tag-editor-row" data-name="${(c.name || '').toLowerCase()}" style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0 .35rem ${indent}rem;cursor:pointer;">
                 <input type="checkbox" value="${c.id}" ${current.has(c.id) ? 'checked' : ''}>
                 <span class="mgmt-group-dot" style="background:${categoryColor(c)}"></span>${categoryLabel(c)}
             </label>`;
         list.innerHTML = tops.map(c => {
             const kids = childCategories(c.id);
-            return `<div style="margin-bottom:.4rem;border-bottom:1px solid var(--border);">
+            return `<div class="tag-editor-group" style="margin-bottom:.4rem;border-bottom:1px solid var(--border);">
                 ${checkboxRow(c, 0)}
                 ${kids.map(k => checkboxRow(k, 1.6)).join('')}
             </div>`;
         }).join('');
+        filterTagEditorList();
+    }
+
+    // Nasconde (senza rimuovere dal DOM, per non perdere le checkbox già selezionate) le righe
+    // che non combaciano con la ricerca: se la categoria principale combacia mostra anche tutte
+    // le sue sotto-categorie, altrimenti mostra solo le sotto-categorie che combaciano.
+    function filterTagEditorList() {
+        const query = (document.getElementById('tagEditorSearch')?.value || '').trim().toLowerCase();
+        document.querySelectorAll('#tagEditorList .tag-editor-group').forEach(group => {
+            const rows = group.querySelectorAll('.tag-editor-row');
+            const topRow = rows[0];
+            const topMatches = !query || (topRow?.dataset.name || '').includes(query);
+            let anyKidVisible = false;
+            rows.forEach((row, i) => {
+                if (i === 0) return;
+                const visible = !query || topMatches || (row.dataset.name || '').includes(query);
+                row.style.display = visible ? 'flex' : 'none';
+                if (visible) anyKidVisible = true;
+            });
+            const groupVisible = !query || topMatches || anyKidVisible;
+            group.style.display = groupVisible ? 'block' : 'none';
+            if (topRow) topRow.style.display = groupVisible ? 'flex' : 'none';
+        });
     }
 
     function closeTagEditor() { document.getElementById('tagEditorModal').classList.remove('active'); _tagEditorTxId = null; }
