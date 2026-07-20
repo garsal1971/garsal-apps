@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.30</title>
+    <title>Analisi Costi v1.0.31</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -669,6 +669,22 @@
     </div>
 </div>
 
+<!-- ====== MODAL: ANTEPRIMA SINCRONIZZAZIONE BANCARIA ====== -->
+<div class="modal" id="syncPreviewModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Anteprima sincronizzazione</h2>
+            <span class="modal-close" onclick="closeSyncPreviewModal()">✕</span>
+        </div>
+        <p class="form-hint" id="syncPreviewSummary" style="margin-bottom:.75rem;"></p>
+        <div id="syncPreviewList" style="max-height:50vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmSyncImport()">Conferma importazione</button>
+            <button class="btn btn-secondary" onclick="closeSyncPreviewModal()">Annulla</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -683,8 +699,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.30';
-    var BUILD_TIME  = '2026-07-20T00:45:00Z';
+    var APP_VERSION = 'v1.0.31';
+    var BUILD_TIME  = '2026-07-20T13:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1654,7 +1670,80 @@
         showToast('🗑️ Conto eliminato');
     }
 
+    // Step 1: chiede alla edge function un'anteprima (nessuna scrittura nel DB) di cosa
+    // verrebbe importato/collegato, e la mostra in un modale prima di scrivere qualsiasi cosa.
+    let _syncPreview = null; // { bankConnectionId, items }
     async function syncBankConnectionNow(id) {
+        showProcessing('🔍 Anteprima sincronizzazione...');
+        try {
+            const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
+                    'apikey': SUPABASE_KEY
+                },
+                body: JSON.stringify({ bankConnectionId: id, preview: true })
+            });
+            const data = await res.json();
+            hideProcessing();
+            if (!res.ok || data.error) {
+                alert('Errore anteprima sincronizzazione: ' + (data?.error?.message || res.status));
+                return;
+            }
+            if (!data.items || !data.items.length) {
+                showToast('Nessuna transazione nuova da sincronizzare');
+                return;
+            }
+            _syncPreview = { bankConnectionId: id, items: data.items, oldestDate: data.oldestDate, totalFetched: data.totalFetched, pages: data.pages };
+            openSyncPreviewModal();
+        } catch (err) {
+            hideProcessing();
+            alert('Errore chiamata: ' + err.message);
+        }
+    }
+
+    function openSyncPreviewModal() {
+        renderSyncPreviewList();
+        document.getElementById('syncPreviewModal').classList.add('active');
+    }
+    function closeSyncPreviewModal() {
+        document.getElementById('syncPreviewModal').classList.remove('active');
+        _syncPreview = null;
+    }
+
+    function renderSyncPreviewList() {
+        if (!_syncPreview) return;
+        const insertCount = _syncPreview.items.filter(i => i.action === 'insert').length;
+        const mergeCount = _syncPreview.items.filter(i => i.action === 'merge').length;
+        document.getElementById('syncPreviewSummary').textContent =
+            `${_syncPreview.items.length} transazioni trovate — ${insertCount} nuove, ${mergeCount} da collegare a righe CSV già presenti. Deseleziona quelle che non vuoi importare.`;
+        const list = document.getElementById('syncPreviewList');
+        list.innerHTML = _syncPreview.items.map((it, i) => `
+            <label style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;">
+                <input type="checkbox" checked data-idx="${i}" style="margin-top:.3rem;">
+                <span style="flex:1;">
+                    <span style="display:flex;justify-content:space-between;gap:.5rem;">
+                        <strong>${it.description || '(senza descrizione)'}</strong>
+                        <span class="mono ${it.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(it.amount)}</span>
+                    </span>
+                    <span class="tx-meta">${formatDateIt(it.date)} ${it.type ? '· ' + it.type : ''} · ${it.action === 'merge' ? '🔗 collega a transazione CSV esistente' : '🆕 nuova'}</span>
+                </span>
+            </label>`).join('');
+    }
+
+    async function confirmSyncImport() {
+        if (!_syncPreview) return;
+        const checkboxes = document.querySelectorAll('#syncPreviewList input[type="checkbox"]');
+        const excludeExternalIds = [];
+        checkboxes.forEach(cb => {
+            if (!cb.checked) {
+                const item = _syncPreview.items[parseInt(cb.dataset.idx, 10)];
+                if (item?.externalId) excludeExternalIds.push(item.externalId);
+            }
+        });
+        const bankConnectionId = _syncPreview.bankConnectionId;
+        closeSyncPreviewModal();
         showProcessing('🔄 Sincronizzazione in corso...');
         try {
             const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-sync', {
@@ -1664,7 +1753,7 @@
                     'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
                     'apikey': SUPABASE_KEY
                 },
-                body: JSON.stringify({ bankConnectionId: id })
+                body: JSON.stringify({ bankConnectionId, excludeExternalIds })
             });
             const data = await res.json();
             hideProcessing();

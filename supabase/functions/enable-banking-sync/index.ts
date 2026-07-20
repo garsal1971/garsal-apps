@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { bankConnectionId?: string };
+  let body: { bankConnectionId?: string; preview?: boolean; excludeExternalIds?: string[] };
   try {
     body = await req.json();
   } catch {
@@ -117,6 +117,11 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+  // preview=true: calcola cosa verrebbe importato/collegato senza scrivere nulla nel DB, per
+  // farlo rivedere all'utente prima di confermare. excludeExternalIds: righe che l'utente ha
+  // deselezionato nell'anteprima, da saltare quando si conferma (preview=false).
+  const preview = body.preview === true;
+  const excludeExternalIds = new Set((body.excludeExternalIds || []).filter((x) => typeof x === 'string'));
 
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
@@ -139,11 +144,16 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { data: syncLog } = await supabase
-    .from('ca_sync_log')
-    .insert({ user_id: userId, bank_connection_id: bankConnectionId, status: 'running' })
-    .select()
-    .single();
+  // In anteprima non si scrive nulla, log incluso.
+  let syncLog: { id: string } | null = null;
+  if (!preview) {
+    const { data } = await supabase
+      .from('ca_sync_log')
+      .insert({ user_id: userId, bank_connection_id: bankConnectionId, status: 'running' })
+      .select()
+      .single();
+    syncLog = data;
+  }
 
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
@@ -224,8 +234,70 @@ Deno.serve(async (req) => {
     }).filter((t) => t.date && t.externalId);
 
     if (!rows.length) {
-      await supabase.from('ca_sync_log').update({ finished_at: new Date().toISOString(), status: 'success', imported_count: 0 }).eq('id', syncLog?.id);
-      return new Response(JSON.stringify({ imported: 0 }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (syncLog) await supabase.from('ca_sync_log').update({ finished_at: new Date().toISOString(), status: 'success', imported_count: 0 }).eq('id', syncLog.id);
+      return new Response(
+        JSON.stringify(preview ? { preview: true, items: [], totalFetched: rawTransactions.length, pages: pageCount, oldestDate: null } : { imported: 0 }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Le righe escluse dall'utente in un'anteprima precedente vengono saltate in fase di conferma.
+    const effectiveRows = preview ? rows : rows.filter((t) => !excludeExternalIds.has(t.externalId || ''));
+
+    // Evita duplicati quando la stessa transazione è già presente perché importata a mano da
+    // CSV prima del collegamento bancario: cerca tra le transazioni non ancora collegate a un
+    // conto (bank_connection_id nullo) una corrispondenza su data+importo (con tolleranza sui
+    // decimali, per evitare mismatch da arrotondamento float/numeric). Se ambigua (più di una
+    // corrispondenza), si prova a stringere sulla descrizione (colonna CSV "Description" contro
+    // il secondo elemento di remittance_information). Se trovata un'unica corrispondenza,
+    // AGGIORNA quella riga esistente (aggiunge conto/MCC/carta/dato grezzo) invece di inserirne
+    // una nuova, senza toccare categorie o persona già assegnate a mano. Corrispondenze multiple
+    // o assenti finiscono nel normale inserimento, per non rischiare un collegamento sbagliato.
+    // Questa classificazione serve sia per l'anteprima (sola lettura) sia per la conferma.
+    const AMOUNT_EPSILON = 0.01;
+    const { data: unlinked } = await supabase
+      .from('ca_transactions')
+      .select('id, date, amount, mcc, type, spender_person_id, description')
+      .eq('user_id', userId)
+      .is('bank_connection_id', null);
+
+    const candidatePool = [...(unlinked || [])];
+    const toInsert: typeof rows = [];
+    const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
+    for (const row of effectiveRows) {
+      let matches = candidatePool.filter((c) => c.date === row.date && Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON);
+      const desc = (row.matchDescription || '').trim().toLowerCase();
+      if (matches.length > 1 && desc) {
+        const narrowed = matches.filter((c) => (c.description || '').trim().toLowerCase() === desc);
+        if (narrowed.length === 1) matches = narrowed;
+      }
+      if (matches.length === 1) {
+        toMerge.push({ existingId: matches[0].id, row });
+        candidatePool.splice(candidatePool.indexOf(matches[0]), 1);
+      } else {
+        toInsert.push(row);
+      }
+    }
+
+    if (preview) {
+      const previewItems = [
+        ...toInsert.map((t) => ({
+          externalId: t.externalId, date: t.date, amount: t.amount, currency: t.currency,
+          description: t.description, mcc: t.mcc, type: t.type, action: 'insert' as const,
+        })),
+        ...toMerge.map(({ row }) => ({
+          externalId: row.externalId, date: row.date, amount: row.amount, currency: row.currency,
+          description: row.description, mcc: row.mcc, type: row.type, action: 'merge' as const,
+        })),
+      ].sort((a, b) => b.date.localeCompare(a.date));
+      const oldestDate = rows.reduce((min, t) => (!min || t.date < min ? t.date : min), null as string | null);
+      return new Response(JSON.stringify({
+        preview: true,
+        items: previewItems,
+        totalFetched: rawTransactions.length,
+        pages: pageCount,
+        oldestDate,
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { data: cardMap } = await supabase
@@ -259,40 +331,6 @@ Deno.serve(async (req) => {
         : null;
       return mapping ? mapping.person_id : nucleoId;
     };
-
-    // Evita duplicati quando la stessa transazione è già presente perché importata a mano da
-    // CSV prima del collegamento bancario: cerca tra le transazioni non ancora collegate a un
-    // conto (bank_connection_id nullo) una corrispondenza su data+importo (con tolleranza sui
-    // decimali, per evitare mismatch da arrotondamento float/numeric). Se ambigua (più di una
-    // corrispondenza), si prova a stringere sulla descrizione (colonna CSV "Description" contro
-    // il secondo elemento di remittance_information). Se trovata un'unica corrispondenza,
-    // AGGIORNA quella riga esistente (aggiunge conto/MCC/carta/dato grezzo) invece di inserirne
-    // una nuova, senza toccare categorie o persona già assegnate a mano. Corrispondenze multiple
-    // o assenti finiscono nel normale inserimento, per non rischiare un collegamento sbagliato.
-    const AMOUNT_EPSILON = 0.01;
-    const { data: unlinked } = await supabase
-      .from('ca_transactions')
-      .select('id, date, amount, mcc, type, spender_person_id, description')
-      .eq('user_id', userId)
-      .is('bank_connection_id', null);
-
-    const candidatePool = [...(unlinked || [])];
-    const toInsert: typeof rows = [];
-    const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
-    for (const row of rows) {
-      let matches = candidatePool.filter((c) => c.date === row.date && Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON);
-      const desc = (row.matchDescription || '').trim().toLowerCase();
-      if (matches.length > 1 && desc) {
-        const narrowed = matches.filter((c) => (c.description || '').trim().toLowerCase() === desc);
-        if (narrowed.length === 1) matches = narrowed;
-      }
-      if (matches.length === 1) {
-        toMerge.push({ existingId: matches[0].id, row });
-        candidatePool.splice(candidatePool.indexOf(matches[0]), 1);
-      } else {
-        toInsert.push(row);
-      }
-    }
 
     const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
 
@@ -365,11 +403,13 @@ Deno.serve(async (req) => {
 
     const oldestDate = rows.reduce((min, t) => (!min || t.date < min ? t.date : min), null as string | null);
 
-    await supabase.from('ca_sync_log').update({
-      finished_at: new Date().toISOString(),
-      status: 'success',
-      imported_count: inserted.length,
-    }).eq('id', syncLog?.id);
+    if (syncLog) {
+      await supabase.from('ca_sync_log').update({
+        finished_at: new Date().toISOString(),
+        status: 'success',
+        imported_count: inserted.length,
+      }).eq('id', syncLog.id);
+    }
 
     return new Response(JSON.stringify({
       imported: inserted.length,
@@ -382,11 +422,13 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    await supabase.from('ca_sync_log').update({
-      finished_at: new Date().toISOString(),
-      status: 'error',
-      error_message: (e as Error).message,
-    }).eq('id', syncLog?.id);
+    if (syncLog) {
+      await supabase.from('ca_sync_log').update({
+        finished_at: new Date().toISOString(),
+        status: 'error',
+        error_message: (e as Error).message,
+      }).eq('id', syncLog.id);
+    }
     return new Response(
       JSON.stringify({ error: { message: (e as Error).message } }),
       { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
