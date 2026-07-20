@@ -246,39 +246,103 @@ Deno.serve(async (req) => {
     }
     const nucleoId = nucleo?.id || connection.owner_person_id || null;
 
-    const insertRows = rows.map((t) => {
+    const spenderFor = (t: (typeof rows)[number]) => {
       const mapping = t.cardIssuer && t.cardIdentification
         ? (cardMap || []).find((m) => m.card_issuer === t.cardIssuer && m.card_identification === t.cardIdentification)
         : null;
-      return {
+      return mapping ? mapping.person_id : nucleoId;
+    };
+
+    // Evita duplicati quando la stessa transazione è già presente perché importata a mano da
+    // CSV prima del collegamento bancario: cerca tra le transazioni non ancora collegate a un
+    // conto (bank_connection_id nullo) una corrispondenza univoca su data+importo. Se trovata,
+    // AGGIORNA quella riga esistente (aggiunge conto/MCC/carta/dato grezzo) invece di inserirne
+    // una nuova, senza toccare categorie o persona già assegnate a mano. Corrispondenze multiple
+    // o assenti finiscono nel normale inserimento, per non rischiare un collegamento sbagliato.
+    const { data: unlinked } = await supabase
+      .from('ca_transactions')
+      .select('id, date, amount, mcc, type, spender_person_id')
+      .eq('user_id', userId)
+      .is('bank_connection_id', null);
+
+    const candidatePool = [...(unlinked || [])];
+    const toInsert: typeof rows = [];
+    const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
+    for (const row of rows) {
+      const matches = candidatePool.filter((c) => c.date === row.date && Number(c.amount) === row.amount);
+      if (matches.length === 1) {
+        toMerge.push({ existingId: matches[0].id, row });
+        candidatePool.splice(candidatePool.indexOf(matches[0]), 1);
+      } else {
+        toInsert.push(row);
+      }
+    }
+
+    const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
+
+    let mergedCount = 0;
+    if (toMerge.length) {
+      const existingById = new Map((unlinked || []).map((c) => [c.id, c]));
+      const mergedIds: string[] = [];
+      for (const { existingId, row } of toMerge) {
+        const existing = existingById.get(existingId);
+        const update: Record<string, unknown> = {
+          bank_connection_id: bankConnectionId,
+          external_id: row.externalId,
+          raw: row.raw,
+        };
+        if (!existing?.mcc) update.mcc = row.mcc;
+        if (!existing?.type) update.type = row.type;
+        if (!existing?.spender_person_id) update.spender_person_id = spenderFor(row);
+        const { error: updErr } = await supabase.from('ca_transactions').update(update).eq('id', existingId);
+        if (!updErr) { mergedIds.push(existingId); mergedCount++; }
+      }
+      if (mergedIds.length) {
+        const { data: existingCats } = await supabase
+          .from('ca_transaction_categories')
+          .select('transaction_id')
+          .in('transaction_id', mergedIds);
+        const alreadyCategorized = new Set((existingCats || []).map((c) => c.transaction_id));
+        for (const { existingId, row } of toMerge) {
+          if (alreadyCategorized.has(existingId)) continue;
+          const match = (mccMap || []).find((m) => m.mcc === row.mcc);
+          if (match) categoryRows.push({ transaction_id: existingId, category_id: match.category_id, source: 'mcc' });
+        }
+      }
+    }
+
+    let inserted: { id: string; mcc: string | null }[] = [];
+    if (toInsert.length) {
+      const insertRows = toInsert.map((t) => ({
         user_id: userId,
         date: t.date,
         amount: t.amount,
         currency: t.currency,
         description: t.description,
         type: t.type,
-        spender_person_id: mapping ? mapping.person_id : nucleoId,
+        spender_person_id: spenderFor(t),
         person_source: 'unassigned',
         bank_connection_id: bankConnectionId,
         external_id: t.externalId,
         mcc: t.mcc,
         import_source: 'bank_sync',
         raw: t.raw,
-      };
-    });
+      }));
 
-    const { data: inserted, error: insertError } = await supabase
-      .from('ca_transactions')
-      .upsert(insertRows, { onConflict: 'bank_connection_id,external_id', ignoreDuplicates: true })
-      .select('id, mcc');
-    if (insertError) throw new Error(insertError.message);
+      const { data: insertedRows, error: insertError } = await supabase
+        .from('ca_transactions')
+        .upsert(insertRows, { onConflict: 'bank_connection_id,external_id', ignoreDuplicates: true })
+        .select('id, mcc');
+      if (insertError) throw new Error(insertError.message);
+      inserted = insertedRows || [];
 
-    // Categorizzazione MCC (deterministica) per le sole transazioni appena inserite
-    const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
-    for (const t of inserted || []) {
-      const match = (mccMap || []).find((m) => m.mcc === t.mcc);
-      if (match) categoryRows.push({ transaction_id: t.id, category_id: match.category_id, source: 'mcc' });
+      // Categorizzazione MCC (deterministica) per le sole transazioni appena inserite
+      for (const t of inserted) {
+        const match = (mccMap || []).find((m) => m.mcc === t.mcc);
+        if (match) categoryRows.push({ transaction_id: t.id, category_id: match.category_id, source: 'mcc' });
+      }
     }
+
     if (categoryRows.length) {
       await supabase.from('ca_transaction_categories').insert(categoryRows);
     }
@@ -288,11 +352,12 @@ Deno.serve(async (req) => {
     await supabase.from('ca_sync_log').update({
       finished_at: new Date().toISOString(),
       status: 'success',
-      imported_count: inserted?.length || 0,
+      imported_count: inserted.length,
     }).eq('id', syncLog?.id);
 
     return new Response(JSON.stringify({
-      imported: inserted?.length || 0,
+      imported: inserted.length,
+      merged: mergedCount,
       totalFetched: rawTransactions.length,
       pages: pageCount,
       oldestDate,
