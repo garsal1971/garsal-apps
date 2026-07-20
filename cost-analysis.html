@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.37</title>
+    <title>Analisi Costi v1.0.38</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -326,6 +326,10 @@
                     <div style="display:flex;gap:.5rem;">
                         <input type="date" class="form-input" id="txFilterFrom" onchange="onTxFilterChange()">
                         <input type="date" class="form-input" id="txFilterTo" onchange="onTxFilterChange()">
+                    </div>
+                    <div style="display:flex;gap:.5rem;">
+                        <input type="number" step="0.01" class="form-input" id="txFilterAmountFrom" placeholder="Importo da..." oninput="onTxFilterChange()">
+                        <input type="number" step="0.01" class="form-input" id="txFilterAmountTo" placeholder="Importo a..." oninput="onTxFilterChange()">
                     </div>
                 </div>
             </div>
@@ -738,8 +742,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.37';
-    var BUILD_TIME  = '2026-07-20T15:20:00Z';
+    var APP_VERSION = 'v1.0.38';
+    var BUILD_TIME  = '2026-07-20T15:40:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -831,6 +835,14 @@
             return (parent && parent.color) || '#999';
         }
         return c.color || '#999';
+    }
+
+    // Risale dalla categoria (anche sotto-categoria) alla sua categoria principale — usato per
+    // aggregare i totali per categoria senza scendere al dettaglio delle sotto-categorie.
+    function topCategoryId(categoryId) {
+        const c = categories.find(x => x.id === categoryId);
+        if (!c) return categoryId;
+        return c.parent_id || c.id;
     }
 
     function showToast(msg, isError) {
@@ -2244,7 +2256,7 @@
     // ==========================================
     // TRANSAZIONI
     // ==========================================
-    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '' };
+    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '' };
 
     async function loadTransactions() {
         const { data: txs, error: e1 } = await sb.from('ca_transactions').select('*').order('date', { ascending: false });
@@ -2285,6 +2297,10 @@
             if (txFilters.spenderId && t.spender_person_id !== txFilters.spenderId) return false;
             if (txFilters.from && t.date < txFilters.from) return false;
             if (txFilters.to && t.date > txFilters.to) return false;
+            // Confronto sul segno reale dell'importo (negativo = spesa, positivo = entrata),
+            // coerente con come viene salvato/mostrato ovunque nell'app.
+            if (txFilters.amountFrom !== '' && t.amount < parseFloat(txFilters.amountFrom)) return false;
+            if (txFilters.amountTo !== '' && t.amount > parseFloat(txFilters.amountTo)) return false;
             return true;
         });
     }
@@ -2309,6 +2325,8 @@
         txFilters.spenderId = document.getElementById('txFilterSpender').value;
         txFilters.from = document.getElementById('txFilterFrom').value;
         txFilters.to = document.getElementById('txFilterTo').value;
+        txFilters.amountFrom = document.getElementById('txFilterAmountFrom').value;
+        txFilters.amountTo = document.getElementById('txFilterAmountTo').value;
         renderTransactionsList();
     }
 
@@ -2919,12 +2937,15 @@
         renderPersonBreakdown(spese);
     }
 
+    // Il grafico mostra solo le categorie principali: l'importo di una transazione taggata con
+    // una sotto-categoria viene sommato alla sua categoria padre, non mostrato come voce a parte.
     function renderCategoryChart(spese) {
         const totals = {};
         spese.forEach(t => {
             const ids = getTxCategoryIds(t.id);
             if (!ids.length) { totals['__none__'] = (totals['__none__'] || 0) + Math.abs(t.amount); return; }
-            ids.forEach(cid => { totals[cid] = (totals[cid] || 0) + Math.abs(t.amount); });
+            const topIds = [...new Set(ids.map(topCategoryId))];
+            topIds.forEach(cid => { totals[cid] = (totals[cid] || 0) + Math.abs(t.amount); });
         });
         const labels = [], data = [], colors = [];
         Object.entries(totals).sort((a, b) => b[1] - a[1]).forEach(([cid, val]) => {
