@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.38</title>
+    <title>Analisi Costi v1.0.39</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -428,6 +428,12 @@
                 <select class="form-select" id="categoryParent" onchange="onCategoryParentChange()"></select>
                 <div class="form-hint" id="categoryParentHint">Lascia vuoto per una categoria principale, oppure scegli una categoria padre per creare una sotto-categoria.</div>
             </div>
+            <div class="form-group" id="categoryExcludedGroup">
+                <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+                    <input type="checkbox" id="categoryExcludedFromTotals">
+                    Escludi dai totali (es. giroconti, pagamenti carta di credito, ricariche)
+                </label>
+            </div>
             <button type="submit" class="btn btn-primary" style="width:100%;">Salva Categoria</button>
         </form>
     </div>
@@ -742,8 +748,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.38';
-    var BUILD_TIME  = '2026-07-20T15:40:00Z';
+    var APP_VERSION = 'v1.0.39';
+    var BUILD_TIME  = '2026-07-20T16:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -898,6 +904,23 @@
         categories = data || [];
     }
 
+    // Crea al bisogno la categoria principale "Non contabilizzate" (esclusa dai totali di
+    // dashboard) — usata per giroconti, pagamenti carta di credito, ricariche: movimenti reali
+    // ma che non devono contare come spesa o entrata.
+    async function ensureNonContabilizzateCategory() {
+        if (categories.some(c => c.name === 'Non contabilizzate' && !c.parent_id)) return;
+        const { data, error } = await sb.from('ca_categories').insert({
+            name: 'Non contabilizzate',
+            icon: '🚫',
+            color: pickUnusedColor(),
+            parent_id: null,
+            excluded_from_totals: true,
+            user_id: currentUserId()
+        }).select().single();
+        if (error) { console.error('Errore creazione categoria "Non contabilizzate":', error); return; }
+        categories.push(data);
+    }
+
     function topCategories() { return categories.filter(c => !c.parent_id); }
     function childCategories(parentId) { return categories.filter(c => c.parent_id === parentId); }
 
@@ -914,7 +937,7 @@
             return `
             <div class="mgmt-group-card">
                 <div class="mgmt-group-header">
-                    <div class="mgmt-group-title"><span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)} <span style="font-weight:400;color:var(--muted);font-size:.85rem;">(${cCount})</span></div>
+                    <div class="mgmt-group-title"><span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)} <span style="font-weight:400;color:var(--muted);font-size:.85rem;">(${cCount})</span>${c.excluded_from_totals ? ' <span class="chip" style="cursor:default;font-size:.7rem;padding:.15rem .5rem;">esclusa dai totali</span>' : ''}</div>
                     <div class="mgmt-event-actions">
                         <button class="btn btn-small btn-ghost" onclick="openCategoryTransactionsModal('${c.id}')" title="Vedi transazioni">📄</button>
                         <button class="btn btn-small btn-secondary" onclick="openCategoryModal(null, '${c.id}')">+ Sotto</button>
@@ -1027,6 +1050,7 @@
     function onCategoryParentChange() {
         const isSub = !!document.getElementById('categoryParent').value;
         document.getElementById('categoryColorGroup').style.display = isSub ? 'none' : 'block';
+        document.getElementById('categoryExcludedGroup').style.display = isSub ? 'none' : 'block';
     }
 
     function openCategoryModal(id, presetParentId) {
@@ -1035,6 +1059,7 @@
         document.getElementById('categoryModalTitle').textContent = cat ? 'Modifica Categoria' : 'Nuova Categoria';
         document.getElementById('categoryName').value = cat ? cat.name : '';
         document.getElementById('categoryIcon').value = cat ? (cat.icon || '') : '';
+        document.getElementById('categoryExcludedFromTotals').checked = !!(cat && cat.excluded_from_totals);
         renderCategoryColorSwatches((cat && !cat.parent_id) ? (cat.color || pickUnusedColor()) : pickUnusedColor());
         const parentSel = document.getElementById('categoryParent');
         parentSel.innerHTML = '<option value="">— Nessuna (categoria principale) —</option>' +
@@ -1130,6 +1155,9 @@
             icon: document.getElementById('categoryIcon').value.trim(),
             color: isSub ? null : color,
             parent_id: parentId,
+            // Il flag conta solo sulle categorie principali; le sotto-categorie lo ereditano dal
+            // padre (vedi isTxExcludedFromTotals -> topCategoryId), quindi resta false per loro.
+            excluded_from_totals: isSub ? false : document.getElementById('categoryExcludedFromTotals').checked,
             user_id: currentUserId()
         };
         if (!payload.name) return;
@@ -2908,11 +2936,23 @@
         return { from: null, to: null };
     }
 
+    // Una transazione è esclusa dai totali se una delle sue categorie (o la categoria padre,
+    // per le sotto-categorie) ha excluded_from_totals=true — es. giroconti, pagamenti carta di
+    // credito, ricariche: movimenti reali ma che non devono contare come spesa/entrata.
+    function isTxExcludedFromTotals(t) {
+        return getTxCategoryIds(t.id).some(cid => {
+            const topId = topCategoryId(cid);
+            const top = categories.find(c => c.id === topId);
+            return !!(top && top.excluded_from_totals);
+        });
+    }
+
     function dashboardTransactions() {
         const { from, to } = periodRange(dashPeriod);
         return transactions.filter(t => {
             if (from && t.date < toISODate(from)) return false;
             if (to && t.date > toISODate(to)) return false;
+            if (isTxExcludedFromTotals(t)) return false;
             return true;
         });
     }
@@ -2971,7 +3011,7 @@
         const data = months.map(d => {
             const y = d.getFullYear(), m = d.getMonth();
             const from = toISODate(new Date(y, m, 1)), to = toISODate(new Date(y, m + 1, 0));
-            return Number(transactions.filter(t => t.amount < 0 && t.date >= from && t.date <= to).reduce((s, t) => s + Math.abs(t.amount), 0).toFixed(2));
+            return Number(transactions.filter(t => t.amount < 0 && t.date >= from && t.date <= to && !isTxExcludedFromTotals(t)).reduce((s, t) => s + Math.abs(t.amount), 0).toFixed(2));
         });
         const ctx = document.getElementById('monthChart');
         if (monthChartInstance) { monthChartInstance.destroy(); monthChartInstance = null; }
@@ -3006,7 +3046,9 @@
     // ==========================================
     async function startApp() {
         showToast('⏳ Caricamento dati...');
-        await Promise.all([loadCategories(), loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMerchantPersonMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap()]);
+        await loadCategories();
+        await ensureNonContabilizzateCategory();
+        await Promise.all([loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMerchantPersonMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap()]);
         await loadTransactions();
         renderActivePage();
         showToast('✅ Dati caricati');
