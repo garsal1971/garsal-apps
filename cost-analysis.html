@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.34</title>
+    <title>Analisi Costi v1.0.35</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -713,7 +713,8 @@
         </div>
         <div class="form-group">
             <label class="form-label">Nuova categoria padre *</label>
-            <select class="form-select" id="moveSubcategoryParent"></select>
+            <input type="text" class="form-input" id="moveSubcategorySearch" placeholder="Scrivi per cercare..." oninput="renderMoveSubcategorySuggestions()" autocomplete="off">
+            <div id="moveSubcategorySuggestions" style="max-height:220px;overflow-y:auto;margin-top:.4rem;"></div>
         </div>
         <div style="display:flex;gap:.75rem;margin-top:1rem;">
             <button class="btn btn-primary" style="flex:1;" onclick="confirmMoveSubcategory()">Sposta</button>
@@ -736,8 +737,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.34';
-    var BUILD_TIME  = '2026-07-20T14:35:00Z';
+    var APP_VERSION = 'v1.0.35';
+    var BUILD_TIME  = '2026-07-20T14:50:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1225,27 +1226,52 @@
     // SPOSTA SOTTO-CATEGORIA (scorciatoia rispetto al modale di modifica completo)
     // ==========================================
     let _moveSubcategoryId = null;
+    let _moveSubcategoryTargetId = null;
 
     function openMoveSubcategoryModal(kidId) {
         _moveSubcategoryId = kidId;
+        _moveSubcategoryTargetId = null;
         const kid = categories.find(c => c.id === kidId);
         document.getElementById('moveSubcategoryTitle').textContent = `Sposta "${kid ? categoryLabel(kid) : '?'}"`;
-        const sel = document.getElementById('moveSubcategoryParent');
-        sel.innerHTML = topCategories().filter(c => c.id !== kidId).map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
-        sel.value = kid ? (kid.parent_id || '') : '';
+        document.getElementById('moveSubcategorySearch').value = '';
+        renderMoveSubcategorySuggestions();
         document.getElementById('moveSubcategoryModal').classList.add('active');
     }
 
     function closeMoveSubcategoryModal() {
         document.getElementById('moveSubcategoryModal').classList.remove('active');
         _moveSubcategoryId = null;
+        _moveSubcategoryTargetId = null;
+    }
+
+    // Filtra le categorie principali via via che si scrive, come un autocompletamento —
+    // utile quando le categorie sono tante e scorrere un'unica select è scomodo.
+    function renderMoveSubcategorySuggestions() {
+        const query = (document.getElementById('moveSubcategorySearch').value || '').trim().toLowerCase();
+        const options = topCategories()
+            .filter(c => c.id !== _moveSubcategoryId)
+            .filter(c => !query || c.name.toLowerCase().includes(query));
+        const container = document.getElementById('moveSubcategorySuggestions');
+        if (!options.length) {
+            container.innerHTML = '<div style="opacity:.5;font-size:.85rem;padding:.4rem 0;">Nessuna categoria trovata.</div>';
+            return;
+        }
+        container.innerHTML = options.map(c => `
+            <div onclick="selectMoveSubcategoryTarget('${c.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.5rem .4rem;border-radius:6px;cursor:pointer;${c.id === _moveSubcategoryTargetId ? 'background:var(--input-bg);border:2px solid var(--accent);' : 'border:2px solid transparent;'}">
+                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+            </div>`).join('');
+    }
+
+    function selectMoveSubcategoryTarget(categoryId) {
+        _moveSubcategoryTargetId = categoryId;
+        const c = categories.find(x => x.id === categoryId);
+        document.getElementById('moveSubcategorySearch').value = c ? c.name : '';
+        renderMoveSubcategorySuggestions();
     }
 
     async function confirmMoveSubcategory() {
-        if (!_moveSubcategoryId) return;
-        const newParentId = document.getElementById('moveSubcategoryParent').value;
-        if (!newParentId) return;
-        const { error } = await sb.from('ca_categories').update({ parent_id: newParentId }).eq('id', _moveSubcategoryId);
+        if (!_moveSubcategoryId || !_moveSubcategoryTargetId) { showToast('Scegli una categoria dall\'elenco', true); return; }
+        const { error } = await sb.from('ca_categories').update({ parent_id: _moveSubcategoryTargetId }).eq('id', _moveSubcategoryId);
         if (handleAuthError(error)) return;
         if (error) { alert('Errore: ' + error.message); return; }
         closeMoveSubcategoryModal();
