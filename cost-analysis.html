@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.33</title>
+    <title>Analisi Costi v1.0.34</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -704,6 +704,24 @@
     </div>
 </div>
 
+<!-- ====== MODAL: SPOSTA SOTTO-CATEGORIA ====== -->
+<div class="modal" id="moveSubcategoryModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="moveSubcategoryTitle">Sposta sotto-categoria</h2>
+            <span class="modal-close" onclick="closeMoveSubcategoryModal()">✕</span>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Nuova categoria padre *</label>
+            <select class="form-select" id="moveSubcategoryParent"></select>
+        </div>
+        <div style="display:flex;gap:.75rem;margin-top:1rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmMoveSubcategory()">Sposta</button>
+            <button class="btn btn-secondary" onclick="closeMoveSubcategoryModal()">Annulla</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -718,8 +736,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.33';
-    var BUILD_TIME  = '2026-07-20T14:20:00Z';
+    var APP_VERSION = 'v1.0.34';
+    var BUILD_TIME  = '2026-07-20T14:35:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -896,6 +914,7 @@
                             <div class="mgmt-event-info"><span class="mgmt-group-dot" style="background:${categoryColor(k)}"></span><span class="mgmt-event-name">${categoryLabel(k)}</span> <span style="color:var(--muted);font-size:.8rem;">(${categoryTransactionCount(k.id)})</span></div>
                             <div class="mgmt-event-actions">
                                 <button class="btn btn-small btn-ghost" onclick="openCategoryTransactionsModal('${k.id}')" title="Vedi transazioni">📄</button>
+                                <button class="btn btn-small btn-secondary" onclick="openMoveSubcategoryModal('${k.id}')" title="Sposta sotto un'altra categoria">🔀</button>
                                 <button class="btn btn-small btn-secondary" onclick="openCategoryModal('${k.id}')">✏️</button>
                                 <button class="btn btn-small btn-danger" onclick="deleteCategory('${k.id}')">🗑️</button>
                             </div>
@@ -1200,6 +1219,39 @@
         await loadTransactions();
         renderCategories();
         showToast('🗑️ Categoria e sotto-categorie eliminate');
+    }
+
+    // ==========================================
+    // SPOSTA SOTTO-CATEGORIA (scorciatoia rispetto al modale di modifica completo)
+    // ==========================================
+    let _moveSubcategoryId = null;
+
+    function openMoveSubcategoryModal(kidId) {
+        _moveSubcategoryId = kidId;
+        const kid = categories.find(c => c.id === kidId);
+        document.getElementById('moveSubcategoryTitle').textContent = `Sposta "${kid ? categoryLabel(kid) : '?'}"`;
+        const sel = document.getElementById('moveSubcategoryParent');
+        sel.innerHTML = topCategories().filter(c => c.id !== kidId).map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
+        sel.value = kid ? (kid.parent_id || '') : '';
+        document.getElementById('moveSubcategoryModal').classList.add('active');
+    }
+
+    function closeMoveSubcategoryModal() {
+        document.getElementById('moveSubcategoryModal').classList.remove('active');
+        _moveSubcategoryId = null;
+    }
+
+    async function confirmMoveSubcategory() {
+        if (!_moveSubcategoryId) return;
+        const newParentId = document.getElementById('moveSubcategoryParent').value;
+        if (!newParentId) return;
+        const { error } = await sb.from('ca_categories').update({ parent_id: newParentId }).eq('id', _moveSubcategoryId);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeMoveSubcategoryModal();
+        await loadCategories();
+        renderCategories();
+        showToast('✅ Sotto-categoria spostata');
     }
 
     // ==========================================
