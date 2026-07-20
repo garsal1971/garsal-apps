@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.29</title>
+    <title>Analisi Costi v1.0.30</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -468,6 +468,7 @@
             <div class="form-group">
                 <label class="form-label">Categoria *</label>
                 <select class="form-select" id="ruleCategory" required></select>
+                <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.4rem;" onclick="openCategoryModalFromRuleModal()">+ Nuova categoria/sotto-categoria</button>
             </div>
             <div class="form-group">
                 <label class="form-label">Priorità</label>
@@ -523,6 +524,7 @@
             <div class="form-group">
                 <label class="form-label">Categoria *</label>
                 <select class="form-select" id="mccCategory" required></select>
+                <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.4rem;" onclick="openCategoryModalFromMccModal()">+ Nuova categoria/sotto-categoria</button>
             </div>
             <button type="submit" class="btn btn-primary" style="width:100%;">Salva Mapping</button>
         </form>
@@ -681,8 +683,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.29';
-    var BUILD_TIME  = '2026-07-20T00:25:00Z';
+    var APP_VERSION = 'v1.0.30';
+    var BUILD_TIME  = '2026-07-20T00:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -976,16 +978,39 @@
 
     // Se il modale categoria è stato aperto dal tag editor o dai suggerimenti AI, alla
     // chiusura si torna a quel modale con l'elenco/combo aggiornati.
+    // Stato del modulo/form da cui è stato aperto il modale categoria "al volo", per tornarci
+    // dopo il salvataggio invece di lasciare l'utente sulla lista categorie.
+    let _lastSavedCategoryId = null; // id della categoria appena creata/modificata, per riselezionarla al ritorno
+    let _ruleModalReturn = null;     // { id, pattern, priority } della regola categoria in corso
+    let _mccModalReturn = null;      // { id, mcc } del mapping MCC in corso
+
     function closeCategoryModal() {
         document.getElementById('categoryModal').classList.remove('active');
         if (_tagEditorTxId) {
             renderTagEditorList();
+            // Riseleziona subito la categoria appena creata/modificata sulla transazione in corso.
+            if (_lastSavedCategoryId) {
+                const cb = document.querySelector(`#tagEditorList input[value="${_lastSavedCategoryId}"]`);
+                if (cb) cb.checked = true;
+            }
             document.getElementById('tagEditorModal').classList.add('active');
         } else if (_aiSuggestionsReturnPending) {
             _aiSuggestionsReturnPending = false;
             renderAiSuggestionsList();
             document.getElementById('aiSuggestionsModal').classList.add('active');
+        } else if (_ruleModalReturn) {
+            const r = _ruleModalReturn; _ruleModalReturn = null;
+            openRuleModal(r.id || null);
+            document.getElementById('rulePattern').value = r.pattern;
+            document.getElementById('rulePriority').value = r.priority;
+            if (_lastSavedCategoryId) document.getElementById('ruleCategory').value = _lastSavedCategoryId;
+        } else if (_mccModalReturn) {
+            const m = _mccModalReturn; _mccModalReturn = null;
+            openMccModal(m.id || null);
+            document.getElementById('mccCode').value = m.mcc;
+            if (_lastSavedCategoryId) document.getElementById('mccCategory').value = _lastSavedCategoryId;
         }
+        _lastSavedCategoryId = null;
     }
 
     function openCategoryModalFromTagEditor() {
@@ -996,6 +1021,25 @@
     function openCategoryModalFromAiSuggestions() {
         _aiSuggestionsReturnPending = true;
         document.getElementById('aiSuggestionsModal').classList.remove('active');
+        openCategoryModal(null);
+    }
+
+    function openCategoryModalFromRuleModal() {
+        _ruleModalReturn = {
+            id: document.getElementById('editRuleId').value,
+            pattern: document.getElementById('rulePattern').value,
+            priority: document.getElementById('rulePriority').value
+        };
+        document.getElementById('ruleModal').classList.remove('active');
+        openCategoryModal(null);
+    }
+
+    function openCategoryModalFromMccModal() {
+        _mccModalReturn = {
+            id: document.getElementById('editMccId').value,
+            mcc: document.getElementById('mccCode').value
+        };
+        document.getElementById('mccModal').classList.remove('active');
         openCategoryModal(null);
     }
 
@@ -1019,14 +1063,19 @@
             user_id: currentUserId()
         };
         if (!payload.name) return;
-        let error;
+        let error, savedId = id;
         if (id) { ({ error } = await sb.from('ca_categories').update(payload).eq('id', id)); }
-        else { ({ error } = await sb.from('ca_categories').insert(payload)); }
+        else {
+            const res = await sb.from('ca_categories').insert(payload).select().single();
+            error = res.error;
+            savedId = res.data?.id || null;
+        }
         if (handleAuthError(error)) return;
         if (error) { alert('Errore: ' + error.message); return; }
         await loadCategories();
         renderCategories();
         showToast('✅ Categoria salvata');
+        _lastSavedCategoryId = savedId;
         closeCategoryModal();
     }
 
