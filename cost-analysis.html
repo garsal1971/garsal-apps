@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.28</title>
+    <title>Analisi Costi v1.0.29</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -681,8 +681,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.28';
-    var BUILD_TIME  = '2026-07-20T00:10:00Z';
+    var APP_VERSION = 'v1.0.29';
+    var BUILD_TIME  = '2026-07-20T00:25:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2442,8 +2442,10 @@
         }
         hideProcessing();
 
-        _aiSuggestions = allResults.filter(r => r.categoryId);
-        const noMatch = allResults.length - _aiSuggestions.length;
+        // Anche i merchant senza una categoria esistente adatta (categoryId null) restano in
+        // lista, con "— Nessuna categoria —" preselezionato: altrimenti sparivano dal popup e
+        // non c'era modo di creare al volo una categoria nuova apposta per loro.
+        _aiSuggestions = allResults;
 
         if (failedBatches) {
             const msg = `⚠️ ${failedBatches} richiest${failedBatches === 1 ? 'a' : 'e'} su ${batches.length} fallit${failedBatches === 1 ? 'a' : 'e'}`
@@ -2451,7 +2453,7 @@
             showToast(msg, true);
         }
         if (!_aiSuggestions.length) {
-            if (!failedBatches) showToast(noMatch ? `Nessuna categoria adatta trovata per ${noMatch} merchant` : 'Nessun suggerimento');
+            if (!failedBatches) showToast('Nessun suggerimento');
             return;
         }
         openAiSuggestionsModal();
