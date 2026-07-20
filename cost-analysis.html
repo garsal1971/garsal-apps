@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.32</title>
+    <title>Analisi Costi v1.0.33</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -685,6 +685,25 @@
     </div>
 </div>
 
+<!-- ====== MODAL: TRASFERIMENTO SOTTO-CATEGORIE ====== -->
+<div class="modal" id="transferSubcategoriesModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="transferSubcategoriesTitle">Sposta le sotto-categorie</h2>
+            <span class="modal-close" onclick="closeTransferSubcategoriesModal()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:.75rem;">Questa categoria ha delle sotto-categorie. Scegli dove spostare ciascuna prima di eliminarla, oppure elimina tutto insieme.</p>
+        <div id="transferSubcategoriesList"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmTransferAndDelete()">Sposta ed elimina la categoria</button>
+        </div>
+        <div style="display:flex;gap:.75rem;margin-top:.6rem;">
+            <button class="btn btn-danger" style="flex:1;" onclick="deleteCategoryWithSubcategories()">Elimina tutto (categoria + sotto-categorie)</button>
+            <button class="btn btn-secondary" onclick="closeTransferSubcategoriesModal()">Annulla</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -699,8 +718,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.32';
-    var BUILD_TIME  = '2026-07-20T14:00:00Z';
+    var APP_VERSION = 'v1.0.33';
+    var BUILD_TIME  = '2026-07-20T14:20:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1096,7 +1115,12 @@
     }
 
     async function deleteCategory(id) {
-        if (!confirm('Eliminare questa categoria? Le sotto-categorie e i tag associati verranno rimossi.')) return;
+        const kids = childCategories(id);
+        if (kids.length) {
+            openTransferSubcategoriesModal(id);
+            return;
+        }
+        if (!confirm('Eliminare questa categoria? I tag associati alle transazioni verranno rimossi.')) return;
         const { error } = await sb.from('ca_categories').delete().eq('id', id);
         if (handleAuthError(error)) return;
         if (error) { alert('Errore: ' + error.message); return; }
@@ -1104,6 +1128,78 @@
         await loadTransactions();
         renderCategories();
         showToast('🗑️ Categoria eliminata');
+    }
+
+    // ==========================================
+    // TRASFERIMENTO SOTTO-CATEGORIE (prima di eliminare una categoria padre)
+    // ==========================================
+    let _transferCategoryId = null;
+
+    function openTransferSubcategoriesModal(parentId) {
+        _transferCategoryId = parentId;
+        const parent = categories.find(c => c.id === parentId);
+        const kids = childCategories(parentId);
+        document.getElementById('transferSubcategoriesTitle').textContent = `Sposta le sotto-categorie di "${parent ? parent.name : '?'}"`;
+        const otherTops = topCategories().filter(c => c.id !== parentId);
+        const list = document.getElementById('transferSubcategoriesList');
+        list.innerHTML = kids.map(k => {
+            const options = ['<option value="">— Nessuna (diventa categoria principale) —</option>']
+                .concat(otherTops.map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`))
+                .join('');
+            return `<div class="form-group">
+                <label class="form-label">${categoryLabel(k)}</label>
+                <select class="form-select" id="transferKid-${k.id}">${options}</select>
+            </div>`;
+        }).join('');
+        document.getElementById('transferSubcategoriesModal').classList.add('active');
+    }
+
+    function closeTransferSubcategoriesModal() {
+        document.getElementById('transferSubcategoriesModal').classList.remove('active');
+        _transferCategoryId = null;
+    }
+
+    // Sposta ogni sotto-categoria dove scelto dall'utente (categoria principale o un altro
+    // padre) prima di eliminare la categoria di partenza, così non si perdono le
+    // sotto-categorie né i tag già assegnati alle transazioni.
+    async function confirmTransferAndDelete() {
+        if (!_transferCategoryId) return;
+        const parentId = _transferCategoryId;
+        const kids = childCategories(parentId);
+        for (const k of kids) {
+            const sel = document.getElementById(`transferKid-${k.id}`);
+            const newParentId = sel ? sel.value : '';
+            const payload = newParentId
+                ? { parent_id: newParentId }
+                : { parent_id: null, color: k.color || pickUnusedColor() }; // promossa a principale: le serve un colore proprio
+            const { error } = await sb.from('ca_categories').update(payload).eq('id', k.id);
+            if (handleAuthError(error)) return;
+            if (error) { alert('Errore: ' + error.message); return; }
+        }
+        const { error: delError } = await sb.from('ca_categories').delete().eq('id', parentId);
+        if (handleAuthError(delError)) return;
+        if (delError) { alert('Errore: ' + delError.message); return; }
+        closeTransferSubcategoriesModal();
+        await loadCategories();
+        await loadTransactions();
+        renderCategories();
+        showToast('✅ Sotto-categorie spostate, categoria eliminata');
+    }
+
+    // Alternativa: elimina la categoria E tutte le sue sotto-categorie (comportamento
+    // precedente), per chi non vuole conservarle.
+    async function deleteCategoryWithSubcategories() {
+        if (!_transferCategoryId) return;
+        if (!confirm('Eliminare la categoria insieme a tutte le sue sotto-categorie e ai tag associati? Operazione irreversibile.')) return;
+        const parentId = _transferCategoryId;
+        const { error } = await sb.from('ca_categories').delete().eq('id', parentId);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeTransferSubcategoriesModal();
+        await loadCategories();
+        await loadTransactions();
+        renderCategories();
+        showToast('🗑️ Categoria e sotto-categorie eliminate');
     }
 
     // ==========================================
