@@ -201,6 +201,13 @@ Deno.serve(async (req) => {
       const creditorName = (creditor && (pick(creditor, 'name') as string)) || '';
       const debtorName = (debtor && (pick(debtor, 'name') as string)) || '';
       const description = remittanceText || creditorName || debtorName || '';
+      // Per confrontare con la descrizione del CSV Revolut (colonna "Description"): corrisponde
+      // al secondo elemento di remittance_information quando ce ne sono almeno due (es. bonifici/
+      // ricariche: ["nota utente","Payment from ..."]), altrimenti al primo (es. pagamenti carta,
+      // dove c'è un solo elemento con il nome del merchant).
+      const matchDescription = Array.isArray(remittanceInfo) && remittanceInfo.length > 1
+        ? String(remittanceInfo[1] || '')
+        : (Array.isArray(remittanceInfo) && remittanceInfo.length ? String(remittanceInfo[0] || '') : description);
       const date = (pick(tx, 'booking_date', 'bookingDate', 'value_date', 'valueDate') as string) || null;
       const externalId = (pick(tx, 'entry_reference', 'entryReference', 'transaction_id', 'transactionId') as string) || null;
       const mcc = (pick(tx, 'merchant_category_code', 'merchantCategoryCode', 'mcc') as string) || null;
@@ -213,7 +220,7 @@ Deno.serve(async (req) => {
       const card = Array.isArray(cardIdList) && cardIdList.length ? cardIdList[0] : null;
       const cardIssuer = (card && (pick(card, 'issuer') as string)) || null;
       const cardIdentification = (card && (pick(card, 'identification') as string)) || null;
-      return { date, amount, currency, description, externalId, mcc, type, cardIssuer, cardIdentification, raw: tx };
+      return { date, amount, currency, description, matchDescription, externalId, mcc, type, cardIssuer, cardIdentification, raw: tx };
     }).filter((t) => t.date && t.externalId);
 
     if (!rows.length) {
@@ -255,13 +262,17 @@ Deno.serve(async (req) => {
 
     // Evita duplicati quando la stessa transazione è già presente perché importata a mano da
     // CSV prima del collegamento bancario: cerca tra le transazioni non ancora collegate a un
-    // conto (bank_connection_id nullo) una corrispondenza univoca su data+importo. Se trovata,
+    // conto (bank_connection_id nullo) una corrispondenza su data+importo (con tolleranza sui
+    // decimali, per evitare mismatch da arrotondamento float/numeric). Se ambigua (più di una
+    // corrispondenza), si prova a stringere sulla descrizione (colonna CSV "Description" contro
+    // il secondo elemento di remittance_information). Se trovata un'unica corrispondenza,
     // AGGIORNA quella riga esistente (aggiunge conto/MCC/carta/dato grezzo) invece di inserirne
     // una nuova, senza toccare categorie o persona già assegnate a mano. Corrispondenze multiple
     // o assenti finiscono nel normale inserimento, per non rischiare un collegamento sbagliato.
+    const AMOUNT_EPSILON = 0.01;
     const { data: unlinked } = await supabase
       .from('ca_transactions')
-      .select('id, date, amount, mcc, type, spender_person_id')
+      .select('id, date, amount, mcc, type, spender_person_id, description')
       .eq('user_id', userId)
       .is('bank_connection_id', null);
 
@@ -269,7 +280,12 @@ Deno.serve(async (req) => {
     const toInsert: typeof rows = [];
     const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
     for (const row of rows) {
-      const matches = candidatePool.filter((c) => c.date === row.date && Number(c.amount) === row.amount);
+      let matches = candidatePool.filter((c) => c.date === row.date && Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON);
+      if (matches.length > 1) {
+        const desc = (row.matchDescription || '').trim().toLowerCase();
+        const narrowed = matches.filter((c) => (c.description || '').trim().toLowerCase() === desc);
+        if (narrowed.length === 1) matches = narrowed;
+      }
       if (matches.length === 1) {
         toMerge.push({ existingId: matches[0].id, row });
         candidatePool.splice(candidatePool.indexOf(matches[0]), 1);
