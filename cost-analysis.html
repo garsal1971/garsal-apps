@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.41</title>
+    <title>Analisi Costi v1.0.42</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -817,8 +817,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.41';
-    var BUILD_TIME  = '2026-07-20T16:50:00Z';
+    var APP_VERSION = 'v1.0.42';
+    var BUILD_TIME  = '2026-07-20T17:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -899,6 +899,26 @@
     // ==========================================
     // UTIL
     // ==========================================
+    // Supabase/PostgREST limita di default una select('*') senza .range() a 1000 righe:
+    // oltre quella soglia le righe più "in fondo" all'ordinamento sparivano silenziosamente
+    // (es. le transazioni più vecchie, con .order('date', {ascending:false})). Pagina finché
+    // non riceve una pagina più corta della dimensione richiesta.
+    async function fetchAllRows(table, orderCol, ascending) {
+        const PAGE_SIZE = 1000;
+        let allRows = [];
+        let from = 0;
+        while (true) {
+            let query = sb.from(table).select('*').range(from, from + PAGE_SIZE - 1);
+            if (orderCol) query = query.order(orderCol, { ascending });
+            const { data, error } = await query;
+            if (error) return { data: allRows, error };
+            allRows = allRows.concat(data || []);
+            if (!data || data.length < PAGE_SIZE) break;
+            from += PAGE_SIZE;
+        }
+        return { data: allRows, error: null };
+    }
+
     function fmtEUR(v) { return (v || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }); }
     function formatDateIt(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
     function categoryLabel(c) { return (c.icon ? c.icon + ' ' : '') + c.name; }
@@ -2374,9 +2394,9 @@
     let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '', sortBy: 'title' };
 
     async function loadTransactions() {
-        const { data: txs, error: e1 } = await sb.from('ca_transactions').select('*').order('date', { ascending: false });
+        const { data: txs, error: e1 } = await fetchAllRows('ca_transactions', 'date', false);
         if (handleAuthError(e1)) return;
-        const { data: tcs, error: e2 } = await sb.from('ca_transaction_categories').select('*');
+        const { data: tcs, error: e2 } = await fetchAllRows('ca_transaction_categories', null, true);
         if (handleAuthError(e2)) return;
         transactions = txs || [];
         txCategories = tcs || [];
