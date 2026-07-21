@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.40</title>
+    <title>Analisi Costi v1.0.41</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -333,6 +333,17 @@
                         <input type="number" step="0.01" class="form-input" id="txFilterAmountTo" placeholder="Importo a..." oninput="onTxFilterChange()">
                     </div>
                     <select class="form-select" id="txFilterType" onchange="onTxFilterChange()"></select>
+                </div>
+                <div style="margin-top:.75rem;">
+                    <label class="form-label" style="margin-bottom:.3rem;">Ordina per</label>
+                    <select class="form-select" id="txSortBy" onchange="onTxFilterChange()">
+                        <option value="title">Titolo (raggruppate, più frequenti prima)</option>
+                        <option value="date_desc">Data (più recenti prima)</option>
+                        <option value="date_asc">Data (meno recenti prima)</option>
+                        <option value="category">Categoria</option>
+                        <option value="spender">Chi ha speso</option>
+                        <option value="type">Tipo</option>
+                    </select>
                 </div>
             </div>
             <div class="form-hint" id="transactionsCount" style="margin-bottom:.75rem;"></div>
@@ -806,8 +817,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.40';
-    var BUILD_TIME  = '2026-07-20T16:30:00Z';
+    var APP_VERSION = 'v1.0.41';
+    var BUILD_TIME  = '2026-07-20T16:50:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2360,7 +2371,7 @@
     // ==========================================
     // TRANSAZIONI
     // ==========================================
-    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '' };
+    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '', sortBy: 'title' };
 
     async function loadTransactions() {
         const { data: txs, error: e1 } = await sb.from('ca_transactions').select('*').order('date', { ascending: false });
@@ -2429,6 +2440,7 @@
         typeSel.innerHTML = '<option value="">Tutti i tipi</option><option value="__none__">Senza tipo</option>' +
             types.map(ty => `<option value="${ty}">${ty}</option>`).join('');
         typeSel.value = txFilters.type;
+        document.getElementById('txSortBy').value = txFilters.sortBy;
     }
 
     function onTxFilterChange() {
@@ -2441,6 +2453,7 @@
         txFilters.amountFrom = document.getElementById('txFilterAmountFrom').value;
         txFilters.amountTo = document.getElementById('txFilterAmountTo').value;
         txFilters.type = document.getElementById('txFilterType').value;
+        txFilters.sortBy = document.getElementById('txSortBy').value;
         renderTransactionsList();
     }
 
@@ -2506,6 +2519,13 @@
             return;
         }
 
+        if (txFilters.sortBy && txFilters.sortBy !== 'title') {
+            container.innerHTML = sortedTransactionsFlat(list, txFilters.sortBy).map(renderTxRow).join('');
+            return;
+        }
+
+        // Ordinamento predefinito: raggruppate per titolo (descrizione), gruppo più numeroso
+        // per primo, NON in ordine alfabetico.
         const groups = {};
         list.forEach(t => {
             const key = (t.description || '').trim() || '(senza descrizione)';
@@ -2521,6 +2541,29 @@
                 ${sortedItems.map(renderTxRow).join('')}
             </div>`;
         }).join('');
+    }
+
+    // Ordinamenti alternativi (lista piatta, senza raggruppamento per titolo).
+    function sortedTransactionsFlat(list, sortBy) {
+        const categoryKey = (t) => {
+            const ids = getTxCategoryIds(t.id);
+            return ids.length ? categoryFullName(ids[0]) : '￿'; // non categorizzate in fondo
+        };
+        const spenderKey = (t) => {
+            const p = people.find(x => x.id === t.spender_person_id);
+            return p ? p.name : '￿';
+        };
+        const typeKey = (t) => t.type || '￿';
+        return [...list].sort((a, b) => {
+            switch (sortBy) {
+                case 'date_asc': return a.date.localeCompare(b.date);
+                case 'date_desc': return b.date.localeCompare(a.date);
+                case 'category': return categoryKey(a).localeCompare(categoryKey(b));
+                case 'spender': return spenderKey(a).localeCompare(spenderKey(b));
+                case 'type': return typeKey(a).localeCompare(typeKey(b));
+                default: return 0;
+            }
+        });
     }
 
     async function setTxPerson(txId, personId) {
