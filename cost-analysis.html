@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.47</title>
+    <title>Analisi Costi v1.0.48</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -620,23 +620,6 @@
     </div>
 </div>
 
-<!-- ====== MODAL: EDITOR TAG CATEGORIA ====== -->
-<div class="modal" id="tagEditorModal">
-    <div class="modal-content" style="max-width:420px;">
-        <div class="modal-header">
-            <h2 class="modal-title">Categorie transazione</h2>
-            <span class="modal-close" onclick="closeTagEditor()">✕</span>
-        </div>
-        <input type="text" class="form-input" id="tagEditorSearch" placeholder="Cerca categoria..." oninput="filterTagEditorList()" autocomplete="off" style="margin-bottom:.5rem;">
-        <div id="tagEditorList" style="max-height:50vh;overflow-y:auto;"></div>
-        <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.75rem;" onclick="openCategoryModalFromTagEditor()">+ Nuova categoria/sotto-categoria</button>
-        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
-            <button class="btn btn-primary" style="flex:1;" onclick="saveTagEditor()">Salva</button>
-            <button class="btn btn-secondary" onclick="closeTagEditor()">Annulla</button>
-        </div>
-    </div>
-</div>
-
 <!-- ====== MODAL: REVISIONE IMPORT ====== -->
 <div class="modal" id="importReviewModal">
     <div class="modal-content">
@@ -825,8 +808,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.47';
-    var BUILD_TIME  = '2026-07-21T13:35:00Z';
+    var APP_VERSION = 'v1.0.48';
+    var BUILD_TIME  = '2026-07-21T14:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1203,26 +1186,18 @@
         document.getElementById('categoryModal').classList.add('active');
     }
 
-    // Se il modale categoria è stato aperto dal tag editor o dai suggerimenti AI, alla
-    // chiusura si torna a quel modale con l'elenco/combo aggiornati.
-    // Stato del modulo/form da cui è stato aperto il modale categoria "al volo", per tornarci
-    // dopo il salvataggio invece di lasciare l'utente sulla lista categorie.
-    let _lastSavedCategoryId = null; // id della categoria appena creata/modificata, per riselezionarla al ritorno
-    let _ruleModalReturn = null;     // { id, pattern, priority } della regola categoria in corso
-    let _mccModalReturn = null;      // { id, mcc } del mapping MCC in corso
+    // Se il modale categoria è stato aperto "al volo" da un'altra schermata, alla chiusura si
+    // torna a quella schermata invece di lasciare l'utente sulla lista categorie.
+    let _lastSavedCategoryId = null;    // id della categoria appena creata/modificata, per riselezionarla al ritorno
+    let _ruleModalReturn = null;        // { id, pattern, priority } della regola categoria in corso
+    let _mccModalReturn = null;         // { id, mcc } del mapping MCC in corso
+    let _categoryQuickAddTxId = null;   // id della transazione da cui si è aperto "+ Nuova categoria"
 
     function closeCategoryModal() {
         document.getElementById('categoryModal').classList.remove('active');
-        if (_tagEditorTxId) {
-            const search = document.getElementById('tagEditorSearch');
-            if (search) search.value = ''; // altrimenti una ricerca lasciata a metà nasconde la categoria appena creata
-            renderTagEditorList();
-            // Riseleziona subito la categoria appena creata/modificata sulla transazione in corso.
-            if (_lastSavedCategoryId) {
-                const cb = document.querySelector(`#tagEditorList input[value="${_lastSavedCategoryId}"]`);
-                if (cb) cb.checked = true;
-            }
-            document.getElementById('tagEditorModal').classList.add('active');
+        if (_categoryQuickAddTxId) {
+            const txId = _categoryQuickAddTxId; _categoryQuickAddTxId = null;
+            if (_lastSavedCategoryId) setTxCategory(txId, _lastSavedCategoryId);
         } else if (_aiSuggestionsReturnPending) {
             _aiSuggestionsReturnPending = false;
             renderAiSuggestionsList();
@@ -1242,8 +1217,8 @@
         _lastSavedCategoryId = null;
     }
 
-    function openCategoryModalFromTagEditor() {
-        document.getElementById('tagEditorModal').classList.remove('active');
+    function openCategoryModalFromTxRow(txId) {
+        _categoryQuickAddTxId = txId;
         openCategoryModal(null);
     }
 
@@ -2158,7 +2133,7 @@
         return (desc || '').toUpperCase().trim().replace(/\s+/g, ' ').replace(/[*#]?\s*\d{3,}$/, '').trim();
     }
 
-    async function learnMerchantCategories(description, categoryIds) {
+    async function learnMerchantCategories(description, categoryId) {
         const key = normalizeMerchant(description);
         if (!key) return;
         let mm = merchantMap.find(m => m.merchant_key === key);
@@ -2172,10 +2147,10 @@
         }
         await sb.from('ca_merchant_map_categories').delete().eq('merchant_map_id', mm.id);
         merchantMapCategories = merchantMapCategories.filter(c => c.merchant_map_id !== mm.id);
-        if (categoryIds.length) {
-            const rows = categoryIds.map(cid => ({ merchant_map_id: mm.id, category_id: cid }));
-            await sb.from('ca_merchant_map_categories').insert(rows);
-            merchantMapCategories.push(...rows);
+        if (categoryId) {
+            const row = { merchant_map_id: mm.id, category_id: categoryId };
+            await sb.from('ca_merchant_map_categories').insert(row);
+            merchantMapCategories.push(row);
         }
     }
 
@@ -2201,22 +2176,24 @@
     }
 
     function categorizeRow(description, mcc) {
-        let categoryIds = [], catSource = 'uncategorized';
+        let categoryId = null, catSource = 'uncategorized';
         if (mcc) {
             const mccMatch = mccCategoryMap.find(m => m.mcc === mcc);
-            if (mccMatch) { categoryIds = [mccMatch.category_id]; catSource = 'mcc'; }
+            if (mccMatch) { categoryId = mccMatch.category_id; catSource = 'mcc'; }
         }
-        if (!categoryIds.length) {
+        if (!categoryId) {
             const key = normalizeMerchant(description);
             const mm = merchantMap.find(m => m.merchant_key === key);
             if (mm) {
-                categoryIds = merchantMapCategories.filter(c => c.merchant_map_id === mm.id).map(c => c.category_id);
-                if (categoryIds.length) catSource = 'learned';
+                const learned = merchantMapCategories.find(c => c.merchant_map_id === mm.id);
+                if (learned) { categoryId = learned.category_id; catSource = 'learned'; }
             }
         }
-        if (!categoryIds.length) {
-            const matched = rules.filter(r => matchesPattern(description, r.pattern));
-            if (matched.length) { categoryIds = [...new Set(matched.map(r => r.category_id))]; catSource = 'rule'; }
+        if (!categoryId) {
+            // Più regole possono matchare la stessa descrizione: vince quella con priorità più alta.
+            const sortedRules = [...rules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+            const rMatch = sortedRules.find(r => matchesPattern(description, r.pattern));
+            if (rMatch) { categoryId = rMatch.category_id; catSource = 'rule'; }
         }
         // "Per chi" — priorità al merchant appreso (correzione manuale precedente, salvo il
         // caso "solo questa transazione"), poi alle regole parola-chiave, come per la categoria.
@@ -2229,11 +2206,11 @@
             const pMatch = sortedPersonRules.find(r => matchesPattern(description, r.pattern));
             if (pMatch) { personId = pMatch.person_id; personSource = 'rule'; }
         }
-        return { categoryIds, catSource, personId, personSource };
+        return { categoryId, catSource, personId, personSource };
     }
 
     async function insertTransactionRow(item) {
-        const { categoryIds, catSource, personId, personSource } = categorizeRow(item.description, item.mcc);
+        const { categoryId, catSource, personId, personSource } = categorizeRow(item.description, item.mcc);
         const { data, error } = await sb.from('ca_transactions').insert({
             user_id: currentUserId(),
             date: item.date, amount: item.amount, currency: item.currency,
@@ -2248,9 +2225,8 @@
         }).select().single();
         if (handleAuthError(error)) return null;
         if (error) { console.error('Errore import transazione:', error, item); return null; }
-        if (categoryIds.length) {
-            const rows = categoryIds.map(cid => ({ transaction_id: data.id, category_id: cid, source: catSource }));
-            await sb.from('ca_transaction_categories').insert(rows);
+        if (categoryId) {
+            await sb.from('ca_transaction_categories').insert({ transaction_id: data.id, category_id: categoryId, source: catSource });
         }
         return data;
     }
@@ -2511,10 +2487,7 @@
 
     function renderTxRow(t) {
         const catIds = getTxCategoryIds(t.id);
-        const chips = catIds.map(cid => {
-            const c = categories.find(x => x.id === cid);
-            return `<span class="chip active" style="cursor:default;">${c ? categoryLabel(c) : '?'} <span style="cursor:pointer;" onclick="removeTxCategory('${t.id}','${cid}')">✕</span></span>`;
-        }).join('');
+        const currentCategoryId = catIds[0] || '';
         const personOptions = ['<option value="">— Per chi —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
         const spenderOptions = ['<option value="">— Chi ha speso —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.spender_person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
         return `
@@ -2524,20 +2497,41 @@
                 <span class="tx-amount mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
             </div>
             <div class="tx-meta">${formatDateIt(t.date)} ${t.type ? '· ' + t.type : ''}</div>
-            <div class="filter-chips" style="margin:.6rem 0 0;">
-                ${chips}
-                <span class="chip" onclick="openTagEditor('${t.id}')">+ tag</span>
+            <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;">
+                <select class="form-select" style="flex:1;font-size:.85rem;" onchange="setTxCategory('${t.id}', this.value)">${categorySelectOptionsHtml(currentCategoryId)}</select>
+                <button type="button" class="btn btn-small btn-ghost" onclick="openCategoryModalFromTxRow('${t.id}')" title="Nuova categoria/sotto-categoria">+</button>
             </div>
             <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxSpender('${t.id}', this.value)">${spenderOptions}</select>
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
                 ${t.raw ? `<button type="button" class="btn btn-small btn-ghost" onclick="openRawDataModal('${t.id}')" title="Vedi il dato grezzo originale (banca o CSV)">🔍 RAW</button>` : ''}
             </div>
-            <label style="margin-top:.4rem;display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);cursor:pointer;" title="Se attivo, le modifiche a tag e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
+            <label style="margin-top:.4rem;display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);cursor:pointer;" title="Se attivo, le modifiche a categoria e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
                 <input type="checkbox" ${_onlyThisTxIds.has(t.id) ? 'checked' : ''} onchange="toggleOnlyThisTx('${t.id}', this.checked)">
                 🔒 Solo questa transazione (non imparare/propagare)
             </label>
         </div>`;
+    }
+
+    // Ogni transazione ha una sola categoria (o nessuna): assegnarne una nuova sostituisce
+    // sempre quella precedente, non si aggiunge più in coppia.
+    async function setTxCategory(txId, categoryId) {
+        const { error: delErr } = await sb.from('ca_transaction_categories').delete().eq('transaction_id', txId);
+        if (handleAuthError(delErr)) return;
+        let insErr = null;
+        if (categoryId) {
+            ({ error: insErr } = await sb.from('ca_transaction_categories').insert({ transaction_id: txId, category_id: categoryId, source: 'manual' }));
+        }
+        if (insErr) { alert('Errore: ' + insErr.message); return; }
+        txCategories = txCategories.filter(tc => tc.transaction_id !== txId);
+        if (categoryId) txCategories.push({ transaction_id: txId, category_id: categoryId, source: 'manual' });
+        renderTransactionsList();
+        renderDashboard();
+        showToast('✅ Categoria aggiornata');
+        if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
+        const t = transactions.find(x => x.id === txId);
+        await learnMerchantCategories(t?.description, categoryId || null);
+        if (categoryId) await reanalyzeAllTransactions();
     }
 
     function toggleOnlyThisTx(txId, checked) {
@@ -2638,105 +2632,10 @@
         showToast('✅ "Chi ha speso" aggiornato');
     }
 
-    async function removeTxCategory(txId, categoryId) {
-        const { error } = await sb.from('ca_transaction_categories').delete().eq('transaction_id', txId).eq('category_id', categoryId);
-        if (handleAuthError(error)) return;
-        txCategories = txCategories.filter(tc => !(tc.transaction_id === txId && tc.category_id === categoryId));
-        if (!_onlyThisTxIds.has(txId)) {
-            const t = transactions.find(x => x.id === txId);
-            await learnMerchantCategories(t?.description, getTxCategoryIds(txId));
-        }
-        renderTransactionsList();
-        renderDashboard();
-    }
-
-    let _tagEditorTxId = null;
-    function openTagEditor(txId) {
-        _tagEditorTxId = txId;
-        const search = document.getElementById('tagEditorSearch');
-        if (search) search.value = '';
-        renderTagEditorList();
-        document.getElementById('tagEditorModal').classList.add('active');
-    }
-
-    // Elenco categorie organizzato ad albero (categoria principale + sotto-categorie indentate),
-    // ciascuna con il proprio colore ereditato. Costruisce SEMPRE tutte le checkbox (anche quelle
-    // che la ricerca nasconderà): filterTagEditorList() nasconde/mostra le righe senza mai
-    // ricreare le checkbox, per non perdere le selezioni già fatte mentre si scrive nella ricerca.
-    function renderTagEditorList() {
-        if (!_tagEditorTxId) return;
-        const current = new Set(getTxCategoryIds(_tagEditorTxId));
-        const list = document.getElementById('tagEditorList');
-        const tops = topCategories();
-        if (!tops.length) {
-            list.innerHTML = '<div style="opacity:.5;font-size:.85rem;padding:.5rem 0;">Nessuna categoria. Creane una con il bottone qui sotto.</div>';
-            return;
-        }
-        const checkboxRow = (c, indent) => `
-            <label class="tag-editor-row" data-name="${(c.name || '').toLowerCase()}" style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0 .35rem ${indent}rem;cursor:pointer;">
-                <input type="checkbox" value="${c.id}" ${current.has(c.id) ? 'checked' : ''}>
-                <span class="mgmt-group-dot" style="background:${categoryColor(c)}"></span>${categoryLabel(c)}
-            </label>`;
-        list.innerHTML = tops.map(c => {
-            const kids = childCategories(c.id);
-            return `<div class="tag-editor-group" style="margin-bottom:.4rem;border-bottom:1px solid var(--border);">
-                ${checkboxRow(c, 0)}
-                ${kids.map(k => checkboxRow(k, 1.6)).join('')}
-            </div>`;
-        }).join('');
-        filterTagEditorList();
-    }
-
-    // Nasconde (senza rimuovere dal DOM, per non perdere le checkbox già selezionate) le righe
-    // che non combaciano con la ricerca: se la categoria principale combacia mostra anche tutte
-    // le sue sotto-categorie, altrimenti mostra solo le sotto-categorie che combaciano.
-    function filterTagEditorList() {
-        const query = (document.getElementById('tagEditorSearch')?.value || '').trim().toLowerCase();
-        document.querySelectorAll('#tagEditorList .tag-editor-group').forEach(group => {
-            const rows = group.querySelectorAll('.tag-editor-row');
-            const topRow = rows[0];
-            const topMatches = !query || (topRow?.dataset.name || '').includes(query);
-            let anyKidVisible = false;
-            rows.forEach((row, i) => {
-                if (i === 0) return;
-                const visible = !query || topMatches || (row.dataset.name || '').includes(query);
-                row.style.display = visible ? 'flex' : 'none';
-                if (visible) anyKidVisible = true;
-            });
-            const groupVisible = !query || topMatches || anyKidVisible;
-            group.style.display = groupVisible ? 'block' : 'none';
-            if (topRow) topRow.style.display = groupVisible ? 'flex' : 'none';
-        });
-    }
-
-    function closeTagEditor() { document.getElementById('tagEditorModal').classList.remove('active'); _tagEditorTxId = null; }
-
-    async function saveTagEditor() {
-        if (!_tagEditorTxId) return;
-        const txId = _tagEditorTxId;
-        const checked = Array.from(document.querySelectorAll('#tagEditorList input:checked')).map(i => i.value);
-        const before = new Set(getTxCategoryIds(txId));
-        const after = new Set(checked);
-        const toAdd = checked.filter(id => !before.has(id));
-        const toRemove = [...before].filter(id => !after.has(id));
-        if (toRemove.length) await sb.from('ca_transaction_categories').delete().eq('transaction_id', txId).in('category_id', toRemove);
-        if (toAdd.length) await sb.from('ca_transaction_categories').insert(toAdd.map(cid => ({ transaction_id: txId, category_id: cid, source: 'manual' })));
-        txCategories = txCategories.filter(tc => tc.transaction_id !== txId);
-        checked.forEach(cid => txCategories.push({ transaction_id: txId, category_id: cid, source: 'manual' }));
-        closeTagEditor();
-        renderTransactionsList();
-        renderDashboard();
-        showToast('✅ Categorie aggiornate');
-        if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
-        const t = transactions.find(x => x.id === txId);
-        await learnMerchantCategories(t?.description, checked);
-        // Una nuova categoria appresa può valere anche per altre transazioni già importate
-        if (toAdd.length) await reanalyzeAllTransactions();
-    }
-
     // Riapplica l'algoritmo di categorizzazione (merchant appreso + regole) e l'assegnazione
-    // persona a tutte le transazioni esistenti. Categorie: aggiunge i tag mancanti senza mai
-    // toccare quelli già presenti (multi-tag, nessun conflitto possibile). Persona: le
+    // persona a tutte le transazioni esistenti. Categorie: assegna una categoria SOLO alle
+    // transazioni che non ne hanno ancora nessuna (una transazione può avere al massimo una
+    // categoria, non si sovrascrive mai una categoria già presente). Persona: le
     // transazioni senza persona ereditano quella suggerita (da regola o da altre transazioni
     // con la stessa descrizione normalizzata); quelle che hanno GIÀ una persona diversa da
     // quella suggerita NON vengono sovrascritte automaticamente, ma segnalate all'utente in un
@@ -2758,11 +2657,10 @@
         const personConflicts = [];
         for (let i = 0; i < transactions.length; i++) {
             const t = transactions[i];
-            const { categoryIds, catSource, personId, personSource } = categorizeRow(t.description, t.mcc);
-            const existing = new Set(getTxCategoryIds(t.id));
-            categoryIds.filter(cid => !existing.has(cid)).forEach(cid => {
-                newCategoryRows.push({ transaction_id: t.id, category_id: cid, source: catSource });
-            });
+            const { categoryId, catSource, personId, personSource } = categorizeRow(t.description, t.mcc);
+            if (categoryId && !getTxCategoryIds(t.id).length) {
+                newCategoryRows.push({ transaction_id: t.id, category_id: categoryId, source: catSource });
+            }
 
             const key = normalizeMerchant(t.description);
             const suggestedPersonId = personId || personByMerchant[key] || null;
@@ -3063,7 +2961,7 @@
             if (handleAuthError(error)) return;
             if (!error) txCategories.push(...rows);
         }
-        await learnMerchantCategories(s.description, [chosenCategoryId]);
+        await learnMerchantCategories(s.description, chosenCategoryId);
         _aiSuggestions.splice(i, 1);
         renderAiSuggestionsList();
         renderTransactionsList();
