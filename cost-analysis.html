@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.43</title>
+    <title>Analisi Costi v1.0.44</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -817,8 +817,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.43';
-    var BUILD_TIME  = '2026-07-21T12:35:00Z';
+    var APP_VERSION = 'v1.0.44';
+    var BUILD_TIME  = '2026-07-21T12:50:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1012,20 +1012,39 @@
         categories.push(data);
     }
 
-    // Crea al bisogno la categoria principale "Vacanza" (spesa reale, NON esclusa dai totali),
-    // usata da "Applica categoria Vacanza" per i pagamenti con carta durante i viaggi.
-    async function ensureVacanzaCategory() {
-        if (categories.some(c => c.name === 'Vacanza' && !c.parent_id)) return;
-        const { data, error } = await sb.from('ca_categories').insert({
-            name: 'Vacanza',
-            icon: '🏖️',
-            color: pickUnusedColor(),
-            parent_id: null,
-            excluded_from_totals: false,
-            user_id: currentUserId()
-        }).select().single();
-        if (error) { console.error('Errore creazione categoria "Vacanza":', error); return; }
-        categories.push(data);
+    // Trova (o crea al bisogno) la sotto-categoria "VARIE AUTOMATICHE" sotto la categoria
+    // principale "VACANZE" (spesa reale, NON esclusa dai totali) — usata da "Applica categoria
+    // Vacanza" per i pagamenti con carta durante i viaggi.
+    async function ensureVacanzeVarieAutomaticheCategory() {
+        let parent = categories.find(c => c.name === 'VACANZE' && !c.parent_id);
+        if (!parent) {
+            const { data, error } = await sb.from('ca_categories').insert({
+                name: 'VACANZE',
+                icon: '🏖️',
+                color: pickUnusedColor(),
+                parent_id: null,
+                excluded_from_totals: false,
+                user_id: currentUserId()
+            }).select().single();
+            if (error) { console.error('Errore creazione categoria "VACANZE":', error); return null; }
+            categories.push(data);
+            parent = data;
+        }
+        let sub = categories.find(c => c.name === 'VARIE AUTOMATICHE' && c.parent_id === parent.id);
+        if (!sub) {
+            const { data, error } = await sb.from('ca_categories').insert({
+                name: 'VARIE AUTOMATICHE',
+                icon: null,
+                color: null,
+                parent_id: parent.id,
+                excluded_from_totals: false,
+                user_id: currentUserId()
+            }).select().single();
+            if (error) { console.error('Errore creazione sotto-categoria "VARIE AUTOMATICHE":', error); return null; }
+            categories.push(data);
+            sub = data;
+        }
+        return sub;
     }
 
     function topCategories() { return categories.filter(c => !c.parent_id); }
@@ -3283,10 +3302,9 @@
 
     async function previewApplyVacanza() {
         if (!trips.length) { showToast('Nessun viaggio salvato'); return; }
-        await ensureVacanzaCategory();
-        const vacanza = categories.find(c => c.name === 'Vacanza' && !c.parent_id);
-        if (!vacanza) { alert('Errore: impossibile creare/trovare la categoria "Vacanza".'); return; }
-        _vacanzaCategoryId = vacanza.id;
+        const varieAutomatiche = await ensureVacanzeVarieAutomaticheCategory();
+        if (!varieAutomatiche) { alert('Errore: impossibile creare/trovare la sotto-categoria "VARIE AUTOMATICHE".'); return; }
+        _vacanzaCategoryId = varieAutomatiche.id;
 
         const items = [];
         trips.forEach(trip => {
