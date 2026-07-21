@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.39</title>
+    <title>Analisi Costi v1.0.40</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -249,6 +249,7 @@
             <div class="nav-item" onclick="showPage('peoplePage', this)" data-text="Persone">👤</div>
             <div class="nav-item" onclick="showPage('rulesPage', this)" data-text="Regole">🧩</div>
             <div class="nav-item" onclick="showPage('bankConnectionsPage', this)" data-text="Conti Collegati">🏦</div>
+            <div class="nav-item" onclick="showPage('tripsPage', this)" data-text="Viaggi">✈️</div>
         </nav>
     </aside>
 
@@ -331,6 +332,7 @@
                         <input type="number" step="0.01" class="form-input" id="txFilterAmountFrom" placeholder="Importo da..." oninput="onTxFilterChange()">
                         <input type="number" step="0.01" class="form-input" id="txFilterAmountTo" placeholder="Importo a..." oninput="onTxFilterChange()">
                     </div>
+                    <select class="form-select" id="txFilterType" onchange="onTxFilterChange()"></select>
                 </div>
             </div>
             <div class="form-hint" id="transactionsCount" style="margin-bottom:.75rem;"></div>
@@ -393,6 +395,17 @@
             <h2 class="page-title" style="font-size:1.05rem;margin-top:2rem;">Carte — attribuzione "chi ha speso"</h2>
             <p class="form-hint" style="margin-bottom:1rem;">Ogni carta trovata nelle transazioni sincronizzate può essere assegnata a una persona: le transazioni fatte con quella carta verranno attribuite automaticamente a lei. Le carte non assegnate (o le transazioni senza carta, es. bonifici/ricariche) vengono attribuite a <strong>NUCLEO</strong>.</p>
             <div id="cardMappingList"></div>
+        </div>
+
+        <!-- ====== VIAGGI ====== -->
+        <div class="page" id="tripsPage">
+            <div class="page-header">
+                <h1 class="page-title">Viaggi</h1>
+                <button class="btn btn-primary" onclick="openTripModal(null)">+ Nuovo viaggio</button>
+            </div>
+            <p class="form-hint" style="margin-bottom:1rem;">Periodi fuori Bologna, usati per attribuire in automatico la categoria "Vacanza" ai pagamenti con carta effettuati in quel periodo.</p>
+            <button class="btn btn-accent" style="margin-bottom:1rem;" onclick="previewApplyVacanza()">🏖️ Applica categoria Vacanza</button>
+            <div id="tripsList"></div>
         </div>
 
     </main>
@@ -734,6 +747,51 @@
     </div>
 </div>
 
+<!-- ====== MODAL: VIAGGIO ====== -->
+<div class="modal" id="tripModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="tripModalTitle">Nuovo Viaggio</h2>
+            <span class="modal-close" onclick="closeTripModal()">✕</span>
+        </div>
+        <form onsubmit="saveTrip(event)">
+            <input type="hidden" id="editTripId">
+            <div class="form-group">
+                <label class="form-label">Nome *</label>
+                <input type="text" class="form-input" id="tripName" required placeholder="Es: Palermo">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+                <div class="form-group">
+                    <label class="form-label">Data inizio *</label>
+                    <input type="date" class="form-input" id="tripStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Data fine *</label>
+                    <input type="date" class="form-input" id="tripEndDate" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Salva Viaggio</button>
+        </form>
+    </div>
+</div>
+
+<!-- ====== MODAL: ANTEPRIMA "APPLICA CATEGORIA VACANZA" ====== -->
+<div class="modal" id="vacanzaPreviewModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Anteprima "Applica categoria Vacanza"</h2>
+            <span class="modal-close" onclick="closeVacanzaPreviewModal()">✕</span>
+        </div>
+        <p class="form-hint" style="margin-bottom:.5rem;">Solo pagamenti con carta. La categoria "Vacanza" sostituisce quelle già assegnate sulle transazioni selezionate.</p>
+        <div id="vacanzaPreviewSummary" style="margin-bottom:.75rem;"></div>
+        <div id="vacanzaPreviewList" style="max-height:45vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmApplyVacanza()">Conferma e applica</button>
+            <button class="btn btn-secondary" onclick="closeVacanzaPreviewModal()">Annulla</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -748,8 +806,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.39';
-    var BUILD_TIME  = '2026-07-20T16:00:00Z';
+    var APP_VERSION = 'v1.0.40';
+    var BUILD_TIME  = '2026-07-20T16:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -824,6 +882,7 @@
     let _onlyThisTxIds = new Set();
     let bankConnections = [];
     let cardPersonMap = [];
+    let trips = [];
     let mccCategoryMap = [];
 
     // ==========================================
@@ -891,6 +950,7 @@
             case 'peoplePage':        renderPeople(); break;
             case 'rulesPage':         renderRules(); break;
             case 'bankConnectionsPage': renderBankConnections(); renderCardMappingList(); break;
+            case 'tripsPage':          renderTrips(); break;
         }
     }
 
@@ -918,6 +978,22 @@
             user_id: currentUserId()
         }).select().single();
         if (error) { console.error('Errore creazione categoria "Non contabilizzate":', error); return; }
+        categories.push(data);
+    }
+
+    // Crea al bisogno la categoria principale "Vacanza" (spesa reale, NON esclusa dai totali),
+    // usata da "Applica categoria Vacanza" per i pagamenti con carta durante i viaggi.
+    async function ensureVacanzaCategory() {
+        if (categories.some(c => c.name === 'Vacanza' && !c.parent_id)) return;
+        const { data, error } = await sb.from('ca_categories').insert({
+            name: 'Vacanza',
+            icon: '🏖️',
+            color: pickUnusedColor(),
+            parent_id: null,
+            excluded_from_totals: false,
+            user_id: currentUserId()
+        }).select().single();
+        if (error) { console.error('Errore creazione categoria "Vacanza":', error); return; }
         categories.push(data);
     }
 
@@ -2284,7 +2360,7 @@
     // ==========================================
     // TRANSAZIONI
     // ==========================================
-    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '' };
+    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '' };
 
     async function loadTransactions() {
         const { data: txs, error: e1 } = await sb.from('ca_transactions').select('*').order('date', { ascending: false });
@@ -2329,6 +2405,10 @@
             // coerente con come viene salvato/mostrato ovunque nell'app.
             if (txFilters.amountFrom !== '' && t.amount < parseFloat(txFilters.amountFrom)) return false;
             if (txFilters.amountTo !== '' && t.amount > parseFloat(txFilters.amountTo)) return false;
+            if (txFilters.type) {
+                if (txFilters.type === '__none__') { if (t.type) return false; }
+                else if (t.type !== txFilters.type) return false;
+            }
             return true;
         });
     }
@@ -2344,6 +2424,11 @@
         const spenderSel = document.getElementById('txFilterSpender');
         spenderSel.innerHTML = '<option value="">Tutti (chi ha speso)</option>' + people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         spenderSel.value = txFilters.spenderId;
+        const typeSel = document.getElementById('txFilterType');
+        const types = [...new Set(transactions.map(t => t.type).filter(Boolean))].sort();
+        typeSel.innerHTML = '<option value="">Tutti i tipi</option><option value="__none__">Senza tipo</option>' +
+            types.map(ty => `<option value="${ty}">${ty}</option>`).join('');
+        typeSel.value = txFilters.type;
     }
 
     function onTxFilterChange() {
@@ -2355,6 +2440,7 @@
         txFilters.to = document.getElementById('txFilterTo').value;
         txFilters.amountFrom = document.getElementById('txFilterAmountFrom').value;
         txFilters.amountTo = document.getElementById('txFilterAmountTo').value;
+        txFilters.type = document.getElementById('txFilterType').value;
         renderTransactionsList();
     }
 
@@ -3042,13 +3128,175 @@
     }
 
     // ==========================================
+    // VIAGGI
+    // ==========================================
+    async function loadTrips() {
+        const { data, error } = await sb.from('ca_trips').select('*').order('start_date');
+        if (handleAuthError(error)) return;
+        if (error) { console.error(error); return; }
+        trips = data || [];
+    }
+
+    function renderTrips() {
+        const container = document.getElementById('tripsList');
+        if (!trips.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">✈️</div><p>Nessun viaggio. Aggiungine uno per iniziare.</p></div>';
+            return;
+        }
+        container.innerHTML = trips.map(t => `
+            <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <div style="font-weight:700;">${t.name}</div>
+                    <div class="tx-meta">${formatDateIt(t.start_date)} — ${formatDateIt(t.end_date)}</div>
+                </div>
+                <div class="mgmt-event-actions">
+                    <button class="btn btn-small btn-secondary" onclick="openTripModal('${t.id}')">✏️</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteTrip('${t.id}')">🗑️</button>
+                </div>
+            </div>`).join('');
+    }
+
+    function openTripModal(id) {
+        document.getElementById('editTripId').value = id || '';
+        const t = id ? trips.find(x => x.id === id) : null;
+        document.getElementById('tripModalTitle').textContent = t ? 'Modifica Viaggio' : 'Nuovo Viaggio';
+        document.getElementById('tripName').value = t ? t.name : '';
+        document.getElementById('tripStartDate').value = t ? t.start_date : '';
+        document.getElementById('tripEndDate').value = t ? t.end_date : '';
+        document.getElementById('tripModal').classList.add('active');
+    }
+    function closeTripModal() { document.getElementById('tripModal').classList.remove('active'); }
+
+    async function saveTrip(e) {
+        e.preventDefault();
+        const id = document.getElementById('editTripId').value;
+        const payload = {
+            name: document.getElementById('tripName').value.trim(),
+            start_date: document.getElementById('tripStartDate').value,
+            end_date: document.getElementById('tripEndDate').value,
+            user_id: currentUserId()
+        };
+        if (!payload.name || !payload.start_date || !payload.end_date) return;
+        if (payload.end_date < payload.start_date) { alert('La data fine non può essere prima della data inizio.'); return; }
+        let error;
+        if (id) { ({ error } = await sb.from('ca_trips').update(payload).eq('id', id)); }
+        else { ({ error } = await sb.from('ca_trips').insert(payload)); }
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        closeTripModal();
+        await loadTrips();
+        renderTrips();
+        showToast('✅ Viaggio salvato');
+    }
+
+    async function deleteTrip(id) {
+        if (!confirm('Eliminare questo viaggio?')) return;
+        const { error } = await sb.from('ca_trips').delete().eq('id', id);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        await loadTrips();
+        renderTrips();
+        showToast('🗑️ Viaggio eliminato');
+    }
+
+    // Anteprima "Applica categoria Vacanza": nessuna scrittura nel DB finché non si conferma.
+    // Solo pagamenti con carta (type = CARD_PAYMENT) con data nel periodo del viaggio (estremi
+    // inclusi). Applicare sostituisce le categorie già assegnate sulla transazione.
+    let _vacanzaPreview = null; // [{ tripId, tripName, txId, description, date, amount, hadOtherCategory }]
+    let _vacanzaCategoryId = null;
+
+    function findCardTransactionsForTrip(trip) {
+        return transactions.filter(t => t.type === 'CARD_PAYMENT' && t.date >= trip.start_date && t.date <= trip.end_date);
+    }
+
+    async function previewApplyVacanza() {
+        if (!trips.length) { showToast('Nessun viaggio salvato'); return; }
+        await ensureVacanzaCategory();
+        const vacanza = categories.find(c => c.name === 'Vacanza' && !c.parent_id);
+        if (!vacanza) { alert('Errore: impossibile creare/trovare la categoria "Vacanza".'); return; }
+        _vacanzaCategoryId = vacanza.id;
+
+        const items = [];
+        trips.forEach(trip => {
+            findCardTransactionsForTrip(trip).forEach(t => {
+                const catIds = getTxCategoryIds(t.id);
+                items.push({
+                    tripId: trip.id, tripName: trip.name, txId: t.id,
+                    description: t.description, date: t.date, amount: t.amount,
+                    hadOtherCategory: catIds.length > 0 && !catIds.includes(_vacanzaCategoryId)
+                });
+            });
+        });
+        if (!items.length) { showToast('Nessun pagamento con carta trovato nei periodi dei viaggi'); return; }
+        _vacanzaPreview = items;
+        openVacanzaPreviewModal();
+    }
+
+    function openVacanzaPreviewModal() {
+        renderVacanzaPreviewList();
+        document.getElementById('vacanzaPreviewModal').classList.add('active');
+    }
+    function closeVacanzaPreviewModal() {
+        document.getElementById('vacanzaPreviewModal').classList.remove('active');
+        _vacanzaPreview = null;
+    }
+
+    function renderVacanzaPreviewList() {
+        if (!_vacanzaPreview) return;
+        const byTrip = {};
+        _vacanzaPreview.forEach(it => {
+            (byTrip[it.tripId] = byTrip[it.tripId] || { name: it.tripName, count: 0, total: 0, overwrite: 0 });
+            byTrip[it.tripId].count++;
+            byTrip[it.tripId].total += Math.abs(it.amount);
+            if (it.hadOtherCategory) byTrip[it.tripId].overwrite++;
+        });
+        document.getElementById('vacanzaPreviewSummary').innerHTML = Object.values(byTrip).map(g =>
+            `<div class="form-hint">${g.name}: ${g.count} transazioni, ${fmtEUR(g.total)}${g.overwrite ? ` (${g.overwrite} con categoria diversa, verrebbe sostituita)` : ''}</div>`
+        ).join('');
+        const list = document.getElementById('vacanzaPreviewList');
+        list.innerHTML = _vacanzaPreview.map((it, i) => `
+            <label style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;">
+                <input type="checkbox" checked data-idx="${i}" style="margin-top:.3rem;">
+                <span style="flex:1;">
+                    <span style="display:flex;justify-content:space-between;gap:.5rem;">
+                        <strong>${it.description || '(senza descrizione)'}</strong>
+                        <span class="mono ${it.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(it.amount)}</span>
+                    </span>
+                    <span class="tx-meta">${formatDateIt(it.date)} · ${it.tripName}${it.hadOtherCategory ? ' · ⚠️ categoria esistente verrebbe sostituita' : ''}</span>
+                </span>
+            </label>`).join('');
+    }
+
+    async function confirmApplyVacanza() {
+        if (!_vacanzaPreview || !_vacanzaCategoryId) return;
+        const checkboxes = document.querySelectorAll('#vacanzaPreviewList input[type="checkbox"]');
+        const selected = [];
+        checkboxes.forEach(cb => { if (cb.checked) selected.push(_vacanzaPreview[parseInt(cb.dataset.idx, 10)]); });
+        closeVacanzaPreviewModal();
+        if (!selected.length) return;
+        showProcessing(`🏖️ Applicazione categoria Vacanza... 0/${selected.length}`);
+        let applied = 0;
+        for (let i = 0; i < selected.length; i++) {
+            const it = selected[i];
+            showProcessing(`🏖️ Applicazione categoria Vacanza... ${i + 1}/${selected.length}`);
+            await sb.from('ca_transaction_categories').delete().eq('transaction_id', it.txId);
+            const { error } = await sb.from('ca_transaction_categories').insert({ transaction_id: it.txId, category_id: _vacanzaCategoryId, source: 'trip' });
+            if (!error) applied++;
+        }
+        hideProcessing();
+        await loadTransactions();
+        renderActivePage();
+        alert(`✅ Categoria "Vacanza" applicata\n\nTransazioni modificate: ${applied} su ${selected.length} selezionate`);
+    }
+
+    // ==========================================
     // INIT
     // ==========================================
     async function startApp() {
         showToast('⏳ Caricamento dati...');
         await loadCategories();
         await ensureNonContabilizzateCategory();
-        await Promise.all([loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMerchantPersonMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap()]);
+        await Promise.all([loadPeople(), loadRules(), loadPersonRules(), loadMerchantMap(), loadMerchantPersonMap(), loadMccMap(), loadBankConnections(), loadCardPersonMap(), loadTrips()]);
         await loadTransactions();
         renderActivePage();
         showToast('✅ Dati caricati');
