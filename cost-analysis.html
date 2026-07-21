@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.48</title>
+    <title>Analisi Costi v1.0.49</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -808,8 +808,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.48';
-    var BUILD_TIME  = '2026-07-21T14:00:00Z';
+    var APP_VERSION = 'v1.0.49';
+    var BUILD_TIME  = '2026-07-21T14:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2485,9 +2485,14 @@
         renderTransactionsList();
     }
 
+    function escAttr(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     function renderTxRow(t) {
         const catIds = getTxCategoryIds(t.id);
         const currentCategoryId = catIds[0] || '';
+        const currentCategory = categories.find(c => c.id === currentCategoryId);
         const personOptions = ['<option value="">— Per chi —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
         const spenderOptions = ['<option value="">— Chi ha speso —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.spender_person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
         return `
@@ -2498,7 +2503,13 @@
             </div>
             <div class="tx-meta">${formatDateIt(t.date)} ${t.type ? '· ' + t.type : ''}</div>
             <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;">
-                <select class="form-select" style="flex:1;font-size:.85rem;" onchange="setTxCategory('${t.id}', this.value)">${categorySelectOptionsHtml(currentCategoryId)}</select>
+                <div class="tx-cat-picker" style="position:relative;flex:1;">
+                    <input type="text" class="form-input" style="font-size:.85rem;" id="tx-cat-search-${t.id}"
+                        placeholder="Cerca o scegli categoria..." value="${currentCategory ? escAttr(categoryLabel(currentCategory)) : ''}"
+                        oninput="renderTxCategorySuggestions('${t.id}')" onfocus="renderTxCategorySuggestions('${t.id}')"
+                        onblur="hideTxCategorySuggestions('${t.id}')" autocomplete="off">
+                    <div id="tx-cat-suggest-${t.id}" class="tx-cat-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;margin-top:2px;"></div>
+                </div>
                 <button type="button" class="btn btn-small btn-ghost" onclick="openCategoryModalFromTxRow('${t.id}')" title="Nuova categoria/sotto-categoria">+</button>
             </div>
             <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
@@ -2511,6 +2522,52 @@
                 🔒 Solo questa transazione (non imparare/propagare)
             </label>
         </div>`;
+    }
+
+    // Autocomplete categoria/sotto-categoria nella riga transazione: filtra scrivendo nel campo
+    // testo e mostra i risultati raggruppati per categoria principale (con le sue sotto-categorie
+    // indentate sotto), così anche a lista filtrata resta chiaro il rapporto padre/figlio.
+    function renderTxCategorySuggestions(txId) {
+        const input = document.getElementById(`tx-cat-search-${txId}`);
+        const box = document.getElementById(`tx-cat-suggest-${txId}`);
+        if (!input || !box) return;
+        const query = (input.value || '').trim().toLowerCase();
+        const rows = [`<div onmousedown="selectTxCategory('${txId}', '')" style="padding:.5rem .6rem;cursor:pointer;color:var(--muted);font-size:.85rem;border-bottom:1px solid var(--border);">— Nessuna categoria —</div>`];
+        topCategories().forEach(c => {
+            const kids = childCategories(c.id);
+            const topMatches = !query || c.name.toLowerCase().includes(query);
+            const matchingKids = kids.filter(k => topMatches || k.name.toLowerCase().includes(query));
+            if (!topMatches && !matchingKids.length) return;
+            rows.push(`<div onmousedown="selectTxCategory('${txId}', '${c.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;cursor:pointer;font-weight:600;">
+                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+            </div>`);
+            matchingKids.forEach(k => {
+                rows.push(`<div onmousedown="selectTxCategory('${txId}', '${k.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem .4rem 1.8rem;cursor:pointer;font-size:.9rem;">
+                    <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(k)}
+                </div>`);
+            });
+        });
+        if (rows.length === 1) rows.push(`<div style="padding:.5rem .6rem;font-size:.85rem;opacity:.6;">Nessuna categoria trovata.</div>`);
+        box.innerHTML = rows.join('');
+        box.style.display = 'block';
+    }
+
+    // Ritardo prima di nascondere: onmousedown sulla riga scelta scatta comunque prima del
+    // blur, ma il timeout resta come rete di sicurezza per il click fuori dal campo.
+    function hideTxCategorySuggestions(txId) {
+        setTimeout(() => {
+            const box = document.getElementById(`tx-cat-suggest-${txId}`);
+            if (box) box.style.display = 'none';
+        }, 150);
+    }
+
+    function selectTxCategory(txId, categoryId) {
+        const input = document.getElementById(`tx-cat-search-${txId}`);
+        const box = document.getElementById(`tx-cat-suggest-${txId}`);
+        const c = categoryId ? categories.find(x => x.id === categoryId) : null;
+        if (input) input.value = c ? categoryLabel(c) : '';
+        if (box) box.style.display = 'none';
+        setTxCategory(txId, categoryId);
     }
 
     // Ogni transazione ha una sola categoria (o nessuna): assegnarne una nuova sostituisce
