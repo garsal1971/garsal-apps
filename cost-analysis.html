@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.42</title>
+    <title>Analisi Costi v1.0.43</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -817,8 +817,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.42';
-    var BUILD_TIME  = '2026-07-20T17:15:00Z';
+    var APP_VERSION = 'v1.0.43';
+    var BUILD_TIME  = '2026-07-21T12:35:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3268,8 +3268,17 @@
     let _vacanzaPreview = null; // [{ tripId, tripName, txId, description, date, amount, hadOtherCategory }]
     let _vacanzaCategoryId = null;
 
+    // Il campo "type" arriva sia in inglese (sync bancario, sempre CARD_PAYMENT) sia nella
+    // lingua dell'export CSV Revolut (es. "Pagamento con carta" per un export in italiano) —
+    // vanno riconosciute entrambe le forme, altrimenti le transazioni carta importate da CSV
+    // localizzato restano fuori dal match.
+    const CARD_PAYMENT_TYPES = ['CARD_PAYMENT', 'Pagamento con carta'];
+    function isCardPaymentType(type) {
+        return CARD_PAYMENT_TYPES.some(v => v.toLowerCase() === (type || '').toLowerCase());
+    }
+
     function findCardTransactionsForTrip(trip) {
-        return transactions.filter(t => t.type === 'CARD_PAYMENT' && t.date >= trip.start_date && t.date <= trip.end_date);
+        return transactions.filter(t => isCardPaymentType(t.type) && t.date >= trip.start_date && t.date <= trip.end_date);
     }
 
     async function previewApplyVacanza() {
