@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.52</title>
+    <title>Analisi Costi v1.0.53</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -799,6 +799,22 @@
     </div>
 </div>
 
+<!-- ====== MODAL: ANTEPRIMA RIANALISI (regole/merchant applicati alle transazioni esistenti) ====== -->
+<div class="modal" id="reanalyzePreviewModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Anteprima rianalisi</h2>
+            <span class="modal-close" onclick="closeReanalyzePreviewModal()">✕</span>
+        </div>
+        <p class="form-hint" id="reanalyzePreviewSummary" style="margin-bottom:.75rem;"></p>
+        <div id="reanalyzePreviewList" style="max-height:50vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmReanalyze()">Conferma modifiche</button>
+            <button class="btn btn-secondary" onclick="closeReanalyzePreviewModal()">Annulla</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -813,8 +829,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.52';
-    var BUILD_TIME  = '2026-07-21T15:45:00Z';
+    var APP_VERSION = 'v1.0.53';
+    var BUILD_TIME  = '2026-07-21T16:10:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1628,8 +1644,9 @@
         await loadRules();
         renderRules();
         showToast('✅ Regola salvata');
-        // Applica subito la regola anche alle transazioni già caricate, non solo alle future.
-        await reanalyzeAllTransactions();
+        // Propone di applicare subito la regola anche alle transazioni già caricate (non solo
+        // alle future), ma solo dopo conferma dell'utente sull'anteprima delle modifiche.
+        await previewReanalyzeAllTransactions();
     }
 
     async function deleteRule(id) {
@@ -1673,8 +1690,9 @@
         await loadPersonRules();
         renderRules();
         showToast('✅ Regola salvata');
-        // Applica subito la regola anche alle transazioni già caricate, non solo alle future.
-        await reanalyzeAllTransactions();
+        // Propone di applicare subito la regola anche alle transazioni già caricate (non solo
+        // alle future), ma solo dopo conferma dell'utente sull'anteprima delle modifiche.
+        await previewReanalyzeAllTransactions();
     }
 
     async function deletePersonRule(id) {
@@ -2108,10 +2126,10 @@
                 : '';
             const mergedInfo = data.merged ? `\nCollegate/aggiornate su transazioni già presenti — CSV o pending diventata booked (nessun duplicato creato): ${data.merged}` : '';
             alert(`✅ Sincronizzazione completata\n\nNuove transazioni importate: ${data.imported}${mergedInfo}${oldestInfo}`);
-            // Il sync applica solo la categorizzazione MCC (server-side); qui in più
-            // applichiamo merchant appreso/regole alle transazioni ancora senza categoria.
+            // Il sync applica solo la categorizzazione MCC (server-side); qui in più proponiamo
+            // (con anteprima) merchant appreso/regole sulle transazioni ancora senza categoria.
             if (data.imported > 0 || data.merged > 0) {
-                await reanalyzeAllTransactions();
+                await previewReanalyzeAllTransactions();
                 await reattributeSpenderByCard(); // allinea eventuali nuove carte già mappate
             }
         } catch (err) {
@@ -2635,7 +2653,7 @@
         if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
         const t = transactions.find(x => x.id === txId);
         await learnMerchantCategories(t?.description, categoryId || null);
-        if (categoryId) await reanalyzeAllTransactions();
+        if (categoryId) await previewReanalyzeAllTransactions();
     }
 
     function toggleOnlyThisTx(txId, checked) {
@@ -2791,7 +2809,7 @@
         if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
         // La persona appena assegnata vale anche per il merchant (transazioni future comprese)
         await learnMerchantPerson(t?.description, personId || null);
-        if (personId) await reanalyzeAllTransactions();
+        if (personId) await previewReanalyzeAllTransactions();
     }
 
     // "Chi ha speso" — di norma arriva in automatico dal conto di origine (sync bancario);
@@ -2813,11 +2831,9 @@
     // transazioni senza persona ereditano quella suggerita (da regola o da altre transazioni
     // con la stessa descrizione normalizzata); quelle che hanno GIÀ una persona diversa da
     // quella suggerita NON vengono sovrascritte automaticamente, ma segnalate all'utente in un
-    // riepilogo per la riassegnazione manuale.
-    async function reanalyzeAllTransactions() {
-        if (!transactions.length) return;
-        showProcessing(`🔄 Rianalisi transazioni esistenti... 0/${transactions.length}`);
-
+    // riepilogo per la riassegnazione manuale. Calcolo puro, nessuna scrittura sul DB: serve a
+    // costruire l'anteprima da mostrare prima di applicare qualsiasi modifica.
+    function computeReanalysisChanges() {
         const personByMerchant = {};
         transactions.forEach(t => {
             if (t.person_id) {
@@ -2829,8 +2845,7 @@
         const newCategoryRows = [];
         const personUpdates = [];
         const personConflicts = [];
-        for (let i = 0; i < transactions.length; i++) {
-            const t = transactions[i];
+        transactions.forEach(t => {
             const { categoryId, catSource, personId, personSource } = categorizeRow(t.description, t.mcc);
             if (categoryId && !getTxCategoryIds(t.id).length) {
                 newCategoryRows.push({ transaction_id: t.id, category_id: categoryId, source: catSource });
@@ -2848,12 +2863,93 @@
                     currentPersonId: t.person_id, suggestedPersonId, suggestedSource
                 });
             }
+        });
+        return { newCategoryRows, personUpdates, personConflicts };
+    }
 
-            if (i % 25 === 0 || i === transactions.length - 1) {
-                showProcessing(`🔄 Rianalisi transazioni esistenti... ${i + 1}/${transactions.length}`);
-                await new Promise(r => setTimeout(r, 0)); // lascia respirare la UI
-            }
+    // Una riga per transazione interessata, con l'eventuale nuova categoria e/o la nuova
+    // persona suggerita insieme (una transazione può ricevere entrambe in un colpo solo).
+    function buildReanalyzePreviewItems(newCategoryRows, personUpdates) {
+        const byTx = new Map();
+        newCategoryRows.forEach(r => {
+            if (!byTx.has(r.transaction_id)) byTx.set(r.transaction_id, { txId: r.transaction_id, categoryRow: null, personUpdate: null });
+            byTx.get(r.transaction_id).categoryRow = r;
+        });
+        personUpdates.forEach(u => {
+            if (!byTx.has(u.id)) byTx.set(u.id, { txId: u.id, categoryRow: null, personUpdate: null });
+            byTx.get(u.id).personUpdate = u;
+        });
+        return [...byTx.values()];
+    }
+
+    let _reanalyzePreview = null;
+
+    // Punto d'ingresso comune per la rianalisi: sostituisce la vecchia applicazione diretta,
+    // mostrando sempre prima un'anteprima delle transazioni che verrebbero modificate.
+    async function previewReanalyzeAllTransactions() {
+        if (!transactions.length) return;
+        const { newCategoryRows, personUpdates, personConflicts } = computeReanalysisChanges();
+        if (!newCategoryRows.length && !personUpdates.length) {
+            if (personConflicts.length) openPersonConflictModal(personConflicts);
+            else showToast('✅ Rianalisi completata, nessuna nuova corrispondenza');
+            return;
         }
+        _reanalyzePreview = { items: buildReanalyzePreviewItems(newCategoryRows, personUpdates), personConflicts };
+        openReanalyzePreviewModal();
+    }
+
+    function openReanalyzePreviewModal() {
+        renderReanalyzePreviewList();
+        document.getElementById('reanalyzePreviewModal').classList.add('active');
+    }
+    function closeReanalyzePreviewModal() {
+        document.getElementById('reanalyzePreviewModal').classList.remove('active');
+        _reanalyzePreview = null;
+    }
+
+    function renderReanalyzePreviewList() {
+        if (!_reanalyzePreview) return;
+        const items = _reanalyzePreview.items;
+        document.getElementById('reanalyzePreviewSummary').textContent =
+            `${items.length} transazion${items.length === 1 ? 'e' : 'i'} interessat${items.length === 1 ? 'a' : 'e'}`;
+        const list = document.getElementById('reanalyzePreviewList');
+        list.innerHTML = items.map((it, i) => {
+            const t = transactions.find(x => x.id === it.txId);
+            if (!t) return '';
+            const changesLines = [];
+            if (it.categoryRow) changesLines.push(`→ Categoria: ${categoryFullName(it.categoryRow.category_id)}`);
+            if (it.personUpdate) {
+                const p = people.find(x => x.id === it.personUpdate.person_id);
+                changesLines.push(`→ Per chi: ${p ? p.name : '?'}`);
+            }
+            return `
+            <label style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;">
+                <input type="checkbox" checked data-idx="${i}" style="margin-top:.3rem;">
+                <span style="flex:1;">
+                    <span style="display:flex;justify-content:space-between;gap:.5rem;">
+                        <strong>${t.description || '(senza descrizione)'}</strong>
+                        <span class="mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
+                    </span>
+                    <span class="tx-meta">${formatDateIt(t.date)}</span>
+                    <span class="form-hint" style="display:block;margin-top:.2rem;">${changesLines.join(' · ')}</span>
+                </span>
+            </label>`;
+        }).join('');
+    }
+
+    async function confirmReanalyze() {
+        if (!_reanalyzePreview) return;
+        const { items, personConflicts } = _reanalyzePreview;
+        const checkboxes = document.querySelectorAll('#reanalyzePreviewList input[type="checkbox"]');
+        const selected = [];
+        checkboxes.forEach(cb => { if (cb.checked) selected.push(items[parseInt(cb.dataset.idx, 10)]); });
+        closeReanalyzePreviewModal();
+        if (!selected.length) return;
+
+        const newCategoryRows = selected.filter(it => it.categoryRow).map(it => it.categoryRow);
+        const personUpdates = selected.filter(it => it.personUpdate).map(it => it.personUpdate);
+
+        showProcessing('🔄 Applicazione modifiche...');
 
         if (newCategoryRows.length) {
             const { error } = await sb.from('ca_transaction_categories').insert(newCategoryRows);
@@ -2883,12 +2979,9 @@
         }
 
         hideProcessing();
-        renderTransactionsList();
+        renderTransactionsActiveView();
         renderDashboard();
-        const totalChanges = newCategoryRows.length + personUpdates.length;
-        showToast(totalChanges
-            ? `✅ ${newCategoryRows.length} tag categoria e ${personUpdates.length} persone aggiornati su transazioni esistenti`
-            : '✅ Rianalisi completata, nessuna nuova corrispondenza');
+        showToast(`✅ ${newCategoryRows.length} tag categoria e ${personUpdates.length} persone aggiornati su ${selected.length} transazioni`);
 
         if (personConflicts.length) openPersonConflictModal(personConflicts);
     }
