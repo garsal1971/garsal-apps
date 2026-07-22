@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.49</title>
+    <title>Analisi Costi v1.0.50</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -354,8 +354,13 @@
                     </select>
                 </div>
             </div>
+            <div style="display:flex;gap:.5rem;margin-bottom:.75rem;">
+                <button class="btn btn-small" id="txViewBtnList" onclick="setTxView('list')">📋 Elenco</button>
+                <button class="btn btn-small" id="txViewBtnSummary" onclick="setTxView('summary')">📊 Voci entrate/spese</button>
+            </div>
             <div class="form-hint" id="transactionsCount" style="margin-bottom:.75rem;"></div>
             <div id="transactionsList"></div>
+            <div id="transactionsSummary" style="display:none;"></div>
         </div>
 
         <!-- ====== CATEGORIE ====== -->
@@ -808,8 +813,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.49';
-    var BUILD_TIME  = '2026-07-21T14:30:00Z';
+    var APP_VERSION = 'v1.0.50';
+    var BUILD_TIME  = '2026-07-21T15:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2395,6 +2400,7 @@
     // TRANSAZIONI
     // ==========================================
     let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '', sortBy: 'title' };
+    let _txView = 'list'; // 'list' | 'summary'
 
     async function loadTransactions() {
         const { data: txs, error: e1 } = await fetchAllRows('ca_transactions', 'date', false);
@@ -2477,12 +2483,33 @@
         txFilters.amountTo = document.getElementById('txFilterAmountTo').value;
         txFilters.type = document.getElementById('txFilterType').value;
         txFilters.sortBy = document.getElementById('txSortBy').value;
-        renderTransactionsList();
+        renderTransactionsActiveView();
     }
 
     function renderTransactions() {
         renderTransactionFilters();
-        renderTransactionsList();
+        applyTxViewButtonState();
+        renderTransactionsActiveView();
+    }
+
+    // Alterna tra l'elenco delle singole transazioni e il riepilogo per voce
+    // (categoria/sotto-categoria), entrambi calcolati sulle stesse transazioni filtrate.
+    function setTxView(view) {
+        _txView = view;
+        applyTxViewButtonState();
+        renderTransactionsActiveView();
+    }
+
+    function applyTxViewButtonState() {
+        document.getElementById('txViewBtnList').className = 'btn btn-small ' + (_txView === 'list' ? 'btn-primary' : 'btn-secondary');
+        document.getElementById('txViewBtnSummary').className = 'btn btn-small ' + (_txView === 'summary' ? 'btn-primary' : 'btn-secondary');
+        document.getElementById('transactionsList').style.display = _txView === 'list' ? 'block' : 'none';
+        document.getElementById('transactionsSummary').style.display = _txView === 'summary' ? 'block' : 'none';
+    }
+
+    function renderTransactionsActiveView() {
+        if (_txView === 'summary') renderTransactionsSummary();
+        else renderTransactionsList();
     }
 
     function escAttr(s) {
@@ -2602,15 +2629,19 @@
     }
     function closeRawDataModal() { document.getElementById('rawDataModal').classList.remove('active'); }
 
-    // Elenco raggruppato per titolo (descrizione): il gruppo con più transazioni dallo
-    // stesso titolo viene mostrato per primo, NON in ordine alfabetico.
-    function renderTransactionsList() {
-        const list = filteredTransactions();
+    function updateTransactionsCount(list) {
         const countEl = document.getElementById('transactionsCount');
         const noun = list.length === 1 ? 'transazione' : 'transazioni';
         countEl.textContent = list.length === transactions.length
             ? `${list.length} ${noun}`
             : `${list.length} ${noun} su ${transactions.length}`;
+    }
+
+    // Elenco raggruppato per titolo (descrizione): il gruppo con più transazioni dallo
+    // stesso titolo viene mostrato per primo, NON in ordine alfabetico.
+    function renderTransactionsList() {
+        const list = filteredTransactions();
+        updateTransactionsCount(list);
         const container = document.getElementById('transactionsList');
         if (!list.length) {
             container.innerHTML = '<div class="empty-state"><div class="empty-icon">💳</div><p>Nessuna transazione trovata.</p></div>';
@@ -2639,6 +2670,61 @@
                 ${sortedItems.map(renderTxRow).join('')}
             </div>`;
         }).join('');
+    }
+
+    // Riepilogo per voce (categoria/sotto-categoria): raggruppa le transazioni filtrate in
+    // Entrate (importo positivo) e Spese (importo negativo), una riga per categoria con il
+    // relativo totale, ordinate dalla voce più consistente alla meno consistente.
+    function categoryTotalsList(txs) {
+        const totals = {}; // categoryId ('__none__' incluso) -> somma valori assoluti
+        txs.forEach(t => {
+            const ids = getTxCategoryIds(t.id);
+            const key = ids[0] || '__none__';
+            totals[key] = (totals[key] || 0) + Math.abs(t.amount);
+        });
+        return Object.entries(totals)
+            .map(([id, val]) => ({
+                id, val,
+                label: id === '__none__' ? 'Da categorizzare' : categoryFullName(id),
+                color: id === '__none__' ? '#9CA3AF' : categoryColor(categories.find(c => c.id === id) || {})
+            }))
+            .sort((a, b) => b.val - a.val);
+    }
+
+    function renderTransactionsSummaryGroup(title, rows, total) {
+        if (!rows.length) return `<div class="mgmt-group-card"><div class="mgmt-group-title" style="font-size:1rem;">${title}</div><p class="form-hint">Nessuna transazione.</p></div>`;
+        const max = Math.max(...rows.map(r => r.val));
+        return `<div class="mgmt-group-card">
+            <div class="mgmt-group-header">
+                <div class="mgmt-group-title" style="font-size:1rem;">${title}</div>
+                <span class="mono" style="font-weight:700;">${fmtEUR(total)}</span>
+            </div>
+            <div class="mgmt-group-body">
+                ${rows.map(r => `
+                    <div class="top-event-row">
+                        <div class="top-event-info"><span><span class="mgmt-group-dot" style="display:inline-block;background:${r.color};margin-right:.4rem;vertical-align:middle;"></span>${r.label}</span><span class="mono">${fmtEUR(r.val)}</span></div>
+                        <div class="top-event-bar"><div class="top-event-bar-fill" style="width:${max ? r.val / max * 100 : 0}%;background:${r.color};"></div></div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+    }
+
+    function renderTransactionsSummary() {
+        const list = filteredTransactions();
+        updateTransactionsCount(list);
+        const container = document.getElementById('transactionsSummary');
+        if (!list.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>Nessuna transazione trovata.</p></div>';
+            return;
+        }
+        const entrate = list.filter(t => t.amount > 0);
+        const spese = list.filter(t => t.amount < 0);
+        const totEntrate = entrate.reduce((s, t) => s + t.amount, 0);
+        const totSpese = spese.reduce((s, t) => s + Math.abs(t.amount), 0);
+        container.innerHTML =
+            renderTransactionsSummaryGroup('💰 Entrate', categoryTotalsList(entrate), totEntrate) +
+            '<div style="height:1rem;"></div>' +
+            renderTransactionsSummaryGroup('💸 Spese', categoryTotalsList(spese), totSpese);
     }
 
     // Ordinamenti alternativi (lista piatta, senza raggruppamento per titolo).
