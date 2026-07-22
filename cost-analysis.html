@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.51</title>
+    <title>Analisi Costi v1.0.52</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -813,8 +813,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.51';
-    var BUILD_TIME  = '2026-07-21T15:20:00Z';
+    var APP_VERSION = 'v1.0.52';
+    var BUILD_TIME  = '2026-07-21T15:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2243,6 +2243,22 @@
     // ==========================================
     // CSV PARSING & IMPORT REVOLUT
     // ==========================================
+    // Un semplice replace(',', '.') funziona solo per importi senza separatore delle migliaia
+    // (es. "-45,67"). Con export in formato italiano un importo come "-1.234,56" diventerebbe
+    // "-1.234" (perde i decimali e tronca il valore di 1000×): qui invece si guarda quale dei
+    // due separatori compare per ultimo nella stringa — quello è il separatore decimale, l'altro
+    // (se presente) è quello delle migliaia e va rimosso. Il segno non viene mai toccato.
+    function parseLocaleAmount(str) {
+        let s = String(str || '').trim();
+        const lastComma = s.lastIndexOf(','), lastDot = s.lastIndexOf('.');
+        if (lastComma !== -1 && lastDot !== -1) {
+            s = lastComma > lastDot ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+        } else if (lastComma !== -1) {
+            s = s.replace(',', '.');
+        }
+        return parseFloat(s);
+    }
+
     function parseCSV(text, delim) {
         const rows = [];
         let i = 0, line = [], field = '', inQuotes = false;
@@ -2309,7 +2325,7 @@
             if (state && state !== 'COMPLETED' && state !== 'COMPLETATO') continue;
             const dateRaw = (r[idx.date] || '').split(' ')[0].split('T')[0];
             if (!dateRaw) continue;
-            const amount = parseFloat((r[idx.amount] || '0').replace(',', '.'));
+            const amount = parseLocaleAmount(r[idx.amount] || '0');
             if (Number.isNaN(amount)) continue;
             items.push({
                 date: dateRaw,
