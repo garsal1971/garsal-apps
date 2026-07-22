@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.50</title>
+    <title>Analisi Costi v1.0.51</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -813,8 +813,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.50';
-    var BUILD_TIME  = '2026-07-21T15:00:00Z';
+    var APP_VERSION = 'v1.0.51';
+    var BUILD_TIME  = '2026-07-21T15:20:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1088,13 +1088,17 @@
     }
 
     // Mostra le transazioni di una categoria/sotto-categoria, raggruppate per titolo
-    // (descrizione), con il gruppo più numeroso per primo.
-    function openCategoryTransactionsModal(categoryId) {
+    // (descrizione), con il gruppo più numeroso per primo. Di norma prende tutte le
+    // transazioni mai taggate con quella categoria (pagina Categorie); passando txsOverride
+    // (es. dal riepilogo voci entrate/spese) mostra invece solo quel sottoinsieme già filtrato.
+    function openCategoryTransactionsModal(categoryId, txsOverride, labelOverride) {
         const cat = categories.find(c => c.id === categoryId);
-        if (!cat) return;
-        const txIds = new Set(txCategories.filter(tc => tc.category_id === categoryId).map(tc => tc.transaction_id));
-        const txs = transactions.filter(t => txIds.has(t.id));
-        document.getElementById('categoryTransactionsTitle').textContent = `${categoryLabel(cat)} (${txs.length})`;
+        if (!cat && !labelOverride) return;
+        const txs = txsOverride || (() => {
+            const txIds = new Set(txCategories.filter(tc => tc.category_id === categoryId).map(tc => tc.transaction_id));
+            return transactions.filter(t => txIds.has(t.id));
+        })();
+        document.getElementById('categoryTransactionsTitle').textContent = `${labelOverride || categoryLabel(cat)} (${txs.length})`;
 
         const groups = {};
         txs.forEach(t => {
@@ -2691,7 +2695,7 @@
             .sort((a, b) => b.val - a.val);
     }
 
-    function renderTransactionsSummaryGroup(title, rows, total) {
+    function renderTransactionsSummaryGroup(title, rows, total, sign) {
         if (!rows.length) return `<div class="mgmt-group-card"><div class="mgmt-group-title" style="font-size:1rem;">${title}</div><p class="form-hint">Nessuna transazione.</p></div>`;
         const max = Math.max(...rows.map(r => r.val));
         return `<div class="mgmt-group-card">
@@ -2701,7 +2705,7 @@
             </div>
             <div class="mgmt-group-body">
                 ${rows.map(r => `
-                    <div class="top-event-row">
+                    <div class="top-event-row" style="cursor:pointer;" onclick="openSummaryCategoryTransactions('${sign}', '${r.id}')" title="Vedi le transazioni di questa voce">
                         <div class="top-event-info"><span><span class="mgmt-group-dot" style="display:inline-block;background:${r.color};margin-right:.4rem;vertical-align:middle;"></span>${r.label}</span><span class="mono">${fmtEUR(r.val)}</span></div>
                         <div class="top-event-bar"><div class="top-event-bar-fill" style="width:${max ? r.val / max * 100 : 0}%;background:${r.color};"></div></div>
                     </div>`).join('')}
@@ -2722,9 +2726,20 @@
         const totEntrate = entrate.reduce((s, t) => s + t.amount, 0);
         const totSpese = spese.reduce((s, t) => s + Math.abs(t.amount), 0);
         container.innerHTML =
-            renderTransactionsSummaryGroup('💰 Entrate', categoryTotalsList(entrate), totEntrate) +
+            renderTransactionsSummaryGroup('💰 Entrate', categoryTotalsList(entrate), totEntrate, 'entrate') +
             '<div style="height:1rem;"></div>' +
-            renderTransactionsSummaryGroup('💸 Spese', categoryTotalsList(spese), totSpese);
+            renderTransactionsSummaryGroup('💸 Spese', categoryTotalsList(spese), totSpese, 'spese');
+    }
+
+    // Apre il modale "Transazioni di una categoria" dal riepilogo voci entrate/spese: a
+    // differenza dell'apertura dalla pagina Categorie, qui l'elenco è ristretto alle sole
+    // transazioni che rispettano i filtri attivi e il segno (entrata/spesa) della voce cliccata.
+    function openSummaryCategoryTransactions(sign, categoryId) {
+        const txs = filteredTransactions()
+            .filter(t => sign === 'entrate' ? t.amount > 0 : t.amount < 0)
+            .filter(t => (getTxCategoryIds(t.id)[0] || '__none__') === categoryId);
+        const label = categoryId === '__none__' ? 'Da categorizzare' : categoryFullName(categoryId);
+        openCategoryTransactionsModal(categoryId, txs, label);
     }
 
     // Ordinamenti alternativi (lista piatta, senza raggruppamento per titolo).
