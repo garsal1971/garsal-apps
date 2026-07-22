@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.53</title>
+    <title>Analisi Costi v1.0.54</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -829,8 +829,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.53';
-    var BUILD_TIME  = '2026-07-21T16:10:00Z';
+    var APP_VERSION = 'v1.0.54';
+    var BUILD_TIME  = '2026-07-21T16:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3510,22 +3510,27 @@
     }
 
     // Anteprima "Applica categoria Vacanza": nessuna scrittura nel DB finché non si conferma.
-    // Solo pagamenti con carta (type = CARD_PAYMENT) con data nel periodo del viaggio (estremi
-    // inclusi). Applicare sostituisce le categorie già assegnate sulla transazione.
-    let _vacanzaPreview = null; // [{ tripId, tripName, txId, description, date, amount, hadOtherCategory }]
+    // Pagamenti con carta E i relativi rimborsi (type riconducibile a carta/rimborso, vedi sotto)
+    // con data nel periodo del viaggio (estremi inclusi). Applicare sostituisce le categorie già
+    // assegnate sulla transazione.
+    let _vacanzaPreview = null; // [{ tripId, tripName, txId, description, date, amount, hadOtherCategory, alreadyCorrect }]
     let _vacanzaCategoryId = null;
 
-    // Il campo "type" arriva sia in inglese (sync bancario, sempre CARD_PAYMENT) sia nella
-    // lingua dell'export CSV Revolut (es. "Pagamento con carta" per un export in italiano) —
-    // vanno riconosciute entrambe le forme, altrimenti le transazioni carta importate da CSV
-    // localizzato restano fuori dal match.
-    const CARD_PAYMENT_TYPES = ['CARD_PAYMENT', 'Pagamento con carta'];
-    function isCardPaymentType(type) {
-        return CARD_PAYMENT_TYPES.some(v => v.toLowerCase() === (type || '').toLowerCase());
+    // Il campo "type" arriva sia in inglese (sync bancario) sia nella lingua dell'export CSV
+    // Revolut (es. "Pagamento con carta" per un export in italiano); i rimborsi di un pagamento
+    // con carta hanno un "type" diverso (es. "REFUND"/"CARD_REFUND" in inglese, "Rimborso" in
+    // italiano) ma vanno inclusi comunque nei viaggi — altrimenti il rimborso di una spesa di
+    // viaggio resta fuori dalla categoria "Vacanza" mentre la spesa originale ci finisce. Match
+    // per parola chiave (non un elenco chiuso di stringhe esatte) per coprire tutte le varianti
+    // senza doverle enumerare a mano.
+    const CARD_OR_REFUND_KEYWORDS = ['card', 'carta', 'refund', 'rimbors'];
+    function isCardOrRefundType(type) {
+        const t = (type || '').toLowerCase();
+        return CARD_OR_REFUND_KEYWORDS.some(k => t.includes(k));
     }
 
-    function findCardTransactionsForTrip(trip) {
-        return transactions.filter(t => isCardPaymentType(t.type) && t.date >= trip.start_date && t.date <= trip.end_date);
+    function findTripEligibleTransactions(trip) {
+        return transactions.filter(t => isCardOrRefundType(t.type) && t.date >= trip.start_date && t.date <= trip.end_date);
     }
 
     async function previewApplyVacanza() {
@@ -3536,16 +3541,17 @@
 
         const items = [];
         trips.forEach(trip => {
-            findCardTransactionsForTrip(trip).forEach(t => {
+            findTripEligibleTransactions(trip).forEach(t => {
                 const catIds = getTxCategoryIds(t.id);
                 items.push({
                     tripId: trip.id, tripName: trip.name, txId: t.id,
                     description: t.description, date: t.date, amount: t.amount,
-                    hadOtherCategory: catIds.length > 0 && !catIds.includes(_vacanzaCategoryId)
+                    hadOtherCategory: catIds.length > 0 && !catIds.includes(_vacanzaCategoryId),
+                    alreadyCorrect: catIds.includes(_vacanzaCategoryId)
                 });
             });
         });
-        if (!items.length) { showToast('Nessun pagamento con carta trovato nei periodi dei viaggi'); return; }
+        if (!items.length) { showToast('Nessun pagamento con carta o rimborso trovato nei periodi dei viaggi'); return; }
         _vacanzaPreview = items;
         openVacanzaPreviewModal();
     }
@@ -3563,13 +3569,14 @@
         if (!_vacanzaPreview) return;
         const byTrip = {};
         _vacanzaPreview.forEach(it => {
-            (byTrip[it.tripId] = byTrip[it.tripId] || { name: it.tripName, count: 0, total: 0, overwrite: 0 });
+            (byTrip[it.tripId] = byTrip[it.tripId] || { name: it.tripName, count: 0, total: 0, overwrite: 0, alreadyCorrect: 0 });
             byTrip[it.tripId].count++;
             byTrip[it.tripId].total += Math.abs(it.amount);
             if (it.hadOtherCategory) byTrip[it.tripId].overwrite++;
+            if (it.alreadyCorrect) byTrip[it.tripId].alreadyCorrect++;
         });
         document.getElementById('vacanzaPreviewSummary').innerHTML = Object.values(byTrip).map(g =>
-            `<div class="form-hint">${g.name}: ${g.count} transazioni, ${fmtEUR(g.total)}${g.overwrite ? ` (${g.overwrite} con categoria diversa, verrebbe sostituita)` : ''}</div>`
+            `<div class="form-hint">${g.name}: ${g.count} transazioni, ${fmtEUR(g.total)}${g.overwrite ? ` (${g.overwrite} con categoria diversa, verrebbe sostituita)` : ''}${g.alreadyCorrect ? ` (${g.alreadyCorrect} già corrette)` : ''}</div>`
         ).join('');
         const list = document.getElementById('vacanzaPreviewList');
         list.innerHTML = _vacanzaPreview.map((it, i) => `
@@ -3580,7 +3587,7 @@
                         <strong>${it.description || '(senza descrizione)'}</strong>
                         <span class="mono ${it.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(it.amount)}</span>
                     </span>
-                    <span class="tx-meta">${formatDateIt(it.date)} · ${it.tripName}${it.hadOtherCategory ? ' · ⚠️ categoria esistente verrebbe sostituita' : ''}</span>
+                    <span class="tx-meta">${formatDateIt(it.date)} · ${it.tripName}${it.alreadyCorrect ? ' · ✅ già in questa categoria' : (it.hadOtherCategory ? ' · ⚠️ categoria esistente verrebbe sostituita' : '')}</span>
                 </span>
             </label>`).join('');
     }
