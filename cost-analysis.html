@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.55</title>
+    <title>Analisi Costi v1.0.56</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -829,8 +829,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.55';
-    var BUILD_TIME  = '2026-07-21T16:45:00Z';
+    var APP_VERSION = 'v1.0.56';
+    var BUILD_TIME  = '2026-07-23T14:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3054,36 +3054,6 @@
     let _aiSuggestions = []; // [{ description, categoryId, count }]
     let _aiSuggestionsReturnPending = false; // torna al modale AI dopo aver creato una categoria al volo
 
-    // Combo unica con le categorie foglia selezionabili: le categorie principali senza
-    // sotto-categorie compaiono come opzioni dirette, le sotto-categorie sono raggruppate
-    // per padre con <optgroup> per scorrerle più comode da aperte. L'<optgroup> però non è
-    // visibile quando il menu è chiuso (limite nativo dei <select>): il testo di ogni
-    // sotto-categoria include quindi anche il nome del padre, così categoria/sotto-categoria
-    // si legge subito anche a combo chiusa, senza doverla aprire.
-    function categorySelectOptionsHtml(selectedId) {
-        const leaves = leafCategories();
-        const topLeaves = leaves.filter(c => !c.parent_id);
-        const byParent = new Map();
-        leaves.filter(c => c.parent_id).forEach(c => {
-            if (!byParent.has(c.parent_id)) byParent.set(c.parent_id, []);
-            byParent.get(c.parent_id).push(c);
-        });
-        let html = '<option value="">— Nessuna categoria —</option>';
-        topLeaves.forEach(c => {
-            html += `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${categoryLabel(c)}</option>`;
-        });
-        byParent.forEach((kids, parentId) => {
-            const parent = categories.find(x => x.id === parentId);
-            const parentName = parent ? parent.name : '?';
-            html += `<optgroup label="${parentName}">`;
-            kids.forEach(k => {
-                html += `<option value="${k.id}" ${k.id === selectedId ? 'selected' : ''}>${parentName} › ${categoryLabel(k)}</option>`;
-            });
-            html += '</optgroup>';
-        });
-        return html;
-    }
-
     // La ricerca geografica (Nominatim) parte per prima su ogni merchant, poi il risultato
     // viene passato a Groq insieme alla descrizione per la classificazione finale. Batch
     // piccolo obbligato: Nominatim consente 1 richiesta/secondo e la edge function ha un
@@ -3207,21 +3177,72 @@
             list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nessun suggerimento residuo.</p></div>';
             return;
         }
-        list.innerHTML = _aiSuggestions.map((s, i) => `<div class="card">
+        list.innerHTML = _aiSuggestions.map((s, i) => {
+            const cat = s.categoryId ? categories.find(c => c.id === s.categoryId) : null;
+            return `<div class="card">
                 <div style="font-weight:700;margin-bottom:.4rem;">${s.description} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${s.count}</span>${s.source === 'geo' ? ' <span title="Trovato con ricerca geografica" style="font-size:.8rem;">🌍</span>' : ''}</div>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-                    <select class="form-select" style="width:auto;flex:1;min-width:160px;" id="ai-sel-${i}">${categorySelectOptionsHtml(s.categoryId)}</select>
+                    <div class="tx-cat-picker" style="position:relative;flex:1;min-width:160px;">
+                        <input type="text" class="form-input" id="ai-cat-search-${i}"
+                            placeholder="Cerca o scegli categoria..." value="${cat ? escAttr(categoryLabel(cat)) : ''}"
+                            oninput="renderAiCategorySuggestions(${i})" onfocus="renderAiCategorySuggestions(${i})"
+                            onblur="hideAiCategorySuggestions(${i})" autocomplete="off">
+                        <div id="ai-cat-suggest-${i}" class="tx-cat-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;margin-top:2px;"></div>
+                    </div>
                     <button class="btn btn-small btn-primary" onclick="applyAiSuggestion(${i})">Applica</button>
                     <button class="btn btn-small btn-secondary" onclick="dismissAiSuggestion(${i})">Ignora</button>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
+    }
+
+    // Stesso pattern di autocomplete della riga transazione (renderTxCategorySuggestions):
+    // filtra scrivendo, raggruppato per categoria principale con le sotto-categorie indentate.
+    function renderAiCategorySuggestions(i) {
+        const input = document.getElementById(`ai-cat-search-${i}`);
+        const box = document.getElementById(`ai-cat-suggest-${i}`);
+        if (!input || !box) return;
+        const query = (input.value || '').trim().toLowerCase();
+        const rows = [`<div onmousedown="selectAiCategory(${i}, '')" style="padding:.5rem .6rem;cursor:pointer;color:var(--muted);font-size:.85rem;border-bottom:1px solid var(--border);">— Nessuna categoria —</div>`];
+        topCategories().forEach(c => {
+            const kids = childCategories(c.id);
+            const topMatches = !query || c.name.toLowerCase().includes(query);
+            const matchingKids = kids.filter(k => topMatches || k.name.toLowerCase().includes(query));
+            if (!topMatches && !matchingKids.length) return;
+            rows.push(`<div onmousedown="selectAiCategory(${i}, '${c.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;cursor:pointer;font-weight:600;">
+                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+            </div>`);
+            matchingKids.forEach(k => {
+                rows.push(`<div onmousedown="selectAiCategory(${i}, '${k.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem .4rem 1.8rem;cursor:pointer;font-size:.9rem;">
+                    <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(k)}
+                </div>`);
+            });
+        });
+        if (rows.length === 1) rows.push(`<div style="padding:.5rem .6rem;font-size:.85rem;opacity:.6;">Nessuna categoria trovata.</div>`);
+        box.innerHTML = rows.join('');
+        box.style.display = 'block';
+    }
+
+    function hideAiCategorySuggestions(i) {
+        setTimeout(() => {
+            const box = document.getElementById(`ai-cat-suggest-${i}`);
+            if (box) box.style.display = 'none';
+        }, 150);
+    }
+
+    function selectAiCategory(i, categoryId) {
+        const input = document.getElementById(`ai-cat-search-${i}`);
+        const box = document.getElementById(`ai-cat-suggest-${i}`);
+        const c = categoryId ? categories.find(x => x.id === categoryId) : null;
+        if (input) input.value = c ? categoryLabel(c) : '';
+        if (box) box.style.display = 'none';
+        if (_aiSuggestions[i]) _aiSuggestions[i].categoryId = categoryId || null;
     }
 
     async function applyAiSuggestion(i) {
         const s = _aiSuggestions[i];
         if (!s) return;
-        const sel = document.getElementById(`ai-sel-${i}`);
-        const chosenCategoryId = sel ? sel.value : s.categoryId;
+        const chosenCategoryId = s.categoryId || null;
         if (!chosenCategoryId) { showToast('Seleziona una categoria oppure usa "Ignora"', true); return; }
         const key = normalizeMerchant(s.description);
         const matchingTx = transactions.filter(t => !getTxCategoryIds(t.id).length && normalizeMerchant(t.description) === key);
