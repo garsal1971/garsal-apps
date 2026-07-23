@@ -251,16 +251,29 @@ Deno.serve(async (req) => {
     // 2) la banca l'aveva già mandata come "pending" (status PDNG) in un sync precedente sullo
     //    STESSO conto, e ora arriva "booked" (status BOOK) con un external_id diverso — capita
     //    spesso con i pagamenti carta: pending e booked sono due record distinti lato banca.
-    // In entrambi i casi si cerca una corrispondenza su data+importo (con tolleranza sui
-    // decimali, per evitare mismatch da arrotondamento float/numeric); se ambigua (più di una
-    // corrispondenza) si prova a stringere sulla descrizione (colonna CSV "Description" contro
-    // il secondo elemento di remittance_information). Se trovata un'unica corrispondenza,
-    // AGGIORNA quella riga esistente (external_id/conto/MCC/carta/dato grezzo aggiornati alla
-    // versione booked) invece di inserirne una nuova, senza toccare categorie o persona già
-    // assegnate a mano. Corrispondenze multiple o assenti finiscono nel normale inserimento, per
-    // non rischiare un collegamento sbagliato. Questa classificazione serve sia per l'anteprima
-    // (sola lettura) sia per la conferma.
+    //
+    // Il confronto sulla data NON può essere esatto: il CSV Revolut salva "Started Date" (data
+    // di avvio pagamento), la banca restituisce booking_date (data di contabilizzazione) — per
+    // un pagamento con carta le due spesso differiscono di uno o più giorni, quindi un confronto
+    // data === data perdeva sistematicamente il match e duplicava la transazione. La priorità è
+    // quindi invertita rispetto alla data:
+    // 1) descrizione (CSV "Description" contro il secondo elemento di remittance_information) +
+    //    importo (tolleranza sui decimali, per arrotondamenti float/numeric) — il segnale più
+    //    affidabile quando la descrizione è disponibile;
+    // 2) se la descrizione non è disponibile (remittance_information troppo corto) o non trova
+    //    nulla, si scende a importo + data con una tolleranza di qualche giorno invece di
+    //    un'uguaglianza esatta;
+    // 3) se restano più candidati ambigui, si stringe su quello con la data più vicina.
+    // Se trovata un'unica corrispondenza, AGGIORNA quella riga esistente (external_id/conto/
+    // MCC/carta/dato grezzo aggiornati alla versione booked) invece di inserirne una nuova,
+    // senza toccare categorie o persona già assegnate a mano. Corrispondenze multiple o assenti
+    // finiscono nel normale inserimento, per non rischiare un collegamento sbagliato. Questa
+    // classificazione serve sia per l'anteprima (sola lettura) sia per la conferma.
     const AMOUNT_EPSILON = 0.01;
+    const DATE_TOLERANCE_DAYS = 5;
+    const dateDiffDays = (a: string, b: string): number =>
+      Math.abs((new Date(a + 'T00:00:00Z').getTime() - new Date(b + 'T00:00:00Z').getTime()) / 86400000);
+
     const { data: unlinked } = await supabase
       .from('ca_transactions')
       .select('id, date, amount, mcc, type, spender_person_id, description')
@@ -277,12 +290,29 @@ Deno.serve(async (req) => {
     const toInsert: typeof rows = [];
     const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
     for (const row of effectiveRows) {
-      let matches = candidatePool.filter((c) => c.date === row.date && Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON);
       const desc = (row.matchDescription || '').trim().toLowerCase();
-      if (matches.length > 1 && desc) {
-        const narrowed = matches.filter((c) => (c.description || '').trim().toLowerCase() === desc);
-        if (narrowed.length === 1) matches = narrowed;
+      const sameAmount = (c: (typeof candidatePool)[number]) => Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON;
+
+      // 1) Descrizione + importo.
+      let matches = desc
+        ? candidatePool.filter((c) => sameAmount(c) && (c.description || '').trim().toLowerCase() === desc)
+        : [];
+
+      // 2) Fallback (o descrizione assente): importo + data entro tolleranza.
+      if (!matches.length) {
+        matches = candidatePool.filter((c) => sameAmount(c) && c.date && dateDiffDays(c.date, row.date) <= DATE_TOLERANCE_DAYS);
       }
+
+      // 3) Ancora ambiguo: stringe sulla data più vicina.
+      if (matches.length > 1) {
+        const withDate = matches.filter((c) => c.date);
+        if (withDate.length) {
+          const minDiff = Math.min(...withDate.map((c) => dateDiffDays(c.date, row.date)));
+          const narrowed = withDate.filter((c) => dateDiffDays(c.date, row.date) === minDiff);
+          if (narrowed.length === 1) matches = narrowed;
+        }
+      }
+
       if (matches.length === 1) {
         toMerge.push({ existingId: matches[0].id, row });
         candidatePool.splice(candidatePool.indexOf(matches[0]), 1);
