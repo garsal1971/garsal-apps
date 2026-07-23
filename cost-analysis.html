@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.57</title>
+    <title>Analisi Costi v1.0.58</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -820,6 +820,22 @@
     </div>
 </div>
 
+<!-- ====== MODAL: PROPAGAZIONE CORREZIONE CATEGORIA ALLO STESSO MERCHANT ====== -->
+<div class="modal" id="merchantPropagationModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Applica anche alle altre transazioni?</h2>
+            <span class="modal-close" onclick="closeMerchantPropagationModal()">✕</span>
+        </div>
+        <p class="form-hint" id="merchantPropagationSummary" style="margin-bottom:.75rem;"></p>
+        <div id="merchantPropagationList" style="max-height:50vh;overflow-y:auto;"></div>
+        <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
+            <button class="btn btn-primary" style="flex:1;" onclick="confirmMerchantPropagation()">Applica alle selezionate</button>
+            <button class="btn btn-secondary" onclick="closeMerchantPropagationModal()">No, solo questa</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- ====== OVERLAY ELABORAZIONE ====== -->
@@ -834,8 +850,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.57';
-    var BUILD_TIME  = '2026-07-23T17:35:00Z';
+    var APP_VERSION = 'v1.0.58';
+    var BUILD_TIME  = '2026-07-23T19:20:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2707,7 +2723,90 @@
         if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
         const t = transactions.find(x => x.id === txId);
         await learnMerchantCategories(t?.description, categoryId || null);
-        if (categoryId) await previewReanalyzeAllTransactions();
+        if (categoryId) await previewMerchantCategoryPropagation(txId, categoryId);
+    }
+
+    let _merchantPropagationPreview = null; // { categoryId, items: [{ txId, currentCategoryId }] }
+
+    // Quando si corregge manualmente la categoria di una transazione, la stessa correzione va
+    // proposta anche a TUTTE le altre transazioni dello stesso merchant già importate — comprese
+    // quelle che hanno già una categoria (magari sbagliata). A differenza della rianalisi
+    // automatica (che riempie solo le transazioni ancora senza categoria, senza mai toccare
+    // quelle già assegnate), qui l'utente ha appena dichiarato esplicitamente qual è la
+    // categoria corretta per questo merchant: va quindi riproposta per SOSTITUIRE anche le
+    // assegnazioni esistenti su tutta la storia delle transazioni, non solo per riempire i vuoti.
+    async function previewMerchantCategoryPropagation(txId, categoryId) {
+        const t = transactions.find(x => x.id === txId);
+        if (!t) return;
+        const key = normalizeMerchant(t.description);
+        if (!key) return;
+        const items = transactions
+            .filter(x => x.id !== txId && normalizeMerchant(x.description) === key)
+            .map(x => ({ txId: x.id, currentCategoryId: getTxCategoryIds(x.id)[0] || null }))
+            .filter(it => it.currentCategoryId !== categoryId);
+        if (!items.length) return;
+        _merchantPropagationPreview = { categoryId, items };
+        openMerchantPropagationModal();
+    }
+
+    function openMerchantPropagationModal() {
+        renderMerchantPropagationList();
+        document.getElementById('merchantPropagationModal').classList.add('active');
+    }
+    function closeMerchantPropagationModal() {
+        document.getElementById('merchantPropagationModal').classList.remove('active');
+        _merchantPropagationPreview = null;
+    }
+
+    function renderMerchantPropagationList() {
+        if (!_merchantPropagationPreview) return;
+        const { categoryId, items } = _merchantPropagationPreview;
+        const newLabel = categoryId ? categoryFullName(categoryId) : '— Nessuna categoria —';
+        document.getElementById('merchantPropagationSummary').textContent =
+            `${items.length} altra${items.length === 1 ? '' : 'e'} transazion${items.length === 1 ? 'e' : 'i'} con lo stesso titolo → ${newLabel}`;
+        const list = document.getElementById('merchantPropagationList');
+        list.innerHTML = items.map((it, i) => {
+            const t = transactions.find(x => x.id === it.txId);
+            if (!t) return '';
+            const currentLabel = it.currentCategoryId ? categoryFullName(it.currentCategoryId) : '— Nessuna categoria —';
+            return `
+            <label style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;">
+                <input type="checkbox" checked data-idx="${i}" style="margin-top:.3rem;">
+                <span style="flex:1;">
+                    <span style="display:flex;justify-content:space-between;gap:.5rem;">
+                        <strong>${t.description || '(senza descrizione)'}</strong>
+                        <span class="mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
+                    </span>
+                    <span class="tx-meta">${formatDateIt(t.date)}</span>
+                    <span class="form-hint" style="display:block;margin-top:.2rem;">${currentLabel} → ${newLabel}</span>
+                </span>
+            </label>`;
+        }).join('');
+    }
+
+    async function confirmMerchantPropagation() {
+        if (!_merchantPropagationPreview) return;
+        const { categoryId, items } = _merchantPropagationPreview;
+        const checkboxes = document.querySelectorAll('#merchantPropagationList input[type="checkbox"]');
+        const selected = [];
+        checkboxes.forEach(cb => { if (cb.checked) selected.push(items[parseInt(cb.dataset.idx, 10)]); });
+        closeMerchantPropagationModal();
+        if (!selected.length) return;
+        showProcessing(`🔁 Applicazione categoria a ${selected.length} transazioni...`);
+        const ids = selected.map(it => it.txId);
+        const { error: delErr } = await sb.from('ca_transaction_categories').delete().in('transaction_id', ids);
+        if (handleAuthError(delErr)) { hideProcessing(); return; }
+        txCategories = txCategories.filter(tc => !ids.includes(tc.transaction_id));
+        if (categoryId) {
+            const rows = ids.map(id => ({ transaction_id: id, category_id: categoryId, source: 'manual' }));
+            const { error: insErr } = await sb.from('ca_transaction_categories').insert(rows);
+            if (handleAuthError(insErr)) { hideProcessing(); return; }
+            if (!insErr) txCategories.push(...rows);
+        }
+        hideProcessing();
+        renderTransactionsActiveView();
+        renderDashboard();
+        showToast(`✅ Categoria applicata a ${selected.length} transazioni`);
     }
 
     function toggleOnlyThisTx(txId, checked) {
