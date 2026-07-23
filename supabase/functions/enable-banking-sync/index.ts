@@ -73,6 +73,25 @@ function pick(obj: any, ...keys: string[]): unknown {
   return null;
 }
 
+// PostgREST limita di default una select() senza .range() a 1000 righe: senza questa
+// paginazione, con più di 1000 transazioni nel DB il pool di candidati per il match CSV/sync si
+// tronca silenziosamente e alcune transazioni CSV restano fuori dal confronto, causando
+// duplicati anche quando data e importo coincidono esattamente (stesso bug già risolto lato
+// client con fetchAllRows in cost-analysis.html).
+async function fetchAllRows(makeQuery: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }>): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await makeQuery(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    all.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -274,19 +293,25 @@ Deno.serve(async (req) => {
     const dateDiffDays = (a: string, b: string): number =>
       Math.abs((new Date(a + 'T00:00:00Z').getTime() - new Date(b + 'T00:00:00Z').getTime()) / 86400000);
 
-    const { data: unlinked } = await supabase
-      .from('ca_transactions')
-      .select('id, date, amount, mcc, type, spender_person_id, description')
-      .eq('user_id', userId)
-      .is('bank_connection_id', null);
-    const { data: pendingSameConnection } = await supabase
-      .from('ca_transactions')
-      .select('id, date, amount, mcc, type, spender_person_id, description')
-      .eq('user_id', userId)
-      .eq('bank_connection_id', bankConnectionId)
-      .eq('raw->>status', 'PDNG');
+    const unlinked = await fetchAllRows((from, to) =>
+      supabase
+        .from('ca_transactions')
+        .select('id, date, amount, mcc, type, spender_person_id, description')
+        .eq('user_id', userId)
+        .is('bank_connection_id', null)
+        .range(from, to)
+    );
+    const pendingSameConnection = await fetchAllRows((from, to) =>
+      supabase
+        .from('ca_transactions')
+        .select('id, date, amount, mcc, type, spender_person_id, description')
+        .eq('user_id', userId)
+        .eq('bank_connection_id', bankConnectionId)
+        .eq('raw->>status', 'PDNG')
+        .range(from, to)
+    );
 
-    const candidatePool = [...(unlinked || []), ...(pendingSameConnection || [])];
+    const candidatePool = [...unlinked, ...pendingSameConnection];
     const toInsert: typeof rows = [];
     const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
     for (const row of effectiveRows) {
@@ -378,7 +403,7 @@ Deno.serve(async (req) => {
 
     let mergedCount = 0;
     if (toMerge.length) {
-      const existingById = new Map([...(unlinked || []), ...(pendingSameConnection || [])].map((c) => [c.id, c]));
+      const existingById = new Map([...unlinked, ...pendingSameConnection].map((c) => [c.id, c]));
       const mergedIds: string[] = [];
       for (const { existingId, row } of toMerge) {
         const existing = existingById.get(existingId);
