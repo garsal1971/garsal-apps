@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.56</title>
+    <title>Analisi Costi v1.0.57</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -329,7 +329,12 @@
             <div class="card">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
                     <input type="text" class="form-input" id="txFilterText" placeholder="Cerca descrizione..." oninput="onTxFilterChange()">
-                    <select class="form-select" id="txFilterCategory" onchange="onTxFilterChange()"></select>
+                    <div class="tx-cat-picker" style="position:relative;">
+                        <input type="text" class="form-input" id="txFilterCategorySearch" placeholder="Tutte le categorie..."
+                            oninput="renderTxFilterCategorySuggestions()" onfocus="renderTxFilterCategorySuggestions()"
+                            onblur="hideTxFilterCategorySuggestions()" autocomplete="off">
+                        <div id="txFilterCategorySuggest" class="tx-cat-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;margin-top:2px;"></div>
+                    </div>
                     <select class="form-select" id="txFilterPerson" onchange="onTxFilterChange()"></select>
                     <select class="form-select" id="txFilterSpender" onchange="onTxFilterChange()"></select>
                     <div style="display:flex;gap:.5rem;">
@@ -829,8 +834,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.56';
-    var BUILD_TIME  = '2026-07-23T14:15:00Z';
+    var APP_VERSION = 'v1.0.57';
+    var BUILD_TIME  = '2026-07-23T17:35:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2491,11 +2496,15 @@
         });
     }
 
+    function txFilterCategoryDisplayLabel(categoryId) {
+        if (categoryId === '__none__') return 'Da categorizzare';
+        if (!categoryId) return '';
+        const c = categories.find(x => x.id === categoryId);
+        return c ? categoryLabel(c) : '';
+    }
+
     function renderTransactionFilters() {
-        const catSel = document.getElementById('txFilterCategory');
-        catSel.innerHTML = '<option value="">Tutte le categorie</option><option value="__none__">Da categorizzare</option>' +
-            categories.map(c => `<option value="${c.id}">${categoryLabel(c)}</option>`).join('');
-        catSel.value = txFilters.categoryId;
+        document.getElementById('txFilterCategorySearch').value = txFilterCategoryDisplayLabel(txFilters.categoryId);
         const perSel = document.getElementById('txFilterPerson');
         perSel.innerHTML = '<option value="">Tutte (per chi)</option>' + people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         perSel.value = txFilters.personId;
@@ -2510,9 +2519,54 @@
         document.getElementById('txSortBy').value = txFilters.sortBy;
     }
 
+    // Autocomplete del filtro categoria: stesso pattern di renderTxCategorySuggestions, con in
+    // più le due voci speciali "Tutte le categorie" e "Da categorizzare" in cima alla lista.
+    function renderTxFilterCategorySuggestions() {
+        const input = document.getElementById('txFilterCategorySearch');
+        const box = document.getElementById('txFilterCategorySuggest');
+        if (!input || !box) return;
+        const query = (input.value || '').trim().toLowerCase();
+        const rows = [];
+        if (!query) {
+            rows.push(`<div onmousedown="selectTxFilterCategory('')" style="padding:.5rem .6rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border);">Tutte le categorie</div>`);
+            rows.push(`<div onmousedown="selectTxFilterCategory('__none__')" style="padding:.5rem .6rem;cursor:pointer;color:var(--muted);font-size:.85rem;border-bottom:1px solid var(--border);">Da categorizzare</div>`);
+        }
+        topCategories().forEach(c => {
+            const kids = childCategories(c.id);
+            const topMatches = !query || c.name.toLowerCase().includes(query);
+            const matchingKids = kids.filter(k => topMatches || k.name.toLowerCase().includes(query));
+            if (!topMatches && !matchingKids.length) return;
+            rows.push(`<div onmousedown="selectTxFilterCategory('${c.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;cursor:pointer;font-weight:600;">
+                <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
+            </div>`);
+            matchingKids.forEach(k => {
+                rows.push(`<div onmousedown="selectTxFilterCategory('${k.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem .4rem 1.8rem;cursor:pointer;font-size:.9rem;">
+                    <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(k)}
+                </div>`);
+            });
+        });
+        if (!rows.length) rows.push(`<div style="padding:.5rem .6rem;font-size:.85rem;opacity:.6;">Nessuna categoria trovata.</div>`);
+        box.innerHTML = rows.join('');
+        box.style.display = 'block';
+    }
+
+    function hideTxFilterCategorySuggestions() {
+        setTimeout(() => {
+            const box = document.getElementById('txFilterCategorySuggest');
+            if (box) box.style.display = 'none';
+        }, 150);
+    }
+
+    function selectTxFilterCategory(categoryId) {
+        document.getElementById('txFilterCategorySearch').value = txFilterCategoryDisplayLabel(categoryId);
+        const box = document.getElementById('txFilterCategorySuggest');
+        if (box) box.style.display = 'none';
+        txFilters.categoryId = categoryId;
+        onTxFilterChange();
+    }
+
     function onTxFilterChange() {
         txFilters.text = document.getElementById('txFilterText').value;
-        txFilters.categoryId = document.getElementById('txFilterCategory').value;
         txFilters.personId = document.getElementById('txFilterPerson').value;
         txFilters.spenderId = document.getElementById('txFilterSpender').value;
         txFilters.from = document.getElementById('txFilterFrom').value;
