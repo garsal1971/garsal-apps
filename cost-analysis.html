@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.58</title>
+    <title>Analisi Costi v1.0.59</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -276,7 +276,14 @@
 
             <div class="stats-strip">
                 <div class="stat-box"><div class="stat-val pts-neg" id="dashTotSpeso">€0</div><div class="stat-lbl">Speso</div></div>
-                <div class="stat-box"><div class="stat-val pts-pos" id="dashTotEntrate">€0</div><div class="stat-lbl">Entrate</div></div>
+                <div class="stat-box">
+                    <div class="stat-val" style="color:var(--accent)" id="dashTotRicarica">€0</div>
+                    <div class="stat-lbl">Ricarica</div>
+                    <div style="font-size:.7rem;color:var(--muted);margin-top:.3rem;display:flex;justify-content:space-between;gap:.5rem;">
+                        <span>Salvatore: <span class="mono" id="dashRicaricaSalvatore">€0</span></span>
+                        <span>Teresa: <span class="mono" id="dashRicaricaTeresa">€0</span></span>
+                    </div>
+                </div>
                 <div class="stat-box"><div class="stat-val" style="color:var(--accent)" id="dashTotTx">0</div><div class="stat-lbl">Transazioni</div></div>
                 <div class="stat-box"><div class="stat-val" style="color:var(--warning)" id="dashUncategorized">0</div><div class="stat-lbl">Da categorizzare</div></div>
             </div>
@@ -850,8 +857,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.58';
-    var BUILD_TIME  = '2026-07-23T19:20:00Z';
+    var APP_VERSION = 'v1.0.59';
+    var BUILD_TIME  = '2026-07-23T20:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3477,18 +3484,45 @@
 
     function onDashPeriodChange(sel) { dashPeriod = sel.value; renderDashboard(); }
 
+    function findCategoryByNameContains(pool, needle) {
+        const n = needle.toUpperCase();
+        return pool.find(c => c.name.toUpperCase().includes(n));
+    }
+
+    // Totale di una categoria (ed eventualmente delle sue sotto-categorie, per il rollup della
+    // principale) nel periodo dashboard selezionato — calcolato a parte da dashboardTransactions()
+    // perché la categoria "Ricarica" ha tipicamente excluded_from_totals=true (non conta come
+    // spesa/entrata nel resto della dashboard), ma qui va mostrata comunque.
+    function dashCategoryTotal(categoryId, includeChildren) {
+        if (!categoryId) return 0;
+        const { from, to } = periodRange(dashPeriod);
+        return transactions
+            .filter(t => (!from || t.date >= toISODate(from)) && (!to || t.date <= toISODate(to)))
+            .filter(t => {
+                const ids = getTxCategoryIds(t.id);
+                if (!ids.length) return false;
+                return includeChildren ? ids.some(cid => topCategoryId(cid) === categoryId) : ids.includes(categoryId);
+            })
+            .reduce((s, t) => s + Math.abs(t.amount), 0);
+    }
+
     function renderDashboard() {
         const txs = dashboardTransactions();
         const spese = txs.filter(t => t.amount < 0);
-        const entrate = txs.filter(t => t.amount > 0);
         const totSpeso = spese.reduce((s, t) => s + Math.abs(t.amount), 0);
-        const totEntrate = entrate.reduce((s, t) => s + t.amount, 0);
         const uncategorized = txs.filter(t => !getTxCategoryIds(t.id).length).length;
 
         document.getElementById('dashTotSpeso').textContent = fmtEUR(-totSpeso);
-        document.getElementById('dashTotEntrate').textContent = fmtEUR(totEntrate);
         document.getElementById('dashTotTx').textContent = txs.length;
         document.getElementById('dashUncategorized').textContent = uncategorized;
+
+        const ricaricaTop = categories.find(c => !c.parent_id && c.name.toUpperCase() === 'RICARICA');
+        const ricaricaKids = ricaricaTop ? childCategories(ricaricaTop.id) : [];
+        const salvatoreCat = findCategoryByNameContains(ricaricaKids, 'SALVATORE');
+        const teresaCat = findCategoryByNameContains(ricaricaKids, 'TERESA');
+        document.getElementById('dashTotRicarica').textContent = fmtEUR(dashCategoryTotal(ricaricaTop?.id, true));
+        document.getElementById('dashRicaricaSalvatore').textContent = fmtEUR(dashCategoryTotal(salvatoreCat?.id, false));
+        document.getElementById('dashRicaricaTeresa').textContent = fmtEUR(dashCategoryTotal(teresaCat?.id, false));
 
         renderCategoryChart(spese);
         renderMonthChart();
