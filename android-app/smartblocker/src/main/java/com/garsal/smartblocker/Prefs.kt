@@ -47,6 +47,14 @@ object Prefs {
         return entities.isNotEmpty() && entities.all { it.app == "ta_firi" }
     }
 
+    /** true se il blocco corrente riguarda solo notifiche informative (es. cost_analysis: sync
+        Revolut da completare) — sfondo blu, dismiss con un solo bottone, nessun PIN e nessuna RPC
+        di completamento (non c'è un task/sfida da "completare" server-side). */
+    fun isInfoOnlyBlock(ctx: Context): Boolean {
+        val entities = getBlockEntities(ctx)
+        return entities.isNotEmpty() && entities.all { it.app == "cost_analysis" }
+    }
+
     /** Titolo del blocco attivo (join dei titoli dei task pendenti). */
     fun getBlockTitle(ctx: Context): String = sp(ctx).getString("block_title", "") ?: ""
     fun setBlockTitle(ctx: Context, title: String) { sp(ctx).edit().putString("block_title", title).apply() }
