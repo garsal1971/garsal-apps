@@ -450,29 +450,19 @@ Deno.serve(async (req) => {
       }
 
       if (isDryRun) {
-        const allTxNow = await fetchAllRows((from, to) =>
-          supabase.from('ca_transactions').select('id').eq('user_id', userId).range(from, to)
-        );
-        const allCatsNow = await fetchAllRows((from, to) =>
-          supabase.from('ca_transaction_categories').select('transaction_id').range(from, to)
-        );
-        const categorizedIdsNow = new Set(allCatsNow.map((c: any) => c.transaction_id));
-        const currentUncategorizedCount = allTxNow.filter((t: any) => !categorizedIdsNow.has(t.id)).length;
+        // Niente scan aggiuntivo dell'intero storico (allTx/allCats — costoso su tabelle
+        // grandi, è la causa più probabile dei timeout osservati in test): il conteggio
+        // "no-categoria" globale viene mostrato dalla dashboard di cost-analysis.html, qui
+        // basta la statistica sul solo batch di test.
         const newWithoutCategory = dryRunPreview.filter((p) => !p.wouldMergeWithExistingId && !p.category).length;
-        const hypotheticalUncategorizedCount = currentUncategorizedCount + newWithoutCategory;
 
         return new Response(JSON.stringify({
           mode: 'dry_run',
-          note: 'Nessuna scrittura eseguita: transazioni non salvate, notifica non accodata. Solo simulazione.',
+          note: 'Nessuna scrittura eseguita: transazioni non salvate, notifica non accodata. Solo simulazione sul batch di test.',
           receivedCount: rows.length,
           wouldMergeCount: dryRunPreview.filter((p) => p.wouldMergeWithExistingId).length,
           wouldInsertCount: dryRunPreview.filter((p) => !p.wouldMergeWithExistingId).length,
-          currentUncategorizedCount,
-          hypotheticalUncategorizedCount,
-          previewNotification: hypotheticalUncategorizedCount > 0 ? {
-            title: `${hypotheticalUncategorizedCount} transazion${hypotheticalUncategorizedCount === 1 ? 'e' : 'i'} Revolut da categorizzare`,
-            body: `Dopo il sync automatico restano ${hypotheticalUncategorizedCount} transazioni senza categoria. Apri Analisi Costi per completarle.`,
-          } : null,
+          uncategorizedInBatch: newWithoutCategory,
           transactions: dryRunPreview,
         }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
