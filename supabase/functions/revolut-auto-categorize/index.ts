@@ -26,6 +26,9 @@
 // v1.3.1 — 2026-07-24: ogni categoria include ora parent_id, per il picker Android con lista
 // raggruppata principale/sottocategorie + ricerca (stesso pattern di
 // renderTxCategorySuggestions in cost-analysis.html).
+// v1.3.2 — 2026-07-24: filtra le categorie con ca_categories.visible_in_app=false dal payload
+// dello Smart Block (migration 20260724290000) — disattivarlo su una principale nasconde anche
+// tutte le sue sotto-categorie, indipendentemente dal loro flag individuale.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -531,16 +534,25 @@ Deno.serve(async (req) => {
         // parent_id incluso per raggruppare categorie/sottocategorie nel picker Android come
         // in cost-analysis.html (renderTxCategorySuggestions): principali in grassetto, figlie
         // indentate subito sotto, entrambe selezionabili.
-        const { data: userCategories } = await supabase
+        const { data: allUserCategories } = await supabase
           .from('ca_categories')
-          .select('id, name, icon, parent_id')
+          .select('id, name, icon, parent_id, visible_in_app')
           .eq('user_id', userId)
           .order('name');
+
+        // visible_in_app nascosta su una principale nasconde anche tutte le sue sotto-categorie
+        // dallo Smart Block, indipendentemente dal flag della singola figlia.
+        const hiddenTopIds = new Set(
+          (allUserCategories || []).filter((c: any) => !c.parent_id && !c.visible_in_app).map((c: any) => c.id)
+        );
+        const visibleCategories = (allUserCategories || [])
+          .filter((c: any) => c.visible_in_app && !(c.parent_id && hiddenTopIds.has(c.parent_id)))
+          .map((c: any) => ({ id: c.id, name: c.name, icon: c.icon, parent_id: c.parent_id }));
 
         const metadata: Record<string, unknown> = {
           cost_analysis: {
             transactions: uncategorizedTx || [],
-            categories: userCategories || [],
+            categories: visibleCategories,
           },
         };
         if (deviceToken) metadata.device_token = deviceToken;

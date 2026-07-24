@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.59</title>
+    <title>Analisi Costi v1.0.60</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -483,6 +483,13 @@
                     Escludi dai totali (es. giroconti, pagamenti carta di credito, ricariche)
                 </label>
             </div>
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+                    <input type="checkbox" id="categoryVisibleInApp" checked>
+                    Visibile in app
+                </label>
+                <div class="form-hint">Se disattivata, la categoria non compare nella scelta categoria dello Smart Block sul telefono. Disattivarla su una categoria principale nasconde anche tutte le sue sotto-categorie.</div>
+            </div>
             <button type="submit" class="btn btn-primary" style="width:100%;">Salva Categoria</button>
         </form>
     </div>
@@ -857,8 +864,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.59';
-    var BUILD_TIME  = '2026-07-23T20:15:00Z';
+    var APP_VERSION = 'v1.0.60';
+    var BUILD_TIME  = '2026-07-24T21:50:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1230,6 +1237,7 @@
         document.getElementById('categoryName').value = cat ? cat.name : '';
         document.getElementById('categoryIcon').value = cat ? (cat.icon || '') : '';
         document.getElementById('categoryExcludedFromTotals').checked = !!(cat && cat.excluded_from_totals);
+        document.getElementById('categoryVisibleInApp').checked = cat ? cat.visible_in_app !== false : true;
         renderCategoryColorSwatches((cat && !cat.parent_id) ? (cat.color || pickUnusedColor()) : pickUnusedColor());
         const parentSel = document.getElementById('categoryParent');
         parentSel.innerHTML = '<option value="">— Nessuna (categoria principale) —</option>' +
@@ -1320,6 +1328,10 @@
             // Il flag conta solo sulle categorie principali; le sotto-categorie lo ereditano dal
             // padre (vedi isTxExcludedFromTotals -> topCategoryId), quindi resta false per loro.
             excluded_from_totals: isSub ? false : document.getElementById('categoryExcludedFromTotals').checked,
+            // A differenza di excluded_from_totals, qui vale anche per le sotto-categorie
+            // (disattivarla su una principale nasconde comunque tutte le sue figlie dallo
+            // Smart Block, lato revolut-auto-categorize — vedi migration 20260724290000).
+            visible_in_app: document.getElementById('categoryVisibleInApp').checked,
             user_id: currentUserId()
         };
         if (!payload.name) return;
