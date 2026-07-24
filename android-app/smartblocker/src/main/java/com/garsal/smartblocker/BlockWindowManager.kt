@@ -295,9 +295,13 @@ class BlockWindowManager(private val ctx: Context) {
     private fun isCaTopCategory(cat: JSONObject): Boolean =
         cat.isNull("parent_id") || cat.optString("parent_id", "").isBlank()
 
+    /** id della categoria principale attualmente "aperta" (sottocategorie visibili) quando non
+        c'è una ricerca in corso — solo una alla volta (fisarmonica), nessuna aperta di default. */
+    private var caExpandedTopId: String? = null
+
     /** Mostra la prima transazione ancora in lista; se è vuota (tutte categorizzate) chiude il
-        blocco come per un blocco informativo normale. Altrimenti azzera la ricerca e ridisegna
-        la lista categorie. */
+        blocco come per un blocco informativo normale. Altrimenti azzera ricerca/apertura e
+        ridisegna la lista categorie (principali chiuse). */
     private fun renderCaCurrentTransaction() {
         if (caTransactions.isEmpty()) {
             tvCaProgress.text = ""
@@ -316,53 +320,79 @@ class BlockWindowManager(private val ctx: Context) {
         tvCaTransaction.text = "$desc\n${String.format(Locale.ITALY, "%.2f", amount)} $currency"
         etCaSearch.visibility = View.VISIBLE
         etCaSearch.setText("")
+        caExpandedTopId = null
         renderCaCategoryList("")
     }
 
-    /** Ridisegna la lista categorie/sottocategorie filtrata per query (nome principale o
-        sottocategoria che la contiene, case-insensitive) — richiamata ad ogni tocco di tasto. */
+    /** Ridisegna la lista categorie. Senza ricerca: solo le principali, chiuse — toccarne una
+        la apre/chiude mostrando le sottocategorie subito sotto (fisarmonica, una alla volta) più
+        una riga per assegnare la principale stessa. Con una ricerca in corso: ignora lo stato
+        aperto/chiuso e mostra tutte le principali+sottocategorie che matchano, come prima
+        (comportamento identico a renderTxCategorySuggestions in cost-analysis.html). */
     private fun renderCaCategoryList(query: String) {
         llCaCategories.removeAllViews()
         if (caTransactions.isEmpty()) return
         val tx = caTransactions[0]
         val q = query.trim().lowercase(Locale.getDefault())
+        val searching = q.isNotBlank()
 
         val topCats = caCategories.filter { isCaTopCategory(it) && it.optString("id", "").isNotBlank() }
         val kidsByParent = caCategories.filter { !isCaTopCategory(it) }
             .groupBy { it.optString("parent_id", "") }
+
+        fun addCategoryButton(label: String, sub: Boolean, onClick: () -> Unit) {
+            llCaCategories.addView(Button(ctx).apply {
+                text = label
+                textSize = if (sub) 14f else 15f
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor(if (sub) "#1F2937" else "#334155"))
+                setAllCaps(false)
+                setPadding(24, if (sub) 18 else 22, 24, if (sub) 18 else 22)
+                setOnClickListener { onClick() }
+            }, LinearLayout.LayoutParams(MP, WC).apply {
+                topMargin = if (sub) 6 else 10
+                if (sub) marginStart = 32
+            })
+        }
 
         var shown = 0
         topCats.forEach { top ->
             val topId = top.optString("id", "")
             val topName = top.optString("name", "")
             val kids = kidsByParent[topId].orEmpty()
-            val topMatches = q.isBlank() || topName.lowercase(Locale.getDefault()).contains(q)
+            val topMatches = !searching || topName.lowercase(Locale.getDefault()).contains(q)
             val matchingKids = kids.filter { topMatches || it.optString("name", "").lowercase(Locale.getDefault()).contains(q) }
-            if (!topMatches && matchingKids.isEmpty()) return@forEach
+            if (searching && !topMatches && matchingKids.isEmpty()) return@forEach
             shown++
 
             val topIcon = top.optString("icon", "")
-            val topLabel = (if (topIcon.isNotBlank()) "$topIcon " else "") + topName
-            llCaCategories.addView(Button(ctx).apply {
-                text = topLabel; textSize = 15f; setTextColor(Color.WHITE)
-                setBackgroundColor(Color.parseColor("#334155"))
-                setAllCaps(false)
-                setPadding(24, 22, 24, 22)
-                setOnClickListener { onCategoryChosen(tx, topId) }
-            }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 10 })
+            val isExpanded = searching || caExpandedTopId == topId
+            // Durante la ricerca il tap seleziona subito la principale (niente fisarmonica):
+            // la freccia si mostra solo fuori ricerca, dove indica davvero apri/chiudi.
+            val arrow = if (kids.isEmpty() || searching) "" else if (isExpanded) " ▾" else " ▸"
+            val topLabel = (if (topIcon.isNotBlank()) "$topIcon " else "") + topName + arrow
+            addCategoryButton(topLabel, sub = false) {
+                if (searching || kids.isEmpty()) {
+                    onCategoryChosen(tx, topId)
+                } else if (caExpandedTopId == topId) {
+                    caExpandedTopId = null
+                    renderCaCategoryList("")
+                } else {
+                    caExpandedTopId = topId
+                    renderCaCategoryList("")
+                }
+            }
 
-            matchingKids.forEach { kid ->
+            if (!isExpanded) return@forEach
+            if (!searching && kids.isNotEmpty()) {
+                addCategoryButton("→ usa \"$topName\"", sub = true) { onCategoryChosen(tx, topId) }
+            }
+            (if (searching) matchingKids else kids).forEach { kid ->
                 val kidId = kid.optString("id", "")
                 if (kidId.isBlank()) return@forEach
                 val kidIcon = kid.optString("icon", "")
                 val kidLabel = (if (kidIcon.isNotBlank()) "$kidIcon " else "") + kid.optString("name", "")
-                llCaCategories.addView(Button(ctx).apply {
-                    text = kidLabel; textSize = 14f; setTextColor(Color.WHITE)
-                    setBackgroundColor(Color.parseColor("#1F2937"))
-                    setAllCaps(false)
-                    setPadding(24, 18, 24, 18)
-                    setOnClickListener { onCategoryChosen(tx, kidId) }
-                }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 6; marginStart = 32 })
+                addCategoryButton(kidLabel, sub = true) { onCategoryChosen(tx, kidId) }
             }
         }
         if (shown == 0) {
