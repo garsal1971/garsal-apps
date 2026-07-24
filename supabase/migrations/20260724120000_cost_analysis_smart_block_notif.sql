@@ -14,6 +14,9 @@ ALTER TABLE cm_notification_rules ADD CONSTRAINT cm_notification_rules_app_check
 --    che per le regole smart_block con enabled=true cancella ad ogni run TUTTE le righe pending
 --    (non solo quelle future) e le rigenera solo se reminder_presets.due_at è nel futuro — una
 --    riga enabled=true finirebbe cancellata e mai ripristinata dal nostro inserimento diretto.
+-- entity_id è di tipo uuid in produzione (non text come nello schema originale della tabella —
+-- un altro caso di drift schema applicato solo su Supabase, come entity_title/notification_spec):
+-- non può contenere una stringa libera come 'revolut-sync', va generato un uuid vero.
 DO $$
 DECLARE v_user_id uuid;
 BEGIN
@@ -21,13 +24,12 @@ BEGIN
   IF v_user_id IS NULL THEN RETURN; END IF;
   IF EXISTS (
     SELECT 1 FROM cm_notification_rules
-    WHERE user_id = v_user_id AND app = 'cost_analysis' AND entity_id = 'revolut-sync'
-      AND channel = 'smart_block'
+    WHERE user_id = v_user_id AND app = 'cost_analysis' AND channel = 'smart_block'
   ) THEN RETURN; END IF;
 
   INSERT INTO cm_notification_rules
     (user_id, app, entity_id, entity_type, entity_title, reminder_presets, notification_spec, channel, enabled)
   VALUES
-    (v_user_id, 'cost_analysis', 'revolut-sync', 'sync', 'Revolut — categorizzazione automatica',
+    (v_user_id, 'cost_analysis', gen_random_uuid(), 'sync', 'Revolut — categorizzazione automatica',
      '{}'::jsonb, '{}'::jsonb, 'smart_block', false);
 END $$;
