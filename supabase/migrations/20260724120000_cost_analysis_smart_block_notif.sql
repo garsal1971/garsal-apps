@@ -17,6 +17,10 @@ ALTER TABLE cm_notification_rules ADD CONSTRAINT cm_notification_rules_app_check
 -- entity_id è di tipo uuid in produzione (non text come nello schema originale della tabella —
 -- un altro caso di drift schema applicato solo su Supabase, come entity_title/notification_spec):
 -- non può contenere una stringa libera come 'revolut-sync', va generato un uuid vero.
+-- entity_type ha inoltre un vincolo CHECK (chk_entity_type, anch'esso non presente in nessuna
+-- migration locale) che ammette solo un set fisso di valori: 'task' è l'unico che risulta già
+-- usato con successo anche da un'app diversa da 'tasks' (ta-firi.html, app='ta_firi'), quindi è
+-- il valore più sicuro da riusare qui senza conoscere l'elenco completo ammesso.
 DO $$
 DECLARE v_user_id uuid;
 BEGIN
@@ -30,6 +34,6 @@ BEGIN
   INSERT INTO cm_notification_rules
     (user_id, app, entity_id, entity_type, entity_title, reminder_presets, notification_spec, channel, enabled)
   VALUES
-    (v_user_id, 'cost_analysis', gen_random_uuid(), 'sync', 'Revolut — categorizzazione automatica',
+    (v_user_id, 'cost_analysis', gen_random_uuid(), 'task', 'Revolut — categorizzazione automatica',
      '{}'::jsonb, '{}'::jsonb, 'smart_block', false);
 END $$;
