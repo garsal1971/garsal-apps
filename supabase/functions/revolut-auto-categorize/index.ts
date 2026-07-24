@@ -499,6 +499,16 @@ Deno.serve(async (req) => {
         .eq('channel', 'smart_block')
         .maybeSingle();
       if (rule) {
+        // Senza metadata.device_token l'app Android (SupabaseApi.queryQueue → myToken) non
+        // considera mai questa riga "sua" e il blocco non compare mai sul telefono — stesso
+        // campo che fill-notification-queue popola da cm_user_notification_settings.
+        const { data: notifSettings } = await supabase
+          .from('cm_user_notification_settings')
+          .select('smart_block_device_token')
+          .eq('user_id', userId)
+          .maybeSingle();
+        const deviceToken = notifSettings?.smart_block_device_token || null;
+
         await supabase.from('cm_notification_queue').insert({
           rule_id: rule.id,
           user_id: userId,
@@ -509,7 +519,11 @@ Deno.serve(async (req) => {
           channel: 'smart_block',
           fire_at: new Date().toISOString(),
           status: 'pending',
+          metadata: deviceToken ? { device_token: deviceToken } : null,
         });
+        if (!deviceToken) {
+          console.error('[revolut-auto-categorize] smart_block_device_token non impostato per l\'utente — notifica scritta ma non comparirà sul telefono');
+        }
       } else {
         console.error('[revolut-auto-categorize] riga ancora cm_notification_rules (app=cost_analysis) non trovata — notifica non inviata');
       }
