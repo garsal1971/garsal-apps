@@ -90,7 +90,7 @@ class BlockWindowManager(private val ctx: Context) {
             count < Config.MAX_SNOOZES -> "Rinvii rimasti: ${Config.MAX_SNOOZES - count}"
             else -> ""
         }
-        if (!Prefs.isChallengeOnlyBlock(ctx)) {
+        if (!Prefs.isChallengeOnlyBlock(ctx) && !Prefs.isInfoOnlyBlock(ctx)) {
             tvPinHint.text = if (state == Prefs.STATE_LOCKED)
                 "⚠️ Rinvii esauriti — solo PIN"
             else
@@ -143,6 +143,17 @@ class BlockWindowManager(private val ctx: Context) {
         }
     }
 
+    /** Dismiss semplice per blocchi informativi (es. cost_analysis): nessuna RPC, nessun PIN —
+        la riga cm_notification_queue è già passata a 'sent' nel momento in cui l'overlay è stato
+        mostrato (BlockerService → markSent), quindi non serve completare/confermare nulla lato
+        server, si chiude e basta. */
+    private fun onInfoDismiss() {
+        ctx.startService(Intent(ctx, BlockerService::class.java).apply {
+            action = BlockerService.ACTION_UNBLOCK
+        })
+        dismiss()
+    }
+
     /** Invia la risposta SÌ/NO della sfida Ta Firi? (tenuta premuta) e sblocca. */
     private fun onChallengeResponse(status: String) {
         val entities = Prefs.getBlockEntities(ctx)
@@ -160,8 +171,13 @@ class BlockWindowManager(private val ctx: Context) {
     }
 
     private fun buildView(): View {
-        // Verde per le sfide Ta Firi?, rosso per i task (comportamento invariato).
-        val bgColor = if (Prefs.isChallengeOnlyBlock(ctx)) "#0F3D24" else "#4A1414"
+        // Verde per le sfide Ta Firi?, blu per le notifiche informative (es. cost_analysis),
+        // rosso per i task (comportamento invariato).
+        val bgColor = when {
+            Prefs.isChallengeOnlyBlock(ctx) -> "#0F3D24"
+            Prefs.isInfoOnlyBlock(ctx)      -> "#1E3A5F"
+            else                             -> "#4A1414"
+        }
 
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -246,6 +262,21 @@ class BlockWindowManager(private val ctx: Context) {
             row.addView(btnSi, LinearLayout.LayoutParams(0, HOLD_BTN_HEIGHT, 1f).apply { marginEnd = 12 })
             row.addView(btnNo, LinearLayout.LayoutParams(0, HOLD_BTN_HEIGHT, 1f).apply { marginStart = 12 })
             root.addView(row, lp(MP, top = 20))
+        } else if (Prefs.isInfoOnlyBlock(ctx)) {
+            root.addView(TextView(ctx).apply {
+                text = "Informazione"
+                textSize = 15f; setTextColor(Color.parseColor("#94A3B8"))
+                gravity = Gravity.CENTER
+            }, lp(MP, top = 24))
+
+            val btnOk = Button(ctx).apply {
+                text = "Ho capito"
+                textSize = 16f; setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#2563EB"))
+                setPadding(48, 24, 48, 24)
+                setOnClickListener { onInfoDismiss() }
+            }
+            root.addView(btnOk, lp(MP, top = 20))
         } else {
             tvPinHint = TextView(ctx).apply {
                 textSize = 13f; setTextColor(Color.parseColor("#94A3B8"))
