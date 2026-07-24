@@ -125,6 +125,7 @@ class BlockerService : Service() {
         Prefs.clearBlockEntities(this)
         Prefs.clearBlockTitle(this)
         Prefs.clearBlockDate(this)
+        Prefs.clearBlockCaData(this)
         blockWm?.dismiss()
         blockWm = null
         cancelBlockNotification()
@@ -165,10 +166,22 @@ class BlockerService : Service() {
                 val blockDate = result.entries
                     .firstOrNull { it.id in dueIds && it.fireAt.isNotBlank() }
                     ?.fireAt?.take(10) ?: ""
+                // Categorizzazione interattiva Analisi Costi: se tra i blocchi dovuti c'è una
+                // riga cost_analysis con metadata.cost_analysis (transazioni+categorie), la
+                // salviamo per BlockWindowManager. Assume al più una riga pendente per volta.
+                val caEntry = result.entries.firstOrNull {
+                    it.id in dueIds && it.app == "cost_analysis" && it.metadata.isNotBlank()
+                }
                 handler.post {
                     Prefs.setBlockEntities(this, blockEntities)
                     Prefs.setBlockTitle(this, blockTitle)
                     Prefs.setBlockDate(this, blockDate)
+                    if (caEntry != null) {
+                        Prefs.setBlockCaQueueId(this, caEntry.id)
+                        Prefs.setBlockCaData(this, caEntry.metadata)
+                    } else {
+                        Prefs.clearBlockCaData(this)
+                    }
                     Prefs.setState(this, Prefs.STATE_TRIGGERED)
                     Prefs.setSnoozeCount(this, 0)
                     Prefs.setSnoozeUntil(this, 0)

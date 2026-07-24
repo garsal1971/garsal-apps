@@ -22,7 +22,8 @@ class SupabaseApi(private val ctx: Context) {
         val fireAt:   String,   // ISO UTC
         val status:   String,
         val myToken:  Boolean,  // true se device_token corrisponde
-        val app:      String    // 'tasks' | 'ta_firi' — determina la RPC da chiamare allo sblocco
+        val app:      String,   // 'tasks' | 'ta_firi' | 'cost_analysis' — determina RPC/UI allo sblocco
+        val metadata: String    // JSON grezzo della colonna metadata ("" se assente/null)
     )
 
     data class QueueResult(
@@ -65,11 +66,13 @@ class SupabaseApi(private val ctx: Context) {
                 val title    = item.optString("title", "").ifEmpty { item.optString("body", "Blocco") }
                 val fireAt   = item.optString("fire_at", "")
                 val status   = item.optString("status", "")
-                val token    = item.optJSONObject("metadata")?.optString("device_token") ?: ""
+                val metadataObj = item.optJSONObject("metadata")
+                val token    = metadataObj?.optString("device_token") ?: ""
                 val myToken  = token == deviceToken
                 val app      = item.optString("app", "tasks")
+                val metadata = metadataObj?.toString() ?: ""
 
-                entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken, app))
+                entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken, app, metadata))
 
                 val fireAtMs = parseIsoMs(fireAt)
                 if (myToken && status == "pending" && fireAtMs > 0L) {
@@ -206,6 +209,54 @@ class SupabaseApi(private val ctx: Context) {
     /** Dispatcher: sceglie la RPC giusta in base all'app di provenienza dell'entità sbloccata. */
     fun completeEntity(app: String, entityId: String) {
         if (app == "ta_firi") completeChallengeCheckin(entityId) else completeTask(entityId)
+    }
+
+    /**
+     * Chiama la RPC ca_smart_block_set_category per assegnare la categoria a una transazione
+     * Analisi Costi scelta dalla schermata di blocco (categorizzazione interattiva).
+     * Ritorna true solo se la RPC risponde ok=true.
+     */
+    fun setTransactionCategory(transactionId: String, categoryId: String): Boolean {
+        return try {
+            val urlStr = "$base/rest/v1/rpc/ca_smart_block_set_category"
+            val conn = openConn(urlStr, "POST")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = "{\"p_transaction_id\":\"$transactionId\",\"p_category_id\":\"$categoryId\"}"
+            conn.outputStream.write(body.toByteArray())
+            val code = conn.responseCode
+            val resp = if (code < 400) conn.inputStream?.bufferedReader()?.readText() ?: ""
+                       else conn.errorStream?.bufferedReader()?.readText() ?: ""
+            conn.disconnect()
+            AppLogger.log(ctx, "SUPABASE", "setTransactionCategory $transactionId→$categoryId HTTP $code $resp")
+            val ok = code in 200..299 && JSONObject(resp.ifBlank { "{}" }).optBoolean("ok", false)
+            ok
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "SUPABASE", "setTransactionCategory errore: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Sovrascrive l'intera colonna metadata di una riga cm_notification_queue (PostgREST non
+     * supporta il merge parziale di un jsonb via PATCH): il chiamante deve passare l'oggetto
+     * metadata completo già aggiornato (es. con cost_analysis.transactions ridotto dopo che
+     * l'utente ha categorizzato una transazione dalla schermata di blocco).
+     */
+    fun patchQueueMetadata(queueId: String, metadataJson: String) {
+        try {
+            val urlStr = "$base/rest/v1/cm_notification_queue?id=eq.$queueId"
+            val conn = openConn(urlStr, "PATCH")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = JSONObject().put("metadata", JSONObject(metadataJson))
+            conn.outputStream.write(body.toString().toByteArray())
+            val code = conn.responseCode
+            conn.disconnect()
+            AppLogger.log(ctx, "SUPABASE", "patchQueueMetadata $queueId → HTTP $code")
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "SUPABASE", "patchQueueMetadata errore: ${e.message}")
+        }
     }
 
     /**

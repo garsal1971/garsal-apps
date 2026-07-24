@@ -69,6 +69,20 @@ object Prefs {
     fun getDeviceToken(ctx: Context): String = sp(ctx).getString("device_token", "") ?: ""
     fun setDeviceToken(ctx: Context, token: String) { sp(ctx).edit().putString("device_token", token).apply() }
 
+    /** id della riga cm_notification_queue del blocco cost_analysis corrente (per il PATCH di
+        metadata.cost_analysis.transactions dopo ogni categoria scelta) e il suo metadata JSON
+        grezzo (device_token + cost_analysis.transactions/categories). Vuoto se non è un blocco
+        di categorizzazione interattiva. */
+    fun getBlockCaQueueId(ctx: Context): String = sp(ctx).getString("block_ca_queue_id", "") ?: ""
+    fun setBlockCaQueueId(ctx: Context, id: String) { sp(ctx).edit().putString("block_ca_queue_id", id).apply() }
+
+    fun getBlockCaData(ctx: Context): String = sp(ctx).getString("block_ca_data", "") ?: ""
+    fun setBlockCaData(ctx: Context, json: String) { sp(ctx).edit().putString("block_ca_data", json).apply() }
+
+    fun clearBlockCaData(ctx: Context) {
+        sp(ctx).edit().remove("block_ca_queue_id").remove("block_ca_data").apply()
+    }
+
     /** Avvia il servizio automaticamente al boot del dispositivo. Default: true. */
     fun getAutoStart(ctx: Context): Boolean = sp(ctx).getBoolean("auto_start", true)
     fun setAutoStart(ctx: Context, v: Boolean) { sp(ctx).edit().putBoolean("auto_start", v).apply() }

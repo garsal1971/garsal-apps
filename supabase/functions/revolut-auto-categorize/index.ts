@@ -19,6 +19,10 @@
 // remittance_information, booking_date, entry_reference, merchant_category_code) simula
 // dedup/categorizzazione/notifica senza scrivere nulla, per testare la pipeline senza toccare
 // il conto Revolut reale.
+// v1.3 — 2026-07-24: metadata.device_token sulla notifica (senza il blocco non compariva mai
+// sul telefono) + metadata.cost_analysis.{transactions,categories} per la categorizzazione
+// interattiva dalla schermata di blocco (vedi BlockWindowManager.kt + RPC
+// ca_smart_block_set_category, migration 20260724190000).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -486,7 +490,8 @@ Deno.serve(async (req) => {
       supabase.from('ca_transaction_categories').select('transaction_id').range(from, to)
     );
     const categorizedIds = new Set(allCats.map((c: any) => c.transaction_id));
-    const uncategorizedCount = allTx.filter((t: any) => !categorizedIds.has(t.id)).length;
+    const uncategorizedIds = allTx.filter((t: any) => !categorizedIds.has(t.id)).map((t: any) => t.id as string);
+    const uncategorizedCount = uncategorizedIds.length;
 
     if (uncategorizedCount > 0) {
       // Un solo utente ha app='cost_analysis'+channel='smart_block': niente filtro su
@@ -509,6 +514,31 @@ Deno.serve(async (req) => {
           .maybeSingle();
         const deviceToken = notifSettings?.smart_block_device_token || null;
 
+        // Payload per la categorizzazione interattiva dalla schermata di blocco (Android,
+        // BlockWindowManager): fino a MAX_EMBEDDED transazioni ancora senza categoria +
+        // l'elenco delle categorie dell'utente, così l'app può proporre una lista da toccare
+        // senza dover fare altre query. Se l'utente ne categorizza solo una parte, l'app
+        // aggiorna direttamente metadata.cost_analysis.transactions (PATCH) togliendo quelle
+        // già fatte — questa insert scrive solo lo stato iniziale.
+        const MAX_EMBEDDED = 20;
+        const { data: uncategorizedTx } = await supabase
+          .from('ca_transactions')
+          .select('id, description, amount, currency, date')
+          .in('id', uncategorizedIds.slice(0, MAX_EMBEDDED));
+        const { data: userCategories } = await supabase
+          .from('ca_categories')
+          .select('id, name, icon')
+          .eq('user_id', userId)
+          .order('name');
+
+        const metadata: Record<string, unknown> = {
+          cost_analysis: {
+            transactions: uncategorizedTx || [],
+            categories: userCategories || [],
+          },
+        };
+        if (deviceToken) metadata.device_token = deviceToken;
+
         await supabase.from('cm_notification_queue').insert({
           rule_id: rule.id,
           user_id: userId,
@@ -519,7 +549,7 @@ Deno.serve(async (req) => {
           channel: 'smart_block',
           fire_at: new Date().toISOString(),
           status: 'pending',
-          metadata: deviceToken ? { device_token: deviceToken } : null,
+          metadata,
         });
         if (!deviceToken) {
           console.error('[revolut-auto-categorize] smart_block_device_token non impostato per l\'utente — notifica scritta ma non comparirà sul telefono');
