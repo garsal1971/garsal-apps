@@ -12,7 +12,8 @@
 //
 // Richiede i Supabase Secrets: ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY,
 // REVOLUT_SYNC_USER_ID (uuid dell'utente — impostato una tantum con `supabase secrets set`).
-// v1 — 2026-07-24
+// v1 — 2026-07-24 · v1.1 — 2026-07-24: fix entity_id/entity_type per il vincolo di
+// cm_notification_rules (vedi migration 20260724120000), nessuna modifica funzionale
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
