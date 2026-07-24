@@ -23,6 +23,9 @@
 // sul telefono) + metadata.cost_analysis.{transactions,categories} per la categorizzazione
 // interattiva dalla schermata di blocco (vedi BlockWindowManager.kt + RPC
 // ca_smart_block_set_category, migration 20260724190000).
+// v1.3.1 — 2026-07-24: ogni categoria include ora parent_id, per il picker Android con lista
+// raggruppata principale/sottocategorie + ricerca (stesso pattern di
+// renderTxCategorySuggestions in cost-analysis.html).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -525,9 +528,12 @@ Deno.serve(async (req) => {
           .from('ca_transactions')
           .select('id, description, amount, currency, date')
           .in('id', uncategorizedIds.slice(0, MAX_EMBEDDED));
+        // parent_id incluso per raggruppare categorie/sottocategorie nel picker Android come
+        // in cost-analysis.html (renderTxCategorySuggestions): principali in grassetto, figlie
+        // indentate subito sotto, entrambe selezionabili.
         const { data: userCategories } = await supabase
           .from('ca_categories')
-          .select('id, name, icon')
+          .select('id, name, icon, parent_id')
           .eq('user_id', userId)
           .order('name');
 
