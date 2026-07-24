@@ -7,6 +7,8 @@ import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.*
 import android.widget.*
 import org.json.JSONArray
@@ -41,6 +43,7 @@ class BlockWindowManager(private val ctx: Context) {
     private var caCategories = listOf<JSONObject>()
     private lateinit var tvCaProgress: TextView
     private lateinit var tvCaTransaction: TextView
+    private lateinit var etCaSearch: EditText
     private lateinit var llCaCategories: LinearLayout
 
     private val clockTick = object : Runnable {
@@ -254,9 +257,26 @@ class BlockWindowManager(private val ctx: Context) {
         }
         root.addView(tvCaTransaction, lp(top = 16))
 
+        // Stesso pattern del filtro categoria in cost-analysis.html (renderTxCategorySuggestions):
+        // campo di ricerca + lista raggruppata (principale in grassetto, sottocategorie indentate
+        // subito sotto), entrambe toccabili, filtrate live per nome man mano che si scrive.
+        etCaSearch = EditText(ctx).apply {
+            hint = "Cerca categoria…"
+            textSize = 15f; setTextColor(Color.WHITE); setHintTextColor(Color.parseColor("#64748B"))
+            setBackgroundColor(Color.parseColor("#0F172A"))
+            setSingleLine(true)
+            setPadding(24, 20, 24, 20)
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) { renderCaCategoryList(s?.toString() ?: "") }
+            })
+        }
+        root.addView(etCaSearch, lp(top = 14))
+
         llCaCategories = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(ctx).apply { addView(llCaCategories) }
-        root.addView(scroll, LinearLayout.LayoutParams(MP, 0, 1f).apply { topMargin = 16 })
+        root.addView(scroll, LinearLayout.LayoutParams(MP, 0, 1f).apply { topMargin = 12 })
 
         val btnSkip = Button(ctx).apply {
             text = "Rinvia — decido dopo"
@@ -271,12 +291,18 @@ class BlockWindowManager(private val ctx: Context) {
         return root
     }
 
-    /** Mostra la prima transazione ancora in lista + i bottoni categoria; se la lista è vuota
-        (tutte categorizzate) chiude il blocco come per un blocco informativo normale. */
+    /** true se la categoria non ha un parent_id (categoria principale). */
+    private fun isCaTopCategory(cat: JSONObject): Boolean =
+        cat.isNull("parent_id") || cat.optString("parent_id", "").isBlank()
+
+    /** Mostra la prima transazione ancora in lista; se è vuota (tutte categorizzate) chiude il
+        blocco come per un blocco informativo normale. Altrimenti azzera la ricerca e ridisegna
+        la lista categorie. */
     private fun renderCaCurrentTransaction() {
         if (caTransactions.isEmpty()) {
             tvCaProgress.text = ""
             tvCaTransaction.text = "✅ Fatto! Nessuna transazione da categorizzare."
+            etCaSearch.visibility = View.GONE
             llCaCategories.removeAllViews()
             handler.postDelayed({ if (rootView != null) onInfoDismiss() }, 1200)
             return
@@ -288,22 +314,64 @@ class BlockWindowManager(private val ctx: Context) {
         val date = tx.optString("date", "")
         tvCaProgress.text = "1 di ${caTransactions.size}" + if (date.isNotBlank()) " — $date" else ""
         tvCaTransaction.text = "$desc\n${String.format(Locale.ITALY, "%.2f", amount)} $currency"
+        etCaSearch.visibility = View.VISIBLE
+        etCaSearch.setText("")
+        renderCaCategoryList("")
+    }
 
+    /** Ridisegna la lista categorie/sottocategorie filtrata per query (nome principale o
+        sottocategoria che la contiene, case-insensitive) — richiamata ad ogni tocco di tasto. */
+    private fun renderCaCategoryList(query: String) {
         llCaCategories.removeAllViews()
-        caCategories.forEach { cat ->
-            val catId = cat.optString("id", "")
-            if (catId.isBlank()) return@forEach
-            val catName = cat.optString("name", "")
-            val catIcon = cat.optString("icon", "")
-            val label = (if (catIcon.isNotBlank()) "$catIcon " else "") + catName
-            val btn = Button(ctx).apply {
-                text = label; textSize = 15f; setTextColor(Color.WHITE)
+        if (caTransactions.isEmpty()) return
+        val tx = caTransactions[0]
+        val q = query.trim().lowercase(Locale.getDefault())
+
+        val topCats = caCategories.filter { isCaTopCategory(it) && it.optString("id", "").isNotBlank() }
+        val kidsByParent = caCategories.filter { !isCaTopCategory(it) }
+            .groupBy { it.optString("parent_id", "") }
+
+        var shown = 0
+        topCats.forEach { top ->
+            val topId = top.optString("id", "")
+            val topName = top.optString("name", "")
+            val kids = kidsByParent[topId].orEmpty()
+            val topMatches = q.isBlank() || topName.lowercase(Locale.getDefault()).contains(q)
+            val matchingKids = kids.filter { topMatches || it.optString("name", "").lowercase(Locale.getDefault()).contains(q) }
+            if (!topMatches && matchingKids.isEmpty()) return@forEach
+            shown++
+
+            val topIcon = top.optString("icon", "")
+            val topLabel = (if (topIcon.isNotBlank()) "$topIcon " else "") + topName
+            llCaCategories.addView(Button(ctx).apply {
+                text = topLabel; textSize = 15f; setTextColor(Color.WHITE)
                 setBackgroundColor(Color.parseColor("#334155"))
                 setAllCaps(false)
-                setPadding(24, 24, 24, 24)
-                setOnClickListener { onCategoryChosen(tx, catId) }
+                setPadding(24, 22, 24, 22)
+                setOnClickListener { onCategoryChosen(tx, topId) }
+            }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 10 })
+
+            matchingKids.forEach { kid ->
+                val kidId = kid.optString("id", "")
+                if (kidId.isBlank()) return@forEach
+                val kidIcon = kid.optString("icon", "")
+                val kidLabel = (if (kidIcon.isNotBlank()) "$kidIcon " else "") + kid.optString("name", "")
+                llCaCategories.addView(Button(ctx).apply {
+                    text = kidLabel; textSize = 14f; setTextColor(Color.WHITE)
+                    setBackgroundColor(Color.parseColor("#1F2937"))
+                    setAllCaps(false)
+                    setPadding(24, 18, 24, 18)
+                    setOnClickListener { onCategoryChosen(tx, kidId) }
+                }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 6; marginStart = 32 })
             }
-            llCaCategories.addView(btn, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 10 })
+        }
+        if (shown == 0) {
+            llCaCategories.addView(TextView(ctx).apply {
+                text = "Nessuna categoria trovata."
+                textSize = 13f; setTextColor(Color.parseColor("#94A3B8"))
+                gravity = Gravity.CENTER
+                setPadding(0, 16, 0, 0)
+            })
         }
     }
 
