@@ -58,30 +58,50 @@ class BlockWindowManager(private val ctx: Context) {
     fun isShowing() = rootView != null
 
     @Suppress("DEPRECATION")
+    private fun buildOverlayParams() = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
+        PixelFormat.OPAQUE
+    )
+
     fun show() {
         if (rootView != null) return
         if (!Settings.canDrawOverlays(ctx)) return
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
-            PixelFormat.OPAQUE
-        )
-
         val view = buildView()
         rootView = view
         try {
-            wm.addView(view, params)
+            wm.addView(view, buildOverlayParams())
             handler.post(clockTick)
             refreshUI()
         } catch (e: Exception) {
             AppLogger.log(ctx, "WINDOW", "errore show(): ${e.message}")
+            rootView = null
+        }
+    }
+
+    /** Passa dal picker categorie alla schermata di blocco standard (PIN/sfida), senza
+        sbloccare — usata quando il picker termina ma restano altre entità (task/sfide) da
+        gestire. Vedi finishCaPickerAndMaybeUnblock(). */
+    private fun switchToStandardView() {
+        handler.removeCallbacks(clockTick)
+        rootView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        rootView = null
+        isCaPickerView = false
+        val view = buildStandardView()
+        rootView = view
+        try {
+            wm.addView(view, buildOverlayParams())
+            handler.post(clockTick)
+            refreshUI()
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "WINDOW", "errore switchToStandardView(): ${e.message}")
             rootView = null
         }
     }
@@ -308,7 +328,7 @@ class BlockWindowManager(private val ctx: Context) {
             tvCaTransaction.text = "✅ Fatto! Nessuna transazione da categorizzare."
             etCaSearch.visibility = View.GONE
             llCaCategories.removeAllViews()
-            handler.postDelayed({ if (rootView != null) onInfoDismiss() }, 1200)
+            handler.postDelayed({ if (rootView != null) finishCaPickerAndMaybeUnblock() }, 1200)
             return
         }
         val tx = caTransactions[0]
@@ -444,14 +464,38 @@ class BlockWindowManager(private val ctx: Context) {
         }
     }
 
+    /** Il picker categorie può comparire insieme ad altri blocchi (task/sfide) dovuti nello
+        stesso momento — in quel caso, terminato il picker, NON si sblocca il telefono: restano
+        le altre entità da gestire con PIN, altrimenti l'utente eviterebbe di completarle
+        davvero (e completeEntity() chiamerebbe erroneamente task_complete con l'id fittizio
+        della riga cost_analysis, vedi log "task non trovato"). Si passa quindi alla schermata
+        standard, filtrando via l'entità cost_analysis da Prefs. Se non restava nient'altro, si
+        sblocca normalmente. */
+    private fun finishCaPickerAndMaybeUnblock() {
+        val remaining = Prefs.getBlockEntities(ctx).filter { it.app != "cost_analysis" }
+        Prefs.clearBlockCaData(ctx)
+        if (remaining.isNotEmpty()) {
+            Prefs.setBlockEntities(ctx, remaining)
+            switchToStandardView()
+        } else {
+            onInfoDismiss()
+        }
+    }
+
+    /** Il picker ha priorità ogni volta che ci sono dati cost_analysis pendenti, anche se nello
+        stesso blocco sono dovute anche altre entità (task/sfide) — prima non veniva mostrato in
+        quel caso (serviva isInfoOnlyBlock, cioè TUTTE le entità dovevano essere cost_analysis),
+        facendo apparire per errore la schermata PIN rossa standard invece del picker. */
     private fun buildView(): View {
         isCaPickerView = false
-        if (Prefs.isInfoOnlyBlock(ctx)) {
-            loadCaDataFromPrefs()
-            if (caTransactions.isNotEmpty() && caCategories.isNotEmpty()) {
-                return buildCategoryPickerView()
-            }
+        loadCaDataFromPrefs()
+        if (caTransactions.isNotEmpty() && caCategories.isNotEmpty()) {
+            return buildCategoryPickerView()
         }
+        return buildStandardView()
+    }
+
+    private fun buildStandardView(): View {
         // Verde per le sfide Ta Firi?, blu per le notifiche informative (es. cost_analysis),
         // rosso per i task (comportamento invariato).
         val bgColor = when {

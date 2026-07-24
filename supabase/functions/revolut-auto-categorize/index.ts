@@ -31,6 +31,9 @@
 // v1.3.3 — 2026-07-24: la cascata principale → sotto-categorie ora avviene in scrittura lato
 // cost-analysis.html (propagazione al salvataggio), non più ricalcolata qui — si filtra solo
 // sul valore proprio di ogni categoria.
+// v1.3.4 — 2026-07-24: non accoda più una notifica smart_block se ce n'è già una pending per
+// la stessa regola, per non accumulare righe duplicate ad ogni run del cron finché l'utente non
+// le smaltisce.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -511,7 +514,20 @@ Deno.serve(async (req) => {
         .eq('app', 'cost_analysis')
         .eq('channel', 'smart_block')
         .maybeSingle();
-      if (rule) {
+      // Se una notifica smart_block per questa regola è già pending (l'utente non l'ha ancora
+      // vista/gestita), non ne accoda un'altra: altrimenti ad ogni run del cron (anche ravvicinati)
+      // si accumulerebbero righe duplicate finché l'utente non le smaltisce tutte.
+      const { data: alreadyPending } = rule
+        ? await supabase
+            .from('cm_notification_queue')
+            .select('id')
+            .eq('rule_id', rule.id)
+            .eq('status', 'pending')
+            .limit(1)
+            .maybeSingle()
+        : { data: null };
+
+      if (rule && !alreadyPending) {
         // Senza metadata.device_token l'app Android (SupabaseApi.queryQueue → myToken) non
         // considera mai questa riga "sua" e il blocco non compare mai sul telefono — stesso
         // campo che fill-notification-queue popola da cm_user_notification_settings.
@@ -570,8 +586,10 @@ Deno.serve(async (req) => {
         if (!deviceToken) {
           console.error('[revolut-auto-categorize] smart_block_device_token non impostato per l\'utente — notifica scritta ma non comparirà sul telefono');
         }
-      } else {
+      } else if (!rule) {
         console.error('[revolut-auto-categorize] riga ancora cm_notification_rules (app=cost_analysis) non trovata — notifica non inviata');
+      } else {
+        console.log('[revolut-auto-categorize] notifica smart_block già pending, non ne accodo un\'altra');
       }
     }
 
