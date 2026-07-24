@@ -406,12 +406,13 @@ Deno.serve(async (req) => {
     const uncategorizedCount = allTx.filter((t: any) => !categorizedIds.has(t.id)).length;
 
     if (uncategorizedCount > 0) {
+      // Un solo utente ha app='cost_analysis'+channel='smart_block': niente filtro su
+      // entity_id (è uuid in produzione, non una stringa libera come 'revolut-sync').
       const { data: rule } = await supabase
         .from('cm_notification_rules')
         .select('id')
         .eq('user_id', userId)
         .eq('app', 'cost_analysis')
-        .eq('entity_id', 'revolut-sync')
         .eq('channel', 'smart_block')
         .maybeSingle();
       if (rule) {
@@ -419,7 +420,7 @@ Deno.serve(async (req) => {
           rule_id: rule.id,
           user_id: userId,
           app: 'cost_analysis',
-          entity_id: 'revolut-sync',
+          entity_id: rule.id, // entity_id è uuid: riusa l'id della regola stessa, non serve altro
           title: `${uncategorizedCount} transazion${uncategorizedCount === 1 ? 'e' : 'i'} Revolut da categorizzare`,
           body: `Dopo il sync automatico restano ${uncategorizedCount} transazioni senza categoria. Apri Analisi Costi per completarle.`,
           channel: 'smart_block',
