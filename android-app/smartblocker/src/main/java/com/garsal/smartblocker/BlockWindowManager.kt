@@ -9,6 +9,8 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.*
 import android.widget.*
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -30,6 +32,16 @@ class BlockWindowManager(private val ctx: Context) {
     private lateinit var tvPinError: TextView
     private lateinit var btnSnooze: Button
     private val pinDots = arrayOfNulls<TextView>(4)
+
+    // ── Categorizzazione interattiva Analisi Costi (Smart Block "cost_analysis") ────────────
+    private var isCaPickerView = false
+    private var caQueueId = ""
+    private var caMetadata: JSONObject? = null          // metadata grezzo (device_token + cost_analysis)
+    private var caTransactions = mutableListOf<JSONObject>()
+    private var caCategories = listOf<JSONObject>()
+    private lateinit var tvCaProgress: TextView
+    private lateinit var tvCaTransaction: TextView
+    private lateinit var llCaCategories: LinearLayout
 
     private val clockTick = object : Runnable {
         override fun run() {
@@ -81,6 +93,10 @@ class BlockWindowManager(private val ctx: Context) {
     }
 
     private fun refreshUI() {
+        // Il picker categorie ha i suoi bottoni dedicati (nessun rinvio/PIN standard) e non
+        // inizializza btnSnooze/tvSnoozeInfo/tvPinHint — uscire subito evita un crash per
+        // lateinit non inizializzato.
+        if (isCaPickerView) return
         val state = Prefs.getState(ctx)
         val count = Prefs.getSnoozeCount(ctx)
         btnSnooze.visibility =
@@ -170,7 +186,174 @@ class BlockWindowManager(private val ctx: Context) {
         dismiss()
     }
 
+    /** Legge da Prefs il metadata del blocco cost_analysis corrente e lo scompone in
+        caTransactions/caCategories. caTransactions vuoto o caCategories vuoto → niente picker,
+        si ricade sul blocco informativo semplice ("Ho capito"). */
+    private fun loadCaDataFromPrefs() {
+        caQueueId = Prefs.getBlockCaQueueId(ctx)
+        caMetadata = null
+        caTransactions = mutableListOf()
+        caCategories = listOf()
+        val raw = Prefs.getBlockCaData(ctx)
+        if (raw.isBlank()) return
+        try {
+            val meta = JSONObject(raw)
+            caMetadata = meta
+            val ca = meta.optJSONObject("cost_analysis") ?: return
+            val txArr = ca.optJSONArray("transactions") ?: JSONArray()
+            val txList = mutableListOf<JSONObject>()
+            for (i in 0 until txArr.length()) txList.add(txArr.getJSONObject(i))
+            caTransactions = txList
+            val catArr = ca.optJSONArray("categories") ?: JSONArray()
+            val catList = mutableListOf<JSONObject>()
+            for (i in 0 until catArr.length()) catList.add(catArr.getJSONObject(i))
+            caCategories = catList
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "CA_CATEGORY", "parse metadata fallito: ${e.message}")
+            caMetadata = null
+            caTransactions = mutableListOf()
+            caCategories = listOf()
+        }
+    }
+
+    private fun buildCategoryPickerView(): View {
+        isCaPickerView = true
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#1E3A5F"))
+            layoutParams = ViewGroup.LayoutParams(MP, MP)
+            setPadding(48, 72, 48, 40)
+        }
+        fun lp(w: Int = MP, h: Int = WC, top: Int = 0) = LinearLayout.LayoutParams(w, h).apply { topMargin = top }
+
+        root.addView(TextView(ctx).apply {
+            text = "🔒"; textSize = 36f; gravity = Gravity.CENTER
+        }, lp(top = 0))
+
+        tvClock = TextView(ctx).apply {
+            textSize = 36f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        root.addView(tvClock, lp(top = 8))
+
+        root.addView(TextView(ctx).apply {
+            text = "Categorizza le transazioni Revolut"
+            textSize = 16f; setTextColor(Color.parseColor("#A78BFA"))
+            gravity = Gravity.CENTER
+        }, lp(top = 8))
+
+        tvCaProgress = TextView(ctx).apply {
+            textSize = 13f; setTextColor(Color.parseColor("#94A3B8")); gravity = Gravity.CENTER
+        }
+        root.addView(tvCaProgress, lp(top = 10))
+
+        tvCaTransaction = TextView(ctx).apply {
+            textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(16, 16, 16, 16)
+        }
+        root.addView(tvCaTransaction, lp(top = 16))
+
+        llCaCategories = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(ctx).apply { addView(llCaCategories) }
+        root.addView(scroll, LinearLayout.LayoutParams(MP, 0, 1f).apply { topMargin = 16 })
+
+        val btnSkip = Button(ctx).apply {
+            text = "Rinvia — decido dopo"
+            textSize = 14f; setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#7C3AED"))
+            setPadding(32, 20, 32, 20)
+            setOnClickListener { onSnooze() }
+        }
+        root.addView(btnSkip, lp(top = 16))
+
+        renderCaCurrentTransaction()
+        return root
+    }
+
+    /** Mostra la prima transazione ancora in lista + i bottoni categoria; se la lista è vuota
+        (tutte categorizzate) chiude il blocco come per un blocco informativo normale. */
+    private fun renderCaCurrentTransaction() {
+        if (caTransactions.isEmpty()) {
+            tvCaProgress.text = ""
+            tvCaTransaction.text = "✅ Fatto! Nessuna transazione da categorizzare."
+            llCaCategories.removeAllViews()
+            handler.postDelayed({ if (rootView != null) onInfoDismiss() }, 1200)
+            return
+        }
+        val tx = caTransactions[0]
+        val desc = tx.optString("description", "").ifBlank { "Transazione" }
+        val amount = tx.optDouble("amount", 0.0)
+        val currency = tx.optString("currency", "").ifBlank { "EUR" }
+        val date = tx.optString("date", "")
+        tvCaProgress.text = "1 di ${caTransactions.size}" + if (date.isNotBlank()) " — $date" else ""
+        tvCaTransaction.text = "$desc\n${String.format(Locale.ITALY, "%.2f", amount)} $currency"
+
+        llCaCategories.removeAllViews()
+        caCategories.forEach { cat ->
+            val catId = cat.optString("id", "")
+            if (catId.isBlank()) return@forEach
+            val catName = cat.optString("name", "")
+            val catIcon = cat.optString("icon", "")
+            val label = (if (catIcon.isNotBlank()) "$catIcon " else "") + catName
+            val btn = Button(ctx).apply {
+                text = label; textSize = 15f; setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#334155"))
+                setAllCaps(false)
+                setPadding(24, 24, 24, 24)
+                setOnClickListener { onCategoryChosen(tx, catId) }
+            }
+            llCaCategories.addView(btn, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 10 })
+        }
+    }
+
+    /** Chiama la RPC in background, poi rimuove la transazione dalla lista locale e da
+        metadata.cost_analysis.transactions (PATCH) così un eventuale rinvio non la ripropone. */
+    private fun onCategoryChosen(tx: JSONObject, categoryId: String) {
+        val txId = tx.optString("id", "")
+        if (txId.isBlank()) return
+        llCaCategories.removeAllViews()
+        tvCaTransaction.text = "Salvataggio…"
+        Thread {
+            val ok = SupabaseApi(ctx).setTransactionCategory(txId, categoryId)
+            handler.post {
+                if (rootView == null) return@post // blocco chiuso nel frattempo (es. rinvio)
+                if (ok) {
+                    caTransactions.removeAll { it.optString("id") == txId }
+                    persistCaData()
+                    renderCaCurrentTransaction()
+                } else {
+                    tvCaTransaction.text = "Errore di salvataggio, riprovo…"
+                    handler.postDelayed({ if (rootView != null) renderCaCurrentTransaction() }, 1500)
+                }
+            }
+        }.start()
+    }
+
+    /** Salva la lista transazioni residue sia in Prefs (per un eventuale rebuild della view)
+        sia su Supabase (PATCH dell'intero metadata, device_token incluso — vedi
+        SupabaseApi.patchQueueMetadata). */
+    private fun persistCaData() {
+        val meta = caMetadata ?: return
+        val ca = meta.optJSONObject("cost_analysis") ?: JSONObject().also { meta.put("cost_analysis", it) }
+        val arr = JSONArray()
+        caTransactions.forEach { arr.put(it) }
+        ca.put("transactions", arr)
+        Prefs.setBlockCaData(ctx, meta.toString())
+        if (caQueueId.isNotBlank()) {
+            val metaSnapshot = meta.toString()
+            Thread { SupabaseApi(ctx).patchQueueMetadata(caQueueId, metaSnapshot) }.start()
+        }
+    }
+
     private fun buildView(): View {
+        isCaPickerView = false
+        if (Prefs.isInfoOnlyBlock(ctx)) {
+            loadCaDataFromPrefs()
+            if (caTransactions.isNotEmpty() && caCategories.isNotEmpty()) {
+                return buildCategoryPickerView()
+            }
+        }
         // Verde per le sfide Ta Firi?, blu per le notifiche informative (es. cost_analysis),
         // rosso per i task (comportamento invariato).
         val bgColor = when {
