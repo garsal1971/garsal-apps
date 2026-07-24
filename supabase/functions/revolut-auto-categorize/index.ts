@@ -173,13 +173,15 @@ Deno.serve(async (req) => {
     .not('account_id', 'is', null)
     .maybeSingle();
 
-  if (!connection) {
+  if (!connection && !isDryRun) {
     return new Response(
       JSON.stringify({ skipped: 'no_active_revolut_connection' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-  const bankConnectionId = connection.id as string;
+  // In dry-run non serve una connessione Revolut reale (si testano solo dedup/categorizzazione):
+  // se manca, bankConnectionId resta null e la query pendingSameConnection sotto viene saltata.
+  const bankConnectionId = (connection?.id as string | undefined) ?? null;
 
   const { data: syncLog } = isDryRun
     ? { data: null }
@@ -200,7 +202,7 @@ Deno.serve(async (req) => {
       const MAX_PAGES = 50;
       let continuationKey: string | null = null;
       do {
-        const url = new URL(`${ENABLE_BANKING_API_BASE}/accounts/${connection.account_id}/transactions`);
+        const url = new URL(`${ENABLE_BANKING_API_BASE}/accounts/${connection!.account_id}/transactions`);
         if (continuationKey) url.searchParams.set('continuation_key', continuationKey);
         const txRes = await fetch(url.toString(), { headers: { Authorization: 'Bearer ' + jwt } });
         const txData = await txRes.json();
@@ -283,15 +285,17 @@ Deno.serve(async (req) => {
           .is('bank_connection_id', null)
           .range(from, to)
       );
-      const pendingSameConnection = await fetchAllRows((from, to) =>
-        supabase
-          .from('ca_transactions')
-          .select('id, date, amount, mcc, type, spender_person_id, description')
-          .eq('user_id', userId)
-          .eq('bank_connection_id', bankConnectionId)
-          .eq('raw->>status', 'PDNG')
-          .range(from, to)
-      );
+      const pendingSameConnection = bankConnectionId
+        ? await fetchAllRows((from, to) =>
+            supabase
+              .from('ca_transactions')
+              .select('id, date, amount, mcc, type, spender_person_id, description')
+              .eq('user_id', userId)
+              .eq('bank_connection_id', bankConnectionId)
+              .eq('raw->>status', 'PDNG')
+              .range(from, to)
+          )
+        : [];
 
       const candidatePool = [...unlinked, ...pendingSameConnection];
       const toInsert: typeof rows = [];
@@ -347,7 +351,7 @@ Deno.serve(async (req) => {
             .single();
           nucleo = createdNucleo;
         }
-        const nucleoId = nucleo?.id || connection.owner_person_id || null;
+        const nucleoId = nucleo?.id || connection!.owner_person_id || null;
 
         const spenderFor = (t: (typeof rows)[number]) => {
           const mapping = t.cardIssuer && t.cardIdentification
