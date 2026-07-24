@@ -14,6 +14,11 @@
 // REVOLUT_SYNC_USER_ID (uuid dell'utente — impostato una tantum con `supabase secrets set`).
 // v1 — 2026-07-24 · v1.1 — 2026-07-24: fix entity_id/entity_type per il vincolo di
 // cm_notification_rules (vedi migration 20260724120000), nessuna modifica funzionale
+// v1.2 — 2026-07-24: modalità test dry-run — POST con body { "test_transactions": [...] }
+// (stesso shape di Enable Banking: transaction_amount.amount/currency, credit_debit_indicator,
+// remittance_information, booking_date, entry_reference, merchant_category_code) simula
+// dedup/categorizzazione/notifica senza scrivere nulla, per testare la pipeline senza toccare
+// il conto Revolut reale.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -128,12 +133,29 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  // Modalità test: POST con body { "test_transactions": [ ... shape Enable Banking ... ] }
+  // salta la vera chiamata a Enable Banking e usa queste transazioni finte. Nessuna scrittura
+  // (ca_transactions, ca_transaction_categories, cm_notification_queue, ca_sync_log) viene
+  // eseguita: la function calcola dedup/categorizzazione/notifica e restituisce solo l'anteprima
+  // in JSON. verify_jwt resta true (default) quindi resta comunque richiesta una chiamata
+  // autenticata (anon key o service role key vanno bene).
+  let testTransactions: unknown[] | null = null;
+  if (req.method === 'POST') {
+    try {
+      const body = await req.json();
+      if (Array.isArray(body?.test_transactions)) testTransactions = body.test_transactions;
+    } catch {
+      // body assente o non JSON: sync normale via cron, si ignora
+    }
+  }
+  const isDryRun = testTransactions !== null;
+
   const appId = Deno.env.get('ENABLE_BANKING_APP_ID');
   const privateKeyPem = Deno.env.get('ENABLE_BANKING_PRIVATE_KEY');
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const userId = Deno.env.get('REVOLUT_SYNC_USER_ID');
-  if (!appId || !privateKeyPem || !supabaseUrl || !supabaseServiceRoleKey || !userId) {
+  if (!supabaseUrl || !supabaseServiceRoleKey || !userId || (!isDryRun && (!appId || !privateKeyPem))) {
     return new Response(
       JSON.stringify({ error: { message: 'Configurazione mancante (secrets Enable Banking, Supabase o REVOLUT_SYNC_USER_ID).' } }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -159,32 +181,38 @@ Deno.serve(async (req) => {
   }
   const bankConnectionId = connection.id as string;
 
-  const { data: syncLog } = await supabase
-    .from('ca_sync_log')
-    .insert({ user_id: userId, bank_connection_id: bankConnectionId, status: 'running' })
-    .select()
-    .single();
+  const { data: syncLog } = isDryRun
+    ? { data: null }
+    : await supabase
+        .from('ca_sync_log')
+        .insert({ user_id: userId, bank_connection_id: bankConnectionId, status: 'running' })
+        .select()
+        .single();
 
   try {
-    const jwt = await createEnableBankingJWT(appId, privateKeyPem);
-
-    const MAX_PAGES = 50;
     const rawTransactions: unknown[] = [];
-    let continuationKey: string | null = null;
     let pageCount = 0;
-    do {
-      const url = new URL(`${ENABLE_BANKING_API_BASE}/accounts/${connection.account_id}/transactions`);
-      if (continuationKey) url.searchParams.set('continuation_key', continuationKey);
-      const txRes = await fetch(url.toString(), { headers: { Authorization: 'Bearer ' + jwt } });
-      const txData = await txRes.json();
-      if (!txRes.ok) {
-        throw new Error('Errore Enable Banking: ' + (txData?.message || txRes.status));
-      }
-      const page: unknown[] = Array.isArray(txData.transactions) ? txData.transactions : [];
-      rawTransactions.push(...page);
-      continuationKey = txData.continuation_key || null;
-      pageCount++;
-    } while (continuationKey && pageCount < MAX_PAGES);
+    if (isDryRun) {
+      rawTransactions.push(...(testTransactions as unknown[]));
+    } else {
+      const jwt = await createEnableBankingJWT(appId as string, privateKeyPem as string);
+
+      const MAX_PAGES = 50;
+      let continuationKey: string | null = null;
+      do {
+        const url = new URL(`${ENABLE_BANKING_API_BASE}/accounts/${connection.account_id}/transactions`);
+        if (continuationKey) url.searchParams.set('continuation_key', continuationKey);
+        const txRes = await fetch(url.toString(), { headers: { Authorization: 'Bearer ' + jwt } });
+        const txData = await txRes.json();
+        if (!txRes.ok) {
+          throw new Error('Errore Enable Banking: ' + (txData?.message || txRes.status));
+        }
+        const page: unknown[] = Array.isArray(txData.transactions) ? txData.transactions : [];
+        rawTransactions.push(...page);
+        continuationKey = txData.continuation_key || null;
+        pageCount++;
+      } while (continuationKey && pageCount < MAX_PAGES);
+    }
 
     const { data: mccMap } = await supabase
       .from('ca_mcc_category_map')
@@ -294,104 +322,164 @@ Deno.serve(async (req) => {
         }
       }
 
-      const { data: cardMap } = await supabase
-        .from('ca_card_person_map')
-        .select('card_issuer, card_identification, person_id')
-        .eq('user_id', userId);
+      let dryRunPreview: {
+        date: string | null; description: string; amount: number; currency: string | null; mcc: string | null;
+        wouldMergeWithExistingId: string | null; category: { id: string; source: string } | null;
+      }[] = [];
 
-      let { data: nucleo } = await supabase
-        .from('ca_people')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('name', 'NUCLEO')
-        .maybeSingle();
-      if (!nucleo) {
-        const { data: createdNucleo } = await supabase
+      if (!isDryRun) {
+        const { data: cardMap } = await supabase
+          .from('ca_card_person_map')
+          .select('card_issuer, card_identification, person_id')
+          .eq('user_id', userId);
+
+        let { data: nucleo } = await supabase
           .from('ca_people')
-          .insert({ user_id: userId, name: 'NUCLEO', color: '#6B7280' })
           .select('id')
-          .single();
-        nucleo = createdNucleo;
-      }
-      const nucleoId = nucleo?.id || connection.owner_person_id || null;
+          .eq('user_id', userId)
+          .eq('name', 'NUCLEO')
+          .maybeSingle();
+        if (!nucleo) {
+          const { data: createdNucleo } = await supabase
+            .from('ca_people')
+            .insert({ user_id: userId, name: 'NUCLEO', color: '#6B7280' })
+            .select('id')
+            .single();
+          nucleo = createdNucleo;
+        }
+        const nucleoId = nucleo?.id || connection.owner_person_id || null;
 
-      const spenderFor = (t: (typeof rows)[number]) => {
-        const mapping = t.cardIssuer && t.cardIdentification
-          ? (cardMap || []).find((m) => m.card_issuer === t.cardIssuer && m.card_identification === t.cardIdentification)
-          : null;
-        return mapping ? mapping.person_id : nucleoId;
-      };
+        const spenderFor = (t: (typeof rows)[number]) => {
+          const mapping = t.cardIssuer && t.cardIdentification
+            ? (cardMap || []).find((m) => m.card_issuer === t.cardIssuer && m.card_identification === t.cardIdentification)
+            : null;
+          return mapping ? mapping.person_id : nucleoId;
+        };
 
-      const newTxIds: string[] = [];
+        const newTxIds: string[] = [];
 
-      if (toMerge.length) {
-        const existingById = new Map([...unlinked, ...pendingSameConnection].map((c) => [c.id, c]));
-        for (const { existingId, row } of toMerge) {
-          const existing = existingById.get(existingId);
-          const update: Record<string, unknown> = {
+        if (toMerge.length) {
+          const existingById = new Map([...unlinked, ...pendingSameConnection].map((c) => [c.id, c]));
+          for (const { existingId, row } of toMerge) {
+            const existing = existingById.get(existingId);
+            const update: Record<string, unknown> = {
+              bank_connection_id: bankConnectionId,
+              external_id: row.externalId,
+              raw: row.raw,
+            };
+            if (!existing?.mcc) update.mcc = row.mcc;
+            if (!existing?.type) update.type = row.type;
+            if (!existing?.spender_person_id) update.spender_person_id = spenderFor(row);
+            const { error: updErr } = await supabase.from('ca_transactions').update(update).eq('id', existingId);
+            if (!updErr) newTxIds.push(existingId);
+          }
+        }
+
+        if (toInsert.length) {
+          const insertRows = toInsert.map((t) => ({
+            user_id: userId,
+            date: t.date,
+            amount: t.amount,
+            currency: t.currency,
+            description: t.description,
+            type: t.type,
+            spender_person_id: spenderFor(t),
+            person_source: 'unassigned',
             bank_connection_id: bankConnectionId,
-            external_id: row.externalId,
-            raw: row.raw,
-          };
-          if (!existing?.mcc) update.mcc = row.mcc;
-          if (!existing?.type) update.type = row.type;
-          if (!existing?.spender_person_id) update.spender_person_id = spenderFor(row);
-          const { error: updErr } = await supabase.from('ca_transactions').update(update).eq('id', existingId);
-          if (!updErr) newTxIds.push(existingId);
-        }
-      }
-
-      if (toInsert.length) {
-        const insertRows = toInsert.map((t) => ({
-          user_id: userId,
-          date: t.date,
-          amount: t.amount,
-          currency: t.currency,
-          description: t.description,
-          type: t.type,
-          spender_person_id: spenderFor(t),
-          person_source: 'unassigned',
-          bank_connection_id: bankConnectionId,
-          external_id: t.externalId,
-          mcc: t.mcc,
-          import_source: 'bank_sync',
-          raw: t.raw,
-        }));
-        const { data: insertedRows, error: insertError } = await supabase
-          .from('ca_transactions')
-          .upsert(insertRows, { onConflict: 'bank_connection_id,external_id', ignoreDuplicates: true })
-          .select('id, description, mcc');
-        if (insertError) throw new Error(insertError.message);
-        importedCount = (insertedRows || []).length;
-        newTxIds.push(...(insertedRows || []).map((t: any) => t.id));
-      }
-
-      // Categorizzazione deterministica (MCC → merchant appreso → regole) per tutte le
-      // transazioni toccate in questo run che non hanno già una categoria.
-      if (newTxIds.length) {
-        const { data: existingCats } = await supabase
-          .from('ca_transaction_categories')
-          .select('transaction_id')
-          .in('transaction_id', newTxIds);
-        const alreadyCategorized = new Set((existingCats || []).map((c: any) => c.transaction_id));
-        const toCategorize = newTxIds.filter((id) => !alreadyCategorized.has(id));
-        if (toCategorize.length) {
-          const { data: txsToCategorize } = await supabase
+            external_id: t.externalId,
+            mcc: t.mcc,
+            import_source: 'bank_sync',
+            raw: t.raw,
+          }));
+          const { data: insertedRows, error: insertError } = await supabase
             .from('ca_transactions')
-            .select('id, description, mcc')
-            .in('id', toCategorize);
-          const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
-          for (const t of txsToCategorize || []) {
-            const { categoryId, source } = categorizeCategory(
-              t.description, t.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
-            );
-            if (categoryId && source) categoryRows.push({ transaction_id: t.id, category_id: categoryId, source });
-          }
-          if (categoryRows.length) {
-            await supabase.from('ca_transaction_categories').insert(categoryRows);
+            .upsert(insertRows, { onConflict: 'bank_connection_id,external_id', ignoreDuplicates: true })
+            .select('id, description, mcc');
+          if (insertError) throw new Error(insertError.message);
+          importedCount = (insertedRows || []).length;
+          newTxIds.push(...(insertedRows || []).map((t: any) => t.id));
+        }
+
+        // Categorizzazione deterministica (MCC → merchant appreso → regole) per tutte le
+        // transazioni toccate in questo run che non hanno già una categoria.
+        if (newTxIds.length) {
+          const { data: existingCats } = await supabase
+            .from('ca_transaction_categories')
+            .select('transaction_id')
+            .in('transaction_id', newTxIds);
+          const alreadyCategorized = new Set((existingCats || []).map((c: any) => c.transaction_id));
+          const toCategorize = newTxIds.filter((id) => !alreadyCategorized.has(id));
+          if (toCategorize.length) {
+            const { data: txsToCategorize } = await supabase
+              .from('ca_transactions')
+              .select('id, description, mcc')
+              .in('id', toCategorize);
+            const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
+            for (const t of txsToCategorize || []) {
+              const { categoryId, source } = categorizeCategory(
+                t.description, t.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
+              );
+              if (categoryId && source) categoryRows.push({ transaction_id: t.id, category_id: categoryId, source });
+            }
+            if (categoryRows.length) {
+              await supabase.from('ca_transaction_categories').insert(categoryRows);
+            }
           }
         }
+      } else {
+        // Dry-run: nessuna scrittura, solo calcolo dell'anteprima (merge/insert + categoria
+        // deterministica) per ogni transazione finta ricevuta.
+        const preview = [
+          ...toMerge.map((m) => ({ ...m.row, wouldMergeWithId: m.existingId as string | null })),
+          ...toInsert.map((r) => ({ ...r, wouldMergeWithId: null as string | null })),
+        ];
+        dryRunPreview = preview.map((r) => {
+          const { categoryId, source } = categorizeCategory(
+            r.description, r.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
+          );
+          return {
+            date: r.date, description: r.description, amount: r.amount, currency: r.currency, mcc: r.mcc,
+            wouldMergeWithExistingId: r.wouldMergeWithId,
+            category: categoryId && source ? { id: categoryId, source } : null,
+          };
+        });
       }
+
+      if (isDryRun) {
+        const allTxNow = await fetchAllRows((from, to) =>
+          supabase.from('ca_transactions').select('id').eq('user_id', userId).range(from, to)
+        );
+        const allCatsNow = await fetchAllRows((from, to) =>
+          supabase.from('ca_transaction_categories').select('transaction_id').range(from, to)
+        );
+        const categorizedIdsNow = new Set(allCatsNow.map((c: any) => c.transaction_id));
+        const currentUncategorizedCount = allTxNow.filter((t: any) => !categorizedIdsNow.has(t.id)).length;
+        const newWithoutCategory = dryRunPreview.filter((p) => !p.wouldMergeWithExistingId && !p.category).length;
+        const hypotheticalUncategorizedCount = currentUncategorizedCount + newWithoutCategory;
+
+        return new Response(JSON.stringify({
+          mode: 'dry_run',
+          note: 'Nessuna scrittura eseguita: transazioni non salvate, notifica non accodata. Solo simulazione.',
+          receivedCount: rows.length,
+          wouldMergeCount: dryRunPreview.filter((p) => p.wouldMergeWithExistingId).length,
+          wouldInsertCount: dryRunPreview.filter((p) => !p.wouldMergeWithExistingId).length,
+          currentUncategorizedCount,
+          hypotheticalUncategorizedCount,
+          previewNotification: hypotheticalUncategorizedCount > 0 ? {
+            title: `${hypotheticalUncategorizedCount} transazion${hypotheticalUncategorizedCount === 1 ? 'e' : 'i'} Revolut da categorizzare`,
+            body: `Dopo il sync automatico restano ${hypotheticalUncategorizedCount} transazioni senza categoria. Apri Analisi Costi per completarle.`,
+          } : null,
+          transactions: dryRunPreview,
+        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } else if (isDryRun) {
+      // Nessuna transazione finta valida (filtrata da .filter(date && externalId)).
+      return new Response(JSON.stringify({
+        mode: 'dry_run',
+        note: 'Nessuna transazione valida in test_transactions (servono almeno booking_date/date e entry_reference/transaction_id).',
+        receivedCount: 0,
+        transactions: [],
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Conteggio transazioni ancora senza categoria (stessa definizione del contatore
