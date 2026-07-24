@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.60</title>
+    <title>Analisi Costi v1.0.61</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -864,8 +864,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.60';
-    var BUILD_TIME  = '2026-07-24T21:50:00Z';
+    var APP_VERSION = 'v1.0.61';
+    var BUILD_TIME  = '2026-07-24T22:05:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1328,9 +1328,10 @@
             // Il flag conta solo sulle categorie principali; le sotto-categorie lo ereditano dal
             // padre (vedi isTxExcludedFromTotals -> topCategoryId), quindi resta false per loro.
             excluded_from_totals: isSub ? false : document.getElementById('categoryExcludedFromTotals').checked,
-            // A differenza di excluded_from_totals, qui vale anche per le sotto-categorie
-            // (disattivarla su una principale nasconde comunque tutte le sue figlie dallo
-            // Smart Block, lato revolut-auto-categorize — vedi migration 20260724290000).
+            // A differenza di excluded_from_totals, qui vale anche per le sotto-categorie: si
+            // può disattivare/riattivare sia sulla principale (propagata a tutte le figlie subito
+            // sotto, vedi dopo il salvataggio) sia su una singola sotto-categoria (resta poi
+            // indipendente dalla principale finché non la si modifica di nuovo).
             visible_in_app: document.getElementById('categoryVisibleInApp').checked,
             user_id: currentUserId()
         };
@@ -1344,6 +1345,14 @@
         }
         if (handleAuthError(error)) return;
         if (error) { alert('Errore: ' + error.message); return; }
+        if (!isSub && savedId) {
+            // "Visibile in app" sulla principale si propaga a tutte le sue sotto-categorie
+            // esistenti — sostituisce il valore che avevano, non lo combina.
+            const { error: propErr } = await sb.from('ca_categories')
+                .update({ visible_in_app: payload.visible_in_app })
+                .eq('parent_id', savedId);
+            if (propErr) console.error('Propagazione visible_in_app alle sotto-categorie fallita:', propErr);
+        }
         await loadCategories();
         renderCategories();
         showToast('✅ Categoria salvata');

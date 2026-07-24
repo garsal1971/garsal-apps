@@ -27,8 +27,10 @@
 // raggruppata principale/sottocategorie + ricerca (stesso pattern di
 // renderTxCategorySuggestions in cost-analysis.html).
 // v1.3.2 — 2026-07-24: filtra le categorie con ca_categories.visible_in_app=false dal payload
-// dello Smart Block (migration 20260724290000) — disattivarlo su una principale nasconde anche
-// tutte le sue sotto-categorie, indipendentemente dal loro flag individuale.
+// dello Smart Block (migration 20260724290000).
+// v1.3.3 — 2026-07-24: la cascata principale → sotto-categorie ora avviene in scrittura lato
+// cost-analysis.html (propagazione al salvataggio), non più ricalcolata qui — si filtra solo
+// sul valore proprio di ogni categoria.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -533,21 +535,17 @@ Deno.serve(async (req) => {
           .in('id', uncategorizedIds.slice(0, MAX_EMBEDDED));
         // parent_id incluso per raggruppare categorie/sottocategorie nel picker Android come
         // in cost-analysis.html (renderTxCategorySuggestions): principali in grassetto, figlie
-        // indentate subito sotto, entrambe selezionabili.
-        const { data: allUserCategories } = await supabase
+        // indentate subito sotto, entrambe selezionabili. La cascata principale → sotto-categorie
+        // di visible_in_app avviene lato client al salvataggio (cost-analysis.html saveCategory,
+        // che propaga il valore a tutte le figlie): qui basta filtrare sul valore proprio di
+        // ciascuna riga, senza ricalcolare nulla rispetto al padre.
+        const { data: visibleUserCategories } = await supabase
           .from('ca_categories')
-          .select('id, name, icon, parent_id, visible_in_app')
+          .select('id, name, icon, parent_id')
           .eq('user_id', userId)
+          .eq('visible_in_app', true)
           .order('name');
-
-        // visible_in_app nascosta su una principale nasconde anche tutte le sue sotto-categorie
-        // dallo Smart Block, indipendentemente dal flag della singola figlia.
-        const hiddenTopIds = new Set(
-          (allUserCategories || []).filter((c: any) => !c.parent_id && !c.visible_in_app).map((c: any) => c.id)
-        );
-        const visibleCategories = (allUserCategories || [])
-          .filter((c: any) => c.visible_in_app && !(c.parent_id && hiddenTopIds.has(c.parent_id)))
-          .map((c: any) => ({ id: c.id, name: c.name, icon: c.icon, parent_id: c.parent_id }));
+        const visibleCategories = visibleUserCategories || [];
 
         const metadata: Record<string, unknown> = {
           cost_analysis: {
