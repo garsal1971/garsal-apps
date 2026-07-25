@@ -12,6 +12,21 @@ The suite is branded **AppSphere** and the UI language is **Italian**.
 
 ---
 
+## Utenti — applicazione familiare
+
+**garsal-apps non è un prodotto multi-tenant generico: è un'applicazione familiare**, pensata per e usata esclusivamente da un piccolo gruppo di persone reali. Informazione informale, utile per capire richieste che parlano di persone specifiche per nome (es. notifiche solo per una persona, dati condivisi solo con alcuni):
+
+| Persona | Ruolo |
+|---|---|
+| **Salvatore** | Utente principale / maggiore utilizzatore (account `garsal1971@gmail.com`, quello con cui interagisce Claude in questa repo) |
+| **Teresa** | Condivide con Salvatore i dati di Finanza (`ta-firi`/finanza) e ora anche di Analisi Costi |
+| **Rosa** | Condivide con Salvatore parte dei dati di Finanza |
+| **Ada** | Solo utente di Analisi Costi (non ha accesso a Finanza) |
+
+Questo elenco può cambiare nel tempo — se una richiesta menziona una persona non elencata qui, chiedere chiarimenti invece di assumere un ruolo.
+
+---
+
 ## Client supportati
 
 Le app sono progettate per funzionare su:
