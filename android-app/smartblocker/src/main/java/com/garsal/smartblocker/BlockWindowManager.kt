@@ -303,7 +303,13 @@ class BlockWindowManager(private val ctx: Context) {
             textSize = 14f; setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#7C3AED"))
             setPadding(32, 20, 32, 20)
-            setOnClickListener { onSnooze() }
+            // Niente ACTION_SNOOZE/alarm locale: la riga cm_notification_queue è già 'sent'
+            // (BlockerService → markSent), quindi non riapparirebbe comunque da una nuova query
+            // Supabase con lo stesso id — riusare l'alarm di rinvio la riproporrebbe solo dalla
+            // cache locale, con dati potenzialmente superati. Si chiude e basta (come
+            // onInfoDismiss/finishCaPickerAndMaybeUnblock): ricomparirà da sola al prossimo giro
+            // del cron revolut-auto-categorize, se restano ancora transazioni senza categoria.
+            setOnClickListener { finishCaPickerAndMaybeUnblock() }
         }
         root.addView(btnSkip, lp(top = 16))
 
