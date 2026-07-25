@@ -41,10 +41,13 @@ class BlockWindowManager(private val ctx: Context) {
     private var caMetadata: JSONObject? = null          // metadata grezzo (device_token + cost_analysis)
     private var caTransactions = mutableListOf<JSONObject>()
     private var caCategories = listOf<JSONObject>()
+    private var caIndex = 0                              // transazione mostrata (navigabile con ◀ ▶)
     private lateinit var tvCaProgress: TextView
     private lateinit var tvCaTransaction: TextView
     private lateinit var etCaSearch: EditText
     private lateinit var llCaCategories: LinearLayout
+    private lateinit var btnCaPrev: Button
+    private lateinit var btnCaNext: Button
 
     private val clockTick = object : Runnable {
         override fun run() {
@@ -217,6 +220,7 @@ class BlockWindowManager(private val ctx: Context) {
         caMetadata = null
         caTransactions = mutableListOf()
         caCategories = listOf()
+        caIndex = 0
         val raw = Prefs.getBlockCaData(ctx)
         if (raw.isBlank()) return
         try {
@@ -265,10 +269,31 @@ class BlockWindowManager(private val ctx: Context) {
             gravity = Gravity.CENTER
         }, lp(top = 8))
 
+        val caNavRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        btnCaPrev = Button(ctx).apply {
+            text = "◀"
+            textSize = 16f; setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#334155"))
+            setPadding(28, 8, 28, 8)
+            setOnClickListener { onCaPrev() }
+        }
+        caNavRow.addView(btnCaPrev, LinearLayout.LayoutParams(WC, WC))
         tvCaProgress = TextView(ctx).apply {
             textSize = 13f; setTextColor(Color.parseColor("#94A3B8")); gravity = Gravity.CENTER
         }
-        root.addView(tvCaProgress, lp(top = 10))
+        caNavRow.addView(tvCaProgress, LinearLayout.LayoutParams(0, WC, 1f))
+        btnCaNext = Button(ctx).apply {
+            text = "▶"
+            textSize = 16f; setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#334155"))
+            setPadding(28, 8, 28, 8)
+            setOnClickListener { onCaNext() }
+        }
+        caNavRow.addView(btnCaNext, LinearLayout.LayoutParams(WC, WC))
+        root.addView(caNavRow, lp(top = 10))
 
         tvCaTransaction = TextView(ctx).apply {
             textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
@@ -325,29 +350,50 @@ class BlockWindowManager(private val ctx: Context) {
         c'è una ricerca in corso — solo una alla volta (fisarmonica), nessuna aperta di default. */
     private var caExpandedTopId: String? = null
 
-    /** Mostra la prima transazione ancora in lista; se è vuota (tutte categorizzate) chiude il
-        blocco come per un blocco informativo normale. Altrimenti azzera ricerca/apertura e
-        ridisegna la lista categorie (principali chiuse). */
+    /** Mostra la transazione alla posizione caIndex; se la lista è vuota (tutte categorizzate)
+        chiude il blocco come per un blocco informativo normale. Altrimenti azzera ricerca/apertura
+        e ridisegna la lista categorie (principali chiuse). */
     private fun renderCaCurrentTransaction() {
         if (caTransactions.isEmpty()) {
+            caIndex = 0
             tvCaProgress.text = ""
             tvCaTransaction.text = "✅ Fatto! Nessuna transazione da categorizzare."
             etCaSearch.visibility = View.GONE
             llCaCategories.removeAllViews()
+            btnCaPrev.visibility = View.GONE
+            btnCaNext.visibility = View.GONE
             handler.postDelayed({ if (rootView != null) finishCaPickerAndMaybeUnblock() }, 1200)
             return
         }
-        val tx = caTransactions[0]
+        if (caIndex >= caTransactions.size) caIndex = caTransactions.size - 1
+        if (caIndex < 0) caIndex = 0
+        val tx = caTransactions[caIndex]
         val desc = tx.optString("description", "").ifBlank { "Transazione" }
         val amount = tx.optDouble("amount", 0.0)
         val currency = tx.optString("currency", "").ifBlank { "EUR" }
         val date = tx.optString("date", "")
-        tvCaProgress.text = "1 di ${caTransactions.size}" + if (date.isNotBlank()) " — $date" else ""
+        tvCaProgress.text = "${caIndex + 1} di ${caTransactions.size}" + if (date.isNotBlank()) " — $date" else ""
         tvCaTransaction.text = "$desc\n${String.format(Locale.ITALY, "%.2f", amount)} $currency"
         etCaSearch.visibility = View.VISIBLE
         etCaSearch.setText("")
         caExpandedTopId = null
         renderCaCategoryList("")
+        btnCaPrev.visibility = View.VISIBLE
+        btnCaNext.visibility = View.VISIBLE
+        btnCaPrev.isEnabled = caIndex > 0
+        btnCaPrev.alpha = if (caIndex > 0) 1f else 0.4f
+        btnCaNext.isEnabled = caIndex < caTransactions.size - 1
+        btnCaNext.alpha = if (caIndex < caTransactions.size - 1) 1f else 0.4f
+    }
+
+    /** Naviga alla transazione precedente/successiva senza modificarne la categoria — a
+        differenza di onCategoryChosen(), che avanza automaticamente rimuovendo quella appena
+        fatta, qui si scorre soltanto la lista per rivedere o saltare le altre transazioni. */
+    private fun onCaPrev() {
+        if (caIndex > 0) { caIndex--; renderCaCurrentTransaction() }
+    }
+    private fun onCaNext() {
+        if (caIndex < caTransactions.size - 1) { caIndex++; renderCaCurrentTransaction() }
     }
 
     /** Ridisegna la lista categorie. Senza ricerca: solo le principali, chiuse — toccarne una
@@ -358,7 +404,7 @@ class BlockWindowManager(private val ctx: Context) {
     private fun renderCaCategoryList(query: String) {
         llCaCategories.removeAllViews()
         if (caTransactions.isEmpty()) return
-        val tx = caTransactions[0]
+        val tx = caTransactions[caIndex.coerceIn(0, caTransactions.size - 1)]
         val q = query.trim().lowercase(Locale.getDefault())
         val searching = q.isNotBlank()
 
