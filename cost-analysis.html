@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.61</title>
+    <title>Analisi Costi v1.0.62</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -864,8 +864,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.61';
-    var BUILD_TIME  = '2026-07-24T22:05:00Z';
+    var APP_VERSION = 'v1.0.62';
+    var BUILD_TIME  = '2026-07-25T13:45:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2486,7 +2486,7 @@
     // ==========================================
     // TRANSAZIONI
     // ==========================================
-    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '', sortBy: 'title' };
+    let txFilters = { text: '', categoryId: '', personId: '', spenderId: '', from: '', to: '', amountFrom: '', amountTo: '', type: '', sortBy: 'date_desc' };
     let _txView = 'list'; // 'list' | 'summary'
 
     async function loadTransactions() {
@@ -2512,6 +2512,21 @@
         txCategories = [];
         renderActivePage();
         showToast('🗑️ Tutte le transazioni sono state eliminate');
+    }
+
+    // Elimina una singola transazione (cascade su ca_transaction_categories).
+    async function deleteTransaction(txId) {
+        const t = transactions.find(x => x.id === txId);
+        if (!t) return;
+        if (!confirm(`Eliminare la transazione "${t.description || '(senza descrizione)'}" del ${formatDateIt(t.date)} (${fmtEUR(t.amount)})? Operazione irreversibile.`)) return;
+        const { error } = await sb.from('ca_transactions').delete().eq('id', txId);
+        if (handleAuthError(error)) return;
+        if (error) { alert('Errore: ' + error.message); return; }
+        transactions = transactions.filter(x => x.id !== txId);
+        txCategories = txCategories.filter(tc => tc.transaction_id !== txId);
+        renderTransactionsActiveView();
+        renderDashboard();
+        showToast('🗑️ Transazione eliminata');
     }
 
     function getTxCategoryIds(txId) { return txCategories.filter(tc => tc.transaction_id === txId).map(tc => tc.category_id); }
@@ -2679,6 +2694,7 @@
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxSpender('${t.id}', this.value)">${spenderOptions}</select>
                 <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
                 ${t.raw ? `<button type="button" class="btn btn-small btn-ghost" onclick="openRawDataModal('${t.id}')" title="Vedi il dato grezzo originale (banca o CSV)">🔍 RAW</button>` : ''}
+                <button type="button" class="btn btn-small btn-danger" onclick="deleteTransaction('${t.id}')" title="Elimina questa transazione">🗑️</button>
             </div>
             <label style="margin-top:.4rem;display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);cursor:pointer;" title="Se attivo, le modifiche a categoria e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
                 <input type="checkbox" ${_onlyThisTxIds.has(t.id) ? 'checked' : ''} onchange="toggleOnlyThisTx('${t.id}', this.checked)">
