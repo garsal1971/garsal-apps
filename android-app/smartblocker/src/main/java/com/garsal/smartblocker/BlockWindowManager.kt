@@ -42,6 +42,7 @@ class BlockWindowManager(private val ctx: Context) {
     private var caTransactions = mutableListOf<JSONObject>()
     private var caCategories = listOf<JSONObject>()
     private var caIndex = 0                              // transazione mostrata (navigabile con ◀ ▶)
+    private var caNewSubParentId: String? = null          // categoria principale sotto cui si sta creando una nuova sotto-categoria (null = lista normale)
     private lateinit var tvCaProgress: TextView
     private lateinit var tvCaTransaction: TextView
     private lateinit var etCaSearch: EditText
@@ -221,6 +222,7 @@ class BlockWindowManager(private val ctx: Context) {
         caTransactions = mutableListOf()
         caCategories = listOf()
         caIndex = 0
+        caNewSubParentId = null
         val raw = Prefs.getBlockCaData(ctx)
         if (raw.isBlank()) return
         try {
@@ -390,10 +392,10 @@ class BlockWindowManager(private val ctx: Context) {
         differenza di onCategoryChosen(), che avanza automaticamente rimuovendo quella appena
         fatta, qui si scorre soltanto la lista per rivedere o saltare le altre transazioni. */
     private fun onCaPrev() {
-        if (caIndex > 0) { caIndex--; renderCaCurrentTransaction() }
+        if (caIndex > 0) { caIndex--; caNewSubParentId = null; renderCaCurrentTransaction() }
     }
     private fun onCaNext() {
-        if (caIndex < caTransactions.size - 1) { caIndex++; renderCaCurrentTransaction() }
+        if (caIndex < caTransactions.size - 1) { caIndex++; caNewSubParentId = null; renderCaCurrentTransaction() }
     }
 
     /** Ridisegna la lista categorie. Senza ricerca: solo le principali, chiuse — toccarne una
@@ -405,6 +407,12 @@ class BlockWindowManager(private val ctx: Context) {
         llCaCategories.removeAllViews()
         if (caTransactions.isEmpty()) return
         val tx = caTransactions[caIndex.coerceIn(0, caTransactions.size - 1)]
+        val parentId = caNewSubParentId
+        if (parentId != null) {
+            renderCaNewSubcategoryForm(tx, parentId)
+            return
+        }
+        etCaSearch.visibility = View.VISIBLE
         val q = query.trim().lowercase(Locale.getDefault())
         val searching = q.isNotBlank()
 
@@ -466,6 +474,16 @@ class BlockWindowManager(private val ctx: Context) {
                 val kidLabel = (if (kidIcon.isNotBlank()) "$kidIcon " else "") + kid.optString("name", "")
                 addCategoryButton(kidLabel, sub = true) { onCategoryChosen(tx, kidId) }
             }
+            if (!searching) {
+                llCaCategories.addView(Button(ctx).apply {
+                    text = "➕ Nuova sotto-categoria"
+                    textSize = 13f; setTextColor(Color.parseColor("#A78BFA"))
+                    setBackgroundColor(Color.parseColor("#0F172A"))
+                    setAllCaps(false)
+                    setPadding(24, 16, 24, 16)
+                    setOnClickListener { caNewSubParentId = topId; renderCaCategoryList("") }
+                }, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 6; marginStart = 32 })
+            }
         }
         if (shown == 0) {
             llCaCategories.addView(TextView(ctx).apply {
@@ -475,6 +493,75 @@ class BlockWindowManager(private val ctx: Context) {
                 setPadding(0, 16, 0, 0)
             })
         }
+    }
+
+    /** Modulo inline (al posto della lista categorie) per creare una nuova sotto-categoria di
+        parentId: nasconde il campo ricerca per evitare che digitare lì ridisegni la lista sopra
+        il modulo. "Crea e assegna" chiama la RPC e, se ok, assegna subito la nuova sotto-categoria
+        alla transazione corrente (stesso comportamento del "+" in cost-analysis.html). */
+    private fun renderCaNewSubcategoryForm(tx: JSONObject, parentId: String) {
+        etCaSearch.visibility = View.GONE
+        val parentName = caCategories.find { it.optString("id", "") == parentId }?.optString("name", "") ?: ""
+
+        llCaCategories.addView(TextView(ctx).apply {
+            text = "Nuova sotto-categoria di \"$parentName\""
+            textSize = 13f; setTextColor(Color.parseColor("#94A3B8"))
+        }, LinearLayout.LayoutParams(MP, WC).apply { bottomMargin = 10 })
+
+        val etName = EditText(ctx).apply {
+            hint = "Nome sotto-categoria…"
+            textSize = 15f; setTextColor(Color.WHITE); setHintTextColor(Color.parseColor("#64748B"))
+            setBackgroundColor(Color.parseColor("#0F172A"))
+            setSingleLine(true)
+            setPadding(24, 20, 24, 20)
+        }
+        llCaCategories.addView(etName, LinearLayout.LayoutParams(MP, WC))
+
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        val btnCancel = Button(ctx).apply {
+            text = "Annulla"
+            textSize = 14f; setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#334155"))
+            setAllCaps(false)
+            setOnClickListener { caNewSubParentId = null; renderCaCategoryList("") }
+        }
+        val btnCreate = Button(ctx).apply {
+            text = "Crea e assegna"
+            textSize = 14f; setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#7C3AED"))
+            setAllCaps(false)
+            setOnClickListener {
+                val name = etName.text?.toString()?.trim().orEmpty()
+                if (name.isBlank()) { etName.error = "Obbligatorio"; return@setOnClickListener }
+                createCaSubcategory(tx, parentId, name)
+            }
+        }
+        row.addView(btnCancel, LinearLayout.LayoutParams(0, WC, 1f).apply { marginEnd = 8 })
+        row.addView(btnCreate, LinearLayout.LayoutParams(0, WC, 1f).apply { marginStart = 8 })
+        llCaCategories.addView(row, LinearLayout.LayoutParams(MP, WC).apply { topMargin = 14 })
+    }
+
+    /** Crea la sotto-categoria via RPC e, se riesce, la assegna subito alla transazione corrente
+        (stesso ramo di onCategoryChosen: rimuove la transazione, persiste, avanza). */
+    private fun createCaSubcategory(tx: JSONObject, parentId: String, name: String) {
+        llCaCategories.removeAllViews()
+        tvCaTransaction.text = "Creazione categoria…"
+        Thread {
+            val newId = SupabaseApi(ctx).createSubcategory(tx.optString("id", ""), parentId, name)
+            handler.post {
+                if (rootView == null) return@post
+                caNewSubParentId = null
+                if (newId != null) {
+                    caCategories = caCategories + JSONObject().apply {
+                        put("id", newId); put("name", name); put("icon", ""); put("parent_id", parentId)
+                    }
+                    onCategoryChosen(tx, newId)
+                } else {
+                    tvCaTransaction.text = "Errore creazione categoria, riprova"
+                    handler.postDelayed({ if (rootView != null) renderCaCurrentTransaction() }, 1500)
+                }
+            }
+        }.start()
     }
 
     /** Chiama la RPC in background, poi rimuove la transazione dalla lista locale e da
