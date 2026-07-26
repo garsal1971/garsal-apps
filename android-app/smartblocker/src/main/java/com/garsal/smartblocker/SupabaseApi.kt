@@ -238,6 +238,38 @@ class SupabaseApi(private val ctx: Context) {
     }
 
     /**
+     * Chiama la RPC ca_smart_block_create_subcategory per creare al volo una nuova
+     * sotto-categoria (sotto p_parent_id, una categoria principale) dalla schermata di blocco,
+     * quando nessuna categoria esistente va bene per la transazione mostrata.
+     * Ritorna l'id della sotto-categoria creata, o null in caso di errore.
+     */
+    fun createSubcategory(transactionId: String, parentId: String, name: String): String? {
+        return try {
+            val urlStr = "$base/rest/v1/rpc/ca_smart_block_create_subcategory"
+            val conn = openConn(urlStr, "POST")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = JSONObject()
+                .put("p_transaction_id", transactionId)
+                .put("p_parent_id", parentId)
+                .put("p_name", name)
+            conn.outputStream.write(body.toString().toByteArray())
+            val code = conn.responseCode
+            val resp = if (code < 400) conn.inputStream?.bufferedReader()?.readText() ?: ""
+                       else conn.errorStream?.bufferedReader()?.readText() ?: ""
+            conn.disconnect()
+            AppLogger.log(ctx, "SUPABASE", "createSubcategory $parentId/\"$name\" → HTTP $code $resp")
+            val result = JSONObject(resp.ifBlank { "{}" })
+            if (code in 200..299 && result.optBoolean("ok", false)) {
+                result.optString("id", "").ifBlank { null }
+            } else null
+        } catch (e: Exception) {
+            AppLogger.log(ctx, "SUPABASE", "createSubcategory errore: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Sovrascrive l'intera colonna metadata di una riga cm_notification_queue (PostgREST non
      * supporta il merge parziale di un jsonb via PATCH): il chiamante deve passare l'oggetto
      * metadata completo già aggiornato (es. con cost_analysis.transactions ridotto dopo che
