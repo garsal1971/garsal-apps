@@ -1,0 +1,1933 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obiettivi v1.0.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #6C5CE7;
+            --success: #00B894;
+            --warning: #F39C12;
+            --danger: #E74C3C;
+            --dark: #1F2937;
+            --light: #FFFFFF;
+            --muted: #6B7280;
+            --accent: #2563EB;
+            --border: #E5E7EB;
+            --card-bg: #FFFFFF;
+            --input-bg: #F9FAFB;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Darker Grotesque', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        /* ── TOP BAR ── */
+        #garsal-top-bar {
+            position: fixed; top: 0; left: 0; right: 0; height: 56px;
+            background: #0081C8;
+            display: flex; align-items: center; padding: 0 20px; gap: 10px;
+            z-index: 3000;
+        }
+        #garsal-top-bar-text {
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px;
+        }
+
+        /* ── LAYOUT ── */
+        .app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: calc(100vh - 56px);
+        }
+
+        .sidebar {
+            background: #F3F4F6;
+            padding: 1.0rem 0.75rem;
+            border-right: 1px solid var(--border);
+            position: sticky; top: 56px; height: calc(100vh - 56px);
+            overflow-y: auto;
+        }
+        .nav-menu { display: flex; flex-direction: column; }
+        .nav-item {
+            padding: 0.5rem 0.6rem; margin-bottom: 0.5rem;
+            cursor: pointer; transition: all 0.3s ease;
+            font-size: 1.1rem; font-weight: 500;
+        }
+        .nav-item:hover { background: rgba(37,99,235,0.08); transform: translateX(3px); }
+        .nav-item.active { background: var(--primary); color: white; }
+        @media (min-width: 769px) {
+            .sidebar { display: block !important; position: sticky !important; left: 0 !important; }
+            .nav-item::after { content: " " attr(data-text); }
+        }
+
+        .main-content { padding: 1.5rem; overflow-y: auto; }
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .page-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;
+        }
+        .page-title {
+            font-size: 2.5rem; font-weight: 900;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; white-space: nowrap;
+        }
+        .page-hint { font-size: 1rem; color: var(--muted); margin-bottom: 1.25rem; max-width: 62ch; }
+
+        /* ── OBIETTIVO CARD ── */
+        .obj-card {
+            border: 2px solid var(--border);
+            background: var(--card-bg);
+            margin-bottom: 1.25rem;
+            transition: all 0.2s;
+        }
+        .obj-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+        .obj-color-bar { height: 6px; }
+
+        .obj-body { padding: 1.1rem 1.25rem; }
+
+        .obj-head {
+            display: flex; align-items: flex-start; gap: 0.75rem;
+            margin-bottom: 0.35rem;
+        }
+        .obj-title {
+            flex: 1; font-size: 1.5rem; font-weight: 900; line-height: 1.2;
+            cursor: pointer;
+        }
+        .obj-title:hover { color: var(--accent); }
+        .obj-why {
+            font-size: 1rem; color: var(--muted); font-style: italic;
+            margin-bottom: 0.85rem; line-height: 1.4;
+        }
+        .obj-meta {
+            font-family: 'Space Mono', monospace; font-size: 0.7rem;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px;
+        }
+
+        .status-pill {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem; font-weight: 700; padding: 0.2rem 0.5rem;
+            border-radius: 999px; color: white; text-transform: uppercase;
+            letter-spacing: 0.4px; white-space: nowrap; flex-shrink: 0;
+        }
+        .st-on_track  { background: var(--success); }
+        .st-at_risk   { background: var(--warning); }
+        .st-off_track { background: var(--danger); }
+        .st-unknown   { background: var(--muted); }
+        .st-achieved  { background: var(--success); }
+        .st-missed    { background: var(--danger); }
+        .st-paused    { background: var(--muted); }
+        .st-archived  { background: #9CA3AF; }
+
+        /* ── LE DUE BARRE ── */
+        .bars {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;
+            margin: 1rem 0 0.5rem;
+        }
+        .bar-block { min-width: 0; }
+        .bar-label {
+            display: flex; justify-content: space-between; align-items: baseline;
+            font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 0.3rem;
+        }
+        .bar-label .bar-pct { font-family: 'Space Mono', monospace; font-size: 0.9rem; }
+        .bar-track { height: 12px; background: var(--input-bg); border: 1px solid var(--border); }
+        .bar-fill { height: 100%; transition: width 0.4s ease; }
+        .bar-fill.result    { background: linear-gradient(90deg, var(--accent), var(--secondary)); }
+        .bar-fill.execution { background: linear-gradient(90deg, #94A3B8, #64748B); }
+        .bar-sub {
+            font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem;
+            font-family: 'Space Mono', monospace;
+        }
+        .bar-expected {
+            position: relative; height: 0;
+        }
+        .bar-marker {
+            position: absolute; top: -13px; width: 2px; height: 14px;
+            background: var(--dark);
+        }
+        .bar-marker::after {
+            content: '▾'; position: absolute; top: -13px; left: -4px;
+            font-size: 0.6rem; color: var(--dark);
+        }
+
+        /* avviso divergenza risultato vs esecuzione */
+        .divergence {
+            margin-top: 0.85rem; padding: 0.6rem 0.75rem;
+            background: #FEF3C7; border-left: 4px solid var(--warning);
+            font-size: 0.95rem; line-height: 1.4;
+        }
+
+        /* ── FIGLI ── */
+        .children { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.85rem; }
+        .children-title {
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--muted); margin-bottom: 0.6rem;
+        }
+        .child-row {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.4rem 0; cursor: pointer;
+        }
+        .child-row:hover .child-name { color: var(--accent); }
+        .child-name { flex: 1; font-size: 1.05rem; font-weight: 500; min-width: 0; }
+        .child-bar { width: 120px; height: 8px; background: var(--input-bg); border: 1px solid var(--border); flex-shrink: 0; }
+        .child-bar-fill { height: 100%; background: var(--secondary); }
+        .child-val { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--muted); width: 62px; text-align: right; flex-shrink: 0; }
+
+        /* ── MILESTONE TIMELINE ── */
+        .ms-strip { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.85rem; }
+        .ms-chip {
+            font-family: 'Space Mono', monospace; font-size: 0.7rem;
+            padding: 0.2rem 0.5rem; border: 1px solid var(--border);
+            cursor: pointer; background: var(--input-bg);
+        }
+        .ms-chip.hit    { background: var(--success); color: white; border-color: var(--success); }
+        .ms-chip.missed { background: var(--danger);  color: white; border-color: var(--danger); }
+
+        /* ── METRICHE ── */
+        .metric-row {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+        }
+        .metric-row:last-child { border-bottom: none; }
+        .metric-main { flex: 1; min-width: 0; }
+        .metric-name { font-size: 1.1rem; font-weight: 700; }
+        .metric-sub {
+            font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted);
+            margin-top: 0.1rem;
+        }
+        .role-tag {
+            font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700;
+            padding: 0.1rem 0.35rem; border-radius: 3px; text-transform: uppercase;
+            margin-right: 0.35rem;
+        }
+        .role-primary { background: var(--secondary); color: white; }
+        .role-control { background: #C7D2FE; color: #3730A3; }
+        .role-leading { background: #E0E7FF; color: #3730A3; }
+        .metric-value {
+            font-family: 'Space Mono', monospace; font-size: 1.15rem; font-weight: 700;
+            text-align: right; white-space: nowrap;
+        }
+        .metric-target { font-size: 0.7rem; color: var(--muted); font-weight: 400; }
+
+        .sparkline { width: 90px; height: 26px; flex-shrink: 0; }
+
+        /* ── PROTOCOLLO ── */
+        .protocol-box {
+            background: #EFF6FF; border-left: 4px solid var(--accent);
+            padding: 0.75rem 0.9rem; margin-bottom: 1.25rem;
+            font-size: 1rem; line-height: 1.5;
+        }
+        .protocol-box .protocol-label {
+            font-family: 'Space Mono', monospace; font-size: 0.65rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent);
+            display: block; margin-bottom: 0.3rem;
+        }
+
+        /* ── RUBRICA ── */
+        .crit-row { margin-bottom: 0.9rem; }
+        .crit-head {
+            display: flex; justify-content: space-between; align-items: baseline;
+            margin-bottom: 0.2rem;
+        }
+        .crit-label { font-size: 1.05rem; font-weight: 500; }
+        .crit-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.05rem; }
+        .crit-weight { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted); }
+        .crit-row input[type=range] { width: 100%; accent-color: var(--secondary); }
+        .rubric-avg {
+            display: flex; justify-content: space-between; align-items: baseline;
+            padding: 0.75rem 0.9rem; background: var(--input-bg);
+            border: 2px solid var(--secondary); margin-top: 0.5rem;
+        }
+        .rubric-avg-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .rubric-avg-val { font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700; color: var(--secondary); }
+
+        .crit-editor-row {
+            display: grid; grid-template-columns: 1fr 90px 36px; gap: 0.5rem;
+            margin-bottom: 0.5rem; align-items: center;
+        }
+
+        /* ── TASK LINK ── */
+        .link-row {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.45rem 0; border-bottom: 1px solid var(--border);
+        }
+        .link-kind {
+            font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700;
+            padding: 0.1rem 0.35rem; background: var(--input-bg); border: 1px solid var(--border);
+            text-transform: uppercase;
+        }
+        .link-name { flex: 1; font-size: 1rem; }
+
+        /* ── HISTORY ── */
+        .hist-row {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.4rem 0; border-bottom: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+        .hist-date { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--muted); width: 82px; flex-shrink: 0; }
+        .hist-val { font-family: 'Space Mono', monospace; font-weight: 700; width: 62px; text-align: right; flex-shrink: 0; }
+        .hist-note { flex: 1; color: var(--muted); font-size: 0.9rem; min-width: 0; }
+
+        /* ── SECTION ── */
+        .section-title {
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.6px; color: var(--muted);
+            margin: 1.5rem 0 0.6rem; padding-bottom: 0.3rem;
+            border-bottom: 2px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        .empty-state { text-align: center; padding: 4rem 2rem; color: var(--muted); }
+        .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .empty-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--dark); }
+        .empty-desc { font-size: 1rem; }
+
+        /* ── FAB ── */
+        .fab {
+            position: fixed; bottom: 2rem; right: 2rem;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: var(--primary); color: white;
+            font-size: 1.8rem; border: none; cursor: pointer;
+            box-shadow: 0 4px 16px rgba(255,51,102,0.4);
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s; z-index: 100;
+        }
+        .fab:hover { transform: scale(1.1); }
+
+        /* ── BUTTONS ── */
+        .btn {
+            padding: 0.45rem 0.9rem; border: none; cursor: pointer;
+            font-family: 'Darker Grotesque', sans-serif; font-size: 1rem; font-weight: 700;
+            transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .btn:hover { transform: translateY(-2px); opacity: 0.9; }
+        .btn:active { transform: translateY(0); }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-secondary { background: var(--border); color: var(--dark); }
+        .btn-accent { background: var(--accent); color: white; }
+        .btn-small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+        .btn-ghost { background: transparent; border: 2px solid var(--border); color: var(--dark); }
+        .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* ── MODAL ── */
+        .modal {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(6px);
+            z-index: 2000; align-items: center; justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white; padding: 1.5rem;
+            max-width: 780px; width: 96%; max-height: 92vh;
+            overflow-y: auto; position: relative;
+        }
+        .modal-content.narrow { max-width: 520px; }
+        .modal-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.25rem; gap: 1rem;
+        }
+        .modal-title { font-size: 1.7rem; font-weight: 900; color: var(--accent); line-height: 1.15; }
+        .modal-close {
+            font-size: 1.8rem; cursor: pointer; color: var(--muted);
+            transition: all 0.2s; line-height: 1; background: none; border: none;
+        }
+        .modal-close:hover { color: var(--danger); transform: rotate(90deg); }
+        .modal-actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.5rem; flex-wrap: wrap; }
+
+        /* ── FORM ── */
+        .form-group { margin-bottom: 1.1rem; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-label {
+            display: block; margin-bottom: 0.4rem; font-weight: 700;
+            font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .form-hint { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.35; }
+        .form-input, .form-select, .form-textarea {
+            width: 100%; padding: 0.5rem 0.65rem;
+            border: 2px solid var(--border); background: var(--input-bg);
+            color: var(--dark); font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.05rem; transition: border-color 0.2s;
+        }
+        .form-textarea { min-height: 78px; resize: vertical; line-height: 1.45; }
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none; border-color: var(--accent); background: white;
+        }
+
+        /* ── CONFIRM ── */
+        #confirmDialog {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            z-index: 4000; align-items: center; justify-content: center;
+        }
+        #confirmDialog.active { display: flex; }
+        .confirm-box { background: white; padding: 2rem; max-width: 380px; width: 90%; }
+        .confirm-msg { font-size: 1.1rem; margin-bottom: 1.5rem; line-height: 1.4; }
+        .confirm-btns { display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+        /* ── AUTH ── */
+        #authOverlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.85); z-index: 5000;
+            align-items: center; justify-content: center; text-align: center; color: white;
+        }
+        .auth-box { max-width: 340px; }
+        .auth-icon { font-size: 3rem; margin-bottom: 1rem; }
+        .auth-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .auth-desc { font-size: 0.95rem; opacity: 0.7; }
+
+        /* ── TOAST ── */
+        #toast {
+            position: fixed; bottom: 5.5rem; right: 2rem;
+            background: var(--dark); color: white;
+            padding: 0.6rem 1.2rem; font-size: 0.95rem; font-weight: 700;
+            z-index: 9999; display: none; pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        /* ── MOBILE ── */
+        @media (max-width: 768px) {
+            .app-container { grid-template-columns: 1fr; }
+            .bars { grid-template-columns: 1fr; gap: 0.85rem; }
+            .form-row { grid-template-columns: 1fr; }
+            .sidebar {
+                display: flex !important; position: fixed !important;
+                top: 56px !important; left: 0 !important; right: 0 !important;
+                width: 100% !important; height: auto !important;
+                background: #F3F4F6 !important;
+                border-bottom: 2px solid var(--border) !important;
+                border-right: none !important;
+                padding: 0.1rem 0 !important; z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .nav-menu {
+                display: flex !important; flex-direction: row !important;
+                width: 100% !important; justify-content: space-around !important;
+                align-items: center !important; gap: 0 !important; margin: 0 !important;
+            }
+            .nav-item {
+                display: flex !important; flex-direction: column !important;
+                align-items: center !important; justify-content: center !important;
+                padding: 0.15rem 0.1rem !important; margin: 0 !important;
+                font-size: 2.2rem !important; flex: 1 !important; text-align: center !important;
+            }
+            .nav-item.active { background: var(--primary) !important; border-radius: 0; }
+            .nav-item::after { content: none !important; display: none !important; }
+            .main-content { padding-top: 4.5rem !important; }
+            .page-title { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="garsal-top-bar">
+    <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+        <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
+        <div id="garsal-top-bar-text">Garsal Apps</div>
+    </a>
+</div>
+
+<!-- AUTH OVERLAY -->
+<div id="authOverlay" style="display:flex;">
+    <div class="auth-box">
+        <div class="auth-icon">🎯</div>
+        <div class="auth-title">Obiettivi</div>
+        <div class="auth-desc">Apri questa app da AppSphere per accedere.</div>
+    </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div id="confirmDialog">
+    <div class="confirm-box">
+        <div class="confirm-msg" id="confirmMsg"></div>
+        <div class="confirm-btns">
+            <button class="btn btn-secondary" id="confirmNo">Annulla</button>
+            <button class="btn btn-danger" id="confirmYes">Elimina</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MAIN APP -->
+<div class="app-container">
+
+    <aside class="sidebar" id="sidebar">
+        <nav class="nav-menu">
+            <div class="nav-item active" data-text="Obiettivi" data-section="obiettivi"
+                 onclick="showPage('obiettivi'); setNavActive(this)">🎯</div>
+            <div class="nav-item" data-text="Rilevazioni" data-section="rilevazioni"
+                 onclick="showPage('rilevazioni'); setNavActive(this)">📈</div>
+            <div class="nav-item" data-text="Archivio" data-section="archivio"
+                 onclick="showPage('archivio'); setNavActive(this)">📦</div>
+            <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
+                 onclick="showPage('impostazioni'); setNavActive(this)">⚙️</div>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+
+        <!-- PAGE: OBIETTIVI -->
+        <section class="page active" id="page-obiettivi">
+            <div class="page-header">
+                <div class="page-title">Obiettivi</div>
+                <button class="btn btn-accent" onclick="openObjectiveEditor(null, null)">+ Obiettivo annuale</button>
+            </div>
+            <div id="objectivesList"></div>
+        </section>
+
+        <!-- PAGE: RILEVAZIONI -->
+        <section class="page" id="page-rilevazioni">
+            <div class="page-header">
+                <div class="page-title">Rilevazioni</div>
+            </div>
+            <div class="page-hint">
+                Le metriche in scadenza sono in cima. Il protocollo di misura viene sempre
+                riproposto prima di inserire un valore: se cambi il modo di misurare, la serie
+                storica non è più confrontabile.
+            </div>
+            <div id="metricsList"></div>
+        </section>
+
+        <!-- PAGE: ARCHIVIO -->
+        <section class="page" id="page-archivio">
+            <div class="page-header">
+                <div class="page-title">Archivio</div>
+            </div>
+            <div class="page-hint">Obiettivi conclusi, mancati o archiviati.</div>
+            <div id="archiveList"></div>
+        </section>
+
+        <!-- PAGE: IMPOSTAZIONI -->
+        <section class="page" id="page-impostazioni">
+            <div class="page-header">
+                <div class="page-title">Impostazioni</div>
+            </div>
+            <div class="section-title">Informazioni</div>
+            <div class="metric-row">
+                <div class="metric-main"><div class="metric-name">Versione</div></div>
+                <div class="metric-value" id="infoVersion" style="font-size:0.95rem;"></div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-main"><div class="metric-name">Build</div></div>
+                <div class="metric-value" id="infoBuild" style="font-size:0.95rem;"></div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-main"><div class="metric-name">Ambiente</div></div>
+                <div class="metric-value" id="infoEnv" style="font-size:0.95rem;"></div>
+            </div>
+            <div class="section-title">Manutenzione</div>
+            <div style="display:flex;gap:0.6rem;flex-wrap:wrap;">
+                <button class="btn btn-ghost" onclick="loadAll()">🔄 Ricarica dati</button>
+                <button class="btn btn-ghost" onclick="exportBackup()">⬇️ Esporta JSON</button>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<button class="fab" onclick="openObjectiveEditor(null, null)" title="Nuovo obiettivo">+</button>
+
+<!-- ══════════════ MODAL: DETTAGLIO OBIETTIVO ══════════════ -->
+<div class="modal" id="detailModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="detailTitle"></div>
+            <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
+        </div>
+        <div id="detailBody"></div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: EDITOR OBIETTIVO ══════════════ -->
+<div class="modal" id="objModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="objModalTitle">Nuovo obiettivo</div>
+            <button class="modal-close" onclick="closeModal('objModal')">&times;</button>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Titolo</label>
+            <input type="text" class="form-input" id="objTitle"
+                   placeholder="es. Sostenere una call di lavoro di 30 minuti in inglese">
+            <div class="form-hint">Scrivi il risultato osservabile, non l'attività. «Parlare inglese» non è un obiettivo, è un argomento.</div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Perché</label>
+            <textarea class="form-textarea" id="objWhy"
+                      placeholder="es. così smetto di evitare le riunioni con i fornitori esteri"></textarea>
+            <div class="form-hint">È quello che rileggerai a novembre quando non avrai voglia.</div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Inizio</label>
+                <input type="date" class="form-input" id="objStart">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Scadenza</label>
+                <input type="date" class="form-input" id="objDue">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Stato</label>
+                <select class="form-select" id="objStatus">
+                    <option value="active">Attivo</option>
+                    <option value="achieved">Raggiunto</option>
+                    <option value="missed">Mancato</option>
+                    <option value="paused">In pausa</option>
+                    <option value="archived">Archiviato</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Colore</label>
+                <input type="color" class="form-input" id="objColor" value="#6C5CE7" style="height:42px;padding:0.2rem;">
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-danger"    id="objDeleteBtn" onclick="deleteObjective()" style="margin-right:auto;">Elimina</button>
+            <button class="btn btn-secondary" onclick="closeModal('objModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="saveObjective()">Salva</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: EDITOR METRICA ══════════════ -->
+<div class="modal" id="metricModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="metricModalTitle">Nuova metrica</div>
+            <button class="modal-close" onclick="closeModal('metricModal')">&times;</button>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Nome</label>
+            <input type="text" class="form-input" id="mName" placeholder="es. Rubrica inglese parlato">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Ruolo</label>
+                <select class="form-select" id="mRole" onchange="renderMetricFormHints()">
+                    <option value="primary">Primaria — il risultato (lagging)</option>
+                    <option value="control">Controllo — secondo riscontro (lagging)</option>
+                    <option value="leading">Leading — lo sforzo</option>
+                </select>
+                <div class="form-hint" id="roleHint"></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Tipo</label>
+                <select class="form-select" id="mKind" onchange="onKindChange()">
+                    <option value="state">Stato — conta l'ultimo valore</option>
+                    <option value="cumulative">Cumulativa — si somma nel periodo</option>
+                    <option value="checklist">Checklist — completati su totale</option>
+                    <option value="rubric">Rubrica — autovalutazione 1-5</option>
+                </select>
+                <div class="form-hint" id="kindHint"></div>
+            </div>
+        </div>
+
+        <div class="form-row" id="mBaseTargetRow">
+            <div class="form-group">
+                <label class="form-label">Baseline</label>
+                <input type="number" step="any" class="form-input" id="mBaseline" value="0">
+                <div class="form-hint">Da dove parti oggi.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Target</label>
+                <input type="number" step="any" class="form-input" id="mTarget">
+                <div class="form-hint">Dove vuoi arrivare. Deve essere diverso dalla baseline.</div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Unità</label>
+                <input type="text" class="form-input" id="mUnit" placeholder="es. min/settimana, pause, /5">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Direzione</label>
+                <select class="form-select" id="mDirection">
+                    <option value="increase">Deve salire ↑</option>
+                    <option value="decrease">Deve scendere ↓</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group" id="mPeriodGroup" style="display:none;">
+            <label class="form-label">Finestra di accumulo</label>
+            <select class="form-select" id="mPeriod">
+                <option value="week">Settimanale — si azzera ogni lunedì</option>
+                <option value="month">Mensile</option>
+                <option value="quarter">Trimestrale</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Protocollo di misura</label>
+            <textarea class="form-textarea" id="mProtocol"
+                      placeholder="es. Mi registro mentre descrivo a voce per 3 minuti la mia giornata di ieri. Conto le pause sopra i 3 secondi."></textarea>
+            <div class="form-hint">
+                Come si misura, nel dettaglio. Verrà riproposto a ogni rilevazione: tra tre mesi
+                non te lo ricorderai, e se cambi metodo di misura la serie storica non vale più.
+            </div>
+        </div>
+
+        <!-- criteri rubrica -->
+        <div id="mRubricSection" style="display:none;">
+            <div class="section-title">
+                Criteri della rubrica
+                <button class="btn btn-ghost btn-small" onclick="addCriterionRow('', 1)">+ Criterio</button>
+            </div>
+            <div class="form-hint" style="margin-bottom:0.75rem;">
+                Ogni criterio si valuta 1-5. Il valore della metrica è la media pesata.
+                Con criteri espliciti il voto smette di dipendere dall'umore del giorno.
+            </div>
+            <div id="critEditorList"></div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-danger"    id="mDeleteBtn" onclick="deleteMetric()" style="margin-right:auto;">Elimina</button>
+            <button class="btn btn-secondary" onclick="closeModal('metricModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="saveMetric()">Salva</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: RILEVAZIONE ══════════════ -->
+<div class="modal" id="measureModal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <div class="modal-title" id="measureTitle"></div>
+            <button class="modal-close" onclick="closeModal('measureModal')">&times;</button>
+        </div>
+        <div id="measureProtocol"></div>
+        <div class="form-group">
+            <label class="form-label">Data</label>
+            <input type="date" class="form-input" id="measDate">
+        </div>
+        <div id="measureInputs"></div>
+        <div class="form-group">
+            <label class="form-label">Nota</label>
+            <input type="text" class="form-input" id="measNote" placeholder="facoltativa">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('measureModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="saveMeasurement()">Registra</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: MILESTONE ══════════════ -->
+<div class="modal" id="msModal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <div class="modal-title" id="msModalTitle">Nuova milestone</div>
+            <button class="modal-close" onclick="closeModal('msModal')">&times;</button>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Etichetta</label>
+            <input type="text" class="form-input" id="msLabel" placeholder="es. Fine Q1">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Data</label>
+                <input type="date" class="form-input" id="msDue">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Valore atteso</label>
+                <input type="number" step="any" class="form-input" id="msExpected">
+                <div class="form-hint">Della metrica primaria. È la curva contro cui si calcola il semaforo.</div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Stato</label>
+            <select class="form-select" id="msStatus">
+                <option value="pending">Da verificare</option>
+                <option value="hit">Centrata</option>
+                <option value="missed">Mancata</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-danger"    id="msDeleteBtn" onclick="deleteMilestone()" style="margin-right:auto;">Elimina</button>
+            <button class="btn btn-secondary" onclick="closeModal('msModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="saveMilestone()">Salva</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: COLLEGA AZIONE ══════════════ -->
+<div class="modal" id="linkModal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <div class="modal-title">Collega un'azione</div>
+            <button class="modal-close" onclick="closeModal('linkModal')">&times;</button>
+        </div>
+        <div class="page-hint" style="margin-bottom:1rem;">
+            Le azioni restano task e abitudini veri, gestiti nelle loro app. Qui si collegano soltanto.
+        </div>
+        <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select class="form-select" id="linkKind" onchange="renderLinkOptions()">
+                <option value="task">Task (Tasks)</option>
+                <option value="habit">Abitudine (Habit Tracker)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Elemento</label>
+            <select class="form-select" id="linkTarget"></select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('linkModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="saveLink()">Collega</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// OBIETTIVI — versione
+// ════════════════════════════════════════════════════════════
+var APP_VERSION = 'v1.0.0';
+var BUILD_TIME  = '2026-07-27T10:00:00Z';
+console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+// ════════════════════════════════════════════════════════════
+// SUPABASE
+// ════════════════════════════════════════════════════════════
+const _DEV_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0'];
+const _IS_DEV = _DEV_HOSTS.includes(window.location.hostname)
+             || (window.location.hostname.endsWith('.netlify.app')
+                && window.location.hostname.startsWith('dev--'));
+
+const SUPABASE_URL = _IS_DEV
+    ? 'https://hcmmywitrbmcsmytjbaf.supabase.co'
+    : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_KEY = _IS_DEV
+    ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbW15d2l0cmJtY3NteXRqYmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3ODE1NDUsImV4cCI6MjA4OTM1NzU0NX0.pAtj6THjWXibrMulU1IVGH-BFx4YkjkNT_x07lNUfWE'
+    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+let sb            = null;
+let sbAccessToken = null;
+let currentUserId = null;
+
+// ════════════════════════════════════════════════════════════
+// DATA STORE
+// ════════════════════════════════════════════════════════════
+let objectives   = [];   // ob_objectives
+let metrics      = [];   // ob_metrics
+let criteria     = [];   // ob_rubric_criteria
+let milestones   = [];   // ob_milestones
+let measurements = [];   // ob_measurements
+let taskLinks    = [];   // ob_task_links
+let tasksRef     = [];   // ts_tasks (per il picker)
+let habitsRef    = [];   // hb_habits (per il picker)
+let progress     = {};   // { objective_id: risultato RPC }
+
+// stato editor
+let editingObjId    = null;
+let editingParentId = null;
+let editingMetricId = null;
+let editingMetricObjId = null;
+let editingMsId     = null;
+let editingMsObjId  = null;
+let measuringMetricId = null;
+let linkingObjId    = null;
+let toastTimer      = null;
+
+// ════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════
+function initWithToken(token) {
+    if (sb) return;
+    sbAccessToken = token;
+    localStorage.setItem('sb_token', token);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth:   { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: 'Bearer ' + token } }
+    });
+    const payload = decodeJWT(token);
+    currentUserId = payload?.sub || null;
+    console.log('✅ Supabase autenticato (Obiettivi ' + APP_VERSION + ')');
+    document.getElementById('authOverlay').style.display = 'none';
+    startApp();
+}
+
+function handleAuthError(error) {
+    if (!error) return false;
+    const msg = (error.message || '').toLowerCase();
+    const isAuth = error.status === 401
+        || msg.includes('jwt expired') || msg.includes('invalid jwt')
+        || msg.includes('not authenticated') || msg.includes('pgjwt');
+    if (!isAuth) return false;
+    sb = null; sbAccessToken = null;
+    localStorage.removeItem('sb_token');
+    document.getElementById('authOverlay').style.display = 'flex';
+    return true;
+}
+
+function decodeJWT(token) {
+    try { return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }
+    catch(e) { return null; }
+}
+
+window.addEventListener('message', (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'SB_TOKEN' && e.data.token) {
+        console.log('✅ SB_TOKEN ricevuto dal launcher (Obiettivi)');
+        initWithToken(e.data.token);
+    }
+});
+
+const _authChannel = new BroadcastChannel('appsphere_auth');
+_authChannel.onmessage = (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'LOGOUT') {
+        sb = null; sbAccessToken = null;
+        localStorage.removeItem('sb_token');
+        document.getElementById('authOverlay').style.display = 'flex';
+    } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+        const t = e.data.sbToken;
+        localStorage.setItem('sb_token', t); sbAccessToken = t;
+        if (sb) {
+            sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + t } }
+            });
+        }
+    }
+};
+
+window.addEventListener('load', () => {
+    const stored = localStorage.getItem('sb_token');
+    if (stored) initWithToken(stored);
+    else document.getElementById('authOverlay').style.display = 'flex';
+});
+
+// ════════════════════════════════════════════════════════════
+// AVVIO
+// ════════════════════════════════════════════════════════════
+async function startApp() {
+    document.getElementById('infoVersion').textContent = APP_VERSION;
+    document.getElementById('infoBuild').textContent   = BUILD_TIME;
+    document.getElementById('infoEnv').textContent     = _IS_DEV ? '🧪 Development' : '🚀 Production';
+    await loadAll();
+}
+
+async function loadAll() {
+    const [o, m, c, ms, meas, links] = await Promise.all([
+        sb.from('ob_objectives').select('*').order('sort_order').order('due_date'),
+        sb.from('ob_metrics').select('*').order('sort_order'),
+        sb.from('ob_rubric_criteria').select('*').order('sort_order'),
+        sb.from('ob_milestones').select('*').order('due_date'),
+        sb.from('ob_measurements').select('*').order('measured_on'),
+        sb.from('ob_task_links').select('*')
+    ]);
+
+    for (const r of [o, m, c, ms, meas, links]) {
+        if (r.error) { if (handleAuthError(r.error)) return; console.error(r.error); showToast('❌ ' + r.error.message); return; }
+    }
+
+    objectives   = o.data     || [];
+    metrics      = m.data     || [];
+    criteria     = c.data     || [];
+    milestones   = ms.data    || [];
+    measurements = meas.data  || [];
+    taskLinks    = links.data || [];
+
+    await loadProgress();
+    renderObjectives();
+    renderMetricsPage();
+    renderArchive();
+}
+
+// Il calcolo del progresso vive nella RPC: qui non si ricalcola nulla.
+async function loadProgress() {
+    progress = {};
+    const results = await Promise.all(objectives.map(o =>
+        sb.rpc('ob_objective_progress', { p_objective_id: o.id })
+    ));
+    results.forEach((r, i) => {
+        if (r.error) { console.error('progress', objectives[i].id, r.error); return; }
+        if (r.data && r.data.ok) progress[objectives[i].id] = r.data;
+    });
+}
+
+// riferimenti per il picker azioni — caricati solo quando servono
+async function loadActionRefs() {
+    if (tasksRef.length || habitsRef.length) return;
+    const [t, h] = await Promise.all([
+        sb.from('ts_tasks').select('id,title,status').order('title'),
+        sb.from('hb_habits').select('id,name').order('name')
+    ]);
+    if (!t.error) tasksRef  = t.data || [];
+    if (!h.error) habitsRef = h.data || [];
+}
+
+// ════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch =>
+        ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+}
+
+// dd/mm/yyyy senza passare da Date: niente scarti di fuso
+function fmtDate(iso) {
+    if (!iso) return '—';
+    const p = String(iso).slice(0, 10).split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+}
+
+function todayISO() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function daysBetween(fromISO, toISO) {
+    const a = new Date(fromISO + 'T00:00:00');
+    const b = new Date(toISO   + 'T00:00:00');
+    return Math.round((b - a) / 86400000);
+}
+
+function fmtNum(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    const n = Number(v);
+    if (!isFinite(n)) return '—';
+    return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+}
+
+const STATUS_LABEL = {
+    on_track: 'in linea', at_risk: 'a rischio', off_track: 'fuori rotta', unknown: 'senza metrica',
+    achieved: 'raggiunto', missed: 'mancato', paused: 'in pausa', archived: 'archiviato'
+};
+
+const ROLE_LABEL = { primary: 'risultato', control: 'controllo', leading: 'sforzo' };
+const KIND_LABEL = { state: 'stato', cumulative: 'cumulativa', checklist: 'checklist', rubric: 'rubrica' };
+const PERIOD_LABEL = { week: 'settimana', month: 'mese', quarter: 'trimestre' };
+
+function metricsOf(objId)    { return metrics.filter(m => m.objective_id === objId); }
+function criteriaOf(metId)   { return criteria.filter(c => c.metric_id === metId); }
+function measuresOf(metId)   { return measurements.filter(m => m.metric_id === metId); }
+function milestonesOf(objId) { return milestones.filter(m => m.objective_id === objId); }
+function linksOf(objId)      { return taskLinks.filter(l => l.objective_id === objId); }
+function childrenOf(objId)   { return objectives.filter(o => o.parent_id === objId); }
+function primaryOf(objId)    { return metricsOf(objId).find(m => m.role === 'primary') || null; }
+
+// valore corrente di una metrica, con la stessa semantica della RPC ob_metric_current
+function currentValue(metric) {
+    const rows = measuresOf(metric.id);
+    if (metric.kind === 'cumulative') {
+        const from = periodStart(metric.period || 'week');
+        return rows.filter(r => r.measured_on >= from)
+                   .reduce((s, r) => s + Number(r.value), 0);
+    }
+    if (!rows.length) return Number(metric.baseline);
+    return Number(rows[rows.length - 1].value);
+}
+
+function periodStart(period) {
+    const d = new Date();
+    if (period === 'week') {
+        const dow = (d.getDay() + 6) % 7;          // lunedì = 0
+        d.setDate(d.getDate() - dow);
+    } else if (period === 'month') {
+        d.setDate(1);
+    } else {
+        d.setMonth(Math.floor(d.getMonth() / 3) * 3, 1);
+    }
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function metricProgress(metric) {
+    const cur  = currentValue(metric);
+    const base = Number(metric.baseline);
+    const tgt  = Number(metric.target);
+    if (tgt === base) return 0;
+    return Math.max(0, Math.min(1, (cur - base) / (tgt - base)));
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER — pagina obiettivi
+// ════════════════════════════════════════════════════════════
+function renderObjectives() {
+    const host = document.getElementById('objectivesList');
+    const roots = objectives.filter(o => !o.parent_id && ['active','paused'].includes(o.status));
+
+    if (!roots.length) {
+        host.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🎯</div>
+                <div class="empty-title">Nessun obiettivo attivo</div>
+                <div class="empty-desc">Comincia da un obiettivo annuale: un risultato osservabile, con una data.</div>
+            </div>`;
+        return;
+    }
+
+    host.innerHTML = roots.map(renderObjectiveCard).join('');
+}
+
+function renderObjectiveCard(obj) {
+    const p        = progress[obj.id] || {};
+    const primary  = primaryOf(obj.id);
+    const kids     = childrenOf(obj.id);
+    const ms       = milestonesOf(obj.id);
+    const semaforo = obj.status === 'active' ? (p.status || 'unknown') : obj.status;
+
+    const result    = p.has_result    ? p.result    : null;
+    const execution = p.has_execution ? p.execution : null;
+
+    // posizione del marcatore "dove dovrei essere" sulla barra risultato
+    let marker = '';
+    if (primary && p.expected_value !== null && p.expected_value !== undefined) {
+        const base = Number(primary.baseline), tgt = Number(primary.target);
+        if (tgt !== base) {
+            const exp = Math.max(0, Math.min(1, (Number(p.expected_value) - base) / (tgt - base))) * 100;
+            marker = `<div class="bar-expected"><div class="bar-marker" style="left:${exp}%" title="atteso: ${fmtNum(p.expected_value)}"></div></div>`;
+        }
+    }
+
+    // la divergenza fra le due barre è l'informazione più preziosa: non va nascosta
+    let divergence = '';
+    if (result !== null && execution !== null && execution - result >= 25) {
+        divergence = `<div class="divergence">
+            ⚠️ Stai eseguendo il piano (${execution}%) ma il risultato non si muove (${result}%).
+            Non è un bug del conteggio: è il segnale che stai lavorando sulla cosa sbagliata. Rivedi il metodo.
+        </div>`;
+    }
+
+    const daysLeft = daysBetween(todayISO(), String(obj.due_date).slice(0,10));
+
+    return `
+    <div class="obj-card">
+        <div class="obj-color-bar" style="background:${esc(obj.color || '#6C5CE7')}"></div>
+        <div class="obj-body">
+            <div class="obj-head">
+                <div class="obj-title" onclick="openDetail('${obj.id}')">${esc(obj.title)}</div>
+                <span class="status-pill st-${semaforo}">${STATUS_LABEL[semaforo] || semaforo}</span>
+            </div>
+            <div class="obj-meta">
+                scadenza ${fmtDate(obj.due_date)}
+                ${daysLeft >= 0 ? '· ' + daysLeft + ' giorni' : '· scaduto da ' + Math.abs(daysLeft) + ' giorni'}
+            </div>
+            ${obj.why ? `<div class="obj-why" style="margin-top:0.5rem;">«${esc(obj.why)}»</div>` : '<div style="height:0.6rem;"></div>'}
+
+            <div class="bars">
+                <div class="bar-block">
+                    <div class="bar-label">
+                        <span>Risultato</span>
+                        <span class="bar-pct">${result !== null ? result + '%' : '—'}</span>
+                    </div>
+                    ${marker}
+                    <div class="bar-track"><div class="bar-fill result" style="width:${result || 0}%"></div></div>
+                    <div class="bar-sub">${primary
+                        ? esc(primary.name) + ': ' + fmtNum(p.current_value) + (primary.unit ? ' ' + esc(primary.unit) : '') + ' → ' + fmtNum(primary.target)
+                        : 'nessuna metrica primaria'}</div>
+                </div>
+                <div class="bar-block">
+                    <div class="bar-label">
+                        <span>Esecuzione</span>
+                        <span class="bar-pct">${execution !== null ? execution + '%' : '—'}</span>
+                    </div>
+                    <div class="bar-track"><div class="bar-fill execution" style="width:${execution || 0}%"></div></div>
+                    <div class="bar-sub">${execution !== null
+                        ? (p.children_done + '/' + p.children_total + ' sotto-obiettivi · ' + p.milestones_hit + '/' + p.milestones_total + ' milestone')
+                        : 'nessun sotto-obiettivo'}</div>
+                </div>
+            </div>
+
+            ${divergence}
+
+            ${ms.length ? `<div class="ms-strip">${ms.map(m => `
+                <div class="ms-chip ${m.status}" onclick="openMilestoneEditor('${obj.id}','${m.id}')">
+                    ${fmtDate(m.due_date)}${m.expected_value !== null ? ' → ' + fmtNum(m.expected_value) : ''}
+                </div>`).join('')}</div>` : ''}
+
+            ${kids.length ? `
+            <div class="children">
+                <div class="children-title">Sotto-obiettivi trimestrali — il «come»</div>
+                ${kids.map(k => {
+                    const kp = progress[k.id] || {};
+                    const kv = kp.has_result ? kp.result : 0;
+                    return `<div class="child-row" onclick="openDetail('${k.id}')">
+                        <div class="child-name">${esc(k.title)}</div>
+                        <div class="child-bar"><div class="child-bar-fill" style="width:${kv}%"></div></div>
+                        <div class="child-val">${kp.has_result ? kv + '%' : '—'}</div>
+                    </div>`;
+                }).join('')}
+            </div>` : ''}
+
+            <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-small" onclick="openDetail('${obj.id}')">Dettaglio</button>
+                <button class="btn btn-ghost btn-small" onclick="openObjectiveEditor(null,'${obj.id}')">+ Sotto-obiettivo</button>
+                <button class="btn btn-ghost btn-small" onclick="openMilestoneEditor('${obj.id}',null)">+ Milestone</button>
+            </div>
+        </div>
+    </div>`;
+}
+
+function renderArchive() {
+    const host = document.getElementById('archiveList');
+    const rows = objectives.filter(o => ['achieved','missed','archived'].includes(o.status));
+    if (!rows.length) {
+        host.innerHTML = `<div class="empty-state"><div class="empty-icon">📦</div>
+            <div class="empty-title">Archivio vuoto</div>
+            <div class="empty-desc">Qui finiranno gli obiettivi conclusi.</div></div>`;
+        return;
+    }
+    host.innerHTML = rows.map(o => `
+        <div class="metric-row">
+            <div class="metric-main">
+                <div class="metric-name" style="cursor:pointer;" onclick="openDetail('${o.id}')">${esc(o.title)}</div>
+                <div class="metric-sub">${o.horizon === 'annual' ? 'annuale' : 'trimestrale'} · scadenza ${fmtDate(o.due_date)}</div>
+            </div>
+            <span class="status-pill st-${o.status}">${STATUS_LABEL[o.status] || o.status}</span>
+        </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER — pagina rilevazioni
+// ════════════════════════════════════════════════════════════
+function renderMetricsPage() {
+    const host = document.getElementById('metricsList');
+    const activeIds = objectives.filter(o => o.status === 'active').map(o => o.id);
+    const rows = metrics.filter(m => activeIds.includes(m.objective_id));
+
+    if (!rows.length) {
+        host.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div>
+            <div class="empty-title">Nessuna metrica</div>
+            <div class="empty-desc">Apri un obiettivo e aggiungi la sua metrica primaria.</div></div>`;
+        return;
+    }
+
+    // le più "stantie" in cima: è lì che serve un promemoria
+    const withAge = rows.map(m => {
+        const rowsM = measuresOf(m.id);
+        const last  = rowsM.length ? rowsM[rowsM.length - 1].measured_on : null;
+        return { m, last, age: last ? daysBetween(last, todayISO()) : 9999 };
+    }).sort((a, b) => b.age - a.age);
+
+    host.innerHTML = withAge.map(({ m, last, age }) => {
+        const obj = objectives.find(o => o.id === m.objective_id);
+        const cur = currentValue(m);
+        const pct = Math.round(metricProgress(m) * 100);
+        return `
+        <div class="metric-row">
+            <div class="metric-main">
+                <div class="metric-name">
+                    <span class="role-tag role-${m.role}">${ROLE_LABEL[m.role]}</span>
+                    ${esc(m.name)}
+                </div>
+                <div class="metric-sub">
+                    ${esc(obj ? obj.title : '')} · ${KIND_LABEL[m.kind]}
+                    ${m.kind === 'cumulative' ? ' / ' + PERIOD_LABEL[m.period || 'week'] : ''}
+                    · ultima: ${last ? fmtDate(last) + ' (' + age + 'g fa)' : 'mai'}
+                </div>
+            </div>
+            ${sparkline(m)}
+            <div class="metric-value">
+                ${fmtNum(cur)}${m.unit ? ' <span class="metric-target">' + esc(m.unit) + '</span>' : ''}
+                <div class="metric-target">${pct}% · target ${fmtNum(m.target)}</div>
+            </div>
+            <button class="btn btn-accent btn-small" onclick="openMeasure('${m.id}')">Rileva</button>
+        </div>`;
+    }).join('');
+}
+
+function sparkline(metric) {
+    const rows = measuresOf(metric.id);
+    if (rows.length < 2) return '<div class="sparkline"></div>';
+    const vals = rows.map(r => Number(r.value));
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const span = (max - min) || 1;
+    const w = 90, h = 26;
+    const pts = vals.map((v, i) => {
+        const x = (i / (vals.length - 1)) * (w - 2) + 1;
+        const y = h - 1 - ((v - min) / span) * (h - 2);
+        return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    const good = metric.direction === 'increase'
+        ? vals[vals.length-1] >= vals[0]
+        : vals[vals.length-1] <= vals[0];
+    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <polyline points="${pts}" fill="none" stroke="${good ? '#00B894' : '#E74C3C'}" stroke-width="1.5"/>
+    </svg>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// DETTAGLIO OBIETTIVO
+// ════════════════════════════════════════════════════════════
+async function openDetail(objId) {
+    const obj = objectives.find(o => o.id === objId);
+    if (!obj) return;
+    // i nomi di task e abitudini servono già al primo render dei collegamenti
+    await loadActionRefs();
+    const p    = progress[objId] || {};
+    const mets = metricsOf(objId);
+    const ms   = milestonesOf(objId);
+    const lks  = linksOf(objId);
+    const kids = childrenOf(objId);
+
+    document.getElementById('detailTitle').textContent = obj.title;
+
+    let html = '';
+
+    html += `<div class="obj-meta">
+        ${obj.horizon === 'annual' ? 'obiettivo annuale' : 'sotto-obiettivo trimestrale'}
+        · ${fmtDate(obj.start_date)} → ${fmtDate(obj.due_date)}
+        · <span class="status-pill st-${obj.status === 'active' ? (p.status || 'unknown') : obj.status}">
+            ${STATUS_LABEL[obj.status === 'active' ? (p.status || 'unknown') : obj.status]}</span>
+    </div>`;
+
+    if (obj.why) html += `<div class="obj-why" style="margin-top:0.75rem;">«${esc(obj.why)}»</div>`;
+
+    // METRICHE
+    html += `<div class="section-title">Metriche
+        <button class="btn btn-ghost btn-small" onclick="openMetricEditor('${objId}',null)">+ Metrica</button></div>`;
+    if (!mets.length) {
+        html += `<div class="form-hint">Nessuna metrica. Senza un numero l'obiettivo non è verificabile:
+                 servono una metrica primaria (il risultato) e possibilmente una leading (lo sforzo).</div>`;
+    } else {
+        html += mets.map(m => {
+            const cur = currentValue(m);
+            const pct = Math.round(metricProgress(m) * 100);
+            const crits = m.kind === 'rubric' ? criteriaOf(m.id) : [];
+            return `<div class="metric-row">
+                <div class="metric-main">
+                    <div class="metric-name" style="cursor:pointer;" onclick="openMetricEditor('${objId}','${m.id}')">
+                        <span class="role-tag role-${m.role}">${ROLE_LABEL[m.role]}</span>
+                        ${esc(m.name)}
+                    </div>
+                    <div class="metric-sub">
+                        ${KIND_LABEL[m.kind]}${m.kind === 'cumulative' ? ' / ' + PERIOD_LABEL[m.period || 'week'] : ''}
+                        · ${fmtNum(m.baseline)} → ${fmtNum(m.target)} ${m.direction === 'increase' ? '↑' : '↓'}
+                        ${crits.length ? ' · ' + crits.length + ' criteri' : ''}
+                    </div>
+                </div>
+                ${sparkline(m)}
+                <div class="metric-value">${fmtNum(cur)}<div class="metric-target">${pct}%</div></div>
+                <button class="btn btn-accent btn-small" onclick="openMeasure('${m.id}')">Rileva</button>
+            </div>`;
+        }).join('');
+
+        // storico della metrica primaria
+        const prim = primaryOf(objId);
+        if (prim) {
+            const hist = measuresOf(prim.id).slice().reverse().slice(0, 12);
+            if (hist.length) {
+                html += `<div class="section-title">Storico — ${esc(prim.name)}</div>`;
+                html += hist.map(r => `<div class="hist-row">
+                    <div class="hist-date">${fmtDate(r.measured_on)}</div>
+                    <div class="hist-val">${fmtNum(r.value)}</div>
+                    <div class="hist-note">${esc(r.note || '')}</div>
+                </div>`).join('');
+            }
+        }
+    }
+
+    // SOTTO-OBIETTIVI
+    html += `<div class="section-title">Sotto-obiettivi
+        <button class="btn btn-ghost btn-small" onclick="closeModal('detailModal');openObjectiveEditor(null,'${objId}')">+ Sotto-obiettivo</button></div>`;
+    html += kids.length
+        ? kids.map(k => {
+            const kp = progress[k.id] || {};
+            return `<div class="child-row" onclick="closeModal('detailModal');openDetail('${k.id}')">
+                <div class="child-name">${esc(k.title)}
+                    <span class="metric-sub">· ${fmtDate(k.due_date)}</span></div>
+                <div class="child-bar"><div class="child-bar-fill" style="width:${kp.has_result ? kp.result : 0}%"></div></div>
+                <div class="child-val">${kp.has_result ? kp.result + '%' : '—'}</div>
+            </div>`;
+          }).join('')
+        : `<div class="form-hint">Nessuno. Il progresso di questo obiettivo resta quello della sua metrica.</div>`;
+
+    // MILESTONE
+    html += `<div class="section-title">Milestone
+        <button class="btn btn-ghost btn-small" onclick="openMilestoneEditor('${objId}',null)">+ Milestone</button></div>`;
+    html += ms.length
+        ? ms.map(m => `<div class="hist-row" style="cursor:pointer;" onclick="openMilestoneEditor('${objId}','${m.id}')">
+                <div class="hist-date">${fmtDate(m.due_date)}</div>
+                <div class="hist-val">${fmtNum(m.expected_value)}</div>
+                <div class="hist-note">${esc(m.label || '')}</div>
+                <span class="status-pill st-${m.status === 'hit' ? 'achieved' : m.status === 'missed' ? 'missed' : 'unknown'}">
+                    ${m.status === 'hit' ? 'centrata' : m.status === 'missed' ? 'mancata' : 'attesa'}</span>
+            </div>`).join('')
+        : `<div class="form-hint">Nessuna. Le milestone sono la curva attesa: senza, il semaforo non ha riferimento.</div>`;
+
+    // AZIONI COLLEGATE
+    html += `<div class="section-title">Azioni collegate
+        <button class="btn btn-ghost btn-small" onclick="openLinkModal('${objId}')">+ Collega</button></div>`;
+    html += lks.length
+        ? lks.map(l => {
+            const name = l.task_id
+                ? (tasksRef.find(t => t.id === l.task_id)?.title || '(task)')
+                : (habitsRef.find(h => h.id === l.habit_id)?.name || '(abitudine)');
+            return `<div class="link-row">
+                <span class="link-kind">${l.task_id ? 'task' : 'abitudine'}</span>
+                <span class="link-name">${esc(name)}</span>
+                <button class="btn btn-ghost btn-small" onclick="removeLink('${l.id}')">Scollega</button>
+            </div>`;
+          }).join('')
+        : `<div class="form-hint">Nessuna. Le azioni restano task e abitudini veri nelle loro app: qui si collegano soltanto.</div>`;
+
+    html += `<div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('detailModal');openObjectiveEditor('${objId}',null)">Modifica obiettivo</button>
+        <button class="btn btn-secondary" onclick="closeModal('detailModal')">Chiudi</button>
+    </div>`;
+
+    document.getElementById('detailBody').innerHTML = html;
+    openModal('detailModal');
+}
+
+// ════════════════════════════════════════════════════════════
+// EDITOR OBIETTIVO
+// ════════════════════════════════════════════════════════════
+function openObjectiveEditor(objId, parentId) {
+    editingObjId    = objId;
+    editingParentId = parentId;
+    const obj = objId ? objectives.find(o => o.id === objId) : null;
+
+    document.getElementById('objModalTitle').textContent =
+        obj ? 'Modifica obiettivo' : (parentId ? 'Nuovo sotto-obiettivo trimestrale' : 'Nuovo obiettivo annuale');
+    document.getElementById('objDeleteBtn').style.display = obj ? '' : 'none';
+
+    document.getElementById('objTitle').value  = obj?.title  || '';
+    document.getElementById('objWhy').value    = obj?.why    || '';
+    document.getElementById('objStart').value  = obj ? String(obj.start_date).slice(0,10) : todayISO();
+    document.getElementById('objStatus').value = obj?.status || 'active';
+    document.getElementById('objColor').value  = obj?.color  || (parentId
+        ? (objectives.find(o => o.id === parentId)?.color || '#6C5CE7')
+        : '#6C5CE7');
+
+    if (obj) {
+        document.getElementById('objDue').value = String(obj.due_date).slice(0,10);
+    } else {
+        const d = new Date();
+        if (parentId) d.setMonth(d.getMonth() + 3); else d.setFullYear(d.getFullYear() + 1);
+        document.getElementById('objDue').value =
+            d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+
+    openModal('objModal');
+}
+
+async function saveObjective() {
+    const title = document.getElementById('objTitle').value.trim();
+    const due   = document.getElementById('objDue').value;
+    if (!title) { showToast('Serve un titolo'); return; }
+    if (!due)   { showToast('Serve una scadenza'); return; }
+
+    const obj = editingObjId ? objectives.find(o => o.id === editingObjId) : null;
+    const parentId = obj ? obj.parent_id : editingParentId;
+
+    const payload = {
+        title,
+        why:        document.getElementById('objWhy').value.trim(),
+        start_date: document.getElementById('objStart').value || todayISO(),
+        due_date:   due,
+        status:     document.getElementById('objStatus').value,
+        color:      document.getElementById('objColor').value,
+        horizon:    parentId ? 'quarterly' : 'annual',
+        parent_id:  parentId || null
+    };
+
+    let res;
+    if (editingObjId) res = await sb.from('ob_objectives').update(payload).eq('id', editingObjId);
+    else              res = await sb.from('ob_objectives').insert(payload);
+
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+
+    closeModal('objModal');
+    showToast('✅ Obiettivo salvato');
+    await loadAll();
+}
+
+async function deleteObjective() {
+    if (!editingObjId) return;
+    const kids = childrenOf(editingObjId).length;
+    const ok = await customConfirm(kids
+        ? `Elimino l'obiettivo, i suoi ${kids} sotto-obiettivi, le metriche e tutte le rilevazioni?`
+        : `Elimino l'obiettivo con le sue metriche e rilevazioni?`);
+    if (!ok) return;
+
+    const res = await sb.from('ob_objectives').delete().eq('id', editingObjId);
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+
+    closeModal('objModal');
+    showToast('🗑 Obiettivo eliminato');
+    await loadAll();
+}
+
+// ════════════════════════════════════════════════════════════
+// EDITOR METRICA
+// ════════════════════════════════════════════════════════════
+function openMetricEditor(objId, metricId) {
+    editingMetricObjId = objId;
+    editingMetricId    = metricId;
+    const m = metricId ? metrics.find(x => x.id === metricId) : null;
+
+    document.getElementById('metricModalTitle').textContent = m ? 'Modifica metrica' : 'Nuova metrica';
+    document.getElementById('mDeleteBtn').style.display = m ? '' : 'none';
+
+    document.getElementById('mName').value      = m?.name      || '';
+    document.getElementById('mRole').value      = m?.role      || (primaryOf(objId) ? 'leading' : 'primary');
+    document.getElementById('mKind').value      = m?.kind      || 'state';
+    document.getElementById('mUnit').value      = m?.unit      || '';
+    document.getElementById('mDirection').value = m?.direction || 'increase';
+    document.getElementById('mBaseline').value  = m ? m.baseline : 0;
+    document.getElementById('mTarget').value    = m ? m.target   : '';
+    document.getElementById('mProtocol').value  = m?.protocol  || '';
+    document.getElementById('mPeriod').value    = m?.period    || 'week';
+
+    document.getElementById('critEditorList').innerHTML = '';
+    if (m && m.kind === 'rubric') {
+        criteriaOf(m.id).forEach(c => addCriterionRow(c.label, c.weight));
+    }
+
+    onKindChange();
+    renderMetricFormHints();
+    closeModal('detailModal');
+    openModal('metricModal');
+}
+
+function onKindChange() {
+    const kind = document.getElementById('mKind').value;
+    document.getElementById('mRubricSection').style.display = kind === 'rubric'  ? '' : 'none';
+    document.getElementById('mPeriodGroup').style.display   = kind === 'cumulative' ? '' : 'none';
+
+    if (kind === 'rubric') {
+        // la rubrica ha una scala fissa 1-5: baseline/target si esprimono in quella scala
+        if (!document.getElementById('mTarget').value) document.getElementById('mTarget').value = 4;
+        if (!document.getElementById('mUnit').value)   document.getElementById('mUnit').value   = '/5';
+        if (!document.getElementById('critEditorList').children.length) {
+            addCriterionRow('', 1); addCriterionRow('', 1); addCriterionRow('', 1);
+        }
+    }
+    renderMetricFormHints();
+}
+
+function renderMetricFormHints() {
+    const role = document.getElementById('mRole').value;
+    const kind = document.getElementById('mKind').value;
+
+    const roleHints = {
+        primary: 'Il vero obiettivo: alimenta la barra «risultato» e il semaforo. Una sola per obiettivo.',
+        control: 'Secondo riscontro sul risultato, tipicamente il test ripetibile. Si vede nel dettaglio ma non muove la barra.',
+        leading: 'Quanto ci lavori. La controlli tu, ti dà il riscontro settimanale — ma puoi lavorarci tanto e male.'
+    };
+    document.getElementById('roleHint').textContent = roleHints[role];
+
+    const kindHints = {
+        state:      'Conta solo l\'ultimo valore rilevato: peso, punteggio di un test ripetibile.',
+        cumulative: 'I valori si sommano dentro la finestra scelta e poi ripartono da zero.',
+        checklist:  'Quanti elementi hai completato: baseline 0, target = totale (es. 40 lezioni).',
+        rubric:     'Più criteri valutati 1-5, media pesata. È ciò che rende misurabile un obiettivo senza numeri ovvi.'
+    };
+    document.getElementById('kindHint').textContent = kindHints[kind];
+}
+
+function addCriterionRow(label, weight) {
+    const host = document.getElementById('critEditorList');
+    const div = document.createElement('div');
+    div.className = 'crit-editor-row';
+    div.innerHTML = `
+        <input type="text"   class="form-input crit-label-in"  placeholder="es. fluidità" value="${esc(label || '')}">
+        <input type="number" class="form-input crit-weight-in" step="0.5" min="0.5" value="${weight || 1}" title="peso">
+        <button class="btn btn-ghost btn-small" onclick="this.parentElement.remove()">✕</button>`;
+    host.appendChild(div);
+}
+
+async function saveMetric() {
+    const name   = document.getElementById('mName').value.trim();
+    const kind   = document.getElementById('mKind').value;
+    const target = document.getElementById('mTarget').value;
+    const base   = document.getElementById('mBaseline').value;
+
+    if (!name)            { showToast('Serve un nome'); return; }
+    if (target === '')    { showToast('Serve un target'); return; }
+    if (Number(target) === Number(base)) { showToast('Target e baseline devono essere diversi'); return; }
+
+    // criteri: raccolti prima, così un errore non lascia la metrica a metà
+    let crits = [];
+    if (kind === 'rubric') {
+        crits = Array.from(document.querySelectorAll('#critEditorList .crit-editor-row')).map((row, i) => ({
+            label:  row.querySelector('.crit-label-in').value.trim(),
+            weight: Number(row.querySelector('.crit-weight-in').value) || 1,
+            sort_order: i
+        })).filter(c => c.label);
+        if (!crits.length) { showToast('La rubrica ha bisogno di almeno un criterio'); return; }
+    }
+
+    const payload = {
+        objective_id: editingMetricObjId,
+        name,
+        role:      document.getElementById('mRole').value,
+        kind,
+        unit:      document.getElementById('mUnit').value.trim(),
+        direction: document.getElementById('mDirection').value,
+        baseline:  Number(base),
+        target:    Number(target),
+        protocol:  document.getElementById('mProtocol').value.trim(),
+        period:    kind === 'cumulative' ? document.getElementById('mPeriod').value : null
+    };
+
+    // una sola primaria per obiettivo: intercettata qui per dare un messaggio
+    // comprensibile invece dell'errore del vincolo unico
+    if (payload.role === 'primary') {
+        const other = metricsOf(editingMetricObjId).find(x => x.role === 'primary' && x.id !== editingMetricId);
+        if (other) {
+            showToast('«' + other.name + '» è già la metrica primaria — usa Controllo o Leading');
+            return;
+        }
+    }
+
+    let metricId = editingMetricId;
+    if (metricId) {
+        const res = await sb.from('ob_metrics').update(payload).eq('id', metricId);
+        if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+    } else {
+        const res = await sb.from('ob_metrics').insert(payload).select('id').single();
+        if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+        metricId = res.data.id;
+    }
+
+    // i criteri si riscrivono per intero: sono pochi e l'ordine conta
+    if (kind === 'rubric') {
+        const del = await sb.from('ob_rubric_criteria').delete().eq('metric_id', metricId);
+        if (del.error) { showToast('❌ ' + del.error.message); return; }
+        const ins = await sb.from('ob_rubric_criteria')
+            .insert(crits.map(c => ({ ...c, metric_id: metricId })));
+        if (ins.error) { showToast('❌ ' + ins.error.message); return; }
+    }
+
+    closeModal('metricModal');
+    showToast('✅ Metrica salvata');
+    await loadAll();
+    openDetail(editingMetricObjId);
+}
+
+async function deleteMetric() {
+    if (!editingMetricId) return;
+    const n = measuresOf(editingMetricId).length;
+    const ok = await customConfirm(n
+        ? `Elimino la metrica e le sue ${n} rilevazioni? La serie storica va persa.`
+        : 'Elimino la metrica?');
+    if (!ok) return;
+
+    const res = await sb.from('ob_metrics').delete().eq('id', editingMetricId);
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+
+    closeModal('metricModal');
+    showToast('🗑 Metrica eliminata');
+    const objId = editingMetricObjId;
+    await loadAll();
+    openDetail(objId);
+}
+
+// ════════════════════════════════════════════════════════════
+// RILEVAZIONE
+// ════════════════════════════════════════════════════════════
+function openMeasure(metricId) {
+    const m = metrics.find(x => x.id === metricId);
+    if (!m) return;
+    measuringMetricId = metricId;
+
+    document.getElementById('measureTitle').textContent = m.name;
+    document.getElementById('measDate').value = todayISO();
+    document.getElementById('measNote').value = '';
+
+    // il protocollo va sempre riletto prima di misurare
+    document.getElementById('measureProtocol').innerHTML = m.protocol
+        ? `<div class="protocol-box"><span class="protocol-label">Protocollo di misura</span>${esc(m.protocol)}</div>`
+        : `<div class="protocol-box" style="background:#FEF3C7;border-left-color:var(--warning);">
+             <span class="protocol-label" style="color:#92400E;">Nessun protocollo</span>
+             Questa metrica non dice come si misura. Senza protocollo i valori di mesi diversi
+             non sono confrontabili: aprila in modifica e scrivilo.
+           </div>`;
+
+    const host = document.getElementById('measureInputs');
+
+    if (m.kind === 'rubric') {
+        const crits = criteriaOf(m.id);
+        if (!crits.length) {
+            host.innerHTML = `<div class="form-hint">La rubrica non ha criteri. Modificala prima di rilevare.</div>`;
+            return;
+        }
+        host.innerHTML = crits.map(c => `
+            <div class="crit-row">
+                <div class="crit-head">
+                    <span class="crit-label">${esc(c.label)}
+                        ${Number(c.weight) !== 1 ? `<span class="crit-weight">×${fmtNum(c.weight)}</span>` : ''}</span>
+                    <span class="crit-score" id="score-${c.id}">3</span>
+                </div>
+                <input type="range" min="1" max="5" step="1" value="3"
+                       data-crit="${c.id}" data-weight="${c.weight}"
+                       oninput="onRubricSlide(this)">
+            </div>`).join('') + `
+            <div class="rubric-avg">
+                <span class="rubric-avg-label">Media pesata</span>
+                <span class="rubric-avg-val" id="rubricAvg">3.00</span>
+            </div>`;
+        updateRubricAvg();
+    } else {
+        const last = measuresOf(m.id).slice(-1)[0];
+        host.innerHTML = `
+            <div class="form-group">
+                <label class="form-label">Valore${m.unit ? ' (' + esc(m.unit) + ')' : ''}</label>
+                <input type="number" step="any" class="form-input" id="measValue"
+                       value="${last ? last.value : ''}">
+                <div class="form-hint">
+                    ${m.kind === 'cumulative'
+                        ? 'Si somma agli altri valori della ' + PERIOD_LABEL[m.period || 'week'] + ' corrente.'
+                        : m.kind === 'checklist'
+                            ? 'Quanti ne hai completati in totale finora (non l\'incremento).'
+                            : 'Baseline ' + fmtNum(m.baseline) + ' → target ' + fmtNum(m.target) + '.'}
+                </div>
+            </div>`;
+    }
+    openModal('measureModal');
+}
+
+function onRubricSlide(el) {
+    document.getElementById('score-' + el.dataset.crit).textContent = el.value;
+    updateRubricAvg();
+}
+
+function updateRubricAvg() {
+    const sliders = document.querySelectorAll('#measureInputs input[type=range]');
+    let sw = 0, swv = 0;
+    sliders.forEach(s => {
+        const w = Number(s.dataset.weight) || 1;
+        sw += w; swv += w * Number(s.value);
+    });
+    const el = document.getElementById('rubricAvg');
+    if (el) el.textContent = sw ? (swv / sw).toFixed(2) : '—';
+}
+
+async function saveMeasurement() {
+    const m = metrics.find(x => x.id === measuringMetricId);
+    if (!m) return;
+
+    const args = {
+        p_metric_id:   m.id,
+        p_measured_on: document.getElementById('measDate').value || todayISO(),
+        p_note:        document.getElementById('measNote').value.trim()
+    };
+
+    if (m.kind === 'rubric') {
+        const detail = {};
+        document.querySelectorAll('#measureInputs input[type=range]')
+            .forEach(s => { detail[s.dataset.crit] = Number(s.value); });
+        if (!Object.keys(detail).length) { showToast('Nessun criterio da registrare'); return; }
+        args.p_detail = detail;          // il valore lo calcola la RPC come media pesata
+    } else {
+        const v = document.getElementById('measValue').value;
+        if (v === '') { showToast('Serve un valore'); return; }
+        args.p_value = Number(v);
+    }
+
+    const { data, error } = await sb.rpc('ob_record_measurement', args);
+    if (error)      { if (handleAuthError(error)) return; showToast('❌ ' + error.message); return; }
+    if (!data?.ok)  { showToast('❌ ' + (data?.error || 'errore sconosciuto')); return; }
+
+    closeModal('measureModal');
+    showToast('✅ Rilevazione registrata: ' + fmtNum(data.value));
+    await loadAll();
+}
+
+// ════════════════════════════════════════════════════════════
+// MILESTONE
+// ════════════════════════════════════════════════════════════
+function openMilestoneEditor(objId, msId) {
+    editingMsObjId = objId;
+    editingMsId    = msId;
+    const ms = msId ? milestones.find(m => m.id === msId) : null;
+
+    document.getElementById('msModalTitle').textContent = ms ? 'Modifica milestone' : 'Nuova milestone';
+    document.getElementById('msDeleteBtn').style.display = ms ? '' : 'none';
+    document.getElementById('msLabel').value    = ms?.label || '';
+    document.getElementById('msDue').value      = ms ? String(ms.due_date).slice(0,10) : todayISO();
+    document.getElementById('msExpected').value = ms?.expected_value ?? '';
+    document.getElementById('msStatus').value   = ms?.status || 'pending';
+
+    closeModal('detailModal');
+    openModal('msModal');
+}
+
+async function saveMilestone() {
+    const due = document.getElementById('msDue').value;
+    if (!due) { showToast('Serve una data'); return; }
+
+    const exp = document.getElementById('msExpected').value;
+    const payload = {
+        objective_id:   editingMsObjId,
+        label:          document.getElementById('msLabel').value.trim(),
+        due_date:       due,
+        expected_value: exp === '' ? null : Number(exp),
+        status:         document.getElementById('msStatus').value
+    };
+
+    const res = editingMsId
+        ? await sb.from('ob_milestones').update(payload).eq('id', editingMsId)
+        : await sb.from('ob_milestones').insert(payload);
+
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+
+    closeModal('msModal');
+    showToast('✅ Milestone salvata');
+    await loadAll();
+}
+
+async function deleteMilestone() {
+    if (!editingMsId) return;
+    if (!await customConfirm('Elimino la milestone?')) return;
+    const res = await sb.from('ob_milestones').delete().eq('id', editingMsId);
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+    closeModal('msModal');
+    showToast('🗑 Milestone eliminata');
+    await loadAll();
+}
+
+// ════════════════════════════════════════════════════════════
+// AZIONI COLLEGATE
+// ════════════════════════════════════════════════════════════
+async function openLinkModal(objId) {
+    linkingObjId = objId;
+    await loadActionRefs();
+    renderLinkOptions();
+    closeModal('detailModal');
+    openModal('linkModal');
+}
+
+function renderLinkOptions() {
+    const kind = document.getElementById('linkKind').value;
+    const sel  = document.getElementById('linkTarget');
+    const existing = linksOf(linkingObjId);
+
+    const rows = kind === 'task'
+        ? tasksRef.filter(t => !existing.some(l => l.task_id === t.id))
+                  .map(t => ({ id: t.id, label: t.title }))
+        : habitsRef.filter(h => !existing.some(l => l.habit_id === h.id))
+                   .map(h => ({ id: h.id, label: h.name }));
+
+    sel.innerHTML = rows.length
+        ? rows.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join('')
+        : '<option value="">— niente da collegare —</option>';
+}
+
+async function saveLink() {
+    const kind     = document.getElementById('linkKind').value;
+    const targetId = document.getElementById('linkTarget').value;
+    if (!targetId) { showToast('Niente da collegare'); return; }
+
+    const payload = { objective_id: linkingObjId };
+    if (kind === 'task') payload.task_id = targetId; else payload.habit_id = targetId;
+
+    const res = await sb.from('ob_task_links').insert(payload);
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+
+    closeModal('linkModal');
+    showToast('✅ Azione collegata');
+    const objId = linkingObjId;
+    await loadAll();
+    openDetail(objId);
+}
+
+async function removeLink(linkId) {
+    const link = taskLinks.find(l => l.id === linkId);
+    const res = await sb.from('ob_task_links').delete().eq('id', linkId);
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+    showToast('Scollegata');
+    const objId = link?.objective_id;
+    await loadAll();
+    if (objId) openDetail(objId);
+}
+
+// ════════════════════════════════════════════════════════════
+// BACKUP
+// ════════════════════════════════════════════════════════════
+function exportBackup() {
+    const dump = { app: 'obiettivi', version: APP_VERSION, exported_at: new Date().toISOString(),
+                   objectives, metrics, criteria, milestones, measurements, taskLinks };
+    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'obiettivi-backup-' + todayISO() + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('⬇️ Backup esportato');
+}
+
+// ════════════════════════════════════════════════════════════
+// UI
+// ════════════════════════════════════════════════════════════
+function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const el = document.getElementById('page-' + name);
+    if (el) el.classList.add('active');
+}
+
+function setNavActive(el) {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+document.querySelectorAll('.modal').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); });
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+});
+
+function showToast(msg, ms) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.style.display = 'none'; }, ms || 2800);
+    return t;
+}
+
+function customConfirm(msg) {
+    return new Promise(resolve => {
+        document.getElementById('confirmMsg').textContent = msg;
+        document.getElementById('confirmDialog').classList.add('active');
+        const yes = document.getElementById('confirmYes');
+        const no  = document.getElementById('confirmNo');
+        const cleanup = () => {
+            document.getElementById('confirmDialog').classList.remove('active');
+            yes.onclick = null; no.onclick = null;
+        };
+        yes.onclick = () => { cleanup(); resolve(true);  };
+        no.onclick  = () => { cleanup(); resolve(false); };
+    });
+}
+</script>
+</body>
+</html>
