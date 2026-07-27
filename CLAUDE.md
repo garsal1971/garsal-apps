@@ -157,6 +157,23 @@ Tables are namespaced by app prefix:
 |---|---|
 | `ps_weight_tracking` | Weight measurement entries |
 
+### Obiettivi (`ob_`)
+| Table | Purpose |
+|---|---|
+| `ob_objectives` | Obiettivi, gerarchia a due livelli (`annual` → `quarterly`) via `parent_id` |
+| `ob_metrics` | Metriche di un obiettivo (1..N) |
+| `ob_rubric_criteria` | Criteri 1-5 delle metriche `kind='rubric'` |
+| `ob_measurements` | Rilevazioni; `detail` jsonb contiene i punteggi per criterio |
+| `ob_milestones` | Curva attesa (`expected_value` per data) — base del semaforo |
+| `ob_task_links` | Collegamento a `ts_tasks` / `hb_habits` (le azioni restano nelle loro app) |
+
+`ob_metrics.role` distingue **`primary`** (il risultato, alimenta la barra e il semaforo — **una sola per
+obiettivo**, vincolo `uq_ob_metrics_one_primary`), **`control`** (secondo riscontro lagging) e **`leading`**
+(lo sforzo). `ob_metrics.kind` vale `state` | `cumulative` | `checklist` | `rubric`.
+
+`ob_metrics.protocol` descrive **come** si misura e viene riproposto a ogni rilevazione: se cambia il
+protocollo la serie storica non è più confrontabile.
+
 ---
 
 ## Funzioni RPC Supabase — Task lifecycle
@@ -175,6 +192,11 @@ Le operazioni sul ciclo di vita dei task (complete, skip, fail) sono implementat
 | `task_skip` | `20260619100000_task_skip.sql` | `p_task_id uuid, p_days integer DEFAULT 1` | Salta un task alla prossima occorrenza |
 | `task_fail` | `20260619110000_task_fail.sql` | `p_task_id uuid` | Segna un task come fallito |
 | `task_next_recurring_date` | `20260520110000_fix_task_next_recurring_date.sql` | `p_task ts_tasks, p_base date` | Calcola la prossima data per task `recurring` |
+
+Stessa regola per **Obiettivi**: il calcolo del progresso e la media pesata della rubrica vivono nelle RPC
+`ob_objective_progress` / `ob_record_measurement` (`20260727100000_ob_objectives_tables.sql`), non nel JS.
+`ob_metric_current` è invece volutamente `SECURITY INVOKER`: riceve una riga `ob_metrics` dal chiamante,
+quindi la RLS su `ob_measurements` deve restare attiva.
 
 Tutte le funzioni restituiscono `jsonb` con la struttura:
 ```json
@@ -286,6 +308,18 @@ Le migration vengono applicate **automaticamente** al push su `claude/**` tramit
 ### `events-log.html` — Events Log
 - Groups → Events → Logs hierarchy
 - Quick-log UI: select event, tap to log with timestamp
+
+### `obiettivi.html` — Obiettivi
+- Obiettivi annuali con sotto-obiettivi trimestrali (`parent_id`, due soli livelli)
+- **Due barre affiancate, mai fuse in una media**: *risultato* (metrica `primary` dell'obiettivo) e
+  *esecuzione* (% figli + milestone completati). Il progresso del padre **non** è la media dei figli:
+  quando le due barre divergono di ≥ 25 punti l'app mostra un avviso esplicito, perché è il segnale
+  che il piano viene eseguito ma il metodo non funziona.
+- Semaforo (`on_track` / `at_risk` / `off_track`) confrontando il risultato con l'ultima milestone scaduta
+- Rubrica multi-criterio per gli obiettivi senza numeri ovvi: slider 1-5, media pesata calcolata
+  **server-side** da `ob_record_measurement` (il client non invia mai il valore per `kind='rubric'`)
+- Formula unica di avanzamento per tutti i `kind`, regge entrambe le `direction`:
+  `(corrente − baseline) / (target − baseline)` — es. pause 14 → 3, corrente 6 ⇒ 73 %
 
 ### `weight-quest.html` — Weight Quest
 - Chart.js weight graph centred on today (30-day window, scrollable)
