@@ -326,6 +326,20 @@ Le migration vengono applicate **automaticamente** al push su `claude/**` tramit
 - Google Fit integration via OAuth token
 - Minimal inline Supabase client (no CDN); milestone and objective tracking
 
+### `spuntiamola.html` — Spuntiamola
+- Conto alla rovescia "a spunte": si imposta un periodo **dal giorno X al giorno Y** e si spunta
+  un giorno alla volta fino al traguardo
+- Griglia dei giorni raggruppata per mese; ogni cella è cliccabile (spunta / de-spunta)
+- Stati della cella: *fatto* (verde), *oggi* (bordo viola), *saltato* (rosso, giorno passato non
+  spuntato), *da fare* (grigio)
+- **Ogni spunta assegna un'emoji casuale al giorno** (resta lì, salvata) e mostra una frase
+  simpatica + confetti; a 25/50/75/100 % scattano messaggi di traguardo dedicati
+- Opzione "salta sabato e domenica" per contare solo i giorni feriali
+- **Nessuna tabella Supabase**: periodo, opzioni e spunte vivono in `localStorage`
+  (chiavi `sp_*`), quindi i dati sono per-dispositivo e non sincronizzati
+- Registrata in `cm_apps` da `20260727230000_spuntiamola_app.sql` con `score_query` costante
+  (`SELECT 0::int`), perché non c'è nulla da contare lato DB
+
 ---
 
 ## Development Workflow

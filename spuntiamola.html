@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✅ Spuntiamola v1.0.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF3366;
+            --secondary: #6C5CE7;
+            --success: #00B894;
+            --warning: #F39C12;
+            --danger: #E74C3C;
+            --dark: #1F2937;
+            --light: #FFFFFF;
+            --muted: #6B7280;
+            --border: #E5E7EB;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Darker Grotesque', sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 45%, #6C5CE7 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: var(--dark);
+            overflow-x: hidden;
+        }
+
+        /* ── HEADER ── */
+        .app-header {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .app-title {
+            font-size: 1.35rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .app-version {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.62rem;
+            color: rgba(255,255,255,0.75);
+            background: rgba(0,0,0,0.2);
+            padding: 4px 9px;
+            border-radius: 99px;
+        }
+
+        .header-right { display: flex; align-items: center; gap: 8px; }
+
+        .btn-icon {
+            background: rgba(255,255,255,0.22);
+            border: 1px solid rgba(255,255,255,0.35);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .15s, background .15s;
+        }
+        .btn-icon:hover { background: rgba(255,255,255,0.35); transform: translateY(-2px); }
+        .btn-icon:active { transform: scale(0.94); }
+
+        .main {
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 18px 14px 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.96);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+        }
+
+        /* ── HERO ── */
+        .hero { text-align: center; }
+
+        .hero-goal {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 4px;
+        }
+
+        .hero-number {
+            font-size: 5rem;
+            font-weight: 900;
+            line-height: 0.95;
+            background: linear-gradient(135deg, var(--secondary), var(--primary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-label {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin-top: 2px;
+        }
+
+        .hero-range {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--muted);
+            margin-top: 10px;
+        }
+
+        /* ── PROGRESS ── */
+        .progress-wrap { margin-top: 18px; }
+
+        .progress-bar {
+            height: 16px;
+            background: #EDF0F3;
+            border-radius: 99px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success), #38ef7d);
+            border-radius: 99px;
+            width: 0%;
+            transition: width .5s cubic-bezier(.34,1.56,.64,1);
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--muted);
+            margin-top: 7px;
+        }
+
+        /* ── STATS ── */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .stat {
+            background: #F7F8FA;
+            border-radius: 14px;
+            padding: 12px 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.6rem;
+            font-weight: 900;
+            color: var(--dark);
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        /* ── CTA ── */
+        .btn-today {
+            width: 100%;
+            margin-top: 18px;
+            padding: 16px;
+            border: none;
+            border-radius: 16px;
+            background: linear-gradient(135deg, var(--success), #0aa)  ;
+            color: white;
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            box-shadow: 0 6px 18px rgba(0,184,148,0.4);
+            transition: transform .15s, box-shadow .15s;
+        }
+        .btn-today:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,184,148,0.5); }
+        .btn-today:active { transform: scale(0.98); }
+        .btn-today:disabled {
+            background: #D8DDE3;
+            color: #98A2AE;
+            box-shadow: none;
+            cursor: default;
+            transform: none;
+        }
+
+        /* ── MESSAGGIO SIMPATICO ── */
+        .fun-box {
+            margin-top: 14px;
+            background: linear-gradient(135deg, #FFF6E5, #FFEFD6);
+            border: 2px dashed var(--warning);
+            border-radius: 16px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: opacity .4s, max-height .4s, margin .4s;
+        }
+        .fun-box.show { opacity: 1; max-height: 220px; }
+
+        .fun-emoji { font-size: 2.2rem; line-height: 1; flex-shrink: 0; }
+
+        .fun-text {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #8A5A00;
+            line-height: 1.25;
+        }
+
+        /* ── CALENDARIO ── */
+        .cal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 900;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .legend {
+            display: flex;
+            gap: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--muted);
+            flex-wrap: wrap;
+        }
+        .legend span { display: flex; align-items: center; gap: 4px; }
+        .legend i {
+            width: 11px; height: 11px; border-radius: 4px; display: inline-block;
+            border: 1px solid var(--border);
+        }
+        .lg-done   { background: var(--success); border-color: var(--success) !important; }
+        .lg-today  { background: #FFF; border: 2px solid var(--secondary) !important; }
+        .lg-missed { background: #FFE3E3; border-color: #F5B5B5 !important; }
+        .lg-future { background: #F2F4F7; }
+
+        .month-block { margin-bottom: 18px; }
+        .month-block:last-child { margin-bottom: 0; }
+
+        .month-name {
+            font-size: 0.82rem;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .month-name::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .month-count {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        .days-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+            gap: 6px;
+        }
+
+        .day {
+            aspect-ratio: 1;
+            border-radius: 11px;
+            border: 1.5px solid var(--border);
+            background: #F2F4F7;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: transform .12s, background .2s, border-color .2s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .day:hover { transform: translateY(-2px); border-color: var(--secondary); }
+        .day:active { transform: scale(0.92); }
+
+        .day-num {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .day-mark { font-size: 1.15rem; line-height: 1; }
+
+        .day.done {
+            background: linear-gradient(135deg, #E4FBF2, #D3F8E8);
+            border-color: var(--success);
+        }
+        .day.done .day-num { color: var(--success); }
+
+        .day.missed { background: #FFE9E9; border-color: #F5C2C2; }
+        .day.missed .day-num { color: var(--danger); }
+
+        .day.today {
+            border: 2.5px solid var(--secondary);
+            box-shadow: 0 0 0 3px rgba(108,92,231,0.16);
+        }
+        .day.today .day-num { color: var(--secondary); font-weight: 700; }
+
+        .day.weekend .day-num { opacity: 0.55; }
+
+        .day.pop { animation: pop .45s cubic-bezier(.34,1.56,.64,1); }
+        @keyframes pop {
+            0%   { transform: scale(1); }
+            45%  { transform: scale(1.32) rotate(-7deg); }
+            100% { transform: scale(1); }
+        }
+
+        /* ── EMPTY ── */
+        .empty {
+            text-align: center;
+            padding: 26px 16px;
+            color: var(--muted);
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+        .empty-emoji { font-size: 2.6rem; display: block; margin-bottom: 8px; }
+
+        /* ── MODALE ── */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(20,25,35,0.55);
+            backdrop-filter: blur(3px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            z-index: 900;
+        }
+        .overlay.show { display: flex; }
+
+        .modal {
+            background: white;
+            border-radius: 22px;
+            width: 100%;
+            max-width: 440px;
+            max-height: 92vh;
+            overflow-y: auto;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp .3s cubic-bezier(.34,1.4,.64,1);
+        }
+        @keyframes slideUp {
+            from { transform: translateY(24px); opacity: 0; }
+            to   { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-title {
+            font-size: 1.4rem;
+            font-weight: 900;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .field { margin-bottom: 15px; }
+
+        .field label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 6px;
+        }
+
+        .field input[type="text"],
+        .field input[type="date"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.92rem;
+            color: var(--dark);
+            background: #F9FAFB;
+            transition: border-color .2s;
+        }
+        .field input:focus { outline: none; border-color: var(--secondary); background: white; }
+
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .field-hint {
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 5px;
+            font-weight: 600;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            background: #F9FAFB;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        .toggle-label { font-size: 1rem; font-weight: 700; color: var(--dark); }
+        .toggle-sub { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-top: 2px; }
+
+        .switch {
+            width: 46px;
+            height: 26px;
+            border-radius: 99px;
+            background: #CBD2DA;
+            position: relative;
+            flex-shrink: 0;
+            transition: background .2s;
+        }
+        .switch::after {
+            content: '';
+            position: absolute;
+            top: 3px; left: 3px;
+            width: 20px; height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform .2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+        }
+        .switch.on { background: var(--success); }
+        .switch.on::after { transform: translateX(20px); }
+
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+        .btn {
+            flex: 1;
+            padding: 13px;
+            border: none;
+            border-radius: 13px;
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: transform .15s, filter .15s;
+        }
+        .btn:hover { transform: translateY(-2px); filter: brightness(1.06); }
+        .btn:active { transform: scale(0.97); }
+
+        .btn-primary { background: var(--secondary); color: white; }
+        .btn-ghost   { background: #EEF0F3; color: var(--dark); }
+        .btn-danger  { background: #FDECEC; color: var(--danger); }
+
+        .danger-zone {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px dashed var(--border);
+        }
+
+        /* ── CONFETTI ── */
+        .confetti-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 999;
+            overflow: hidden;
+        }
+        .confetto {
+            position: absolute;
+            animation: fall linear forwards;
+        }
+        @keyframes fall {
+            to { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+        }
+
+        .app-footer {
+            text-align: center;
+            padding: 18px;
+            color: rgba(255,255,255,0.85);
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        @media (max-width: 560px) {
+            .hero-number { font-size: 3.8rem; }
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .days-grid { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
+            .field-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="app-header">
+    <div class="app-title">✅ Spuntiamola</div>
+    <div class="header-right">
+        <span class="app-version" id="versionBadge">v1.0.0</span>
+        <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
+    </div>
+</header>
+
+<div class="main">
+
+    <!-- HERO -->
+    <div class="card hero">
+        <div class="hero-goal" id="heroGoal">Traguardo</div>
+        <div class="hero-number" id="heroNumber">—</div>
+        <div class="hero-label" id="heroLabel">giorni che mancano</div>
+        <div class="hero-range" id="heroRange"></div>
+
+        <div class="progress-wrap">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-meta">
+                <span id="progressLeft">0 spuntati</span>
+                <span id="progressRight">0%</span>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="statDone">0</div>
+                <div class="stat-label">Spuntati</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statLeft">0</div>
+                <div class="stat-label">Mancano</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statStreak">0</div>
+                <div class="stat-label">Serie</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Totali</div>
+            </div>
+        </div>
+
+        <button class="btn-today" id="btnToday">Spunta oggi!</button>
+
+        <div class="fun-box" id="funBox">
+            <div class="fun-emoji" id="funEmoji">🎉</div>
+            <div class="fun-text" id="funText"></div>
+        </div>
+    </div>
+
+    <!-- CALENDARIO -->
+    <div class="card">
+        <div class="cal-head">
+            <div class="card-title">🗓️ I giorni</div>
+            <div class="legend">
+                <span><i class="lg-done"></i>fatto</span>
+                <span><i class="lg-today"></i>oggi</span>
+                <span><i class="lg-missed"></i>saltato</span>
+                <span><i class="lg-future"></i>da fare</span>
+            </div>
+        </div>
+        <div id="calendar"></div>
+    </div>
+
+</div>
+
+<footer class="app-footer">
+    Spuntiamola <span id="versionFooter">v1.0.0</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+</footer>
+
+<!-- MODALE IMPOSTAZIONI -->
+<div class="overlay" id="settingsOverlay">
+    <div class="modal">
+        <div class="modal-title">⚙️ Impostazioni</div>
+
+        <div class="field">
+            <label for="inGoal">Cosa stai aspettando?</label>
+            <input type="text" id="inGoal" maxlength="60" placeholder="Es. Le ferie in Sicilia">
+        </div>
+
+        <div class="field">
+            <label for="inEmoji">Emoji del traguardo</label>
+            <input type="text" id="inEmoji" maxlength="4" placeholder="🏖️">
+            <div class="field-hint">Compare accanto al conto alla rovescia.</div>
+        </div>
+
+        <div class="field-row">
+            <div class="field">
+                <label for="inStart">Dal giorno</label>
+                <input type="date" id="inStart">
+            </div>
+            <div class="field">
+                <label for="inEnd">Al giorno</label>
+                <input type="date" id="inEnd">
+            </div>
+        </div>
+
+        <div class="toggle-row" id="toggleWeekend">
+            <div>
+                <div class="toggle-label">Salta sabato e domenica</div>
+                <div class="toggle-sub">Conta solo i giorni feriali</div>
+            </div>
+            <div class="switch" id="switchWeekend"></div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-ghost" id="btnCancel">Annulla</button>
+            <button class="btn btn-primary" id="btnSave">Salva</button>
+        </div>
+
+        <div class="danger-zone">
+            <button class="btn btn-danger" id="btnReset" style="width:100%">🧹 Cancella tutte le spunte</button>
+        </div>
+    </div>
+</div>
+
+<div class="confetti-layer" id="confettiLayer"></div>
+
+<script>
+var APP_VERSION = 'v1.0.0';
+var BUILD_TIME  = '2026-07-27T22:00:00Z';
+console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+document.getElementById('versionBadge').textContent  = APP_VERSION;
+document.getElementById('versionFooter').textContent = APP_VERSION;
+
+// ============================================================
+// STATE — tutto in localStorage, nessuna tabella Supabase
+// ============================================================
+var LS = {
+    goal:     'sp_goal',
+    emoji:    'sp_emoji',
+    start:    'sp_startDate',
+    end:      'sp_endDate',
+    weekend:  'sp_skipWeekend',
+    checks:   'sp_checks'
+};
+
+function todayISO() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+function defaultEnd() {
+    var d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function loadChecks() {
+    try {
+        var raw = localStorage.getItem(LS.checks);
+        var obj = raw ? JSON.parse(raw) : {};
+        return (obj && typeof obj === 'object') ? obj : {};
+    } catch (e) {
+        console.warn('Spunte illeggibili, riparto da zero', e);
+        return {};
+    }
+}
+
+var S = {
+    goal:        localStorage.getItem(LS.goal)   || 'Il traguardo',
+    emoji:       localStorage.getItem(LS.emoji)  || '🎯',
+    startDate:   localStorage.getItem(LS.start)  || todayISO(),
+    endDate:     localStorage.getItem(LS.end)    || defaultEnd(),
+    skipWeekend: localStorage.getItem(LS.weekend) === '1',
+    // checks: { 'YYYY-MM-DD': '🎉' }  — l'emoji simpatica assegnata a quel giorno
+    checks:      loadChecks()
+};
+
+// ============================================================
+// ROBA SIMPATICA — una frase + un'emoji per ogni spunta
+// ============================================================
+var FRASI = [
+    "E uno! Il traguardo trema. 😏",
+    "Giorno archiviato. Prossimo!",
+    "Un altro se n'è andato. Ciao ciao! 👋",
+    "Sei ufficialmente più vicino di ieri.",
+    "Spuntato. La matematica non mente. 🧮",
+    "Questo giorno non tornerà. Meglio così!",
+    "Piano piano si arriva ovunque. 🐢",
+    "Bravo! Hai battuto il calendario oggi.",
+    "Un giorno in meno, zero rimpianti.",
+    "Il tempo passa, tu spunti. Perfetto.",
+    "Chi spunta, arriva. Regola numero uno. 📏",
+    "Fatto! Ora puoi anche riposarti.",
+    "Sei una macchina da spunte. 🤖",
+    "Il calendario ti teme, ormai.",
+    "Ancora uno? Ancora uno. 💪",
+    "Segnato! La strada si accorcia.",
+    "Oggi c'eri. È già tantissimo.",
+    "Un mattoncino in più nel muro. 🧱",
+    "Spunta fatta, coscienza a posto. 😌",
+    "Il conto alla rovescia ringrazia.",
+    "Costanza batte entusiasmo. Sempre. 🔁",
+    "Nessuno ti toglie questo giorno.",
+    "Eccellente. Continua così, campione! 🏆",
+    "Un altro giorno domato. 🦁",
+    "Questa spunta profuma di libertà. 🌬️",
+    "Che soddisfazione, eh? 😎",
+    "Piccolo passo, grande direzione. 🚶",
+    "Il futuro si avvicina a piedi. Lascialo camminare.",
+    "Spuntato con stile. ✨",
+    "Fatto. Si torna a vivere. 🎈"
+];
+
+var EMOJI_SPUNTA = [
+    '✅','🎉','⭐','🔥','💪','🚀','🌟','🏆','😎','🍀',
+    '🎯','⚡','🥳','👏','💎','🌈','🦾','🧨','🎊','☀️'
+];
+
+var CONFETTI_COLORS = ['#FF3366','#6C5CE7','#00B894','#F39C12','#2563EB','#FFD700','#38ef7d'];
+
+function frasePerGiorno(iso) {
+    // stessa data → stessa frase, così non cambia a ogni render
+    var h = 0;
+    for (var i = 0; i < iso.length; i++) h = (h * 31 + iso.charCodeAt(i)) >>> 0;
+    return FRASI[h % FRASI.length];
+}
+
+function emojiRandom() {
+    return EMOJI_SPUNTA[Math.floor(Math.random() * EMOJI_SPUNTA.length)];
+}
+
+// ============================================================
+// DATE HELPERS — sempre su stringhe ISO, mai conversioni UTC
+// ============================================================
+function parseISO(iso) {
+    var p = iso.split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+}
+
+function toISO(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function addDays(iso, n) {
+    var d = parseISO(iso);
+    d.setDate(d.getDate() + n);
+    return toISO(d);
+}
+
+var MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+            'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+// Elenco dei giorni del periodo, filtrando il weekend se richiesto
+function giorniDelPeriodo() {
+    var out = [];
+    if (!S.startDate || !S.endDate) return out;
+    if (parseISO(S.endDate) < parseISO(S.startDate)) return out;
+
+    var cur = S.startDate;
+    var guard = 0;
+    while (parseISO(cur) <= parseISO(S.endDate) && guard < 4000) {
+        var dow = parseISO(cur).getDay();
+        if (!(S.skipWeekend && (dow === 0 || dow === 6))) out.push(cur);
+        cur = addDays(cur, 1);
+        guard++;
+    }
+    return out;
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+    var giorni = giorniDelPeriodo();
+    var oggi   = todayISO();
+
+    var spuntati = giorni.filter(function(g) { return S.checks[g]; }).length;
+    var totali   = giorni.length;
+    var mancano  = giorni.filter(function(g) { return !S.checks[g] && g >= oggi; }).length;
+    var perc     = totali ? Math.round(spuntati / totali * 100) : 0;
+
+    // HERO
+    document.getElementById('heroGoal').textContent   = S.emoji + ' ' + S.goal;
+    document.getElementById('heroNumber').textContent = totali ? mancano : '—';
+    document.getElementById('heroLabel').textContent  =
+        !totali ? 'imposta il periodo per iniziare'
+                : (mancano === 1 ? 'giorno che manca' : 'giorni che mancano');
+    document.getElementById('heroRange').textContent  = totali
+        ? 'dal ' + fmtIT(S.startDate) + ' al ' + fmtIT(S.endDate)
+          + (S.skipWeekend ? ' · solo feriali' : '')
+        : '';
+
+    document.getElementById('progressFill').style.width = perc + '%';
+    document.getElementById('progressLeft').textContent  = spuntati + ' di ' + totali + ' spuntati';
+    document.getElementById('progressRight').textContent = perc + '%';
+
+    document.getElementById('statDone').textContent   = spuntati;
+    document.getElementById('statLeft').textContent   = mancano;
+    document.getElementById('statStreak').textContent = calcolaSerie(giorni);
+    document.getElementById('statTotal').textContent  = totali;
+
+    // BOTTONE OGGI
+    var btn = document.getElementById('btnToday');
+    var oggiNelPeriodo = giorni.indexOf(oggi) !== -1;
+    if (!totali) {
+        btn.textContent = 'Imposta il periodo ⚙️';
+        btn.disabled = false;
+        btn.onclick = apriImpostazioni;
+    } else if (!oggiNelPeriodo) {
+        btn.textContent = parseISO(oggi) > parseISO(S.endDate)
+            ? 'Periodo concluso 🏁'
+            : 'Oggi non è nel periodo';
+        btn.disabled = true;
+        btn.onclick = null;
+    } else if (S.checks[oggi]) {
+        btn.textContent = 'Oggi è già spuntato ' + S.checks[oggi];
+        btn.disabled = true;
+        btn.onclick = null;
+    } else {
+        btn.textContent = 'Spunta oggi!';
+        btn.disabled = false;
+        btn.onclick = function() { toggleGiorno(oggi); };
+    }
+
+    renderCalendario(giorni, oggi);
+}
+
+function fmtIT(iso) {
+    var p = iso.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+// Serie = giorni consecutivi spuntati che finiscono oggi (o all'ultimo giorno passato)
+function calcolaSerie(giorni) {
+    var oggi = todayISO();
+    var passati = giorni.filter(function(g) { return g <= oggi; });
+    var serie = 0;
+    for (var i = passati.length - 1; i >= 0; i--) {
+        if (S.checks[passati[i]]) serie++;
+        else break;
+    }
+    return serie;
+}
+
+function renderCalendario(giorni, oggi) {
+    var box = document.getElementById('calendar');
+
+    if (!giorni.length) {
+        box.innerHTML = '<div class="empty"><span class="empty-emoji">🤷</span>'
+            + 'Nessun giorno da spuntare.<br>Apri le impostazioni ⚙️ e scegli il periodo.</div>';
+        return;
+    }
+
+    // raggruppa per mese
+    var blocchi = [];
+    var correnteKey = null;
+    giorni.forEach(function(g) {
+        var key = g.slice(0, 7);
+        if (key !== correnteKey) {
+            correnteKey = key;
+            blocchi.push({ key: key, giorni: [] });
+        }
+        blocchi[blocchi.length - 1].giorni.push(g);
+    });
+
+    var html = blocchi.map(function(b) {
+        var p = b.key.split('-');
+        var fatti = b.giorni.filter(function(g) { return S.checks[g]; }).length;
+
+        var celle = b.giorni.map(function(g) {
+            var cls = ['day'];
+            var dow = parseISO(g).getDay();
+            if (dow === 0 || dow === 6) cls.push('weekend');
+            if (S.checks[g])            cls.push('done');
+            else if (g < oggi)          cls.push('missed');
+            if (g === oggi)             cls.push('today');
+
+            var marchio = S.checks[g]
+                ? '<span class="day-mark">' + S.checks[g] + '</span>'
+                : '';
+            var numero = '<span class="day-num">' + (+g.slice(8, 10)) + '</span>';
+
+            return '<div class="' + cls.join(' ') + '" data-date="' + g + '" title="' + fmtIT(g) + '">'
+                 + marchio + numero + '</div>';
+        }).join('');
+
+        return '<div class="month-block">'
+             + '<div class="month-name">' + MESI[+p[1] - 1] + ' ' + p[0]
+             + ' <span class="month-count">' + fatti + '/' + b.giorni.length + '</span></div>'
+             + '<div class="days-grid">' + celle + '</div>'
+             + '</div>';
+    }).join('');
+
+    box.innerHTML = html;
+
+    Array.prototype.forEach.call(box.querySelectorAll('.day'), function(el) {
+        el.addEventListener('click', function() { toggleGiorno(el.dataset.date); });
+    });
+}
+
+// ============================================================
+// SPUNTA / DE-SPUNTA
+// ============================================================
+function toggleGiorno(iso) {
+    if (S.checks[iso]) {
+        delete S.checks[iso];
+        salvaChecks();
+        nascondiFun();
+        render();
+        return;
+    }
+
+    S.checks[iso] = emojiRandom();
+    salvaChecks();
+    render();
+
+    mostraFun(iso);
+    animaCella(iso);
+
+    var giorni   = giorniDelPeriodo();
+    var spuntati = giorni.filter(function(g) { return S.checks[g]; }).length;
+    festeggia(giorni.length && spuntati === giorni.length ? 160 : 45);
+    controllaTraguardi(spuntati, giorni.length);
+}
+
+function salvaChecks() {
+    localStorage.setItem(LS.checks, JSON.stringify(S.checks));
+}
+
+function animaCella(iso) {
+    var el = document.querySelector('.day[data-date="' + iso + '"]');
+    if (!el) return;
+    el.classList.add('pop');
+    setTimeout(function() { el.classList.remove('pop'); }, 500);
+}
+
+var funTimer = null;
+
+function mostraFun(iso, testoCustom) {
+    var box = document.getElementById('funBox');
+    document.getElementById('funEmoji').textContent = S.checks[iso] || '🎉';
+    document.getElementById('funText').textContent  = testoCustom || frasePerGiorno(iso);
+    box.classList.add('show');
+    clearTimeout(funTimer);
+    funTimer = setTimeout(nascondiFun, 7000);
+}
+
+function nascondiFun() {
+    document.getElementById('funBox').classList.remove('show');
+}
+
+// Traguardi intermedi: 25 / 50 / 75 / 100 %
+var TRAGUARDI = [
+    { perc: 25,  emoji: '🌱', testo: 'Un quarto fatto! Il difficile è cominciare.' },
+    { perc: 50,  emoji: '⛰️', testo: 'Metà strada! Da qui si vede il traguardo.' },
+    { perc: 75,  emoji: '🔥', testo: 'Tre quarti! Ormai è in discesa.' },
+    { perc: 100, emoji: '🏁', testo: 'FINITO! Li hai spuntati tutti. Campione! 🎊' }
+];
+
+function controllaTraguardi(spuntati, totali) {
+    if (!totali) return;
+    var perc  = spuntati / totali * 100;
+    var prima = (spuntati - 1) / totali * 100;
+    TRAGUARDI.forEach(function(t) {
+        if (prima < t.perc && perc >= t.perc) {
+            setTimeout(function() {
+                var box = document.getElementById('funBox');
+                document.getElementById('funEmoji').textContent = t.emoji;
+                document.getElementById('funText').textContent  = t.testo;
+                box.classList.add('show');
+                clearTimeout(funTimer);
+                funTimer = setTimeout(nascondiFun, 9000);
+                festeggia(120);
+            }, 800);
+        }
+    });
+}
+
+function festeggia(quanti) {
+    var layer = document.getElementById('confettiLayer');
+    for (var i = 0; i < quanti; i++) {
+        (function(i) {
+            setTimeout(function() {
+                var el = document.createElement('div');
+                el.className = 'confetto';
+                var size = Math.random() * 9 + 6;
+                el.style.cssText = [
+                    'left:' + (Math.random() * 100) + 'vw',
+                    'top:-14px',
+                    'width:' + size + 'px',
+                    'height:' + size + 'px',
+                    'background:' + CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+                    'border-radius:' + (Math.random() > 0.5 ? '50%' : '2px'),
+                    'animation-duration:' + (Math.random() * 1.8 + 1.6) + 's'
+                ].join(';');
+                layer.appendChild(el);
+                setTimeout(function() { el.remove(); }, 4000);
+            }, i * 22);
+        })(i);
+    }
+}
+
+// ============================================================
+// IMPOSTAZIONI
+// ============================================================
+var overlay = document.getElementById('settingsOverlay');
+var swWeekend = document.getElementById('switchWeekend');
+var tmpWeekend = false;
+
+function apriImpostazioni() {
+    document.getElementById('inGoal').value  = S.goal;
+    document.getElementById('inEmoji').value = S.emoji;
+    document.getElementById('inStart').value = S.startDate;
+    document.getElementById('inEnd').value   = S.endDate;
+    tmpWeekend = S.skipWeekend;
+    swWeekend.classList.toggle('on', tmpWeekend);
+    overlay.classList.add('show');
+}
+
+function chiudiImpostazioni() { overlay.classList.remove('show'); }
+
+document.getElementById('btnSettings').addEventListener('click', apriImpostazioni);
+document.getElementById('btnCancel').addEventListener('click', chiudiImpostazioni);
+
+overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) chiudiImpostazioni();
+});
+
+document.getElementById('toggleWeekend').addEventListener('click', function() {
+    tmpWeekend = !tmpWeekend;
+    swWeekend.classList.toggle('on', tmpWeekend);
+});
+
+document.getElementById('btnSave').addEventListener('click', function() {
+    var goal  = document.getElementById('inGoal').value.trim();
+    var emoji = document.getElementById('inEmoji').value.trim();
+    var start = document.getElementById('inStart').value;
+    var end   = document.getElementById('inEnd').value;
+
+    if (!start || !end) {
+        alert('Errore: servono sia la data di inizio che quella di fine.');
+        return;
+    }
+    if (parseISO(end) < parseISO(start)) {
+        alert('Errore: la data finale è prima di quella iniziale.');
+        return;
+    }
+
+    var giorniTot = Math.round((parseISO(end) - parseISO(start)) / 86400000) + 1;
+    if (giorniTot > 1500) {
+        alert('Errore: il periodo è troppo lungo (massimo 1500 giorni).');
+        return;
+    }
+
+    S.goal        = goal || 'Il traguardo';
+    S.emoji       = emoji || '🎯';
+    S.startDate   = start;
+    S.endDate     = end;
+    S.skipWeekend = tmpWeekend;
+
+    localStorage.setItem(LS.goal,    S.goal);
+    localStorage.setItem(LS.emoji,   S.emoji);
+    localStorage.setItem(LS.start,   S.startDate);
+    localStorage.setItem(LS.end,     S.endDate);
+    localStorage.setItem(LS.weekend, S.skipWeekend ? '1' : '0');
+
+    chiudiImpostazioni();
+    nascondiFun();
+    render();
+});
+
+document.getElementById('btnReset').addEventListener('click', function() {
+    if (!confirm('Cancellare tutte le spunte? Il periodo impostato resta com\'è.')) return;
+    S.checks = {};
+    salvaChecks();
+    chiudiImpostazioni();
+    nascondiFun();
+    render();
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && overlay.classList.contains('show')) chiudiImpostazioni();
+});
+
+// ============================================================
+// START
+// ============================================================
+console.log('%c✅ Spuntiamola ' + APP_VERSION, 'color:#00B894;font-size:16px;font-weight:bold;');
+console.log('%cbuild: ' + BUILD_TIME, 'color:#888;font-size:11px;');
+
+render();
+
+// prima apertura: nessun periodo salvato → apri direttamente le impostazioni
+if (!localStorage.getItem(LS.start)) {
+    setTimeout(apriImpostazioni, 400);
+}
+</script>
+
+</body>
+</html>
