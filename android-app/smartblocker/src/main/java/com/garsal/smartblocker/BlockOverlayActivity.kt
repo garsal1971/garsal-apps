@@ -108,6 +108,10 @@ class BlockOverlayActivity : Activity() {
     private fun checkPin() {
         if (pinBuffer == Config.PIN) {
             val entities = Prefs.getBlockEntities(this)
+            // Stato azzerato qui e non solo in handleUnblock(): ACTION_UNBLOCK viene consegnato
+            // sul main thread, quindi arriverebbe dopo finish() — e nel frattempo il ritorno
+            // all'app sottostante farebbe rilanciare il blocco da BlockerAccessibilityService.
+            Prefs.setState(this, Prefs.STATE_NONE)
             startService(Intent(this, BlockerService::class.java).apply {
                 action = BlockerService.ACTION_UNBLOCK
             })
@@ -135,6 +139,7 @@ class BlockOverlayActivity : Activity() {
     /** Invia la risposta SÌ/NO della sfida Ta Firi? (tenuta premuta) e sblocca. */
     private fun onChallengeResponse(status: String) {
         val entities = Prefs.getBlockEntities(this)
+        Prefs.setState(this, Prefs.STATE_NONE)
         startService(Intent(this, BlockerService::class.java).apply {
             action = BlockerService.ACTION_UNBLOCK
         })

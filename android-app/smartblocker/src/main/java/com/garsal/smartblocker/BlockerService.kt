@@ -123,9 +123,14 @@ class BlockerService : Service() {
         Prefs.setSnoozeCount(this, 0)
         Prefs.setSnoozeUntil(this, 0)
         Prefs.clearBlockEntities(this)
+        Prefs.clearBlockApps(this)
         Prefs.clearBlockTitle(this)
         Prefs.clearBlockDate(this)
         Prefs.clearBlockCaData(this)
+        // Riapre la finestra di query: se il blocco appena chiuso era una notifica Analisi Costi,
+        // le eventuali righe task/sfida rimaste pending devono comparire subito dopo (entro il
+        // prossimo giro del checker) e non fino a 5 minuti più tardi.
+        lastSupabaseCheckMs = 0L
         blockWm?.dismiss()
         blockWm = null
         cancelBlockNotification()
@@ -155,25 +160,34 @@ class BlockerService : Service() {
             AppLogger.log(this, "SUPABASE", "HTTP ${result.httpCode} — righe=${result.entries.size} due=${result.dueIds.size} nextFireAt=${result.nextFireAtMs?.let { java.util.Date(it) } ?: "nessuno"}")
             val dueIds = result.dueIds
             if (dueIds.isNotEmpty()) {
-                AppLogger.log(this, "SUPABASE", "blocchi pronti: ${dueIds.joinToString()} — mostro overlay")
-                dueIds.forEach { SupabaseApi(this).markSent(it) }
-                val blockEntities = result.entries
-                    .filter { it.id in dueIds && it.entityId.isNotBlank() }
+                val dueEntries = result.entries.filter { it.id in dueIds }
+                // Le notifiche Analisi Costi sono informative e si chiudono da sole: non vanno
+                // mescolate con task/sfide dovuti nello stesso momento, altrimenti finita la
+                // categorizzazione restavano entità da sbloccare col PIN e la schermata di
+                // richiesta sblocco compariva a sorpresa. Se ce n'è almeno una dovuta, il blocco
+                // è solo suo; le altre righe restano 'pending' (niente markSent) e generano il
+                // loro blocco al giro successivo, così non vanno perse.
+                val caEntries = dueEntries.filter { it.app == "cost_analysis" }
+                val blockedEntries = if (caEntries.isNotEmpty()) caEntries else dueEntries
+                val deferred = dueEntries.size - blockedEntries.size
+                AppLogger.log(this, "SUPABASE", "blocchi pronti: ${blockedEntries.joinToString { it.id }} — mostro overlay" +
+                    if (deferred > 0) " (rinviate $deferred righe non cost_analysis al prossimo giro)" else "")
+                blockedEntries.forEach { SupabaseApi(this).markSent(it.id) }
+                val blockEntities = blockedEntries
+                    .filter { it.entityId.isNotBlank() }
                     .map { BlockedEntity(it.app, it.entityId) }
-                val blockTitle = result.entries
-                    .filter { it.id in dueIds }
-                    .joinToString(" · ") { it.title.take(40) }
-                val blockDate = result.entries
-                    .firstOrNull { it.id in dueIds && it.fireAt.isNotBlank() }
+                val blockApps = blockedEntries.map { it.app }
+                val blockTitle = blockedEntries.joinToString(" · ") { it.title.take(40) }
+                val blockDate = blockedEntries
+                    .firstOrNull { it.fireAt.isNotBlank() }
                     ?.fireAt?.take(10) ?: ""
                 // Categorizzazione interattiva Analisi Costi: se tra i blocchi dovuti c'è una
                 // riga cost_analysis con metadata.cost_analysis (transazioni+categorie), la
                 // salviamo per BlockWindowManager. Assume al più una riga pendente per volta.
-                val caEntry = result.entries.firstOrNull {
-                    it.id in dueIds && it.app == "cost_analysis" && it.metadata.isNotBlank()
-                }
+                val caEntry = caEntries.firstOrNull { it.metadata.isNotBlank() }
                 handler.post {
                     Prefs.setBlockEntities(this, blockEntities)
+                    Prefs.setBlockApps(this, blockApps)
                     Prefs.setBlockTitle(this, blockTitle)
                     Prefs.setBlockDate(this, blockDate)
                     if (caEntry != null) {
