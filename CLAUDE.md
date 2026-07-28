@@ -157,6 +157,12 @@ Tables are namespaced by app prefix:
 |---|---|
 | `ps_weight_tracking` | Weight measurement entries |
 
+### Spuntiamola (`sp_`)
+| Table | Purpose |
+|---|---|
+| `sp_settings` | Una riga per utente: traguardo, emoji, periodo (`start_date` → `end_date`), `skip_weekend` |
+| `sp_checks` | Una riga per giorno spuntato (`UNIQUE (user_id, day)`); `emoji` è quella pescata a caso alla spunta |
+
 ### Obiettivi (`ob_`)
 | Table | Purpose |
 |---|---|
@@ -332,13 +338,20 @@ Le migration vengono applicate **automaticamente** al push su `claude/**` tramit
 - Griglia dei giorni raggruppata per mese; ogni cella è cliccabile (spunta / de-spunta)
 - Stati della cella: *fatto* (verde), *oggi* (bordo viola), *saltato* (rosso, giorno passato non
   spuntato), *da fare* (grigio)
-- **Ogni spunta assegna un'emoji casuale al giorno** (resta lì, salvata) e mostra una frase
-  simpatica + confetti; a 25/50/75/100 % scattano messaggi di traguardo dedicati
+- **Ogni spunta assegna un'emoji casuale al giorno** (resta lì, salvata) e mostra un **toast di
+  ~2,5 s** con una frase simpatica + confetti; a 25/50/75/100 % scattano messaggi di traguardo
+  dedicati (toast più grande, 4,5 s)
 - Opzione "salta sabato e domenica" per contare solo i giorni feriali
-- **Nessuna tabella Supabase**: periodo, opzioni e spunte vivono in `localStorage`
-  (chiavi `sp_*`), quindi i dati sono per-dispositivo e non sincronizzati
-- Registrata in `cm_apps` da `20260727230000_spuntiamola_app.sql` con `score_query` costante
-  (`SELECT 0::int`), perché non c'è nulla da contare lato DB
+- **Avviso "oggi non spuntato"** in due punti: banner giallo dentro l'app e sezione dedicata nel
+  fumetto avvisi di AppSphere (`loadHomeAlertSpuntiamola` in `index.html`)
+- **Dati su Supabase** (`sp_settings` + `sp_checks`, migration `20260728100000_sp_spuntiamola_tables.sql`):
+  il DB è la fonte di verità, `localStorage` (chiavi `sp_*`) resta come cache offline così la
+  griglia compare subito all'apertura. Al primo avvio dopo l'aggiornamento le spunte già presenti
+  in locale vengono caricate sul DB una volta sola.
+- Le scritture sono **ottimistiche con rollback**: se la chiamata al DB fallisce la spunta viene
+  tolta e compare un toast di errore, così non resta una spunta finta che sparisce al reload
+- Registrata in `cm_apps` da `20260727230000_spuntiamola_app.sql`; la `score_query` (aggiornata
+  dalla migration `sp_`) conta i **giorni che mancano**, quindi la bolla nel launcher è proporzionata
 
 ---
 
