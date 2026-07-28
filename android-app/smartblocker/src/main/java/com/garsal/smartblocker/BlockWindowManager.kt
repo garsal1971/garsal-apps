@@ -80,6 +80,7 @@ class BlockWindowManager(private val ctx: Context) {
 
         val view = buildView()
         rootView = view
+        overlayVisible = true
         try {
             wm.addView(view, buildOverlayParams())
             handler.post(clockTick)
@@ -87,26 +88,7 @@ class BlockWindowManager(private val ctx: Context) {
         } catch (e: Exception) {
             AppLogger.log(ctx, "WINDOW", "errore show(): ${e.message}")
             rootView = null
-        }
-    }
-
-    /** Passa dal picker categorie alla schermata di blocco standard (PIN/sfida), senza
-        sbloccare — usata quando il picker termina ma restano altre entità (task/sfide) da
-        gestire. Vedi finishCaPickerAndMaybeUnblock(). */
-    private fun switchToStandardView() {
-        handler.removeCallbacks(clockTick)
-        rootView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
-        rootView = null
-        isCaPickerView = false
-        val view = buildStandardView()
-        rootView = view
-        try {
-            wm.addView(view, buildOverlayParams())
-            handler.post(clockTick)
-            refreshUI()
-        } catch (e: Exception) {
-            AppLogger.log(ctx, "WINDOW", "errore switchToStandardView(): ${e.message}")
-            rootView = null
+            overlayVisible = false
         }
     }
 
@@ -116,6 +98,7 @@ class BlockWindowManager(private val ctx: Context) {
             try { wm.removeView(it) } catch (_: Exception) {}
             rootView = null
         }
+        overlayVisible = false
         pinBuffer = ""
     }
 
@@ -142,6 +125,10 @@ class BlockWindowManager(private val ctx: Context) {
     }
 
     private fun onSnooze() {
+        // Stessa ragione di unblockAndDismiss(): lo stato va azzerato prima di togliere la view.
+        // Solo se il rinvio verrà davvero concesso — a rinvii esauriti handleSnooze() lascia il
+        // blocco attivo e azzerare qui lo stato lo farebbe sparire senza alcun alarm.
+        if (Prefs.getSnoozeCount(ctx) < Config.MAX_SNOOZES) Prefs.setState(ctx, Prefs.STATE_NONE)
         ctx.startService(Intent(ctx, BlockerService::class.java).apply {
             action = BlockerService.ACTION_SNOOZE
         })
@@ -158,12 +145,23 @@ class BlockWindowManager(private val ctx: Context) {
         if (pinBuffer.length == 4) handler.postDelayed({ checkPin() }, 150)
     }
 
+    /** Chiude il blocco. Prefs.setState(STATE_NONE) va fatto **prima** di togliere la view, non
+        solo dentro handleUnblock(): startService() consegna ACTION_UNBLOCK sul main thread, quindi
+        il servizio azzera lo stato solo dopo il ritorno da questo metodo. Nel frattempo la view è
+        già stata rimossa e l'app sotto torna in primo piano generando un TYPE_WINDOW_STATE_CHANGED
+        che BlockerAccessibilityService leggerebbe con lo stato ancora "bloccato", rilanciando la
+        schermata PIN appena sbloccato. */
+    private fun unblockAndDismiss() {
+        Prefs.setState(ctx, Prefs.STATE_NONE)
+        ctx.startService(Intent(ctx, BlockerService::class.java).apply {
+            action = BlockerService.ACTION_UNBLOCK
+        })
+        dismiss()
+    }
+
     private fun checkPin() {
         if (pinBuffer == Config.PIN) {
             val entities = Prefs.getBlockEntities(ctx)
-            ctx.startService(Intent(ctx, BlockerService::class.java).apply {
-                action = BlockerService.ACTION_UNBLOCK
-            })
             if (entities.isNotEmpty()) {
                 Thread {
                     val api = SupabaseApi(ctx)
@@ -171,7 +169,7 @@ class BlockWindowManager(private val ctx: Context) {
                     api.triggerFillQueue()
                 }.start()
             }
-            dismiss()
+            unblockAndDismiss()
         } else {
             tvPinError.text = "PIN errato, riprova"
             pinBuffer = ""
@@ -191,18 +189,12 @@ class BlockWindowManager(private val ctx: Context) {
         mostrato (BlockerService → markSent), quindi non serve completare/confermare nulla lato
         server, si chiude e basta. */
     private fun onInfoDismiss() {
-        ctx.startService(Intent(ctx, BlockerService::class.java).apply {
-            action = BlockerService.ACTION_UNBLOCK
-        })
-        dismiss()
+        unblockAndDismiss()
     }
 
     /** Invia la risposta SÌ/NO della sfida Ta Firi? (tenuta premuta) e sblocca. */
     private fun onChallengeResponse(status: String) {
         val entities = Prefs.getBlockEntities(ctx)
-        ctx.startService(Intent(ctx, BlockerService::class.java).apply {
-            action = BlockerService.ACTION_UNBLOCK
-        })
         if (entities.isNotEmpty()) {
             Thread {
                 val api = SupabaseApi(ctx)
@@ -210,7 +202,7 @@ class BlockWindowManager(private val ctx: Context) {
                 api.triggerFillQueue()
             }.start()
         }
-        dismiss()
+        unblockAndDismiss()
     }
 
     /** Legge da Prefs il metadata del blocco cost_analysis corrente e lo scompone in
@@ -249,7 +241,7 @@ class BlockWindowManager(private val ctx: Context) {
         isCaPickerView = true
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#1E3A5F"))
+            setBackgroundColor(Color.parseColor(BG_INFO))
             layoutParams = ViewGroup.LayoutParams(MP, MP)
             setPadding(48, 72, 48, 40)
         }
@@ -267,7 +259,7 @@ class BlockWindowManager(private val ctx: Context) {
 
         root.addView(TextView(ctx).apply {
             text = "Categorizza le transazioni Revolut"
-            textSize = 16f; setTextColor(Color.parseColor("#A78BFA"))
+            textSize = 16f; setTextColor(Color.parseColor(ACCENT_INFO))
             gravity = Gravity.CENTER
         }, lp(top = 8))
 
@@ -328,7 +320,7 @@ class BlockWindowManager(private val ctx: Context) {
         val btnSkip = Button(ctx).apply {
             text = "Rinvia — decido dopo"
             textSize = 14f; setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#7C3AED"))
+            setBackgroundColor(Color.parseColor(BTN_INFO))
             setPadding(32, 20, 32, 20)
             // Niente ACTION_SNOOZE/alarm locale: la riga cm_notification_queue è già 'sent'
             // (BlockerService → markSent), quindi non riapparirebbe comunque da una nuova query
@@ -477,7 +469,7 @@ class BlockWindowManager(private val ctx: Context) {
             if (!searching) {
                 llCaCategories.addView(Button(ctx).apply {
                     text = "➕ Nuova sotto-categoria"
-                    textSize = 13f; setTextColor(Color.parseColor("#A78BFA"))
+                    textSize = 13f; setTextColor(Color.parseColor(ACCENT_INFO))
                     setBackgroundColor(Color.parseColor("#0F172A"))
                     setAllCaps(false)
                     setPadding(24, 16, 24, 16)
@@ -528,7 +520,7 @@ class BlockWindowManager(private val ctx: Context) {
         val btnCreate = Button(ctx).apply {
             text = "Crea e assegna"
             textSize = 14f; setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#7C3AED"))
+            setBackgroundColor(Color.parseColor(BTN_INFO))
             setAllCaps(false)
             setOnClickListener {
                 val name = etName.text?.toString()?.trim().orEmpty()
@@ -603,22 +595,15 @@ class BlockWindowManager(private val ctx: Context) {
         }
     }
 
-    /** Il picker categorie può comparire insieme ad altri blocchi (task/sfide) dovuti nello
-        stesso momento — in quel caso, terminato il picker, NON si sblocca il telefono: restano
-        le altre entità da gestire con PIN, altrimenti l'utente eviterebbe di completarle
-        davvero (e completeEntity() chiamerebbe erroneamente task_complete con l'id fittizio
-        della riga cost_analysis, vedi log "task non trovato"). Si passa quindi alla schermata
-        standard, filtrando via l'entità cost_analysis da Prefs. Se non restava nient'altro, si
-        sblocca normalmente. */
+    /** Fine del picker (tutte categorizzate o "Rinvia — decido dopo"): il blocco si chiude e
+        basta. Il picker non passa più alla schermata PIN: BlockerService isola le righe
+        cost_analysis in un blocco tutto loro (vedi triggerSupabaseCheck) e lascia pending le
+        eventuali righe task/sfida dovute nello stesso momento, che ricompaiono da sole al giro
+        successivo con la loro schermata. Prima invece finire di categorizzare portava dritti
+        alla richiesta di sblocco con PIN. */
     private fun finishCaPickerAndMaybeUnblock() {
-        val remaining = Prefs.getBlockEntities(ctx).filter { it.app != "cost_analysis" }
         Prefs.clearBlockCaData(ctx)
-        if (remaining.isNotEmpty()) {
-            Prefs.setBlockEntities(ctx, remaining)
-            switchToStandardView()
-        } else {
-            onInfoDismiss()
-        }
+        onInfoDismiss()
     }
 
     /** Il picker ha priorità ogni volta che ci sono dati cost_analysis pendenti, anche se nello
@@ -635,13 +620,15 @@ class BlockWindowManager(private val ctx: Context) {
     }
 
     private fun buildStandardView(): View {
-        // Verde per le sfide Ta Firi?, blu per le notifiche informative (es. cost_analysis),
+        // Verde per le sfide Ta Firi?, giallo per le notifiche informative (es. cost_analysis),
         // rosso per i task (comportamento invariato).
+        val isInfo = Prefs.isInfoOnlyBlock(ctx)
         val bgColor = when {
-            Prefs.isChallengeOnlyBlock(ctx) -> "#0F3D24"
-            Prefs.isInfoOnlyBlock(ctx)      -> "#1E3A5F"
-            else                             -> "#4A1414"
+            Prefs.isChallengeOnlyBlock(ctx) -> BG_CHALLENGE
+            isInfo                           -> BG_INFO
+            else                             -> BG_TASK
         }
+        val accentColor = if (isInfo) ACCENT_INFO else ACCENT_DEFAULT
 
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -666,8 +653,8 @@ class BlockWindowManager(private val ctx: Context) {
         root.addView(tvClock, lp(MP, top = 16))
 
         root.addView(TextView(ctx).apply {
-            text = "Telefono bloccato"; textSize = 22f
-            setTextColor(Color.parseColor("#A78BFA"))
+            text = if (isInfo) "Analisi Costi" else "Telefono bloccato"; textSize = 22f
+            setTextColor(Color.parseColor(accentColor))
             gravity = Gravity.CENTER; letterSpacing = 0.05f
         }, lp(MP, top = 8))
 
@@ -691,7 +678,7 @@ class BlockWindowManager(private val ctx: Context) {
         btnSnooze = Button(ctx).apply {
             text = "Rinvia ${Config.SNOOZE_DURATION_MS / 60000} min"
             textSize = 16f; setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#7C3AED"))
+            setBackgroundColor(Color.parseColor(if (isInfo) BTN_INFO else "#7C3AED"))
             setPadding(48, 24, 48, 24)
             setOnClickListener { onSnooze() }
         }
@@ -736,7 +723,7 @@ class BlockWindowManager(private val ctx: Context) {
             val btnOk = Button(ctx).apply {
                 text = "Ho capito"
                 textSize = 16f; setTextColor(Color.WHITE)
-                setBackgroundColor(Color.parseColor("#2563EB"))
+                setBackgroundColor(Color.parseColor(BTN_INFO))
                 setPadding(48, 24, 48, 24)
                 setOnClickListener { onInfoDismiss() }
             }
@@ -793,5 +780,23 @@ class BlockWindowManager(private val ctx: Context) {
         private const val MP = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WC = ViewGroup.LayoutParams.WRAP_CONTENT
         private const val HOLD_BTN_HEIGHT = 170
+
+        /** Sfondi delle schermate di blocco: verde per le sfide Ta Firi?, giallo per le notifiche
+            informative di Analisi Costi (blocco informativo e picker categorie), rosso per i task. */
+        const val BG_CHALLENGE = "#0F3D24"
+        const val BG_INFO      = "#4A3A0F"   // ambra scura: giallo leggibile con testo bianco
+        const val BG_TASK      = "#4A1414"
+        /** Accento (sottotitoli, testi secondari) abbinato allo sfondo. */
+        const val ACCENT_INFO    = "#FCD34D" // giallo chiaro
+        const val ACCENT_DEFAULT = "#A78BFA" // viola, invariato per task/sfide
+        /** Bottoni d'azione delle schermate Analisi Costi. */
+        const val BTN_INFO = "#B45309"       // ambra scura, coerente con lo sfondo giallo
+
+        /** true mentre l'overlay WindowManager è a schermo. Letto da BlockerAccessibilityService
+            per non rilanciare BlockOverlayActivity (la vecchia schermata PIN) sopra un blocco già
+            gestito da qui — vedi onAccessibilityEvent(). */
+        @Volatile
+        private var overlayVisible = false
+        fun isOverlayVisible() = overlayVisible
     }
 }

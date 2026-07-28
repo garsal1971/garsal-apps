@@ -41,18 +41,34 @@ object Prefs {
     }
     fun clearBlockEntities(ctx: Context) { sp(ctx).edit().remove("block_entities").apply() }
 
+    /** App di provenienza delle righe cm_notification_queue che hanno generato il blocco corrente.
+        È indipendente da block_entities: una riga senza entity_id valido non finisce tra le entità
+        da completare, ma la sua app conta lo stesso per decidere colore e comportamento della
+        schermata (altrimenti un blocco cost_analysis con entity_id vuoto cadrebbe sul rosso/PIN). */
+    fun getBlockApps(ctx: Context): List<String> =
+        (sp(ctx).getString("block_apps", "") ?: "").split(",").filter { it.isNotBlank() }
+    fun setBlockApps(ctx: Context, apps: List<String>) {
+        sp(ctx).edit().putString("block_apps", apps.filter { it.isNotBlank() }.distinct().joinToString(",")).apply()
+    }
+    fun clearBlockApps(ctx: Context) { sp(ctx).edit().remove("block_apps").apply() }
+
+    /** App del blocco corrente: block_apps se presente, altrimenti (prefs scritte da una versione
+        precedente dell'app) si ricade sulle app delle entità. */
+    private fun blockApps(ctx: Context): List<String> =
+        getBlockApps(ctx).ifEmpty { getBlockEntities(ctx).map { it.app } }
+
     /** true se il blocco corrente riguarda solo sfide Ta Firi (sfondo verde), false altrimenti (sfondo rosso). */
     fun isChallengeOnlyBlock(ctx: Context): Boolean {
-        val entities = getBlockEntities(ctx)
-        return entities.isNotEmpty() && entities.all { it.app == "ta_firi" }
+        val apps = blockApps(ctx)
+        return apps.isNotEmpty() && apps.all { it == "ta_firi" }
     }
 
     /** true se il blocco corrente riguarda solo notifiche informative (es. cost_analysis: sync
-        Revolut da completare) — sfondo blu, dismiss con un solo bottone, nessun PIN e nessuna RPC
-        di completamento (non c'è un task/sfida da "completare" server-side). */
+        Revolut da completare) — sfondo giallo, dismiss con un solo bottone, nessun PIN e nessuna
+        RPC di completamento (non c'è un task/sfida da "completare" server-side). */
     fun isInfoOnlyBlock(ctx: Context): Boolean {
-        val entities = getBlockEntities(ctx)
-        return entities.isNotEmpty() && entities.all { it.app == "cost_analysis" }
+        val apps = blockApps(ctx)
+        return apps.isNotEmpty() && apps.all { it == "cost_analysis" }
     }
 
     /** Titolo del blocco attivo (join dei titoli dei task pendenti). */
