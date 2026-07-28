@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.119</title>
+<title>AppSphere v1.5.120</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1943,8 +1943,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.119';
-const BUILD_TIME  = '2026-07-28T09:35:00Z';
+const APP_VERSION = 'v1.5.120';
+const BUILD_TIME  = '2026-07-28T10:20:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2995,11 +2995,23 @@ async function loadHomeAlertSpuntiamola(headers) {
     if (!ckRes.ok) return [];
     if ((await ckRes.json()).length) return [];
 
-    return [{
-      title: 'Oggi non l\'hai ancora spuntato — ' + (s.emoji || '🎯') + ' ' + s.goal,
-      hidden: false,
-      url: 'spuntiamola.html'
-    }];
+    // una giornata chiave merita un avviso più esplicito
+    let chiave = null;
+    try {
+      const kdRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/sp_key_days?select=day,label&day=eq.${today}&limit=1`,
+        { headers }
+      );
+      if (kdRes.ok) chiave = (await kdRes.json())[0] || null;
+    } catch (e) {
+      console.warn('Giornate chiave non disponibili:', e);
+    }
+
+    const title = chiave
+      ? '⭐ Oggi è una giornata chiave' + (chiave.label ? ' — ' + chiave.label : '') + ' e non l\'hai spuntata!'
+      : 'Oggi non l\'hai ancora spuntato — ' + (s.emoji || '🎯') + ' ' + s.goal;
+
+    return [{ title, hidden: false, url: 'spuntiamola.html' }];
   } catch (e) {
     console.warn('Avviso Spuntiamola non disponibile:', e);
     return [];
