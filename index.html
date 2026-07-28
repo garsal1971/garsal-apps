@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.118</title>
+<title>AppSphere v1.5.119</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -169,6 +169,11 @@
     background: #F5F3FF;
     color: #5B21B6;
     border-color: #DDD6FE;
+  }
+  .home-alert-chip.spuntiamola {
+    background: #FFFBEB;
+    color: #92400E;
+    border-color: #FDE68A;
   }
   .home-alert-close {
     display: flex;
@@ -1938,8 +1943,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.118';
-const BUILD_TIME  = '2026-07-10T04:50:00Z';
+const APP_VERSION = 'v1.5.119';
+const BUILD_TIME  = '2026-07-28T09:35:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2851,6 +2856,7 @@ let _homeAlertDecisions = [];
 let _homeAlertTasks = [];
 let _homeAlertFinanza = [];
 let _homeAlertChallenges = [];
+let _homeAlertSpuntiamola = [];
 
 function alertDismissedToday() {
   return localStorage.getItem('appsphere_alert_dismissed_date') === new Date().toISOString().slice(0, 10);
@@ -2964,6 +2970,42 @@ async function loadHomeAlertChallenges(headers) {
   }
 }
 
+// Spuntiamola: avvisa solo se oggi rientra nel periodo impostato e la
+// spunta di oggi non è ancora stata fatta.
+async function loadHomeAlertSpuntiamola(headers) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const stRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/sp_settings?select=goal,emoji,start_date,end_date,skip_weekend&limit=1`,
+      { headers }
+    );
+    if (!stRes.ok) return [];
+    const rows = await stRes.json();
+    if (!rows.length) return [];
+    const s = rows[0];
+
+    if (today < s.start_date || today > s.end_date) return [];
+    const dow = new Date(today + 'T00:00:00').getDay();
+    if (s.skip_weekend && (dow === 0 || dow === 6)) return [];
+
+    const ckRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/sp_checks?select=day&day=eq.${today}&limit=1`,
+      { headers }
+    );
+    if (!ckRes.ok) return [];
+    if ((await ckRes.json()).length) return [];
+
+    return [{
+      title: 'Oggi non l\'hai ancora spuntato — ' + (s.emoji || '🎯') + ' ' + s.goal,
+      hidden: false,
+      url: 'spuntiamola.html'
+    }];
+  } catch (e) {
+    console.warn('Avviso Spuntiamola non disponibile:', e);
+    return [];
+  }
+}
+
 async function loadHomeAlerts() {
   if (_homeAlertDismissed) return;
   const token = localStorage.getItem('sb_token');
@@ -2973,16 +3015,18 @@ async function loadHomeAlerts() {
   if (!uid) return;
   const headers = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token };
 
-  const [decisions, tasks, finanza, challenges] = await Promise.all([
+  const [decisions, tasks, finanza, challenges, spuntiamola] = await Promise.all([
     loadHomeAlertDecisions(uid, headers),
     loadHomeAlertUrgentTasks(headers),
     loadHomeAlertPortfolioTotal(headers),
-    loadHomeAlertChallenges(headers)
+    loadHomeAlertChallenges(headers),
+    loadHomeAlertSpuntiamola(headers)
   ]);
   _homeAlertDecisions = decisions;
   _homeAlertTasks = tasks;
   _homeAlertFinanza = finanza;
   _homeAlertChallenges = challenges;
+  _homeAlertSpuntiamola = spuntiamola;
   renderHomeAlertBubble();
 }
 
@@ -3014,7 +3058,8 @@ function renderHomeAlertBubble() {
     renderAlertSection('🗳️ Decisioni in sospeso', _homeAlertDecisions) +
     renderAlertSection('⏰ Task urgenti', _homeAlertTasks) +
     renderAlertSection('💰 Finanza', _homeAlertFinanza, 'finanza') +
-    renderAlertSection('🎯 Sfide di oggi', _homeAlertChallenges, 'sfide');
+    renderAlertSection('🎯 Sfide di oggi', _homeAlertChallenges, 'sfide') +
+    renderAlertSection('✅ Spuntiamola', _homeAlertSpuntiamola, 'spuntiamola');
   if (!sectionsHtml) return;
 
   // Tap fuori: chiude solo questa visualizzazione, ricompare al prossimo caricamento.

@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.0.0</title>
+    <title>✅ Spuntiamola v1.1.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>
@@ -223,31 +224,81 @@
             transform: none;
         }
 
-        /* ── MESSAGGIO SIMPATICO ── */
-        .fun-box {
+        /* ── AVVISO "OGGI NON SPUNTATO" ── */
+        .todo-banner {
             margin-top: 14px;
             background: linear-gradient(135deg, #FFF6E5, #FFEFD6);
             border: 2px dashed var(--warning);
             border-radius: 16px;
-            padding: 14px 16px;
-            display: flex;
+            padding: 13px 16px;
+            display: none;
             align-items: center;
             gap: 12px;
+        }
+        .todo-banner.show { display: flex; }
+        .todo-emoji { font-size: 1.9rem; line-height: 1; flex-shrink: 0; }
+        .todo-text  { font-size: 1.05rem; font-weight: 700; color: #8A5A00; line-height: 1.25; }
+
+        /* ── TOAST — il messaggio simpatico, 2,5 secondi ── */
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 40px;
+            transform: translate(-50%, 26px);
+            background: rgba(24,30,40,0.94);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: white;
+            padding: 16px 24px;
+            border-radius: 18px;
+            box-shadow: 0 14px 42px rgba(0,0,0,0.36);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            max-width: min(520px, calc(100vw - 32px));
             opacity: 0;
-            max-height: 0;
-            overflow: hidden;
-            transition: opacity .4s, max-height .4s, margin .4s;
+            pointer-events: none;
+            transition: opacity .28s, transform .28s cubic-bezier(.34,1.4,.64,1);
+            z-index: 950;
         }
-        .fun-box.show { opacity: 1; max-height: 220px; }
+        .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-        .fun-emoji { font-size: 2.2rem; line-height: 1; flex-shrink: 0; }
+        .toast-emoji { font-size: 2.3rem; line-height: 1; flex-shrink: 0; }
+        .toast-text  { font-size: 1.2rem; font-weight: 800; line-height: 1.25; }
 
-        .fun-text {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #8A5A00;
-            line-height: 1.25;
+        .toast.big { background: linear-gradient(135deg, #6C5CE7, #FF3366); }
+        .toast.big .toast-emoji { font-size: 2.9rem; }
+        .toast.big .toast-text  { font-size: 1.35rem; }
+
+        /* ── STATO SINCRONIZZAZIONE ── */
+        .sync-badge {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.62rem;
+            padding: 4px 9px;
+            border-radius: 99px;
+            background: rgba(0,0,0,0.2);
+            color: rgba(255,255,255,0.8);
+            white-space: nowrap;
         }
+        .sync-badge.offline { background: rgba(231,76,60,0.85); color: #fff; }
+
+        /* ── AUTH ── */
+        #authOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,20,28,0.9);
+            z-index: 5000;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+            padding: 24px;
+        }
+        .auth-box { max-width: 340px; }
+        .auth-icon { font-size: 3rem; margin-bottom: 12px; }
+        .auth-title { font-size: 1.7rem; font-weight: 900; margin-bottom: 6px; }
+        .auth-desc { font-size: 1rem; opacity: 0.75; font-weight: 600; line-height: 1.4; }
 
         /* ── CALENDARIO ── */
         .cal-head {
@@ -558,7 +609,8 @@
 <header class="app-header">
     <div class="app-title">✅ Spuntiamola</div>
     <div class="header-right">
-        <span class="app-version" id="versionBadge">v1.0.0</span>
+        <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
+        <span class="app-version" id="versionBadge">v1.1.0</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </header>
@@ -601,9 +653,9 @@
 
         <button class="btn-today" id="btnToday">Spunta oggi!</button>
 
-        <div class="fun-box" id="funBox">
-            <div class="fun-emoji" id="funEmoji">🎉</div>
-            <div class="fun-text" id="funText"></div>
+        <div class="todo-banner" id="todoBanner">
+            <div class="todo-emoji">⏳</div>
+            <div class="todo-text" id="todoText">La spunta di oggi non l'hai ancora fatta!</div>
         </div>
     </div>
 
@@ -624,8 +676,23 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.0.0</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.1.0</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+    <div class="toast-emoji" id="toastEmoji">🎉</div>
+    <div class="toast-text" id="toastText"></div>
+</div>
+
+<!-- AUTH OVERLAY -->
+<div id="authOverlay">
+    <div class="auth-box">
+        <div class="auth-icon">✅</div>
+        <div class="auth-title">Spuntiamola</div>
+        <div class="auth-desc">Apri questa app da AppSphere per accedere.</div>
+    </div>
+</div>
 
 <!-- MODALE IMPOSTAZIONI -->
 <div class="overlay" id="settingsOverlay">
@@ -675,9 +742,8 @@
 
 <div class="confetti-layer" id="confettiLayer"></div>
 
-<script>
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-07-27T22:00:00Z';
+<script>var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-07-28T09:35:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -686,23 +752,44 @@ document.getElementById('versionBadge').textContent  = APP_VERSION;
 document.getElementById('versionFooter').textContent = APP_VERSION;
 
 // ============================================================
-// STATE — tutto in localStorage, nessuna tabella Supabase
+// SUPABASE
+// ============================================================
+var _DEV_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0'];
+var _IS_DEV = _DEV_HOSTS.indexOf(window.location.hostname) !== -1
+           || (window.location.hostname.endsWith('.netlify.app')
+              && window.location.hostname.startsWith('dev--'));
+
+var SUPABASE_URL = _IS_DEV
+    ? 'https://hcmmywitrbmcsmytjbaf.supabase.co'
+    : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+var SUPABASE_KEY = _IS_DEV
+    ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbW15d2l0cmJtY3NteXRqYmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3ODE1NDUsImV4cCI6MjA4OTM1NzU0NX0.pAtj6THjWXibrMulU1IVGH-BFx4YkjkNT_x07lNUfWE'
+    : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+var sb            = null;
+var sbAccessToken = null;
+var currentUserId = null;
+
+// ============================================================
+// STATE
+// Il DB è la fonte di verità; localStorage resta come cache, così
+// all'apertura la griglia c'è già mentre la rete fa il suo giro.
 // ============================================================
 var LS = {
-    goal:     'sp_goal',
-    emoji:    'sp_emoji',
-    start:    'sp_startDate',
-    end:      'sp_endDate',
-    weekend:  'sp_skipWeekend',
-    checks:   'sp_checks'
+    goal:    'sp_goal',
+    emoji:   'sp_emoji',
+    start:   'sp_startDate',
+    end:     'sp_endDate',
+    weekend: 'sp_skipWeekend',
+    checks:  'sp_checks'
 };
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
 function todayISO() {
     var d = new Date();
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }
-
-function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
 function defaultEnd() {
     var d = new Date();
@@ -710,41 +797,54 @@ function defaultEnd() {
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }
 
-function loadChecks() {
+function loadChecksCache() {
     try {
         var raw = localStorage.getItem(LS.checks);
         var obj = raw ? JSON.parse(raw) : {};
         return (obj && typeof obj === 'object') ? obj : {};
     } catch (e) {
-        console.warn('Spunte illeggibili, riparto da zero', e);
+        console.warn('Spunte in cache illeggibili, riparto da zero', e);
         return {};
     }
 }
 
 var S = {
-    goal:        localStorage.getItem(LS.goal)   || 'Il traguardo',
-    emoji:       localStorage.getItem(LS.emoji)  || '🎯',
-    startDate:   localStorage.getItem(LS.start)  || todayISO(),
-    endDate:     localStorage.getItem(LS.end)    || defaultEnd(),
+    goal:        localStorage.getItem(LS.goal)    || 'Il traguardo',
+    emoji:       localStorage.getItem(LS.emoji)   || '🎯',
+    startDate:   localStorage.getItem(LS.start)   || todayISO(),
+    endDate:     localStorage.getItem(LS.end)     || defaultEnd(),
     skipWeekend: localStorage.getItem(LS.weekend) === '1',
-    // checks: { 'YYYY-MM-DD': '🎉' }  — l'emoji simpatica assegnata a quel giorno
-    checks:      loadChecks()
+    // checks: { 'YYYY-MM-DD': '🎉' } — l'emoji assegnata a quel giorno
+    checks:      loadChecksCache(),
+    // true quando il periodo esiste davvero (in DB o in cache locale)
+    configured:  !!localStorage.getItem(LS.start)
 };
+
+function salvaCache() {
+    localStorage.setItem(LS.goal,    S.goal);
+    localStorage.setItem(LS.emoji,   S.emoji);
+    localStorage.setItem(LS.start,   S.startDate);
+    localStorage.setItem(LS.end,     S.endDate);
+    localStorage.setItem(LS.weekend, S.skipWeekend ? '1' : '0');
+    localStorage.setItem(LS.checks,  JSON.stringify(S.checks));
+}
 
 // ============================================================
 // ROBA SIMPATICA — una frase + un'emoji per ogni spunta
 // ============================================================
 var FRASI = [
+    "Grande! ...anche se non dipende da te. 😄",
     "E uno! Il traguardo trema. 😏",
     "Giorno archiviato. Prossimo!",
     "Un altro se n'è andato. Ciao ciao! 👋",
-    "Sei ufficialmente più vicino di ieri.",
+    "Bravo, hai aspettato benissimo. 🏅",
+    "Complimenti: è passato un giorno. Merito tuo? Mah. 🤷",
     "Spuntato. La matematica non mente. 🧮",
     "Questo giorno non tornerà. Meglio così!",
     "Piano piano si arriva ovunque. 🐢",
-    "Bravo! Hai battuto il calendario oggi.",
+    "Hai battuto il calendario. Di nuovo.",
     "Un giorno in meno, zero rimpianti.",
-    "Il tempo passa, tu spunti. Perfetto.",
+    "Il tempo passa, tu spunti. Squadra perfetta.",
     "Chi spunta, arriva. Regola numero uno. 📏",
     "Fatto! Ora puoi anche riposarti.",
     "Sei una macchina da spunte. 🤖",
@@ -762,7 +862,6 @@ var FRASI = [
     "Questa spunta profuma di libertà. 🌬️",
     "Che soddisfazione, eh? 😎",
     "Piccolo passo, grande direzione. 🚶",
-    "Il futuro si avvicina a piedi. Lascialo camminare.",
     "Spuntato con stile. ✨",
     "Fatto. Si torna a vivere. 🎈"
 ];
@@ -774,15 +873,29 @@ var EMOJI_SPUNTA = [
 
 var CONFETTI_COLORS = ['#FF3366','#6C5CE7','#00B894','#F39C12','#2563EB','#FFD700','#38ef7d'];
 
-function frasePerGiorno(iso) {
-    // stessa data → stessa frase, così non cambia a ogni render
-    var h = 0;
-    for (var i = 0; i < iso.length; i++) h = (h * 31 + iso.charCodeAt(i)) >>> 0;
-    return FRASI[h % FRASI.length];
+function fraseRandom() {
+    return FRASI[Math.floor(Math.random() * FRASI.length)];
 }
 
 function emojiRandom() {
     return EMOJI_SPUNTA[Math.floor(Math.random() * EMOJI_SPUNTA.length)];
+}
+
+// ============================================================
+// TOAST — il messaggio che compare per un paio di secondi
+// ============================================================
+var toastTimer = null;
+
+function toast(emoji, testo, opts) {
+    opts = opts || {};
+    var el = document.getElementById('toast');
+    document.getElementById('toastEmoji').textContent = emoji;
+    document.getElementById('toastText').textContent  = testo;
+    el.classList.toggle('big', !!opts.big);
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { el.classList.remove('show'); },
+                            opts.durata || 2500);
 }
 
 // ============================================================
@@ -803,13 +916,18 @@ function addDays(iso, n) {
     return toISO(d);
 }
 
+function fmtIT(iso) {
+    var p = iso.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+}
+
 var MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
             'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
 // Elenco dei giorni del periodo, filtrando il weekend se richiesto
 function giorniDelPeriodo() {
     var out = [];
-    if (!S.startDate || !S.endDate) return out;
+    if (!S.configured || !S.startDate || !S.endDate) return out;
     if (parseISO(S.endDate) < parseISO(S.startDate)) return out;
 
     var cur = S.startDate;
@@ -824,6 +942,158 @@ function giorniDelPeriodo() {
 }
 
 // ============================================================
+// AUTH
+// ============================================================
+function decodeJWT(token) {
+    try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); }
+    catch (e) { return null; }
+}
+
+function initWithToken(token) {
+    if (sb) return;
+    sbAccessToken = token;
+    localStorage.setItem('sb_token', token);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+        auth:   { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: 'Bearer ' + token } }
+    });
+    var payload = decodeJWT(token);
+    currentUserId = payload && payload.sub ? payload.sub : null;
+    console.log('✅ Supabase autenticato (Spuntiamola ' + APP_VERSION + ')');
+    document.getElementById('authOverlay').style.display = 'none';
+    startApp();
+}
+
+function handleAuthError(error) {
+    if (!error) return false;
+    var msg = (error.message || '').toLowerCase();
+    var isAuth = error.status === 401
+        || msg.indexOf('jwt expired') !== -1 || msg.indexOf('invalid jwt') !== -1
+        || msg.indexOf('not authenticated') !== -1 || msg.indexOf('pgjwt') !== -1;
+    if (!isAuth) return false;
+    sb = null; sbAccessToken = null;
+    localStorage.removeItem('sb_token');
+    document.getElementById('authOverlay').style.display = 'flex';
+    return true;
+}
+
+window.addEventListener('message', function(e) {
+    if (!e.data) return;
+    if (e.data.type === 'SB_TOKEN' && e.data.token) {
+        console.log('✅ SB_TOKEN ricevuto dal launcher (Spuntiamola)');
+        initWithToken(e.data.token);
+    }
+});
+
+var _authChannel = new BroadcastChannel('appsphere_auth');
+_authChannel.onmessage = function(e) {
+    if (!e.data) return;
+    if (e.data.type === 'LOGOUT') {
+        sb = null; sbAccessToken = null;
+        localStorage.removeItem('sb_token');
+        document.getElementById('authOverlay').style.display = 'flex';
+    } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
+        var t = e.data.sbToken;
+        localStorage.setItem('sb_token', t);
+        sbAccessToken = t;
+        if (sb) {
+            sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth:   { persistSession: false, autoRefreshToken: false },
+                global: { headers: { Authorization: 'Bearer ' + t } }
+            });
+        }
+    }
+};
+
+// ============================================================
+// SINCRONIZZAZIONE
+// ============================================================
+function setSync(stato, testo) {
+    var el = document.getElementById('syncBadge');
+    el.textContent = testo;
+    el.classList.toggle('offline', stato === 'offline');
+}
+
+// Carica periodo e spunte dal DB. Se il DB non ha ancora nulla ma in
+// locale c'è un periodo, quei dati vengono caricati sul DB una volta sola.
+async function dbLoad() {
+    if (!sb) return;
+    setSync('sync', '↻ sync…');
+    try {
+        var st = await sb.from('sp_settings').select('*').maybeSingle();
+        if (st.error && st.error.code !== 'PGRST116') throw st.error;
+
+        if (st.data) {
+            S.goal        = st.data.goal;
+            S.emoji       = st.data.emoji;
+            S.startDate   = st.data.start_date;
+            S.endDate     = st.data.end_date;
+            S.skipWeekend = !!st.data.skip_weekend;
+            S.configured  = true;
+
+            var ck = await sb.from('sp_checks').select('day,emoji');
+            if (ck.error) throw ck.error;
+            S.checks = {};
+            (ck.data || []).forEach(function(r) { S.checks[r.day] = r.emoji || '✅'; });
+        } else if (localStorage.getItem(LS.start)) {
+            // primo accesso dopo l'aggiornamento: porto in cloud i dati locali
+            console.log('↑ Primo sync: carico sul DB il periodo salvato in locale');
+            await dbSaveSettings();
+            var giorniLocali = Object.keys(S.checks);
+            if (giorniLocali.length) {
+                var righe = giorniLocali.map(function(g) {
+                    return { day: g, emoji: S.checks[g] };
+                });
+                var up = await sb.from('sp_checks')
+                                 .upsert(righe, { onConflict: 'user_id,day' });
+                if (up.error) throw up.error;
+            }
+            toast('☁️', 'Spunte caricate sul cloud: ora sono su tutti i dispositivi.',
+                  { durata: 4000 });
+        } else {
+            S.configured = false;
+        }
+
+        salvaCache();
+        setSync('ok', '☁ ok');
+    } catch (e) {
+        if (handleAuthError(e)) return;
+        console.warn('Sync non riuscito, uso i dati locali:', e);
+        setSync('offline', '⚠ offline');
+    }
+    render();
+}
+
+async function dbSaveSettings() {
+    if (!sb) return false;
+    var riga = {
+        user_id:      currentUserId,
+        goal:         S.goal,
+        emoji:        S.emoji,
+        start_date:   S.startDate,
+        end_date:     S.endDate,
+        skip_weekend: S.skipWeekend
+    };
+    var res = await sb.from('sp_settings').upsert(riga, { onConflict: 'user_id' });
+    if (res.error) throw res.error;
+    return true;
+}
+
+async function dbAddCheck(iso, emoji) {
+    if (!sb) return;
+    var res = await sb.from('sp_checks')
+                      .upsert({ user_id: currentUserId, day: iso, emoji: emoji },
+                              { onConflict: 'user_id,day' });
+    if (res.error) throw res.error;
+}
+
+async function dbRemoveCheck(iso) {
+    if (!sb) return;
+    var res = await sb.from('sp_checks').delete().eq('day', iso);
+    if (res.error) throw res.error;
+}
+
+// ============================================================
 // RENDER
 // ============================================================
 function render() {
@@ -835,7 +1105,6 @@ function render() {
     var mancano  = giorni.filter(function(g) { return !S.checks[g] && g >= oggi; }).length;
     var perc     = totali ? Math.round(spuntati / totali * 100) : 0;
 
-    // HERO
     document.getElementById('heroGoal').textContent   = S.emoji + ' ' + S.goal;
     document.getElementById('heroNumber').textContent = totali ? mancano : '—';
     document.getElementById('heroLabel').textContent  =
@@ -846,7 +1115,7 @@ function render() {
           + (S.skipWeekend ? ' · solo feriali' : '')
         : '';
 
-    document.getElementById('progressFill').style.width = perc + '%';
+    document.getElementById('progressFill').style.width  = perc + '%';
     document.getElementById('progressLeft').textContent  = spuntati + ' di ' + totali + ' spuntati';
     document.getElementById('progressRight').textContent = perc + '%';
 
@@ -855,9 +1124,11 @@ function render() {
     document.getElementById('statStreak').textContent = calcolaSerie(giorni);
     document.getElementById('statTotal').textContent  = totali;
 
-    // BOTTONE OGGI
+    // BOTTONE + AVVISO "oggi non spuntato"
     var btn = document.getElementById('btnToday');
     var oggiNelPeriodo = giorni.indexOf(oggi) !== -1;
+    var daFareOggi = oggiNelPeriodo && !S.checks[oggi];
+
     if (!totali) {
         btn.textContent = 'Imposta il periodo ⚙️';
         btn.disabled = false;
@@ -878,12 +1149,14 @@ function render() {
         btn.onclick = function() { toggleGiorno(oggi); };
     }
 
-    renderCalendario(giorni, oggi);
-}
+    var banner = document.getElementById('todoBanner');
+    banner.classList.toggle('show', daFareOggi);
+    if (daFareOggi) {
+        document.getElementById('todoText').textContent =
+            'Oggi (' + fmtIT(oggi) + ') non l\'hai ancora spuntato!';
+    }
 
-function fmtIT(iso) {
-    var p = iso.split('-');
-    return p[2] + '/' + p[1] + '/' + p[0];
+    renderCalendario(giorni, oggi);
 }
 
 // Serie = giorni consecutivi spuntati che finiscono oggi (o all'ultimo giorno passato)
@@ -907,7 +1180,6 @@ function renderCalendario(giorni, oggi) {
         return;
     }
 
-    // raggruppa per mese
     var blocchi = [];
     var correnteKey = null;
     giorni.forEach(function(g) {
@@ -919,7 +1191,7 @@ function renderCalendario(giorni, oggi) {
         blocchi[blocchi.length - 1].giorni.push(g);
     });
 
-    var html = blocchi.map(function(b) {
+    box.innerHTML = blocchi.map(function(b) {
         var p = b.key.split('-');
         var fatti = b.giorni.filter(function(g) { return S.checks[g]; }).length;
 
@@ -947,8 +1219,6 @@ function renderCalendario(giorni, oggi) {
              + '</div>';
     }).join('');
 
-    box.innerHTML = html;
-
     Array.prototype.forEach.call(box.querySelectorAll('.day'), function(el) {
         el.addEventListener('click', function() { toggleGiorno(el.dataset.date); });
     });
@@ -956,31 +1226,55 @@ function renderCalendario(giorni, oggi) {
 
 // ============================================================
 // SPUNTA / DE-SPUNTA
+// L'interfaccia si aggiorna subito, il DB dopo: se la scrittura
+// fallisce si torna indietro e si avvisa, così non resta una
+// spunta finta che al prossimo caricamento sparisce.
 // ============================================================
-function toggleGiorno(iso) {
+async function toggleGiorno(iso) {
     if (S.checks[iso]) {
+        var vecchia = S.checks[iso];
         delete S.checks[iso];
-        salvaChecks();
-        nascondiFun();
+        salvaCache();
         render();
+        toast('🤔', 'Spunta tolta. Ci hai ripensato?', { durata: 2000 });
+        try {
+            await dbRemoveCheck(iso);
+        } catch (e) {
+            if (!handleAuthError(e)) {
+                console.warn('Rimozione non sincronizzata:', e);
+                S.checks[iso] = vecchia;
+                salvaCache();
+                render();
+                toast('⚠️', 'Non sono riuscito a togliere la spunta. Riprova.', { durata: 3500 });
+            }
+        }
         return;
     }
 
-    S.checks[iso] = emojiRandom();
-    salvaChecks();
+    var emoji = emojiRandom();
+    S.checks[iso] = emoji;
+    salvaCache();
     render();
 
-    mostraFun(iso);
     animaCella(iso);
+    toast(emoji, fraseRandom());
+    festeggia(45);
 
     var giorni   = giorniDelPeriodo();
     var spuntati = giorni.filter(function(g) { return S.checks[g]; }).length;
-    festeggia(giorni.length && spuntati === giorni.length ? 160 : 45);
     controllaTraguardi(spuntati, giorni.length);
-}
 
-function salvaChecks() {
-    localStorage.setItem(LS.checks, JSON.stringify(S.checks));
+    try {
+        await dbAddCheck(iso, emoji);
+    } catch (e) {
+        if (!handleAuthError(e)) {
+            console.warn('Spunta non sincronizzata:', e);
+            delete S.checks[iso];
+            salvaCache();
+            render();
+            toast('⚠️', 'Spunta non salvata: controlla la connessione.', { durata: 3500 });
+        }
+    }
 }
 
 function animaCella(iso) {
@@ -990,27 +1284,12 @@ function animaCella(iso) {
     setTimeout(function() { el.classList.remove('pop'); }, 500);
 }
 
-var funTimer = null;
-
-function mostraFun(iso, testoCustom) {
-    var box = document.getElementById('funBox');
-    document.getElementById('funEmoji').textContent = S.checks[iso] || '🎉';
-    document.getElementById('funText').textContent  = testoCustom || frasePerGiorno(iso);
-    box.classList.add('show');
-    clearTimeout(funTimer);
-    funTimer = setTimeout(nascondiFun, 7000);
-}
-
-function nascondiFun() {
-    document.getElementById('funBox').classList.remove('show');
-}
-
 // Traguardi intermedi: 25 / 50 / 75 / 100 %
 var TRAGUARDI = [
     { perc: 25,  emoji: '🌱', testo: 'Un quarto fatto! Il difficile è cominciare.' },
     { perc: 50,  emoji: '⛰️', testo: 'Metà strada! Da qui si vede il traguardo.' },
     { perc: 75,  emoji: '🔥', testo: 'Tre quarti! Ormai è in discesa.' },
-    { perc: 100, emoji: '🏁', testo: 'FINITO! Li hai spuntati tutti. Campione! 🎊' }
+    { perc: 100, emoji: '🏁', testo: 'FINITO! Li hai spuntati tutti. Campione!' }
 ];
 
 function controllaTraguardi(spuntati, totali) {
@@ -1020,14 +1299,9 @@ function controllaTraguardi(spuntati, totali) {
     TRAGUARDI.forEach(function(t) {
         if (prima < t.perc && perc >= t.perc) {
             setTimeout(function() {
-                var box = document.getElementById('funBox');
-                document.getElementById('funEmoji').textContent = t.emoji;
-                document.getElementById('funText').textContent  = t.testo;
-                box.classList.add('show');
-                clearTimeout(funTimer);
-                funTimer = setTimeout(nascondiFun, 9000);
-                festeggia(120);
-            }, 800);
+                toast(t.emoji, t.testo, { durata: 4500, big: true });
+                festeggia(t.perc === 100 ? 160 : 110);
+            }, 2600);
         }
     });
 }
@@ -1059,8 +1333,8 @@ function festeggia(quanti) {
 // ============================================================
 // IMPOSTAZIONI
 // ============================================================
-var overlay = document.getElementById('settingsOverlay');
-var swWeekend = document.getElementById('switchWeekend');
+var overlay    = document.getElementById('settingsOverlay');
+var swWeekend  = document.getElementById('switchWeekend');
 var tmpWeekend = false;
 
 function apriImpostazioni() {
@@ -1087,7 +1361,7 @@ document.getElementById('toggleWeekend').addEventListener('click', function() {
     swWeekend.classList.toggle('on', tmpWeekend);
 });
 
-document.getElementById('btnSave').addEventListener('click', function() {
+document.getElementById('btnSave').addEventListener('click', async function() {
     var goal  = document.getElementById('inGoal').value.trim();
     var emoji = document.getElementById('inEmoji').value.trim();
     var start = document.getElementById('inStart').value;
@@ -1108,30 +1382,62 @@ document.getElementById('btnSave').addEventListener('click', function() {
         return;
     }
 
+    var prima = {
+        goal: S.goal, emoji: S.emoji, startDate: S.startDate,
+        endDate: S.endDate, skipWeekend: S.skipWeekend, configured: S.configured
+    };
+
     S.goal        = goal || 'Il traguardo';
     S.emoji       = emoji || '🎯';
     S.startDate   = start;
     S.endDate     = end;
     S.skipWeekend = tmpWeekend;
+    S.configured  = true;
 
-    localStorage.setItem(LS.goal,    S.goal);
-    localStorage.setItem(LS.emoji,   S.emoji);
-    localStorage.setItem(LS.start,   S.startDate);
-    localStorage.setItem(LS.end,     S.endDate);
-    localStorage.setItem(LS.weekend, S.skipWeekend ? '1' : '0');
-
+    salvaCache();
     chiudiImpostazioni();
-    nascondiFun();
     render();
+
+    try {
+        await dbSaveSettings();
+        setSync('ok', '☁ ok');
+    } catch (e) {
+        if (!handleAuthError(e)) {
+            console.warn('Impostazioni non sincronizzate:', e);
+            S.goal = prima.goal; S.emoji = prima.emoji;
+            S.startDate = prima.startDate; S.endDate = prima.endDate;
+            S.skipWeekend = prima.skipWeekend; S.configured = prima.configured;
+            salvaCache();
+            render();
+            toast('⚠️', 'Impostazioni non salvate: controlla la connessione.', { durata: 3500 });
+        }
+    }
 });
 
-document.getElementById('btnReset').addEventListener('click', function() {
+document.getElementById('btnReset').addEventListener('click', async function() {
     if (!confirm('Cancellare tutte le spunte? Il periodo impostato resta com\'è.')) return;
+
+    var backup = S.checks;
     S.checks = {};
-    salvaChecks();
+    salvaCache();
     chiudiImpostazioni();
-    nascondiFun();
     render();
+
+    try {
+        if (sb) {
+            var res = await sb.from('sp_checks').delete().eq('user_id', currentUserId);
+            if (res.error) throw res.error;
+        }
+        toast('🧹', 'Spunte cancellate. Si riparte!');
+    } catch (e) {
+        if (!handleAuthError(e)) {
+            console.warn('Cancellazione non sincronizzata:', e);
+            S.checks = backup;
+            salvaCache();
+            render();
+            toast('⚠️', 'Non sono riuscito a cancellare le spunte. Riprova.', { durata: 3500 });
+        }
+    }
 });
 
 document.addEventListener('keydown', function(e) {
@@ -1139,17 +1445,28 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ============================================================
-// START
+// AVVIO
 // ============================================================
 console.log('%c✅ Spuntiamola ' + APP_VERSION, 'color:#00B894;font-size:16px;font-weight:bold;');
 console.log('%cbuild: ' + BUILD_TIME, 'color:#888;font-size:11px;');
+console.log('%cambiente: ' + (_IS_DEV ? '🧪 Development' : '🚀 Production'), 'color:#888;font-size:11px;');
 
-render();
+async function startApp() {
+    render();          // subito, con la cache locale
+    await dbLoad();    // poi il DB corregge il tiro
 
-// prima apertura: nessun periodo salvato → apri direttamente le impostazioni
-if (!localStorage.getItem(LS.start)) {
-    setTimeout(apriImpostazioni, 400);
+    // prima apertura in assoluto: nessun periodo, apro le impostazioni
+    if (!S.configured) setTimeout(apriImpostazioni, 400);
 }
+
+window.addEventListener('load', function() {
+    var stored = localStorage.getItem('sb_token');
+    if (stored) initWithToken(stored);
+    else {
+        render();
+        document.getElementById('authOverlay').style.display = 'flex';
+    }
+});
 </script>
 
 </body>
