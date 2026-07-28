@@ -162,6 +162,7 @@ Tables are namespaced by app prefix:
 |---|---|
 | `sp_settings` | Una riga per utente: traguardo, emoji, periodo (`start_date` → `end_date`), `skip_weekend` |
 | `sp_checks` | Una riga per giorno spuntato (`UNIQUE (user_id, day)`); `emoji` è quella pescata a caso alla spunta |
+| `sp_key_days` | Giornate chiave (`UNIQUE (user_id, day)`); `label` è l'etichetta libera mostrata alla spunta |
 
 ### Obiettivi (`ob_`)
 | Table | Purpose |
@@ -342,8 +343,15 @@ Le migration vengono applicate **automaticamente** al push su `claude/**` tramit
   ~2,5 s** con una frase simpatica + confetti; a 25/50/75/100 % scattano messaggi di traguardo
   dedicati (toast più grande, 4,5 s)
 - Opzione "salta sabato e domenica" per contare solo i giorni feriali
+- **Giornate chiave** (`sp_key_days`): giorni "che contano" segnati dalle impostazioni, con
+  etichetta libera. Nella griglia sono dorate con una ★; alla spunta parte `fuochiArtificio()`
+  — sei scoppi scaglionati, ognuno con lampo centrale e raggiera di scintille/stelle con
+  gravità — più un toast dorato da 5 s. Le giornate chiave si modificano su una copia
+  (`tmpKeyDays`) e si applicano solo con "Salva", così "Annulla" butta via tutto davvero.
 - **Avviso "oggi non spuntato"** in due punti: banner giallo dentro l'app e sezione dedicata nel
-  fumetto avvisi di AppSphere (`loadHomeAlertSpuntiamola` in `index.html`)
+  fumetto avvisi di AppSphere (`loadHomeAlertSpuntiamola` in `index.html`). Se oggi è una
+  giornata chiave entrambi gli avvisi lo dicono esplicitamente.
+- Link **🏠 Home** in alto a sinistra (`href="/"`) per tornare ad AppSphere
 - **Dati su Supabase** (`sp_settings` + `sp_checks`, migration `20260728100000_sp_spuntiamola_tables.sql`):
   il DB è la fonte di verità, `localStorage` (chiavi `sp_*`) resta come cache offline così la
   griglia compare subito all'apertura. Al primo avvio dopo l'aggiornamento le spunte già presenti
