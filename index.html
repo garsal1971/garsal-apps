@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.121</title>
+<title>AppSphere v1.5.122</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1948,8 +1948,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.121';
-const BUILD_TIME  = '2026-07-31T10:00:00Z';
+const APP_VERSION = 'v1.5.122';
+const BUILD_TIME  = '2026-07-31T17:30:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2930,29 +2930,63 @@ async function loadHomeAlertUrgentTasks(headers) {
   }
 }
 
+// Variazione percentuale fra due snapshot, già formattata con l'etichetta.
+// Stringa vuota se il termine di paragone manca o è zero (divisione impossibile).
+function fmtPctVar(current, prev, label) {
+  if (!prev) return '';
+  const pct = (current - prev) / Math.abs(prev) * 100;
+  return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% ' + label;
+}
+
+// Estrae valore e data da una risposta PostgREST che restituisce al massimo una riga.
+async function readSnapshotRow(res) {
+  if (!res || !res.ok) return null;
+  const rows = await res.json();
+  if (!rows.length || rows[0].portafogli_totali == null) return null;
+  return {
+    value: parseFloat(rows[0].portafogli_totali),
+    day: String(rows[0].snapshot_date || '').slice(0, 10)
+  };
+}
+
 async function loadHomeAlertPortfolioTotal(headers) {
   try {
+    const base = `${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali,snapshot_date`;
     const yearStart = new Date().getFullYear() + '-01-01';
-    const [curRes, prevRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali&order=snapshot_date.desc&limit=1`, { headers }),
-      fetch(`${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali&snapshot_date=lt.${yearStart}&order=snapshot_date.desc&limit=1`, { headers })
-    ]);
-    if (!curRes.ok) return [];
-    const curRows = await curRes.json();
-    if (!curRows.length || curRows[0].portafogli_totali == null) return [];
-    const current = parseFloat(curRows[0].portafogli_totali);
 
-    let pctText = '';
-    if (prevRes.ok) {
-      const prevRows = await prevRes.json();
-      const prevVal = prevRows[0]?.portafogli_totali != null ? parseFloat(prevRows[0].portafogli_totali) : null;
-      if (prevVal) {
-        const pct = (current - prevVal) / Math.abs(prevVal) * 100;
-        pctText = ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% da fine anno scorso)';
-      }
+    const cur = await readSnapshotRow(await fetch(`${base}&order=snapshot_date.desc&limit=1`, { headers }));
+    if (!cur) return [];
+
+    // Due termini di paragone: l'ultimo snapshot dell'anno scorso e quello
+    // immediatamente precedente all'attuale (di norma il giorno prima).
+    const [yearRes, dayRes] = await Promise.all([
+      fetch(`${base}&snapshot_date=lt.${yearStart}&order=snapshot_date.desc&limit=1`, { headers }),
+      fetch(`${base}&snapshot_date=lt.${cur.day}&order=snapshot_date.desc&limit=1`, { headers })
+    ]);
+    const prevYear = await readSnapshotRow(yearRes);
+    const prevDay  = await readSnapshotRow(dayRes);
+
+    const parts = [];
+
+    // se lo snapshot più recente è ancora dell'anno scorso il confronto YTD
+    // pescherebbe sé stesso: in quel caso non ha senso mostrarlo
+    if (prevYear && prevYear.day < cur.day) {
+      const p = fmtPctVar(cur.value, prevYear.value, 'da fine anno scorso');
+      if (p) parts.push(p);
     }
 
-    return [{ title: 'Totale portafogli: ' + fmtEuroInt(current) + pctText, hidden: false, url: 'finanza.html' }];
+    if (prevDay) {
+      // "da ieri" solo se lo snapshot attuale è di oggi e il precedente è
+      // davvero del giorno prima, altrimenti si indica la data esplicita
+      const label = (cur.day === localDayStr() && prevDay.day === localDayStr(-1))
+        ? 'da ieri'
+        : 'dal ' + prevDay.day.slice(8, 10) + '/' + prevDay.day.slice(5, 7);
+      const p = fmtPctVar(cur.value, prevDay.value, label);
+      if (p) parts.push(p);
+    }
+
+    const pctText = parts.length ? ' (' + parts.join(' · ') + ')' : '';
+    return [{ title: 'Totale portafogli: ' + fmtEuroInt(cur.value) + pctText, hidden: false, url: 'finanza.html' }];
   } catch (e) {
     console.warn('Avviso Finanza non disponibile:', e);
     return [];
