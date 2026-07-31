@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.120</title>
+<title>AppSphere v1.5.121</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -174,6 +174,11 @@
     background: #FFFBEB;
     color: #92400E;
     border-color: #FDE68A;
+  }
+  .home-alert-chip.abitudini {
+    background: #EFF6FF;
+    color: #1E3A8A;
+    border-color: #BFDBFE;
   }
   .home-alert-close {
     display: flex;
@@ -1943,8 +1948,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.120';
-const BUILD_TIME  = '2026-07-28T10:20:00Z';
+const APP_VERSION = 'v1.5.121';
+const BUILD_TIME  = '2026-07-31T10:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2849,7 +2854,7 @@ async function loadApps(forceRender = false) {
 //    il popup ricompare regolarmente.
 // Fonti aggregate: decisioni DecisionKeeper con show_home_alert=true, task
 // scaduti/di oggi con priorità "urgente", totale portafogli Finanza, sfide
-// Ta Firi attive oggi. Ogni fonte espone item con lo stesso formato
+// Ta Firi attive oggi, abitudini ancora aperte oggi. Ogni fonte espone item con lo stesso formato
 // { title, hidden, url } così la sezione può crescere in futuro (nuove
 // app) senza toccare il rendering.
 let _homeAlertDecisions = [];
@@ -2857,6 +2862,7 @@ let _homeAlertTasks = [];
 let _homeAlertFinanza = [];
 let _homeAlertChallenges = [];
 let _homeAlertSpuntiamola = [];
+let _homeAlertHabits = [];
 
 function alertDismissedToday() {
   return localStorage.getItem('appsphere_alert_dismissed_date') === new Date().toISOString().slice(0, 10);
@@ -3018,6 +3024,72 @@ async function loadHomeAlertSpuntiamola(headers) {
   }
 }
 
+// Data locale in formato YYYY-MM-DD (toISOString userebbe UTC e di notte
+// restituirebbe il giorno prima).
+function localDayStr(offsetDays) {
+  const d = new Date();
+  if (offsetDays) d.setDate(d.getDate() + offsetDays);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Abitudini: un avviso per ogni attività ancora aperta oggi. Aperta = prevista
+// oggi e senza nessun record in hb_completions (né fatta né saltata). Per le
+// abitudini con più orari al giorno ogni slot mancante è un avviso a sé.
+async function loadHomeAlertHabits(headers) {
+  try {
+    const today = localDayStr();
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/hb_habits?select=id,name,frequency,weekdays,daily_times,started_at,created_at,riservato&status=eq.active`,
+      { headers }
+    );
+    if (!res.ok) return [];
+    const habits = await res.json();
+    if (!habits.length) return [];
+
+    // Finestra larga ±1 giorno: completed_at è salvato come orario locale, il
+    // filtro esatto sul giorno lo facciamo sul prefisso della stringa.
+    const cRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/hb_completions?select=habit_id,completed_at,period_key,status` +
+      `&completed_at=gte.${localDayStr(-1)}&completed_at=lt.${localDayStr(2)}`,
+      { headers }
+    );
+    const allCompletions = cRes.ok ? await cRes.json() : [];
+    const todayCompletions = allCompletions.filter(c => (c.completed_at || '').startsWith(today));
+
+    const dow = new Date(today + 'T00:00:00').getDay();
+    const items = [];
+
+    for (const h of habits) {
+      // non ancora iniziata
+      const start = String(h.started_at || h.created_at || '').slice(0, 10);
+      if (start && start > today) continue;
+      // giorno non previsto (stessa regola di isDayApplicable in habit-tracker)
+      if (h.frequency === 'weekly' && Array.isArray(h.weekdays) && h.weekdays.length
+          && !h.weekdays.map(Number).includes(dow)) continue;
+
+      const done = todayCompletions.filter(c => c.habit_id === h.id);
+
+      if (h.frequency === 'daily_multiple' && Array.isArray(h.daily_times) && h.daily_times.length) {
+        for (const raw of h.daily_times) {
+          const time = String(raw).slice(0, 5);
+          const chiusa = done.some(c =>
+            (c.period_key || '') === today + '-' + time ||
+            String(c.completed_at || '').substring(11, 16) === time
+          );
+          if (!chiusa) items.push({ title: h.name + ' · ' + time, hidden: !!h.riservato, url: 'habit-tracker.html' });
+        }
+      } else if (!done.length) {
+        items.push({ title: h.name, hidden: !!h.riservato, url: 'habit-tracker.html' });
+      }
+    }
+
+    return items;
+  } catch (e) {
+    console.warn('Avvisi abitudini non disponibili:', e);
+    return [];
+  }
+}
+
 async function loadHomeAlerts() {
   if (_homeAlertDismissed) return;
   const token = localStorage.getItem('sb_token');
@@ -3027,18 +3099,20 @@ async function loadHomeAlerts() {
   if (!uid) return;
   const headers = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token };
 
-  const [decisions, tasks, finanza, challenges, spuntiamola] = await Promise.all([
+  const [decisions, tasks, finanza, challenges, spuntiamola, habits] = await Promise.all([
     loadHomeAlertDecisions(uid, headers),
     loadHomeAlertUrgentTasks(headers),
     loadHomeAlertPortfolioTotal(headers),
     loadHomeAlertChallenges(headers),
-    loadHomeAlertSpuntiamola(headers)
+    loadHomeAlertSpuntiamola(headers),
+    loadHomeAlertHabits(headers)
   ]);
   _homeAlertDecisions = decisions;
   _homeAlertTasks = tasks;
   _homeAlertFinanza = finanza;
   _homeAlertChallenges = challenges;
   _homeAlertSpuntiamola = spuntiamola;
+  _homeAlertHabits = habits;
   renderHomeAlertBubble();
 }
 
@@ -3071,7 +3145,8 @@ function renderHomeAlertBubble() {
     renderAlertSection('⏰ Task urgenti', _homeAlertTasks) +
     renderAlertSection('💰 Finanza', _homeAlertFinanza, 'finanza') +
     renderAlertSection('🎯 Sfide di oggi', _homeAlertChallenges, 'sfide') +
-    renderAlertSection('✅ Spuntiamola', _homeAlertSpuntiamola, 'spuntiamola');
+    renderAlertSection('✅ Spuntiamola', _homeAlertSpuntiamola, 'spuntiamola') +
+    renderAlertSection('🔁 Abituati — da fare oggi', _homeAlertHabits, 'abitudini');
   if (!sectionsHtml) return;
 
   // Tap fuori: chiude solo questa visualizzazione, ricompare al prossimo caricamento.
