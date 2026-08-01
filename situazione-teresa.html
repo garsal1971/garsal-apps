@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.7.1</title>
+  <title>Situazione Teresa v1.7.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -158,7 +158,9 @@
       <div id="garsal-top-bar-text" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Situazione Teresa</div>
     </div>
     <div id="user-info" class="hidden" style="color:#fff; font-size:12px; font-family:var(--font-mono); flex-shrink:0;"></div>
-    <button id="btn-logout" class="btn btn-outline btn-sm hidden" style="color:#fff; border-color:rgba(255,255,255,0.3); flex-shrink:0;">Esci</button>
+    <!-- Niente bottone "Esci": la sessione resta in localStorage e non c'è motivo di uscire da
+         una pagina personale. La funzione logout() resta e viene ancora chiamata da sola quando
+         la sessione scade o l'account non è autorizzato. -->
   </div>
 
   <div id="screen-login">
@@ -300,8 +302,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.7.1';
-    const BUILD_TIME  = '2026-08-01T15:40:00Z';
+    const APP_VERSION = 'v1.7.2';
+    const BUILD_TIME  = '2026-08-01T22:35:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -416,7 +418,6 @@
       nativeCredsClear();
       document.getElementById('screen-login').classList.remove('hidden');
       document.getElementById('screen-app').classList.add('hidden');
-      document.getElementById('btn-logout').classList.add('hidden');
       document.getElementById('user-info').classList.add('hidden');
       document.getElementById('btn-hamburger').classList.add('hidden');
     }
@@ -470,7 +471,6 @@
 
       document.getElementById('screen-login').classList.add('hidden');
       document.getElementById('screen-app').classList.remove('hidden');
-      document.getElementById('btn-logout').classList.remove('hidden');
       document.getElementById('user-info').textContent = S.session.user.email;
       document.getElementById('user-info').classList.remove('hidden');
       document.getElementById('btn-hamburger').classList.remove('hidden');
@@ -609,12 +609,6 @@
         btn.disabled = false;
         btn.textContent = 'Accedi';
       }
-    };
-
-    document.getElementById('btn-logout').onclick = () => {
-      localStorage.removeItem('garsal_session');
-      nativeCredsClear();
-      location.reload();
     };
 
     document.getElementById('btn-setup-password').onclick = async () => {
