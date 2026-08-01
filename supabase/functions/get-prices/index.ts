@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.16.1"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko, azioni→TD/GoogleFinance
+const VERSION = "5.17.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -476,6 +476,7 @@ async function fetchJustEtfPrice(
 // Preferred for EU ETFs (LU/IE ISINs): returns price only if currency is EUR.
 async function fetchYahooFinanceByIsin(
   isin: string, requestId: string, dbEntries: DbEntry[],
+  apiKey: string, rateCache: Map<string, number>,
 ): Promise<number | null> {
   const headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -498,8 +499,10 @@ async function fetchYahooFinanceByIsin(
       return null;
     }
 
-    // Prefer EUR-denominated exchanges (Borsa Italiana, Euronext Paris, XETRA, Amsterdam)
-    const eurExchanges = ["MIL", "PAR", "GER", "AMS", "EBS", "VIE"];
+    // Prefer EUR-denominated exchanges (Borsa Italiana, Euronext Paris, XETRA, Amsterdam, Vienna).
+    // EBS (SIX Svizzera) è volutamente escluso: quota in CHF, e se compare prima di una
+    // piazza in euro nei risultati la sceglierebbe al posto di quella giusta.
+    const eurExchanges = ["MIL", "PAR", "GER", "AMS", "VIE"];
     const best = quotes.find((q) => eurExchanges.includes(q.exchange)) ?? quotes[0];
     const ySymbol = best.symbol;
 
@@ -524,9 +527,19 @@ async function fetchYahooFinanceByIsin(
       dbLog(dbEntries, "WARN", `Yahoo Finance: invalid price for ${ySymbol}`, { isin, symbol: ySymbol, price }, requestId);
       return null;
     }
-    if (currency !== "EUR") {
-      dbLog(dbEntries, "WARN", `Yahoo Finance: non-EUR price for ${ySymbol}`, { isin, symbol: ySymbol, currency, price }, requestId);
-      return null;
+    // Quotazione in valuta diversa: stesso ISIN = stessa classe di quote, cambia solo
+    // la piazza di negoziazione, quindi il prezzo convertito al cambio è quello giusto.
+    // Prima veniva scartato, e per gli ETF quotati solo fuori dall'area euro (es. CHIP,
+    // che Yahoo risolve in CHIP.SW in CHF) significava restare senza prezzo.
+    if (currency !== TARGET_CURRENCY) {
+      const rate = await getConversionRate(currency, TARGET_CURRENCY, apiKey, requestId, rateCache);
+      if (!rate) {
+        dbLog(dbEntries, "WARN", `Yahoo Finance: conversione ${currency}→EUR fallita per ${ySymbol}`, { isin, symbol: ySymbol, currency, price }, requestId);
+        return null;
+      }
+      const converted = roundMoney(price * rate);
+      dbLog(dbEntries, "INFO", `Fetched from Yahoo Finance (convertito)`, { isin, symbol: ySymbol, currency, price, rate, converted }, requestId);
+      return converted;
     }
 
     dbLog(dbEntries, "INFO", `Fetched from Yahoo Finance`, { isin, symbol: ySymbol, price }, requestId);
@@ -652,75 +665,112 @@ const COINGECKO_ID_MAP: Record<string, string> = {
   POL: "polygon-ecosystem-token", // rebrand di MATIC (2024), ID CoinGecko diverso da matic-network
 };
 
-// Fetches EUR price from CoinGecko for a crypto symbol.
-// 1. Looks up CoinGecko ID: hardcoded map → /search fallback.
-// 2. Fetches /simple/price?ids={id}&vs_currencies=eur.
-// Free API — no key required. Rate limit ~10–30 req/min.
-async function fetchCryptoPrice(
+const COINGECKO_HEADERS = {
+  "User-Agent": "GarsalFinanza/1.0",
+  "Accept": "application/json",
+};
+
+// Risolve un simbolo non presente in COINGECKO_ID_MAP tramite /search.
+async function searchCoinGeckoId(
   symbol: string, requestId: string, dbEntries: DbEntry[],
-): Promise<number | null> {
-  const headers = {
-    "User-Agent": "GarsalFinanza/1.0",
-    "Accept": "application/json",
-  };
-
-  // Step 1: resolve symbol → CoinGecko ID
-  let coinId: string | null = COINGECKO_ID_MAP[symbol.toUpperCase()] ?? null;
-
-  if (!coinId) {
-    try {
-      const searchUrl = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(symbol)}`;
-      const res = await fetch(searchUrl, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        const coins: { id: string; symbol: string }[] = data?.coins ?? [];
-        // Prefer exact symbol match
-        const match = coins.find((c) => c.symbol.toUpperCase() === symbol.toUpperCase()) ?? coins[0];
-        if (match) coinId = match.id;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      dbLog(dbEntries, "WARN", `CoinGecko search error for ${symbol}`, { symbol, error: msg }, requestId);
-    }
-  }
-
-  if (!coinId) {
-    dbLog(dbEntries, "WARN", `CoinGecko: no coin ID found for ${symbol}`, { symbol }, requestId);
-    return null;
-  }
-
-  // Step 2: fetch EUR price
+): Promise<string | null> {
   try {
-    const priceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coinId)}&vs_currencies=eur&include_24hr_change=true`;
-    let res = await fetch(priceUrl, { headers });
-    if (res.status === 429) {
-      // Free CoinGecko API rate-limita spesso le IP condivise di Supabase Edge:
-      // un retry dopo una breve attesa risolve la maggior parte dei 429 transitori.
-      dbLog(dbEntries, "WARN", `CoinGecko 429 for ${symbol}, retry after backoff`, { symbol, coinId }, requestId);
-      await delay(5000);
-      res = await fetch(priceUrl, { headers });
-    }
+    const searchUrl = `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(symbol)}`;
+    const res = await fetch(searchUrl, { headers: COINGECKO_HEADERS });
     if (!res.ok) {
-      dbLog(dbEntries, "WARN", `CoinGecko price HTTP ${res.status} for ${symbol}`, { symbol, coinId, status: res.status }, requestId);
+      dbLog(dbEntries, "WARN", `CoinGecko search HTTP ${res.status} for ${symbol}`, { symbol, status: res.status }, requestId);
       return null;
     }
     const data = await res.json();
-    const entry = data?.[coinId];
-    if (!entry) {
-      dbLog(dbEntries, "WARN", `CoinGecko: empty price response for ${symbol}`, { symbol, coinId }, requestId);
+    const coins: { id: string; symbol: string }[] = data?.coins ?? [];
+    const match = coins.find((c) => c.symbol.toUpperCase() === symbol.toUpperCase()) ?? coins[0];
+    return match?.id ?? null;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    dbLog(dbEntries, "WARN", `CoinGecko search error for ${symbol}`, { symbol, error: msg }, requestId);
+    return null;
+  }
+}
+
+// Prezzi EUR di TUTTE le crypto in una sola chiamata a /simple/price.
+// /simple/price accetta più id separati da virgola: una richiesta invece di una
+// per simbolo. Il piano free di CoinGecko rate-limita pesantemente gli IP
+// condivisi di Supabase Edge, e con una chiamata per crypto i simboli in fondo
+// alla lista prendevano 429 in modo sistematico.
+async function fetchCryptoPricesBatch(
+  symbols: string[], requestId: string, dbEntries: DbEntry[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (symbols.length === 0) return out;
+
+  // symbol → coin id (mappa statica, /search solo per i simboli sconosciuti)
+  const idBySymbol = new Map<string, string>();
+  for (const symbol of symbols) {
+    const known = COINGECKO_ID_MAP[symbol.toUpperCase()];
+    if (known) { idBySymbol.set(symbol, known); continue; }
+    const found = await searchCoinGeckoId(symbol, requestId, dbEntries);
+    if (found) idBySymbol.set(symbol, found);
+    else dbLog(dbEntries, "WARN", `CoinGecko: no coin ID found for ${symbol}`, { symbol }, requestId);
+  }
+  if (idBySymbol.size === 0) return out;
+
+  const ids = [...new Set(idBySymbol.values())];
+  const priceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids.join(","))}&vs_currencies=eur&include_24hr_change=true`;
+
+  try {
+    let res = await fetch(priceUrl, { headers: COINGECKO_HEADERS });
+    if (res.status === 429) {
+      dbLog(dbEntries, "WARN", `CoinGecko 429 sul batch, retry dopo backoff`, { ids }, requestId);
+      await delay(5000);
+      res = await fetch(priceUrl, { headers: COINGECKO_HEADERS });
+    }
+    if (!res.ok) {
+      dbLog(dbEntries, "WARN", `CoinGecko batch HTTP ${res.status}`, { ids, status: res.status }, requestId);
+      return out;
+    }
+    const data = await res.json();
+    for (const [symbol, coinId] of idBySymbol) {
+      const price = parseNumber(data?.[coinId]?.eur);
+      if (price === null || price <= 0) {
+        dbLog(dbEntries, "WARN", `CoinGecko: prezzo mancante per ${symbol}`, { symbol, coinId }, requestId);
+        continue;
+      }
+      out.set(symbol, price);
+    }
+    dbLog(dbEntries, "INFO", `Fetched from CoinGecko (batch)`, {
+      requested: symbols.length, resolved: idBySymbol.size, withPrice: out.size,
+    }, requestId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    dbLog(dbEntries, "WARN", `CoinGecko batch error`, { ids, error: msg }, requestId);
+  }
+  return out;
+}
+
+// Seconda fonte per le crypto: spot price di Coinbase, senza chiave e con
+// limiti molto più larghi di CoinGecko. Prima non c'era alcun ripiego, quindi
+// un 429 di CoinGecko lasciava la crypto senza prezzo per tutto il giro.
+async function fetchCoinbaseSpotPrice(
+  symbol: string, requestId: string, dbEntries: DbEntry[],
+): Promise<number | null> {
+  try {
+    const url = `https://api.coinbase.com/v2/prices/${encodeURIComponent(symbol.toUpperCase())}-${TARGET_CURRENCY}/spot`;
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    if (!res.ok) {
+      dbLog(dbEntries, "WARN", `Coinbase HTTP ${res.status} for ${symbol}`, { symbol, status: res.status }, requestId);
       return null;
     }
-    const price = parseNumber(entry.eur);
-    const change24h = parseNumber(entry.eur_24h_change) ?? null;
+    const data = await res.json();
+    const price = parseNumber(data?.data?.amount);
     if (price === null || price <= 0) {
-      dbLog(dbEntries, "WARN", `CoinGecko: invalid price for ${symbol}`, { symbol, coinId, price }, requestId);
+      dbLog(dbEntries, "WARN", `Coinbase: prezzo non valido per ${symbol}`, { symbol, price }, requestId);
       return null;
     }
-    dbLog(dbEntries, "INFO", `Fetched from CoinGecko`, { symbol, coinId, price, change24h }, requestId);
+    dbLog(dbEntries, "INFO", `Fetched from Coinbase`, { symbol, price }, requestId);
     return price;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    dbLog(dbEntries, "WARN", `CoinGecko price error for ${symbol}`, { symbol, coinId, error: msg }, requestId);
+    dbLog(dbEntries, "WARN", `Coinbase error for ${symbol}`, { symbol, error: msg }, requestId);
     return null;
   }
 }
@@ -872,6 +922,7 @@ serve(async (req) => {
     if (toFetch.length > 0) {
       const rows: Record<string, unknown>[] = [];
       const rateCache = new Map<string, number>();
+      const fetchedSymbols = new Set<string>();
 
       // Pre-load rendimentibtp.it solo per BTP standard (non BTPi che usano SoldiOnline)
       const needsBtpSource = toFetch.some(
@@ -884,7 +935,34 @@ serve(async (req) => {
         dbLog(dbEntries, "INFO", "Loaded rendimentibtp.it", { count: btpPrices.size, pageStats }, requestId);
       }
 
+      // Pre-carica in una sola richiesta i prezzi di tutte le crypto da aggiornare.
+      const cryptoSymbols = toFetch.filter((s) => typeMap[s] === "crypto");
+      const cryptoBatch = await fetchCryptoPricesBatch(cryptoSymbols, requestId, dbEntries);
+
+      // Scrive su fnz_price_cache quello che è stato raccolto finora. Serve
+      // chiamarla durante il ciclo e non solo alla fine: il giro dura minuti fra
+      // scraping e pause, e con un unico upsert finale un timeout della Edge
+      // Function buttava via anche i prezzi già recuperati.
+      const flushRows = async () => {
+        if (rows.length === 0) return;
+        const batch = rows.splice(0, rows.length);
+        const { error: upsertError } = await supabase
+            .from("fnz_price_cache")
+            .upsert(batch, { onConflict: "symbol,currency" })
+            .select();
+        if (upsertError) {
+          log("ERROR", "Cache upsert failed", { requestId, message: upsertError.message });
+          dbLog(dbEntries, "ERROR", "Cache upsert failed", { message: upsertError.message, symbols: batch.map((r) => r.symbol) }, requestId);
+          return;
+        }
+        for (const r of batch) {
+          cachedMap.set(r.symbol as string, r);
+          fetchedSymbols.add(r.symbol as string);
+        }
+      };
+
       for (let i = 0; i < toFetch.length; i++) {
+        if (rows.length >= 5) await flushRows();
         const symbol = toFetch[i];
         const isin = isinMap[symbol];
         const assetType = typeMap[symbol] ?? "";
@@ -914,24 +992,25 @@ serve(async (req) => {
 
           // Step 2: catena fallback basata su ISIN e tipo strumento
 
-          // 2-crypto. Crypto → CoinGecko (non richiede ISIN)
+          // 2-crypto. Crypto → CoinGecko (batch già scaricato), poi Coinbase
           if (isCrypto) {
-            const cgPrice = await fetchCryptoPrice(symbol, requestId, dbEntries);
-            if (cgPrice !== null) {
+            let cryptoPrice = cryptoBatch.get(symbol) ?? null;
+            let source = "CoinGecko";
+            if (cryptoPrice === null) {
+              cryptoPrice = await fetchCoinbaseSpotPrice(symbol, requestId, dbEntries);
+              source = "Coinbase";
+            }
+            if (cryptoPrice !== null) {
               rows.push({
-                symbol, price: roundMoney(cgPrice),
+                symbol, price: roundMoney(cryptoPrice),
                 prev_close: null, change_amt: null, change_pct: null,
                 currency: TARGET_CURRENCY, market_state: "REGULAR",
                 updated_at: new Date().toISOString(),
               });
-              dbLog(dbEntries, "INFO", `Fetched ${symbol} from CoinGecko`, { price: cgPrice }, requestId);
+              dbLog(dbEntries, "INFO", `Fetched ${symbol} from ${source}`, { price: cryptoPrice }, requestId);
             } else {
-              dbLog(dbEntries, "WARN", `CoinGecko failed for ${symbol}, no further fallback for crypto`, { symbol }, requestId);
+              dbLog(dbEntries, "WARN", `Nessun prezzo per ${symbol}: CoinGecko e Coinbase falliti`, { symbol }, requestId);
             }
-            // Pacing tra chiamate CoinGecko consecutive: la ricerca /search per simboli
-            // non in COINGECKO_ID_MAP raddoppia le richieste ed è facile sforare il
-            // rate limit del piano free quando si aggiungono più crypto insieme.
-            if (i < toFetch.length - 1) await delay(3000);
             continue;
           }
 
@@ -981,7 +1060,7 @@ serve(async (req) => {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from JustETF`, { isin, price: jePrice }, requestId);
                 continue;
               }
-              const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries);
+              const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries, TWELVE_DATA_API_KEY, rateCache);
               if (yfPrice !== null) {
                 rows.push({
                   symbol, price: roundMoney(yfPrice),
@@ -1011,7 +1090,7 @@ serve(async (req) => {
 
             // 2e. Yahoo Finance by ISIN — per azioni quando TD richiede piano a pagamento
             if (isStock) {
-              const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries);
+              const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries, TWELVE_DATA_API_KEY, rateCache);
               if (yfPrice !== null) {
                 rows.push({
                   symbol, price: roundMoney(yfPrice),
@@ -1153,23 +1232,20 @@ serve(async (req) => {
         }
       }
 
-      if (rows.length > 0) {
-        const { error: upsertError } = await supabase
-            .from("fnz_price_cache")
-            .upsert(rows, { onConflict: "symbol,currency" })
-            .select();
+      await flushRows();
 
-        if (upsertError) {
-          log("ERROR", "Cache upsert failed", { requestId, message: upsertError.message });
-          dbLog(dbEntries, "ERROR", "Cache upsert failed", { message: upsertError.message }, requestId);
-          await flushLogs(supabase, dbEntries);
-          return json({ error: "Failed to update price cache", details: upsertError.message }, 500);
-        }
-
-        for (const r of rows) cachedMap.set(r.symbol as string, r);
-      } else {
+      if (fetchedSymbols.size === 0) {
         log("WARN", "No prices fetched", { requestId, toFetch });
         dbLog(dbEntries, "WARN", "No prices fetched", { toFetch }, requestId);
+      }
+
+      // Riepilogo esplicito di cosa è rimasto senza prezzo: senza questa riga
+      // bisogna ricostruire l'esito simbolo per simbolo leggendo tutti i WARN.
+      const missing = toFetch.filter((s) => !fetchedSymbols.has(s));
+      if (missing.length > 0) {
+        const missingDetail = missing.map((s) => `${s}[${typeMap[s] ?? "?"}]${isinMap[s] ? "=" + isinMap[s] : ""}`);
+        log("WARN", `Symbols without price: ${missing.join(", ")}`, { requestId });
+        dbLog(dbEntries, "WARN", "Symbols without price", { count: missing.length, missing: missingDetail }, requestId);
       }
     }
 
