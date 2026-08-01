@@ -289,6 +289,45 @@ Le migration vengono applicate **automaticamente** al push su `claude/**` tramit
 
 ---
 
+## Edge Functions e job schedulati
+
+Le Edge Functions stanno in `supabase/functions/<nome>/index.ts` (Deno + TypeScript) e vengono
+deployate **automaticamente** al push su `claude/**`: il workflow deploya solo le funzioni toccate
+dal commit. I job periodici sono `pg_cron` + `net.http_post`, creati da migration con la service
+role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.sql` come modello).
+
+| Funzione | Job | Cosa fa |
+|---|---|---|
+| `get-prices` | orario | Aggiorna `fnz_price_cache` (un trigger propaga su `fnz_price_history`). Una fonte diversa per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko in batch + Coinbase come ripiego, azioni→TwelveData/GoogleFinance |
+| `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
+
+### ⚠️ Ora legale nei cron
+
+`pg_cron` lavora in **UTC e non conosce il cambio ora**. Gli schedule sono scritti per l'ora legale
+(CEST, UTC+2): a fine ottobre, con il ritorno all'ora solare, vanno spostati avanti di un'ora o i
+job scatteranno un'ora prima del previsto. Riguarda `fnz-save-snapshot` (`0 21 * * *` = 23:00 CEST)
+e `revolut-auto-categorize`.
+
+### ⚠️ Logica dello snapshot duplicata
+
+Il calcolo del patrimonio esiste in **due copie che devono restare allineate**:
+
+| Dove | Perché |
+|---|---|
+| `finanza.html` — `buildSnapshotPayload`, `portfolioStats`, `computeHoldings`, `computeLoanValue`, `computePricesFromHistory` | Il browser deve calcolare gli stessi numeri per disegnare la dashboard |
+| `supabase/functions/save-snapshot/index.ts` — stesse funzioni riscritte in TypeScript | Il job delle 23:00 deve salvare lo snapshot anche se nessuno apre l'app |
+
+**Se cambi una di quelle funzioni in `finanza.html`, cambiala anche nella Edge Function**, altrimenti
+lo snapshot notturno diverge da quello che l'app mostra a schermo. La duplicazione è voluta — il
+client non può delegare tutto al server perché gli servono comunque i valori live per la dashboard —
+ma non è gratis. Il modo per accorgersene: far girare le due implementazioni sugli stessi dati e
+confrontare i quattro totali e il JSON `details`, devono coincidere esattamente.
+
+Una terza copia, ridotta al solo valore dei portafogli, sta in `index.html`
+(`fetchPortfolioLiveValue`) per l'avviso "Totale portafogli" della home.
+
+---
+
 ## App Details
 
 ### `index.html` — AppSphere
@@ -543,6 +582,8 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 4. **Large file sizes**: `tasks.html` is ~445 KB and ~8 900 lines. When editing, use search to navigate to the relevant section. Sections are marked with `// ========================================` banners.
 5. **No hot reload**: There is no dev server. After editing, hard-refresh the browser (`Cmd/Ctrl+Shift+R`).
 6. **Duplicate `renderTaskCard`**: `tasks.html` defines `renderTaskCard` in two places (dashboard view and categories/management view). Both must be kept in sync when changing card rendering logic.
+7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
+8. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
 
 ---
 
