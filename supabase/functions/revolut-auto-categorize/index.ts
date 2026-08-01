@@ -34,6 +34,10 @@
 // v1.3.4 — 2026-07-24: non accoda più una notifica smart_block se ce n'è già una pending per
 // la stessa regola, per non accumulare righe duplicate ad ogni run del cron finché l'utente non
 // le smaltisce.
+// v1.4 — 2026-08-01: ogni transazione nel payload Smart Block porta anche `spender` (nome della
+// persona che ha pagato, da ca_people via ca_transactions.spender_person_id) e `time` (ora del
+// pagamento estratta da ca_transactions.raw, vedi extractPaymentTime) — servono a
+// BlockWindowManager.kt per dire chi ha fatto il pagamento e a che ora.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -81,6 +85,74 @@ async function createEnableBankingJWT(appId: string, privateKeyPem: string): Pro
 function pick(obj: any, ...keys: string[]): unknown {
   for (const k of keys) {
     if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return null;
+}
+
+// Ora del pagamento — né ca_transactions.date (è un `date`, senza orario) né created_at (è il
+// momento del sync, non del pagamento) la contengono: l'unico posto dove sopravvive è
+// ca_transactions.raw.
+//   · import CSV Revolut  → la riga originale, con "started date"/"completed date" in formato
+//     'YYYY-MM-DD HH:MM:SS' (cost-analysis.html ne tiene solo la parte data);
+//   · sync bancario       → il JSON di Enable Banking, dove l'orario, quando c'è, sta in un
+//     campo *_date_time o transaction_time.
+// Vale la stessa nota di enable-banking-sync: i nomi dei campi non sono garantiti, quindi dopo
+// i campi noti si scansionano tutti i valori stringa in cerca di un 'YYYY-MM-DD HH:MM' — un
+// orario da solo viene accettato solo dai campi noti, per non scambiare per orario un "18:30"
+// finito dentro una descrizione. Se non si trova nulla si restituisce null e l'app non mostra
+// alcun orario, invece di inventarne uno.
+const DATETIME_RE = /\d{4}-\d{2}-\d{2}[T ](?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/;
+const BARE_TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
+const TIME_ZONE = 'Europe/Rome';
+
+/** 'HH:MM' da una stringa data+ora; se porta un fuso esplicito (Z o ±HH:MM) l'ora viene
+    convertita a Europe/Rome, altrimenti si prende alla lettera com'è scritta. */
+function timeFromDateTime(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const m = value.match(DATETIME_RE);
+  if (!m) return null;
+  const stamp = m[0];
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(stamp)) {
+    const d = new Date(stamp);
+    if (!isNaN(d.getTime())) {
+      return new Intl.DateTimeFormat('it-IT', {
+        timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(d);
+    }
+  }
+  return stamp.slice(11, 16);
+}
+
+function extractPaymentTime(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const knownKeys = [
+    'transaction_time', 'transactionTime',
+    'booking_date_time', 'bookingDateTime',
+    'value_date_time', 'valueDateTime',
+    'transaction_date_time', 'transactionDateTime',
+    'started date', 'Started Date', 'completed date', 'Completed Date',
+    'data di inizio', 'Data di inizio', 'data di completamento', 'Data di completamento',
+  ];
+  for (const k of knownKeys) {
+    const v = obj[k];
+    const fromDateTime = timeFromDateTime(v);
+    if (fromDateTime) return fromDateTime;
+    if (typeof v === 'string' && BARE_TIME_RE.test(v.trim())) return v.trim().slice(0, 5);
+  }
+  return scanForDateTime(obj, 2);
+}
+
+/** Scansione generica in profondità limitata: la prima stringa data+ora incontrata vince. */
+function scanForDateTime(node: unknown, depth: number): string | null {
+  if (depth < 0) return null;
+  const direct = timeFromDateTime(node);
+  if (direct) return direct;
+  if (node && typeof node === 'object') {
+    for (const v of Object.values(node as Record<string, unknown>)) {
+      const t = scanForDateTime(v, depth - 1);
+      if (t) return t;
+    }
   }
   return null;
 }
@@ -547,8 +619,29 @@ Deno.serve(async (req) => {
         const MAX_EMBEDDED = 20;
         const { data: uncategorizedTx } = await supabase
           .from('ca_transactions')
-          .select('id, description, amount, currency, date')
+          .select('id, description, amount, currency, date, spender_person_id, raw')
           .in('id', uncategorizedIds.slice(0, MAX_EMBEDDED));
+        // Chi ha pagato + a che ora. `raw` serve solo a ricavare l'orario e NON finisce nel
+        // payload: è il JSON grezzo della banca (o l'intera riga CSV), pesante e inutile
+        // all'app. Il nome della persona si risolve qui una volta sola invece di far fare
+        // un'altra query al telefono; spender_person_id può essere nullo (transazione non
+        // ancora attribuita) e in quel caso `spender` resta null.
+        const { data: peopleRows } = await supabase
+          .from('ca_people')
+          .select('id, name')
+          .eq('user_id', userId);
+        const personName = new Map<string, string>(
+          (peopleRows || []).map((p: any) => [p.id as string, p.name as string] as [string, string])
+        );
+        const embeddedTx = (uncategorizedTx || []).map((t: any) => ({
+          id: t.id,
+          description: t.description,
+          amount: t.amount,
+          currency: t.currency,
+          date: t.date,
+          time: extractPaymentTime(t.raw),
+          spender: t.spender_person_id ? (personName.get(t.spender_person_id) || null) : null,
+        }));
         // parent_id incluso per raggruppare categorie/sottocategorie nel picker Android come
         // in cost-analysis.html (renderTxCategorySuggestions): principali in grassetto, figlie
         // indentate subito sotto, entrambe selezionabili. La cascata principale → sotto-categorie
@@ -565,7 +658,7 @@ Deno.serve(async (req) => {
 
         const metadata: Record<string, unknown> = {
           cost_analysis: {
-            transactions: uncategorizedTx || [],
+            transactions: embeddedTx,
             categories: visibleCategories,
           },
         };

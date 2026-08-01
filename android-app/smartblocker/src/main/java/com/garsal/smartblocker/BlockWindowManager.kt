@@ -344,6 +344,19 @@ class BlockWindowManager(private val ctx: Context) {
         c'è una ricerca in corso — solo una alla volta (fisarmonica), nessuna aperta di default. */
     private var caExpandedTopId: String? = null
 
+    /** Campo stringa di una transazione del payload. NON usare optString() da solo: su un null
+        JSON (org.json.JSONObject.NULL) restituisce la stringa "null", che finirebbe a schermo —
+        e spender/time/description sono nulli tutte le volte che il dato non c'è. */
+    private fun caTxString(tx: JSONObject, key: String): String =
+        if (tx.isNull(key)) "" else tx.optString(key, "").trim()
+
+    /** 'YYYY-MM-DD' → 'DD/MM/YYYY' (formato europeo, come nel resto delle app). Qualsiasi altro
+        formato viene lasciato com'è. */
+    private fun formatCaDate(date: String): String {
+        val p = date.split("-")
+        return if (p.size == 3 && p[0].length == 4) "${p[2]}/${p[1]}/${p[0]}" else date
+    }
+
     /** Mostra la transazione alla posizione caIndex; se la lista è vuota (tutte categorizzate)
         chiude il blocco come per un blocco informativo normale. Altrimenti azzera ricerca/apertura
         e ridisegna la lista categorie (principali chiuse). */
@@ -362,12 +375,27 @@ class BlockWindowManager(private val ctx: Context) {
         if (caIndex >= caTransactions.size) caIndex = caTransactions.size - 1
         if (caIndex < 0) caIndex = 0
         val tx = caTransactions[caIndex]
-        val desc = tx.optString("description", "").ifBlank { "Transazione" }
+        val desc = caTxString(tx, "description").ifBlank { "Transazione" }
         val amount = tx.optDouble("amount", 0.0)
-        val currency = tx.optString("currency", "").ifBlank { "EUR" }
-        val date = tx.optString("date", "")
-        tvCaProgress.text = "${caIndex + 1} di ${caTransactions.size}" + if (date.isNotBlank()) " — $date" else ""
-        tvCaTransaction.text = "$desc\n${String.format(Locale.ITALY, "%.2f", amount)} $currency"
+        val currency = caTxString(tx, "currency").ifBlank { "EUR" }
+        val date = caTxString(tx, "date")
+        // spender/time arrivano da revolut-auto-categorize (v1.4): chi ha pagato e a che ora.
+        // Restano vuoti sulle notifiche accodate da versioni precedenti della Edge Function e
+        // quando il dato manca (transazione non ancora attribuita a una persona, o riga grezza
+        // senza orario) — in quel caso la riga corrispondente semplicemente non compare.
+        val time = caTxString(tx, "time")
+        val spender = caTxString(tx, "spender")
+        tvCaProgress.text = "${caIndex + 1} di ${caTransactions.size}" +
+            if (date.isNotBlank()) " — ${formatCaDate(date)}" else ""
+        val detail = listOfNotNull(
+            spender.ifBlank { null }?.let { "👤 $it" },
+            time.ifBlank { null }?.let { "🕒 $it" }
+        ).joinToString("   ")
+        tvCaTransaction.text = buildString {
+            append(desc)
+            append("\n").append(String.format(Locale.ITALY, "%.2f", amount)).append(" ").append(currency)
+            if (detail.isNotBlank()) append("\n").append(detail)
+        }
         etCaSearch.visibility = View.VISIBLE
         etCaSearch.setText("")
         caExpandedTopId = null
