@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.7.0</title>
+  <title>Situazione Teresa v1.7.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -183,6 +183,15 @@
         la prima volta inserisci email e password, poi resterai sempre connessa.
       </p>
       <a href="/releases/SituazioneTeresa-latest.apk" download="SituazioneTeresa.apk" class="btn-magic" style="display:inline-flex; align-items:center; justify-content:center; text-decoration:none;">⬇ Scarica APK</a>
+
+      <div style="border-top:1px solid var(--c-border); margin:16px 0 12px;"></div>
+
+      <div class="card-title" style="margin-bottom:8px;">💳 Revolut Teresa</div>
+      <p class="text-muted text-sm" style="line-height:1.6; margin-bottom:12px;">
+        App separata: ti avvisa dei pagamenti fatti con la <strong>tua</strong> carta Revolut e
+        ti fa scegliere la categoria di spesa direttamente dall'avviso, senza aprire nient'altro.
+      </p>
+      <a href="/releases/SmartBlockerTeresa-latest.apk" download="RevolutTeresa.apk" class="btn-magic" style="display:inline-flex; align-items:center; justify-content:center; text-decoration:none;">⬇ Scarica APK</a>
     </div>
   </div>
 
@@ -205,6 +214,11 @@
       <nav class="sidebar" id="sidebar">
         <button class="nav-item active" data-view="risparmio">🏡 Conto Risparmio</button>
         <button class="nav-item" data-view="spese">💰 Conto Spese</button>
+        <!-- Niente data-view: è un download, non una vista — la sessione resta in localStorage,
+             quindi la schermata di login (dove sta l'altro riquadro APK) può non ricomparire per
+             settimane e il collegamento sarebbe di fatto irraggiungibile. -->
+        <a id="apk-sidebar-link" class="nav-item" style="margin-top:auto; text-decoration:none;"
+           href="/releases/SmartBlockerTeresa-latest.apk" download="RevolutTeresa.apk">💳 App Revolut</a>
       </nav>
       <main class="app-main">
 
@@ -286,8 +300,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.7.0';
-    const BUILD_TIME  = '2026-07-16T16:38:00Z';
+    const APP_VERSION = 'v1.7.1';
+    const BUILD_TIME  = '2026-08-01T15:40:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -473,7 +487,10 @@
       document.getElementById('mobile-nav-overlay').classList.remove('open');
     }
 
-    document.querySelectorAll('.nav-item').forEach(btn => {
+    // Solo le voci con data-view: il collegamento all'APK usa la stessa classe per avere lo
+    // stesso aspetto, ma navigate(undefined) spegnerebbe tutte le viste lasciando la pagina
+    // bianca mentre parte il download.
+    document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
       btn.addEventListener('click', () => navigate(btn.dataset.view));
     });
 
@@ -929,8 +946,12 @@
       document.getElementById('detail-overlay').classList.add('hidden');
     }
 
+    // Dentro l'app Android i due collegamenti spariscono: la sua WebView non ha un
+    // DownloadListener, quindi toccare un .apk non farebbe assolutamente nulla — meglio nessun
+    // collegamento che uno morto. Gli APK si scaricano aprendo questa pagina dal browser.
     if (navigator.userAgent.includes('SituazioneTeresaApp')) {
       document.getElementById('apk-download-card')?.remove();
+      document.getElementById('apk-sidebar-link')?.remove();
     }
 
     handleAuth();
