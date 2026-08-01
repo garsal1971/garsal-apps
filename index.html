@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.122</title>
+<title>AppSphere v1.5.123</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1948,8 +1948,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.122';
-const BUILD_TIME  = '2026-07-31T17:30:00Z';
+const APP_VERSION = 'v1.5.123';
+const BUILD_TIME  = '2026-08-01T09:30:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2930,12 +2930,78 @@ async function loadHomeAlertUrgentTasks(headers) {
   }
 }
 
-// Variazione percentuale fra due snapshot, già formattata con l'etichetta.
+// Variazione percentuale fra due valori, già formattata con l'etichetta.
 // Stringa vuota se il termine di paragone manca o è zero (divisione impossibile).
+// Stesso formato di deltaHtml() in finanza.html: due decimali con la virgola.
 function fmtPctVar(current, prev, label) {
   if (!prev) return '';
   const pct = (current - prev) / Math.abs(prev) * 100;
-  return (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% ' + label;
+  return (pct >= 0 ? '+' : '') + pct.toFixed(2).replace('.', ',') + '% ' + label;
+}
+
+// Valore quota dei portafogli calcolato sui prezzi correnti, con la stessa
+// logica di portfolioStats()/computeHoldings() in finanza.html: quantità
+// residua per prodotto × ultimo prezzo noto × percentuale di possesso, con
+// ripiego sul costo d'acquisto quando il prezzo manca.
+// Serve calcolarlo qui perché fnz_dashboard_snapshots viene scritto solo
+// all'apertura di Finanza: fino a quel momento lo snapshot più recente è
+// quello di ieri e l'avviso mostrerebbe un totale vecchio di un giorno.
+async function fetchPortfolioLiveValue(headers) {
+  const q = (table, qs) => fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, { headers })
+    .then(r => r.ok ? r.json() : []);
+
+  const [portfolios, products, txs, history] = await Promise.all([
+    q('fnz_portfolios', 'select=id,ownership_percentage'),
+    q('fnz_products', 'select=id,symbol'),
+    q('fnz_transactions', 'select=portfolio_id,product_id,type,quantity,price,commission&order=date.asc,created_at.asc'),
+    q('fnz_price_history', 'select=symbol,price,price_date&order=price_date.desc,id.desc')
+  ]);
+  if (!portfolios.length || !txs.length) return null;
+
+  // ultimo prezzo per simbolo: la lista è ordinata dal più recente, quindi
+  // la prima occorrenza di ogni simbolo è quella buona
+  const price = {};
+  for (const r of history) {
+    if (!(r.symbol in price) && r.price != null) price[r.symbol] = parseFloat(r.price);
+  }
+  const symbolOf = {};
+  for (const p of products) symbolOf[p.id] = p.symbol;
+
+  // quantità e costo medio ponderato per portafoglio/prodotto
+  const byPortfolio = {};
+  for (const tx of txs) {
+    if (!tx.portfolio_id) continue;
+    const m = byPortfolio[tx.portfolio_id] || (byPortfolio[tx.portfolio_id] = new Map());
+    if (!m.has(tx.product_id)) m.set(tx.product_id, { qty: 0, costBasis: 0 });
+    const h = m.get(tx.product_id);
+    const qty = parseFloat(tx.quantity);
+    const prc = parseFloat(tx.price);
+    const com = parseFloat(tx.commission || 0);
+    if (tx.type === 'BUY') {
+      h.costBasis += qty * prc + com;
+      h.qty += qty;
+    } else {
+      if (h.qty > 0) h.costBasis -= (h.costBasis / h.qty) * qty;
+      h.qty -= qty;
+    }
+  }
+
+  let total = 0;
+  for (const p of portfolios) {
+    const m = byPortfolio[p.id];
+    if (!m) continue;
+    const own = (parseFloat(p.ownership_percentage) || 100) / 100;
+    let value = 0;
+    for (const [productId, h] of m) {
+      if (h.qty <= 0.000001) continue;
+      if (!(productId in symbolOf)) continue; // prodotto cancellato: scartato anche da finanza.html
+      // prodotto senza simbolo o senza quotazione: vale il costo d'acquisto
+      const px = price[symbolOf[productId]];
+      value += px != null ? h.qty * px : h.costBasis;
+    }
+    total += value * own;
+  }
+  return total;
 }
 
 // Estrae valore e data da una risposta PostgREST che restituisce al massimo una riga.
@@ -2952,41 +3018,54 @@ async function readSnapshotRow(res) {
 async function loadHomeAlertPortfolioTotal(headers) {
   try {
     const base = `${SUPABASE_URL}/rest/v1/fnz_dashboard_snapshots?select=portafogli_totali,snapshot_date`;
+    const today = localDayStr();
     const yearStart = new Date().getFullYear() + '-01-01';
 
-    const cur = await readSnapshotRow(await fetch(`${base}&order=snapshot_date.desc&limit=1`, { headers }));
-    if (!cur) return [];
-
-    // Due termini di paragone: l'ultimo snapshot dell'anno scorso e quello
-    // immediatamente precedente all'attuale (di norma il giorno prima).
-    const [yearRes, dayRes] = await Promise.all([
+    // Termini di paragone: l'ultimo snapshot dell'anno scorso e l'ultimo
+    // salvato prima di oggi — quest'ultimo è esattamente S.prevSnapshot di
+    // finanza.html, così la percentuale "da ieri" coincide con la sua.
+    const [liveValue, yearRes, dayRes] = await Promise.all([
+      fetchPortfolioLiveValue(headers).catch(e => {
+        console.warn('Valore portafogli live non calcolabile:', e);
+        return null;
+      }),
       fetch(`${base}&snapshot_date=lt.${yearStart}&order=snapshot_date.desc&limit=1`, { headers }),
-      fetch(`${base}&snapshot_date=lt.${cur.day}&order=snapshot_date.desc&limit=1`, { headers })
+      fetch(`${base}&snapshot_date=lt.${today}&order=snapshot_date.desc&limit=1`, { headers })
     ]);
     const prevYear = await readSnapshotRow(yearRes);
     const prevDay  = await readSnapshotRow(dayRes);
 
+    // se i prezzi non sono calcolabili si ripiega sull'ultimo snapshot salvato
+    let current = liveValue;
+    let currentDay = today;
+    if (current == null) {
+      const snap = await readSnapshotRow(await fetch(`${base}&order=snapshot_date.desc&limit=1`, { headers }));
+      if (!snap) return [];
+      current = snap.value;
+      currentDay = snap.day;
+    }
+
     const parts = [];
 
-    // se lo snapshot più recente è ancora dell'anno scorso il confronto YTD
+    // se il valore mostrato è ancora dell'anno scorso il confronto YTD
     // pescherebbe sé stesso: in quel caso non ha senso mostrarlo
-    if (prevYear && prevYear.day < cur.day) {
-      const p = fmtPctVar(cur.value, prevYear.value, 'da fine anno scorso');
+    if (prevYear && prevYear.day < currentDay) {
+      const p = fmtPctVar(current, prevYear.value, 'da fine anno scorso');
       if (p) parts.push(p);
     }
 
-    if (prevDay) {
-      // "da ieri" solo se lo snapshot attuale è di oggi e il precedente è
-      // davvero del giorno prima, altrimenti si indica la data esplicita
-      const label = (cur.day === localDayStr() && prevDay.day === localDayStr(-1))
+    if (prevDay && prevDay.day < currentDay) {
+      // "da ieri" solo se lo snapshot di confronto è davvero del giorno
+      // prima, altrimenti si indica la data esplicita
+      const label = prevDay.day === localDayStr(-1)
         ? 'da ieri'
         : 'dal ' + prevDay.day.slice(8, 10) + '/' + prevDay.day.slice(5, 7);
-      const p = fmtPctVar(cur.value, prevDay.value, label);
+      const p = fmtPctVar(current, prevDay.value, label);
       if (p) parts.push(p);
     }
 
     const pctText = parts.length ? ' (' + parts.join(' · ') + ')' : '';
-    return [{ title: 'Totale portafogli: ' + fmtEuroInt(cur.value) + pctText, hidden: false, url: 'finanza.html' }];
+    return [{ title: 'Totale portafogli: ' + fmtEuroInt(current) + pctText, hidden: false, url: 'finanza.html' }];
   } catch (e) {
     console.warn('Avviso Finanza non disponibile:', e);
     return [];
