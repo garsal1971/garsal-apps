@@ -38,6 +38,12 @@
 // persona che ha pagato, da ca_people via ca_transactions.spender_person_id) e `time` (ora del
 // pagamento estratta da ca_transactions.raw, vedi extractPaymentTime) — servono a
 // BlockWindowManager.kt per dire chi ha fatto il pagamento e a che ora.
+// v1.5 — 2026-08-01: due destinatari invece di uno. Oltre alla notifica di Salvatore (tutte le
+// transazioni senza categoria, invariata) ne viene accodata una per il telefono di Teresa con le
+// sole transazioni fatte con la sua carta (spender_person_id = ca_people 'Teresa', attribuzione
+// già fatta da enable-banking-sync via ca_card_person_map). Le due righe si distinguono per
+// metadata.device_token, quindi il controllo "ne esiste già una pending" è ora per destinatario
+// e non più per regola: altrimenti la pending di uno bloccherebbe la notifica dell'altro.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -48,6 +54,18 @@ const corsHeaders = {
 };
 
 const ENABLE_BANKING_API_BASE = 'https://api.enablebanking.com';
+
+// ── Telefono di Teresa (flavor "teresa" dell'APK Smart Blocker) ────────────────────────────
+// Riceve una notifica separata con le sole transazioni fatte con la sua carta. Il token è una
+// costante condivisa con l'APK (build.gradle → buildConfigField FIXED_DEVICE_TOKEN): non è un
+// segreto e non protegge nulla — la policy smart_block_anon_select lascia leggere tutte le
+// righe smart_block a chiunque abbia la anon key — serve solo a indirizzare la riga al telefono
+// giusto. Se cambia qui va cambiato anche là, altrimenti il suo telefono smette di vedere le
+// notifiche (senza errori: semplicemente nessuna riga risulta "sua").
+const TERESA_DEVICE_TOKEN = 'teresa-smartblock';
+// Come si chiama Teresa in ca_people. Il collegamento carta → persona lo fa già
+// enable-banking-sync via ca_card_person_map: qui serve solo a risalire dal nome all'id.
+const TERESA_PERSON_NAME = 'teresa';
 
 function base64url(input: ArrayBuffer | string): string {
   const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : new Uint8Array(input);
@@ -586,20 +604,22 @@ Deno.serve(async (req) => {
         .eq('app', 'cost_analysis')
         .eq('channel', 'smart_block')
         .maybeSingle();
-      // Se una notifica smart_block per questa regola è già pending (l'utente non l'ha ancora
-      // vista/gestita), non ne accoda un'altra: altrimenti ad ogni run del cron (anche ravvicinati)
-      // si accumulerebbero righe duplicate finché l'utente non le smaltisce tutte.
-      const { data: alreadyPending } = rule
-        ? await supabase
-            .from('cm_notification_queue')
-            .select('id')
-            .eq('rule_id', rule.id)
-            .eq('status', 'pending')
-            .limit(1)
-            .maybeSingle()
-        : { data: null };
+      if (!rule) {
+        console.error('[revolut-auto-categorize] riga ancora cm_notification_rules (app=cost_analysis) non trovata — notifica non inviata');
+      } else {
+        // Le righe già pending vanno lette CON il metadata, non solo contate: i destinatari sono
+        // due (vedi sotto) e si distinguono unicamente per metadata.device_token. Un semplice
+        // "esiste una pending su questa regola" bloccherebbe la notifica di Teresa ogni volta che
+        // Salvatore non ha ancora smaltito la sua, e viceversa.
+        const { data: pendingRows } = await supabase
+          .from('cm_notification_queue')
+          .select('id, metadata')
+          .eq('rule_id', rule.id)
+          .eq('status', 'pending');
+        const pendingTokens = new Set(
+          (pendingRows || []).map((r: any) => (r.metadata?.device_token as string) || '')
+        );
 
-      if (rule && !alreadyPending) {
         // Senza metadata.device_token l'app Android (SupabaseApi.queryQueue → myToken) non
         // considera mai questa riga "sua" e il blocco non compare mai sul telefono — stesso
         // campo che fill-notification-queue popola da cm_user_notification_settings.
@@ -608,40 +628,20 @@ Deno.serve(async (req) => {
           .select('smart_block_device_token')
           .eq('user_id', userId)
           .maybeSingle();
-        const deviceToken = notifSettings?.smart_block_device_token || null;
+        const mainDeviceToken = notifSettings?.smart_block_device_token || null;
 
-        // Payload per la categorizzazione interattiva dalla schermata di blocco (Android,
-        // BlockWindowManager): fino a MAX_EMBEDDED transazioni ancora senza categoria +
-        // l'elenco delle categorie dell'utente, così l'app può proporre una lista da toccare
-        // senza dover fare altre query. Se l'utente ne categorizza solo una parte, l'app
-        // aggiorna direttamente metadata.cost_analysis.transactions (PATCH) togliendo quelle
-        // già fatte — questa insert scrive solo lo stato iniziale.
-        const MAX_EMBEDDED = 20;
-        const { data: uncategorizedTx } = await supabase
-          .from('ca_transactions')
-          .select('id, description, amount, currency, date, spender_person_id, raw')
-          .in('id', uncategorizedIds.slice(0, MAX_EMBEDDED));
-        // Chi ha pagato + a che ora. `raw` serve solo a ricavare l'orario e NON finisce nel
-        // payload: è il JSON grezzo della banca (o l'intera riga CSV), pesante e inutile
-        // all'app. Il nome della persona si risolve qui una volta sola invece di far fare
-        // un'altra query al telefono; spender_person_id può essere nullo (transazione non
-        // ancora attribuita) e in quel caso `spender` resta null.
+        // Nome della persona per il campo `spender` del payload (v1.4) e, per il telefono di
+        // Teresa, filtro delle transazioni. spender_person_id può essere nullo (transazione non
+        // ancora attribuita a nessuno) e in quel caso `spender` resta null.
         const { data: peopleRows } = await supabase
           .from('ca_people')
           .select('id, name')
           .eq('user_id', userId);
+        const people = peopleRows || [];
         const personName = new Map<string, string>(
-          (peopleRows || []).map((p: any) => [p.id as string, p.name as string] as [string, string])
+          people.map((p: any) => [p.id as string, p.name as string] as [string, string])
         );
-        const embeddedTx = (uncategorizedTx || []).map((t: any) => ({
-          id: t.id,
-          description: t.description,
-          amount: t.amount,
-          currency: t.currency,
-          date: t.date,
-          time: extractPaymentTime(t.raw),
-          spender: t.spender_person_id ? (personName.get(t.spender_person_id) || null) : null,
-        }));
+
         // parent_id incluso per raggruppare categorie/sottocategorie nel picker Android come
         // in cost-analysis.html (renderTxCategorySuggestions): principali in grassetto, figlie
         // indentate subito sotto, entrambe selezionabili. La cascata principale → sotto-categorie
@@ -656,33 +656,109 @@ Deno.serve(async (req) => {
           .order('name');
         const visibleCategories = visibleUserCategories || [];
 
-        const metadata: Record<string, unknown> = {
-          cost_analysis: {
-            transactions: embeddedTx,
-            categories: visibleCategories,
-          },
-        };
-        if (deviceToken) metadata.device_token = deviceToken;
-
-        await supabase.from('cm_notification_queue').insert({
-          rule_id: rule.id,
-          user_id: userId,
-          app: 'cost_analysis',
-          entity_id: rule.id, // entity_id è uuid: riusa l'id della regola stessa, non serve altro
-          title: `${uncategorizedCount} transazion${uncategorizedCount === 1 ? 'e' : 'i'} Revolut da categorizzare`,
-          body: `Dopo il sync automatico restano ${uncategorizedCount} transazioni senza categoria. Apri Analisi Costi per completarle.`,
-          channel: 'smart_block',
-          fire_at: new Date().toISOString(),
-          status: 'pending',
-          metadata,
-        });
-        if (!deviceToken) {
-          console.error('[revolut-auto-categorize] smart_block_device_token non impostato per l\'utente — notifica scritta ma non comparirà sul telefono');
+        // ── Destinatari ──────────────────────────────────────────────────────────────────
+        // 1) Salvatore: tutte le transazioni senza categoria (comportamento invariato).
+        // 2) Teresa: solo quelle fatte con la SUA carta, cioè con spender_person_id uguale alla
+        //    sua riga di ca_people — l'attribuzione la fa enable-banking-sync tramite
+        //    ca_card_person_map (carta → persona), qui non si reinterpreta nulla.
+        // Le transazioni di Teresa restano anche nella notifica di Salvatore: se lei non
+        // risponde, lui può comunque chiudere il lavoro. La sovrapposizione è voluta e non fa
+        // danni: ca_smart_block_set_category riscrive la categoria (delete + insert), quindi se
+        // la stessa transazione viene categorizzata da tutti e due vince l'ultimo che tocca.
+        // Una riga già accodata non si aggiorna da sola: la transazione sparisce dalla lista
+        // dell'altro solo alla notifica successiva, quando non risulta più senza categoria.
+        const teresaPerson = people.find(
+          (p: any) => String(p.name || '').trim().toLowerCase() === TERESA_PERSON_NAME
+        );
+        let teresaUncategorizedIds: string[] = [];
+        if (teresaPerson) {
+          const teresaTx = await fetchAllRows((from, to) =>
+            supabase
+              .from('ca_transactions')
+              .select('id')
+              .eq('user_id', userId)
+              .eq('spender_person_id', teresaPerson.id)
+              .range(from, to)
+          );
+          const teresaIds = new Set(teresaTx.map((t: any) => t.id as string));
+          teresaUncategorizedIds = uncategorizedIds.filter((id) => teresaIds.has(id));
+        } else {
+          console.warn(
+            `[revolut-auto-categorize] nessuna persona "${TERESA_PERSON_NAME}" in ca_people — notifica del suo telefono saltata`
+          );
         }
-      } else if (!rule) {
-        console.error('[revolut-auto-categorize] riga ancora cm_notification_rules (app=cost_analysis) non trovata — notifica non inviata');
-      } else {
-        console.log('[revolut-auto-categorize] notifica smart_block già pending, non ne accodo un\'altra');
+
+        const recipients = [
+          {
+            who: 'salvatore',
+            token: mainDeviceToken,
+            ids: uncategorizedIds,
+            title: (n: number) => `${n} transazion${n === 1 ? 'e' : 'i'} Revolut da categorizzare`,
+            body: (n: number) =>
+              `Dopo il sync automatico restano ${n} transazioni senza categoria. Apri Analisi Costi per completarle.`,
+          },
+          {
+            who: 'teresa',
+            token: TERESA_DEVICE_TOKEN,
+            ids: teresaUncategorizedIds,
+            title: (n: number) => `${n} pagament${n === 1 ? 'o' : 'i'} con la tua carta da categorizzare`,
+            body: (n: number) =>
+              `${n === 1 ? 'È arrivato 1 pagamento Revolut fatto' : `Sono arrivati ${n} pagamenti Revolut fatti`} con la tua carta senza categoria. Scegli la categoria direttamente da qui.`,
+          },
+        ];
+
+        for (const r of recipients) {
+          if (!r.ids.length) continue;
+          if (!r.token) {
+            console.error(`[revolut-auto-categorize] device token mancante per ${r.who} — notifica non accodata`);
+            continue;
+          }
+          if (pendingTokens.has(r.token)) {
+            console.log(`[revolut-auto-categorize] notifica già pending per ${r.who}, non ne accodo un'altra`);
+            continue;
+          }
+
+          // Payload per la categorizzazione interattiva dalla schermata di blocco (Android,
+          // BlockWindowManager): fino a MAX_EMBEDDED transazioni ancora senza categoria +
+          // l'elenco delle categorie dell'utente, così l'app può proporre una lista da toccare
+          // senza dover fare altre query. Se l'utente ne categorizza solo una parte, l'app
+          // aggiorna direttamente metadata.cost_analysis.transactions (PATCH) togliendo quelle
+          // già fatte — questa insert scrive solo lo stato iniziale.
+          const MAX_EMBEDDED = 20;
+          const { data: txRows } = await supabase
+            .from('ca_transactions')
+            .select('id, description, amount, currency, date, spender_person_id, raw')
+            .in('id', r.ids.slice(0, MAX_EMBEDDED));
+          // `raw` serve solo a ricavare l'orario e NON finisce nel payload: è il JSON grezzo
+          // della banca (o l'intera riga CSV), pesante e inutile all'app.
+          const embeddedTx = (txRows || []).map((t: any) => ({
+            id: t.id,
+            description: t.description,
+            amount: t.amount,
+            currency: t.currency,
+            date: t.date,
+            time: extractPaymentTime(t.raw),
+            spender: t.spender_person_id ? (personName.get(t.spender_person_id) || null) : null,
+          }));
+
+          const count = r.ids.length;
+          await supabase.from('cm_notification_queue').insert({
+            rule_id: rule.id,
+            user_id: userId,
+            app: 'cost_analysis',
+            entity_id: rule.id, // entity_id è uuid: riusa l'id della regola stessa, non serve altro
+            title: r.title(count),
+            body: r.body(count),
+            channel: 'smart_block',
+            fire_at: new Date().toISOString(),
+            status: 'pending',
+            metadata: {
+              device_token: r.token,
+              cost_analysis: { transactions: embeddedTx, categories: visibleCategories },
+            },
+          });
+          console.log(`[revolut-auto-categorize] notifica accodata per ${r.who}: ${count} transazioni`);
+        }
       }
     }
 

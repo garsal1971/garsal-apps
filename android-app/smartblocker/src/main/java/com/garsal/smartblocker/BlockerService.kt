@@ -45,7 +45,13 @@ class BlockerService : Service() {
         scheduleNextFallback()
         AppLogger.log(this, "SERVICE", "onCreate — servizio avviato, fallback alarm schedulato")
 
-        if (Prefs.getDeviceToken(this).isEmpty()) {
+        // Il profilo con token fisso (teresa) lo riscrive ad ogni avvio invece di leggerlo una
+        // volta sola: se il valore compilato cambia in una versione futura dell'APK, il token
+        // vecchio salvato nelle prefs non deve sopravvivere all'aggiornamento.
+        if (Config.FIXED_DEVICE_TOKEN.isNotBlank()) {
+            Prefs.setDeviceToken(this, Config.FIXED_DEVICE_TOKEN)
+            AppLogger.log(this, "SERVICE", "profilo ${Config.PROFILE} — device token fisso: ${Config.FIXED_DEVICE_TOKEN}")
+        } else if (Prefs.getDeviceToken(this).isEmpty()) {
             Thread {
                 SupabaseApi(this).fetchAndCacheDeviceToken()
                 AppLogger.log(this, "SERVICE", "device token recuperato: ${Prefs.getDeviceToken(this).take(8)}…")
