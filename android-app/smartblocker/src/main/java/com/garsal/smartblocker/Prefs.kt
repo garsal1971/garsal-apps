@@ -59,6 +59,7 @@ object Prefs {
 
     /** true se il blocco corrente riguarda solo sfide Ta Firi (sfondo verde), false altrimenti (sfondo rosso). */
     fun isChallengeOnlyBlock(ctx: Context): Boolean {
+        if (Config.IS_NOTIFY_ONLY) return false   // le sfide non arrivano su quel profilo
         val apps = blockApps(ctx)
         return apps.isNotEmpty() && apps.all { it == "ta_firi" }
     }
@@ -67,6 +68,11 @@ object Prefs {
         Revolut da completare) — sfondo giallo, dismiss con un solo bottone, nessun PIN e nessuna
         RPC di completamento (non c'è un task/sfida da "completare" server-side). */
     fun isInfoOnlyBlock(ctx: Context): Boolean {
+        // Rete di sicurezza del profilo "solo notifiche": su quel telefono nessuna schermata
+        // deve mai chiedere il PIN, che è di Salvatore. Senza questo, un blocco con prefs
+        // incomplete (block_apps vuoto, es. rimasto da un aggiornamento) cadrebbe sul rosso e
+        // resterebbe lì, insbloccabile da chi ha il telefono in mano.
+        if (Config.IS_NOTIFY_ONLY) return true
         val apps = blockApps(ctx)
         return apps.isNotEmpty() && apps.all { it == "cost_analysis" }
     }

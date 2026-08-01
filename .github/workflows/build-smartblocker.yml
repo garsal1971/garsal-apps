@@ -56,10 +56,13 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android-app/gradlew
 
-      - name: Build SmartBlocker release APK
+      # Due product flavor, due APK (vedi android-app/smartblocker/build.gradle):
+      #  · salvatore → SmartBlocker-latest.apk       (applicationId invariato: aggiorna sul posto)
+      #  · teresa    → SmartBlockerTeresa-latest.apk  (suffisso .teresa: app distinta, installabile a fianco)
+      - name: Build SmartBlocker release APK (entrambi i profili)
         working-directory: android-app
         run: |
-          ./gradlew :smartblocker:assembleRelease --no-daemon \
+          ./gradlew :smartblocker:assembleSalvatoreRelease :smartblocker:assembleTeresaRelease --no-daemon \
             -Pandroid.injected.signing.store.file="${{ github.workspace }}/android-app/garsal.keystore" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
@@ -69,7 +72,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SmartBlocker-release
-          path: android-app/smartblocker/build/outputs/apk/release/smartblocker-release.apk
+          path: |
+            android-app/smartblocker/build/outputs/apk/salvatore/release/smartblocker-salvatore-release.apk
+            android-app/smartblocker/build/outputs/apk/teresa/release/smartblocker-teresa-release.apk
           retention-days: 30
 
       - name: Pubblica APK su master (scaricabile via Netlify)
@@ -78,17 +83,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           VERSION=$(grep versionName android-app/smartblocker/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
-          cp android-app/smartblocker/build/outputs/apk/release/smartblocker-release.apk /tmp/SmartBlocker-latest.apk
+          cp android-app/smartblocker/build/outputs/apk/salvatore/release/smartblocker-salvatore-release.apk /tmp/SmartBlocker-latest.apk
+          cp android-app/smartblocker/build/outputs/apk/teresa/release/smartblocker-teresa-release.apk     /tmp/SmartBlockerTeresa-latest.apk
 
           git fetch origin master
           git checkout master
           git reset --hard origin/master
 
           mkdir -p releases
-          cp /tmp/SmartBlocker-latest.apk releases/SmartBlocker-latest.apk
+          cp /tmp/SmartBlocker-latest.apk       releases/SmartBlocker-latest.apk
+          cp /tmp/SmartBlockerTeresa-latest.apk releases/SmartBlockerTeresa-latest.apk
 
-          git add releases/SmartBlocker-latest.apk
-          git diff --staged --quiet && echo "APK non cambiato, skip commit" && exit 0
+          git add releases/SmartBlocker-latest.apk releases/SmartBlockerTeresa-latest.apk
+          git diff --staged --quiet && echo "APK non cambiati, skip commit" && exit 0
 
           git commit -m "chore: aggiorna APK SmartBlocker v${VERSION} [skip actions]"
           git push origin master

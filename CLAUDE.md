@@ -328,6 +328,50 @@ Una terza copia, ridotta al solo valore dei portafogli, sta in `index.html`
 
 ---
 
+## Smart Blocker — due profili, un solo codice
+
+`android-app/smartblocker/` produce **due APK** tramite product flavor Gradle (dimensione `profilo`):
+
+| Flavor | applicationId | APK pubblicato | A chi |
+|---|---|---|---|
+| `salvatore` | `com.garsal.smartblocker` | `releases/SmartBlocker-latest.apk` | App completa: task, sfide Ta Firi?, Analisi Costi |
+| `teresa` | `com.garsal.smartblocker.teresa` | `releases/SmartBlockerTeresa-latest.apk` | Solo le transazioni Revolut fatte con la carta di Teresa |
+
+Le differenze passano **tutte** da tre `buildConfigField` letti in `Config.kt` — niente sorgenti
+duplicati, niente `if (nomeUtente == …)` sparsi nel codice:
+
+| Campo | `salvatore` | `teresa` | Effetto |
+|---|---|---|---|
+| `PROFILE` | `salvatore` | `teresa` | Etichette in `MainActivity` |
+| `FIXED_DEVICE_TOKEN` | vuoto | `teresa-smartblock` | Se valorizzato, `BlockerService` lo scrive nelle prefs ad ogni avvio invece di chiamare `get_smart_block_token()` |
+| `ONLY_APP` | vuoto | `cost_analysis` | `SupabaseApi.queryQueue` scarta ogni riga con `app` diverso |
+
+### Come viene indirizzata la notifica
+
+`revolut-auto-categorize` accoda **una riga per destinatario** in `cm_notification_queue`, distinte
+solo da `metadata.device_token`:
+
+- **Salvatore** — token da `cm_user_notification_settings.smart_block_device_token`, tutte le
+  transazioni senza categoria (comportamento storico, invariato);
+- **Teresa** — token = costante `TERESA_DEVICE_TOKEN`, solo le transazioni con
+  `spender_person_id` = riga `ca_people` di nome *Teresa* (l'attribuzione carta → persona la fa già
+  `enable-banking-sync` via `ca_card_person_map`).
+
+⚠️ **`TERESA_DEVICE_TOKEN` è duplicato**: `supabase/functions/revolut-auto-categorize/index.ts` e
+`build.gradle` (`FIXED_DEVICE_TOKEN`) devono avere lo stesso valore. Se divergono il telefono di
+Teresa smette di ricevere notifiche **senza nessun errore** — semplicemente nessuna riga risulta
+"sua". Non è un segreto: la policy `smart_block_anon_select` lascia leggere tutte le righe
+`smart_block` a chiunque abbia la anon key, il token serve solo a indirizzare.
+
+Il controllo "esiste già una notifica pending" è **per destinatario**, non per regola: le due righe
+condividono lo stesso `rule_id` (l'unica riga ancora di `cm_notification_rules`), quindi un controllo
+per regola farebbe sparire la notifica di uno ogni volta che l'altro non ha ancora smaltito la sua.
+
+Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock` restituisce sempre
+`true`): il PIN è di Salvatore e su quel telefono un blocco rosso sarebbe insbloccabile.
+
+---
+
 ## App Details
 
 ### `index.html` — AppSphere

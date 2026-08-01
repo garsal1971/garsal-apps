@@ -89,13 +89,16 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
         }
         titleCol.addView(TextView(this).apply {
-            text = "🔐 Smart Blocker"
+            // Il profilo "solo notifiche" non blocca niente e non ha PIN: chiamarlo Smart
+            // Blocker e sbandierare il PIN in home confonderebbe e basta.
+            text = if (Config.IS_NOTIFY_ONLY) "💳 Revolut" else "🔐 Smart Blocker"
             textSize = 28f
             setTextColor(0xFF6C5CE7.toInt())
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         })
         titleCol.addView(TextView(this).apply {
-            text = "v1.4.3 · PIN: ${Config.PIN}"
+            text = if (Config.IS_NOTIFY_ONLY) "v1.5.0 · profilo: ${Config.PROFILE}"
+                   else "v1.5.0 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         })
@@ -163,19 +166,25 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { checkQueueNow() }
         }, lp(8))
 
-        // Pulsante test blocco
-        mainContainer.addView(Button(this).apply {
-            text = "🧪 Testa blocco ora"
-            setBackgroundColor(0xFF6C5CE7.toInt())
-            setTextColor(0xFFFFFFFF.toInt())
-            setOnClickListener {
-                Prefs.setState(this@MainActivity, Prefs.STATE_TRIGGERED)
-                Prefs.setSnoozeCount(this@MainActivity, 0)
-                startService(Intent(this@MainActivity, BlockerService::class.java).apply {
-                    action = BlockerService.ACTION_SHOW_OVERLAY
-                })
-            }
-        }, lp(32))
+        // Pulsante test blocco — solo sul profilo completo: un blocco finto non ha righe in coda,
+        // quindi non ha dati Analisi Costi e cadrebbe sulla schermata standard. Sul telefono di
+        // Teresa sarebbe una schermata a vuoto da chiudere, senza niente da categorizzare.
+        // Per verificare che il collegamento funzioni c'è "🔄 Controlla ora", che interroga
+        // davvero la coda.
+        if (!Config.IS_NOTIFY_ONLY) {
+            mainContainer.addView(Button(this).apply {
+                text = "🧪 Testa blocco ora"
+                setBackgroundColor(0xFF6C5CE7.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                setOnClickListener {
+                    Prefs.setState(this@MainActivity, Prefs.STATE_TRIGGERED)
+                    Prefs.setSnoozeCount(this@MainActivity, 0)
+                    startService(Intent(this@MainActivity, BlockerService::class.java).apply {
+                        action = BlockerService.ACTION_SHOW_OVERLAY
+                    })
+                }
+            }, lp(32))
+        }
 
         root.addView(mainContainer, lp(16))
 

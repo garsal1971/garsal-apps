@@ -72,6 +72,12 @@ class SupabaseApi(private val ctx: Context) {
                 val app      = item.optString("app", "tasks")
                 val metadata = metadataObj?.toString() ?: ""
 
+                // Profilo ristretto (teresa): tutto ciò che non è la sua app viene scartato qui,
+                // prima ancora del confronto sul token. La policy anon lascia leggere l'intera
+                // coda smart_block, quindi senza questo filtro un errore di token sulla riga
+                // sbagliata basterebbe a far comparire un blocco task/sfida sul suo telefono.
+                if (Config.ONLY_APP.isNotBlank() && app != Config.ONLY_APP) continue
+
                 entries.add(BlockEntry(id, entityId, title, fireAt, status, myToken, app, metadata))
 
                 val fireAtMs = parseIsoMs(fireAt)
