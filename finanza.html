@@ -452,8 +452,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.48';
-const APP_BUILD   = '2026-07-10T03:25:00Z';
+const APP_VERSION = 'v1.0.49';
+const APP_BUILD   = '2026-08-01T10:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -926,7 +926,12 @@ function computePricesFromHistory() {
   }
   console.log('[prices] calcolati da history:', Object.keys(S.prices).length, 'simboli');
 }
-/* ── Dashboard snapshot ─────────────────────────────────────── */
+/* ── Dashboard snapshot ───────────────────────────────────────
+   ATTENZIONE: questa logica esiste in due copie. La Edge Function
+   supabase/functions/save-snapshot ripete buildSnapshotPayload, portfolioStats,
+   computeHoldings, computeLoanValue e computePricesFromHistory per poter salvare
+   lo snapshot alle 23:00 anche senza che nessuno apra l'app. Se cambi una di
+   queste funzioni qui, cambiala anche lì o i due snapshot divergeranno.        */
 function buildSnapshotPayload() {
   const stats      = portfolioStats();
   const grandValue = stats.reduce((s, x) => s + x.totalValue, 0);
