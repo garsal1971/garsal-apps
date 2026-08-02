@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.2.1</title>
+    <title>✅ Spuntiamola v1.2.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -29,65 +29,27 @@
             min-height: 100vh;
             color: var(--dark);
             overflow-x: hidden;
+            padding-top: 56px;
         }
 
-        /* ── HEADER ── */
-        .app-header {
-            background: rgba(255,255,255,0.15);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 14px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+        /* ── TOP BAR ── */
+        #garsal-top-bar {
+            position: fixed; top: 0; left: 0; right: 0; height: 56px;
+            background: #0081C8;
+            display: flex; align-items: center; padding: 0 20px; gap: 10px;
+            z-index: 3000;
         }
-
-        .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-
-        .app-title {
-            font-size: 1.35rem;
-            font-weight: 900;
-            color: white;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            letter-spacing: -0.5px;
-        }
-
-        /* ── RITORNO AD APPSPHERE ── */
-        .btn-home {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255,255,255,0.22);
-            border: 1px solid rgba(255,255,255,0.35);
-            color: white;
-            height: 40px;
-            padding: 0 14px;
-            border-radius: 12px;
+        #garsal-top-bar-text {
             font-family: 'Darker Grotesque', sans-serif;
-            font-size: 1rem;
-            font-weight: 800;
-            text-decoration: none;
-            white-space: nowrap;
-            cursor: pointer;
-            transition: transform .15s, background .15s;
+            font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px;
         }
-        .btn-home:hover { background: rgba(255,255,255,0.35); transform: translateY(-2px); }
-        .btn-home:active { transform: scale(0.94); }
-        .btn-home .home-word { display: inline; }
+        .topbar-spacer { flex: 1; }
 
         .app-version {
             font-family: 'Space Mono', monospace;
             font-size: 0.62rem;
-            color: rgba(255,255,255,0.75);
-            background: rgba(0,0,0,0.2);
+            color: rgba(255,255,255,0.8);
+            background: rgba(0,0,0,0.18);
             padding: 4px 9px;
             border-radius: 99px;
         }
@@ -95,20 +57,20 @@
         .header-right { display: flex; align-items: center; gap: 8px; }
 
         .btn-icon {
-            background: rgba(255,255,255,0.22);
-            border: 1px solid rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.3);
             color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            font-size: 1.1rem;
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            font-size: 1rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: transform .15s, background .15s;
         }
-        .btn-icon:hover { background: rgba(255,255,255,0.35); transform: translateY(-2px); }
+        .btn-icon:hover { background: rgba(255,255,255,0.32); transform: translateY(-2px); }
         .btn-icon:active { transform: scale(0.94); }
 
         .main {
@@ -291,7 +253,7 @@
             opacity: 0;
             pointer-events: none;
             transition: opacity .3s, transform .3s cubic-bezier(.34,1.4,.64,1);
-            z-index: 950;
+            z-index: 3200;
         }
         .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
@@ -508,7 +470,7 @@
             align-items: center;
             justify-content: center;
             padding: 16px;
-            z-index: 900;
+            z-index: 3100;
         }
         .overlay.show { display: flex; }
 
@@ -711,7 +673,7 @@
             position: fixed;
             inset: 0;
             pointer-events: none;
-            z-index: 999;
+            z-index: 3300;
             overflow: hidden;
         }
         .confetto {
@@ -775,10 +737,7 @@
             .days-grid { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
             .field-row { grid-template-columns: 1fr; }
             .key-add { grid-template-columns: 1fr; }
-            .app-header { padding: 12px 14px; }
-            .app-title { font-size: 1.15rem; }
-            .btn-home { padding: 0 11px; }
-            .btn-home .home-word { display: none; }
+            #garsal-top-bar { padding: 0 14px; }
             .toast { width: 92vw; min-height: 52vh; padding: 26px 20px; gap: 16px; }
             .toast-emoji { font-size: 4.6rem; }
             .toast-text  { font-size: 1.85rem; }
@@ -791,17 +750,19 @@
 </head>
 <body>
 
-<header class="app-header">
-    <div class="header-left">
-        <a class="btn-home" href="/" title="Torna ad AppSphere">🏠 <span class="home-word">Home</span></a>
-        <div class="app-title">✅ Spuntiamola</div>
-    </div>
+<!-- TOP BAR -->
+<div id="garsal-top-bar">
+    <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+        <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
+        <div id="garsal-top-bar-text">Garsal Apps</div>
+    </a>
+    <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.2.1</span>
+        <span class="app-version" id="versionBadge">v1.2.2</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
-</header>
+</div>
 
 <div class="main">
 
@@ -864,7 +825,7 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.2.1</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.2.2</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -944,8 +905,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.2.1';
-var BUILD_TIME  = '2026-07-29T18:05:00Z';
+var APP_VERSION = 'v1.2.2';
+var BUILD_TIME  = '2026-08-02T10:20:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
