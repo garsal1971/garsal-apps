@@ -59,6 +59,16 @@ class BlockerService : Service() {
         } else {
             AppLogger.log(this, "SERVICE", "device token presente: ${Prefs.getDeviceToken(this).take(8)}…")
         }
+
+        // Servizio ripartito (kill di sistema, riavvio, aggiornamento dell'app) con uno stato di
+        // blocco salvato nelle prefs: l'overlay è morto col processo e va rimesso. Se non è
+        // mostrabile — tipicamente permesso overlay mai concesso — showOverlay() riporta lo
+        // stato a NONE e avvisa: senza questo l'app resta "bloccata" senza niente a schermo e
+        // non interroga più la coda, perché triggerSupabaseCheck esce subito con stato ≠ NONE.
+        if (Prefs.getState(this) != Prefs.STATE_NONE) {
+            AppLogger.log(this, "SERVICE", "stato di blocco ${Prefs.getState(this)} trovato all'avvio — ripristino la schermata")
+            showOverlay()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -178,7 +188,6 @@ class BlockerService : Service() {
                 val deferred = dueEntries.size - blockedEntries.size
                 AppLogger.log(this, "SUPABASE", "blocchi pronti: ${blockedEntries.joinToString { it.id }} — mostro overlay" +
                     if (deferred > 0) " (rinviate $deferred righe non cost_analysis al prossimo giro)" else "")
-                blockedEntries.forEach { SupabaseApi(this).markSent(it.id) }
                 val blockEntities = blockedEntries
                     .filter { it.entityId.isNotBlank() }
                     .map { BlockedEntity(it.app, it.entityId) }
@@ -205,7 +214,12 @@ class BlockerService : Service() {
                     Prefs.setState(this, Prefs.STATE_TRIGGERED)
                     Prefs.setSnoozeCount(this, 0)
                     Prefs.setSnoozeUntil(this, 0)
-                    showOverlay()
+                    // markSent solo a schermata comparsa davvero: marcarla prima (com'era) faceva
+                    // sparire la notifica anche quando l'overlay non era mostrabile — la riga
+                    // risultava consegnata a Supabase e nessuno l'avrebbe più riproposta.
+                    if (showOverlay()) {
+                        Thread { blockedEntries.forEach { SupabaseApi(this).markSent(it.id) } }.start()
+                    }
                     BlockAlarmReceiver.releaseWakeLock()
                 }
             } else {
@@ -284,14 +298,49 @@ class BlockerService : Service() {
      * Richiede solo SYSTEM_ALERT_WINDOW — nessuna notifica, nessun permesso extra.
      * L'overlay appare sopra qualsiasi app e sopra la lock screen.
      */
-    private fun showOverlay() {
+    /** true se la schermata è davvero comparsa. Se il permesso overlay manca non c'è nessun
+        modo di mostrarla: si torna a STATE_NONE (altrimenti l'app resta "bloccata" per sempre
+        senza niente a schermo, e triggerSupabaseCheck esce subito ad ogni giro successivo) e si
+        avvisa con una notifica, l'unico canale rimasto per dire che manca un permesso. */
+    private fun showOverlay(): Boolean {
         if (blockWm?.isShowing() == true) {
             AppLogger.log(this, "OVERLAY", "già visibile, skip")
-            return
+            return true
         }
         AppLogger.log(this, "OVERLAY", "show() — overlay=${Settings.canDrawOverlays(this)}")
         blockWm = BlockWindowManager(this)
-        blockWm!!.show()
+        val shown = blockWm!!.show()
+        if (!shown) {
+            blockWm = null
+            Prefs.setState(this, Prefs.STATE_NONE)
+            Prefs.clearBlockEntities(this)
+            Prefs.clearBlockApps(this)
+            Prefs.clearBlockCaData(this)
+            AppLogger.log(this, "OVERLAY", "overlay non mostrabile — stato riportato a NONE, avviso l'utente")
+            notifyMissingOverlayPermission()
+        }
+        return shown
+    }
+
+    /** Notifica ad alta priorità che apre l'app: senza overlay è l'unico modo per farsi vedere. */
+    private fun notifyMissingOverlayPermission() {
+        val pi = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+        )
+        getSystemService(NotificationManager::class.java).notify(
+            BLOCK_NOTIF_ID,
+            NotificationCompat.Builder(this, CH_ALARM)
+                .setContentTitle("Manca un permesso")
+                .setContentText("Concedi \"Visualizza sopra altre app\" per vedere gli avvisi")
+                .setStyle(NotificationCompat.BigTextStyle().bigText(
+                    "C'è un avviso da mostrare ma l'app non può disegnare sopra le altre app. " +
+                    "Apri l'app → ☰ Impostazioni → Concedi Overlay."))
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build()
+        )
     }
 
     fun cancelBlockNotification() {
