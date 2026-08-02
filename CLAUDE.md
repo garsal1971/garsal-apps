@@ -390,7 +390,9 @@ Una terza copia, ridotta al solo valore dei portafogli, sta in `index.html`
 - **Avviso "oggi non spuntato"** in due punti: banner giallo dentro l'app e sezione dedicata nel
   fumetto avvisi di AppSphere (`loadHomeAlertSpuntiamola` in `index.html`). Se oggi è una
   giornata chiave entrambi gli avvisi lo dicono esplicitamente.
-- Link **🏠 Home** in alto a sinistra (`href="/"`) per tornare ad AppSphere
+- **Top bar standard** `#garsal-top-bar` come le altre app (barra fissa blu `#0081C8` alta 56 px,
+  logo a cerchi olimpici + "Garsal Apps" con `href="/"`); a destra restano badge di sincronizzazione,
+  versione e il pulsante ⚙️ Impostazioni
 - **Dati su Supabase** (`sp_settings` + `sp_checks`, migration `20260728100000_sp_spuntiamola_tables.sql`):
   il DB è la fonte di verità, `localStorage` (chiavi `sp_*`) resta come cache offline così la
   griglia compare subito all'apertura. Al primo avvio dopo l'aggiornamento le spunte già presenti
