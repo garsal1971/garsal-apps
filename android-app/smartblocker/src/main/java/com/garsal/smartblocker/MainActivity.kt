@@ -97,8 +97,8 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         })
         titleCol.addView(TextView(this).apply {
-            text = if (Config.IS_NOTIFY_ONLY) "v1.5.0 · profilo: ${Config.PROFILE}"
-                   else "v1.5.0 · PIN: ${Config.PIN}"
+            text = if (Config.IS_NOTIFY_ONLY) "v1.5.1 · profilo: ${Config.PROFILE}"
+                   else "v1.5.1 · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         })

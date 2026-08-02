@@ -74,21 +74,30 @@ class BlockWindowManager(private val ctx: Context) {
         PixelFormat.OPAQUE
     )
 
-    fun show() {
-        if (rootView != null) return
-        if (!Settings.canDrawOverlays(ctx)) return
+    /** true se l'overlay è davvero a schermo. Restituire l'esito è indispensabile: senza il
+        permesso "Visualizza sopra altre app" questa funzione non può fare nulla, e chi chiama
+        deve accorgersene — altrimenti lo stato resta "bloccato" con niente a schermo e la coda
+        non viene più interrogata (vedi BlockerService.triggerSupabaseCheck). */
+    fun show(): Boolean {
+        if (rootView != null) return true
+        if (!Settings.canDrawOverlays(ctx)) {
+            AppLogger.log(ctx, "WINDOW", "show() saltato: manca il permesso overlay (SYSTEM_ALERT_WINDOW)")
+            return false
+        }
 
         val view = buildView()
         rootView = view
         overlayVisible = true
-        try {
+        return try {
             wm.addView(view, buildOverlayParams())
             handler.post(clockTick)
             refreshUI()
+            true
         } catch (e: Exception) {
             AppLogger.log(ctx, "WINDOW", "errore show(): ${e.message}")
             rootView = null
             overlayVisible = false
+            false
         }
     }
 
