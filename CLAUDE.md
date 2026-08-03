@@ -420,19 +420,21 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
 - **Non compare più tra le bolle della home**: `cm_apps.active = false` (migration
   `20260802180000_ca_readonly_teresa_and_hide_app.sql`). Resta l'unica app dove si importa, si
   categorizza e si configura (categorie, persone, regole, conti collegati, viaggi) — si apre dal
-  collegamento *🛠️ Analisi Costi — gestione* nella sidebar di `finanza.html` o dalla notifica
+  collegamento *🛠️ Spese Famiglia — gestione* nella sidebar di `finanza.html` o dalla notifica
   Smart Block.
 - La **consultazione** è stata spostata dentro le due app dove serve, come vista in sola lettura:
   `finanza.html` (Salvatore) e `situazione-teresa.html` (Teresa) — vedi sotto.
 
-### Vista "Analisi Costi" in sola lettura — blocco duplicato
+### Vista "Spese Famiglia" in sola lettura — blocco duplicato
+*(la vista si chiamava "Analisi Costi"; nelle due pagine è etichettata **Spese Famiglia**, mentre
+l'app di gestione `cost-analysis.html` conserva il nome storico)*
 `finanza.html` e `situazione-teresa.html` contengono lo **stesso** blocco CSS + JS (prefisso `ca-` /
 `caXxx()`, oggetto di stato `CA`): dashboard (spesa per categoria, andamento mensile, spesa per
 persona) e transazioni (filtri, elenco raggruppato per titolo, riepilogo voci entrate/spese).
 Nessuna scrittura sul DB, niente import Revolut, categorie, persone, regole o conti collegati.
 
 ⚠️ **Le due copie devono restare identiche**: il blocco è delimitato dal commento
-`ANALISI COSTI — vista in sola lettura`, dipende solo da `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`SPESE FAMIGLIA — vista in sola lettura`, dipende solo da `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 `tok()` e Chart.js, ed è quindi copiabile pari pari da un file all'altro. Se lo modifichi in uno,
 riportalo nell'altro.
 
@@ -654,7 +656,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 5. **No hot reload**: There is no dev server. After editing, hard-refresh the browser (`Cmd/Ctrl+Shift+R`).
 6. **Duplicate `renderTaskCard`**: `tasks.html` defines `renderTaskCard` in two places (dashboard view and categories/management view). Both must be kept in sync when changing card rendering logic.
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
-8. **Vista Analisi Costi duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Analisi Costi" in sola lettura*.
+8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
 
 ---
