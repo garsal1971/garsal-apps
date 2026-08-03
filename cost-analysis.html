@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.62</title>
+    <title>Analisi Costi v1.0.63</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -253,7 +253,7 @@
             <div class="nav-item" onclick="showPage('categoriesPage', this)" data-text="Categorie">🏷️</div>
             <div class="nav-item" onclick="showPage('peoplePage', this)" data-text="Persone">👤</div>
             <div class="nav-item" onclick="showPage('rulesPage', this)" data-text="Regole">🧩</div>
-            <div class="nav-item" onclick="showPage('bankConnectionsPage', this)" data-text="Conti Collegati">🏦</div>
+            <div class="nav-item" onclick="showPage('bankConnectionsPage', this)" data-text="Sincronizza e Carte">🏦</div>
             <div class="nav-item" onclick="showPage('tripsPage', this)" data-text="Viaggi">✈️</div>
         </nav>
     </aside>
@@ -419,13 +419,18 @@
             <div id="mccMapList"></div>
         </div>
 
-        <!-- ====== CONTI COLLEGATI ====== -->
+        <!-- ====== SINCRONIZZAZIONE E CARTE ======
+             La configurazione dei conti (collegamento alla banca, consenso, eliminazione) è
+             passata a finanza.html → Configurazione → Conti Collegati, perché gli stessi conti
+             servono anche al modulo Fondi. Qui resta la sincronizzazione, che non si può
+             spostare: dopo l'import fa girare merchant appresi, regole e attribuzione per
+             carta, cioè roba di Analisi Costi. -->
         <div class="page" id="bankConnectionsPage">
             <div class="page-header">
-                <h1 class="page-title">Conti Collegati</h1>
-                <button class="btn btn-primary" onclick="openBankConnectionModal(null)">+ Collega conto</button>
+                <h1 class="page-title">Sincronizza e Carte</h1>
+                <a class="btn btn-secondary" href="finanza.html" style="text-decoration:none">🏦 Gestisci i conti in Finanza</a>
             </div>
-            <p class="form-hint" style="margin-bottom:1rem;">Sync automatico via Enable Banking (PSD2) — in questa fase i conti si registrano manualmente; il collegamento diretto e la sincronizzazione automatica arrivano quando saranno configurate le credenziali dell'app.</p>
+            <p class="form-hint" style="margin-bottom:1rem;">I conti si collegano e si eliminano da <strong>Finanza → Configurazione → Conti Collegati</strong>. Qui si lancia la sincronizzazione delle transazioni di Spese Famiglia, con anteprima di cosa verrebbe importato.</p>
             <div id="bankConnectionsList"></div>
 
             <h2 class="page-title" style="font-size:1.05rem;margin-top:2rem;">Carte — attribuzione "chi ha speso"</h2>
@@ -593,53 +598,6 @@
                 <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.4rem;" onclick="openCategoryModalFromMccModal()">+ Nuova categoria/sotto-categoria</button>
             </div>
             <button type="submit" class="btn btn-primary" style="width:100%;">Salva Mapping</button>
-        </form>
-    </div>
-</div>
-
-<!-- ====== MODAL: CONTO COLLEGATO ====== -->
-<div class="modal" id="bankConnectionModal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 class="modal-title" id="bankConnectionModalTitle">Nuovo Conto Collegato</h2>
-            <span class="modal-close" onclick="closeBankConnectionModal()">✕</span>
-        </div>
-        <form onsubmit="saveBankConnection(event)">
-            <input type="hidden" id="editBankConnectionId">
-            <div class="form-group" id="bankConnectionSearchGroup">
-                <label class="form-label">Sfoglia banche per paese (catalogo Enable Banking)</label>
-                <div style="display:flex;gap:.5rem;">
-                    <input type="text" class="form-input" id="bankConnectionSearchCountry" placeholder="Paese * (es. LT, IT, DE)" maxlength="2" style="text-transform:uppercase;flex:1;">
-                    <input type="text" class="form-input" id="bankConnectionSearchQuery" placeholder="Filtra per nome (opzionale)" style="flex:2;">
-                    <button type="button" class="btn btn-secondary" onclick="searchAspsps()">🔍 Mostra banche</button>
-                </div>
-                <div id="bankConnectionSearchResults" style="margin-top:.5rem;max-height:200px;overflow-y:auto;"></div>
-                <div class="form-hint">Indica il paese e vedi l'elenco delle banche disponibili lì — clicca quella giusta. Senza paese provo a indovinare tra LT/DE/IT/GB/FR/ES.</div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Banca (nome esatto ASPSP) *</label>
-                <input type="text" class="form-input" id="bankConnectionAspsp" required placeholder="Es: Revolut">
-            </div>
-            <div class="form-group" id="bankConnectionCountryGroup">
-                <label class="form-label">Paese (codice ASPSP) *</label>
-                <input type="text" class="form-input" id="bankConnectionCountry" maxlength="2" style="text-transform:uppercase;" placeholder="Es: LT">
-                <div class="form-hint">Codice paese a 2 lettere usato da Enable Banking per identificare la banca nel suo catalogo.</div>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Nome conto</label>
-                <input type="text" class="form-input" id="bankConnectionDisplayName" placeholder="Es: Revolut personale">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Proprietario (chi ha speso) *</label>
-                <select class="form-select" id="bankConnectionOwner" required></select>
-                <div class="form-hint">Ogni transazione sincronizzata da questo conto viene attribuita automaticamente a questa persona.</div>
-            </div>
-            <div class="form-group" id="bankConnectionExpiryGroup">
-                <label class="form-label">Consenso valido fino al</label>
-                <input type="date" class="form-input" id="bankConnectionConsentExpiry">
-                <div class="form-hint">Popolato automaticamente dal collegamento reale — modificabile solo qui per correzioni manuali.</div>
-            </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;" id="bankConnectionSubmitBtn">Salva Conto</button>
         </form>
     </div>
 </div>
@@ -864,8 +822,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.62';
-    var BUILD_TIME  = '2026-07-25T13:45:00Z';
+    var APP_VERSION = 'v1.0.63';
+    var BUILD_TIME  = '2026-08-03T12:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1592,7 +1550,7 @@
     }
 
     async function loadBankConnections() {
-        const { data, error } = await sb.from('ca_bank_connections').select('*').order('created_at', { ascending: false });
+        const { data, error } = await sb.from('cm_bank_connections').select('*').order('created_at', { ascending: false });
         if (handleAuthError(error)) return;
         bankConnections = data || [];
     }
@@ -1814,16 +1772,20 @@
     }
 
     // ==========================================
-    // CONTI COLLEGATI (Enable Banking — fase 1: registrazione manuale)
+    // SINCRONIZZAZIONE CONTI (Enable Banking)
+    // Sola lettura: il collegamento e la configurazione stanno in finanza.html.
     // ==========================================
     function renderBankConnections() {
         const container = document.getElementById('bankConnectionsList');
-        if (!bankConnections.length) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏦</div><p>Nessun conto collegato.</p></div>';
+        // Solo i conti di Spese Famiglia: quelli dei fondi si sincronizzano dalla scheda
+        // del fondo, con una logica di import completamente diversa.
+        const list = bankConnections.filter(bc => (bc.module || 'cost_analysis') === 'cost_analysis');
+        if (!list.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏦</div><p>Nessun conto collegato per Spese Famiglia.<br><a href="finanza.html">Collegane uno da Finanza</a>.</p></div>';
             return;
         }
         const todayIso = new Date().toISOString().slice(0, 10);
-        container.innerHTML = bankConnections.map(bc => {
+        container.innerHTML = list.map(bc => {
             const owner = people.find(p => p.id === bc.owner_person_id);
             let statusBadge = '<span class="chip" style="cursor:default;border-color:var(--muted);">Nessuna scadenza impostata</span>';
             if (bc.consent_expires_at) {
@@ -1836,15 +1798,9 @@
                 statusBadge = `<span class="chip" style="cursor:default;border-color:${color};color:${color};">${label}</span>`;
             }
             return `<div class="card">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">
-                    <div>
-                        <div style="font-weight:700;">${bc.aspsp_name}${bc.display_name ? ' — ' + bc.display_name : ''}</div>
-                        <div class="tx-meta">Proprietario: ${owner ? owner.name : '—'} · Stato: ${bc.status}</div>
-                    </div>
-                    <div class="mgmt-event-actions">
-                        <button class="btn btn-small btn-secondary" onclick="openBankConnectionModal('${bc.id}')">✏️</button>
-                        <button class="btn btn-small btn-danger" onclick="deleteBankConnection('${bc.id}')">🗑️</button>
-                    </div>
+                <div>
+                    <div style="font-weight:700;">${bc.aspsp_name}${bc.display_name ? ' — ' + bc.display_name : ''}</div>
+                    <div class="tx-meta">Proprietario: ${owner ? owner.name : '—'} · Stato: ${bc.status}</div>
                 </div>
                 <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                     ${statusBadge}
@@ -1937,143 +1893,6 @@
             if (!error) ids.forEach(id => { const t = transactions.find(x => x.id === id); if (t) t.spender_person_id = personId; });
         }
         renderActivePage();
-    }
-
-    // Codice paese ASPSP di default per banca — modificabile nel form se Enable Banking
-    // si aspetta un valore diverso nel proprio catalogo.
-    const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', N26: 'DE', Altro: '' };
-
-    function openBankConnectionModal(id) {
-        document.getElementById('editBankConnectionId').value = id || '';
-        const bc = id ? bankConnections.find(x => x.id === id) : null;
-        document.getElementById('bankConnectionModalTitle').textContent = bc ? 'Modifica Conto Collegato' : 'Nuovo Conto Collegato';
-        const defaultAspsp = bc ? bc.aspsp_name : 'Revolut';
-        document.getElementById('bankConnectionAspsp').value = defaultAspsp;
-        document.getElementById('bankConnectionSearchQuery').value = '';
-        document.getElementById('bankConnectionSearchCountry').value = '';
-        document.getElementById('bankConnectionSearchResults').innerHTML = '';
-        document.getElementById('bankConnectionCountry').value = bc ? '' : (ASPSP_DEFAULT_COUNTRY[defaultAspsp] || '');
-        document.getElementById('bankConnectionDisplayName').value = bc ? (bc.display_name || '') : '';
-        const sel = document.getElementById('bankConnectionOwner');
-        sel.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-        sel.value = bc ? (bc.owner_person_id || '') : (people[0]?.id || '');
-        document.getElementById('bankConnectionConsentExpiry').value = bc && bc.consent_expires_at ? bc.consent_expires_at.slice(0, 10) : '';
-        // Ricerca banca, campo aspsp libero e paese servono solo per avviare un nuovo
-        // collegamento; modificando un conto già collegato si toccano solo i dati locali.
-        document.getElementById('bankConnectionSearchGroup').style.display = bc ? 'none' : 'block';
-        document.getElementById('bankConnectionAspsp').disabled = !!bc;
-        document.getElementById('bankConnectionCountryGroup').style.display = bc ? 'none' : 'block';
-        document.getElementById('bankConnectionSubmitBtn').textContent = bc ? 'Salva Conto' : 'Collega Conto (apre la banca)';
-        document.getElementById('bankConnectionModal').classList.add('active');
-    }
-    function closeBankConnectionModal() { document.getElementById('bankConnectionModal').classList.remove('active'); }
-
-    async function searchAspsps() {
-        const query = document.getElementById('bankConnectionSearchQuery').value.trim();
-        const country = document.getElementById('bankConnectionSearchCountry').value.trim();
-        const resultsEl = document.getElementById('bankConnectionSearchResults');
-        if (!query && !country) { resultsEl.innerHTML = '<div class="form-hint">Indica almeno il paese.</div>'; return; }
-        resultsEl.innerHTML = '<div class="form-hint">Ricerca in corso...</div>';
-        try {
-            const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-aspsps', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
-                    'apikey': SUPABASE_KEY
-                },
-                body: JSON.stringify({ query, country })
-            });
-            const data = await res.json();
-            if (!res.ok || data.error) {
-                resultsEl.innerHTML = `<div class="form-hint" style="color:var(--danger);">Errore: ${data?.error?.message || res.status}</div>`;
-                return;
-            }
-            const results = data.results || [];
-            if (!results.length) {
-                const searched = (data.searchedCountries || []).join(', ');
-                resultsEl.innerHTML = `<div class="form-hint">Nessun risultato (cercato in: ${searched || 'nessun paese'}, ${data.totalFound || 0} banche totali trovate in quei paesi). Prova a indicare tu il paese esatto.</div>`;
-                return;
-            }
-            resultsEl.innerHTML = results.map((r, i) =>
-                `<div class="chip" style="display:inline-block;margin:.2rem .3rem 0 0;" onclick="selectAspspResult(${i})">${r.name} (${r.country})</div>`
-            ).join('');
-            window._aspspSearchResults = results;
-        } catch (err) {
-            resultsEl.innerHTML = `<div class="form-hint" style="color:var(--danger);">Errore: ${err.message}</div>`;
-        }
-    }
-
-    function selectAspspResult(i) {
-        const r = (window._aspspSearchResults || [])[i];
-        if (!r) return;
-        document.getElementById('bankConnectionAspsp').value = r.name;
-        document.getElementById('bankConnectionCountry').value = r.country;
-        showToast('✅ Banca selezionata: ' + r.name);
-    }
-
-    async function saveBankConnection(e) {
-        e.preventDefault();
-        if (!people.length) { alert('Crea prima almeno una persona (Persone → + Nuova Persona).'); return; }
-        const id = document.getElementById('editBankConnectionId').value;
-        const ownerPersonId = document.getElementById('bankConnectionOwner').value;
-        if (!ownerPersonId) return;
-
-        if (id) {
-            // Modifica di un conto esistente: solo campi locali, nessuna nuova richiesta di consenso.
-            const expiry = document.getElementById('bankConnectionConsentExpiry').value;
-            const payload = {
-                display_name: document.getElementById('bankConnectionDisplayName').value.trim() || null,
-                owner_person_id: ownerPersonId,
-                consent_expires_at: expiry ? new Date(expiry).toISOString() : null
-            };
-            const { error } = await sb.from('ca_bank_connections').update(payload).eq('id', id);
-            if (handleAuthError(error)) return;
-            if (error) { alert('Errore: ' + error.message); return; }
-            closeBankConnectionModal();
-            await loadBankConnections();
-            renderBankConnections();
-            showToast('✅ Conto salvato');
-            return;
-        }
-
-        // Nuovo conto: avvia il vero collegamento via Enable Banking (redirect alla banca).
-        const aspspName = document.getElementById('bankConnectionAspsp').value;
-        const country = document.getElementById('bankConnectionCountry').value.trim().toUpperCase();
-        if (!country) { alert('Indica il codice paese della banca (2 lettere).'); return; }
-        const displayName = document.getElementById('bankConnectionDisplayName').value.trim();
-
-        showProcessing('🏦 Avvio collegamento con la banca...');
-        try {
-            const res = await fetch(SUPABASE_URL + '/functions/v1/enable-banking-connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + (sbAccessToken || SUPABASE_KEY),
-                    'apikey': SUPABASE_KEY
-                },
-                body: JSON.stringify({ aspspName, country, ownerPersonId, displayName })
-            });
-            const data = await res.json();
-            hideProcessing();
-            if (!res.ok || data.error) {
-                alert('Errore avvio collegamento: ' + (data?.error?.message || res.status));
-                return;
-            }
-            window.location.href = data.url; // reindirizza alla banca per il consenso
-        } catch (err) {
-            hideProcessing();
-            alert('Errore chiamata: ' + err.message);
-        }
-    }
-
-    async function deleteBankConnection(id) {
-        if (!confirm('Eliminare questo conto collegato? Le transazioni già importate da questo conto non vengono toccate.')) return;
-        const { error } = await sb.from('ca_bank_connections').delete().eq('id', id);
-        if (handleAuthError(error)) return;
-        await loadBankConnections();
-        renderBankConnections();
-        showToast('🗑️ Conto eliminato');
     }
 
     // Step 1: chiede alla edge function un'anteprima (nessuna scrittura nel DB) di cosa
@@ -3907,22 +3726,7 @@
         }
     };
 
-    // Esito del collegamento conto Enable Banking (redirect di ritorno dopo il consenso in banca)
-    function handleBankConnectRedirectResult() {
-        const params = new URLSearchParams(window.location.search);
-        const result = params.get('bank_connect');
-        if (!result) return;
-        const message = params.get('bank_connect_message');
-        if (result === 'success') showToast('✅ Conto collegato con successo');
-        else showToast('⚠️ Collegamento conto non riuscito' + (message ? ': ' + message : ''), true);
-        params.delete('bank_connect');
-        params.delete('bank_connect_message');
-        const newQuery = params.toString();
-        history.replaceState(null, '', window.location.pathname + (newQuery ? '?' + newQuery : ''));
-    }
-
     window.addEventListener('load', () => {
-        handleBankConnectRedirectResult();
         const stored = localStorage.getItem('sb_token');
         if (stored) {
             initWithToken(stored);
