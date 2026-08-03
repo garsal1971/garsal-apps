@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const { data: connection, error: connError } = await supabase
-    .from('ca_bank_connections')
+    .from('cm_bank_connections')
     .select('*')
     .eq('id', bankConnectionId)
     .eq('user_id', userId)
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
   let syncLog: { id: string } | null = null;
   if (!preview) {
     const { data } = await supabase
-      .from('ca_sync_log')
+      .from('cm_sync_log')
       .insert({ user_id: userId, bank_connection_id: bankConnectionId, status: 'running' })
       .select()
       .single();
@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
     }).filter((t) => t.date && t.externalId);
 
     if (!rows.length) {
-      if (syncLog) await supabase.from('ca_sync_log').update({ finished_at: new Date().toISOString(), status: 'success', imported_count: 0 }).eq('id', syncLog.id);
+      if (syncLog) await supabase.from('cm_sync_log').update({ finished_at: new Date().toISOString(), status: 'success', imported_count: 0 }).eq('id', syncLog.id);
       return new Response(
         JSON.stringify(preview ? { preview: true, items: [], totalFetched: rawTransactions.length, pages: pageCount, oldestDate: null } : { imported: 0 }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -471,7 +471,7 @@ Deno.serve(async (req) => {
     const oldestDate = rows.reduce((min, t) => (!min || t.date < min ? t.date : min), null as string | null);
 
     if (syncLog) {
-      await supabase.from('ca_sync_log').update({
+      await supabase.from('cm_sync_log').update({
         finished_at: new Date().toISOString(),
         status: 'success',
         imported_count: inserted.length,
@@ -490,7 +490,7 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     if (syncLog) {
-      await supabase.from('ca_sync_log').update({
+      await supabase.from('cm_sync_log').update({
         finished_at: new Date().toISOString(),
         status: 'error',
         error_message: (e as Error).message,

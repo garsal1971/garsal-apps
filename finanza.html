@@ -160,6 +160,12 @@
     .badge-sell { background: #fee2e2; color: #991b1b; }
     .badge-pos  { background: #dcfce7; color: #166534; }
     .badge-neg  { background: #fee2e2; color: #991b1b; }
+    .badge-warn    { background: #fef3c7; color: #92400e; }
+    .badge-neutral { background: #f1f5f9; color: #475569; }
+    .text-pos { color: #166534; }
+    .text-neg { color: var(--c-danger); }
+    /* Riga di un movimento che non entra nel calcolo delle quote (escluso o da rivedere) */
+    .row-muted td { opacity: .55; }
     .tag-r-alto   { background: #fee2e2; color: #991b1b; }
     .tag-r-medio  { background: #fef3c7; color: #92400e; }
     .tag-r-basso  { background: #dcfce7; color: #166534; }
@@ -295,8 +301,9 @@
       /* Modal transazioni: mostra Azioni(1) Data(2) Tipo(3) Qtà(4) Controv.(6) */
       .table-modal-tx tr > :nth-child(5),.table-modal-tx tr > :nth-child(7),
       .table-modal-tx tr > :nth-child(8) { display: none; }
-      /* Versamenti fondo: mostra Azioni(1) Persona(2) Data(3) Nominale(4) Attualizzato(6) */
-      .table-versamenti tr > :nth-child(5),.table-versamenti tr > :nth-child(7) { display: none; }
+      /* Movimenti fondo: mostra Azioni(1) Persona(2) Data(3) Nominale(5) Rivalutato(7) Stato(8) */
+      .table-versamenti tr > :nth-child(4),.table-versamenti tr > :nth-child(6),
+      .table-versamenti tr > :nth-child(9) { display: none; }
       /* Quote fondo: mostra Persona(1) Attualizzato(4) Quota%(5) Azioni(6) */
       .table-quote-fondo tr > :nth-child(2),.table-quote-fondo tr > :nth-child(3) { display: none; }
     }
@@ -422,6 +429,7 @@
       
       <div class="nav-label">Configurazione</div>
       <button class="nav-item"        data-action="nav" data-view="tag-config">🏷️ Tag</button>
+      <button class="nav-item"        data-action="nav" data-view="conti-collegati">🏦 Conti Collegati</button>
       
       <div class="nav-sep"></div>
       <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
@@ -456,6 +464,7 @@
       <div id="view-prezzi"             class="view"></div>
       <div id="view-analisi-costi"      class="view"></div>
       <div id="view-tag-config"         class="view"></div>
+      <div id="view-conti-collegati"    class="view"></div>
       <div id="view-impostazioni"       class="view"></div>
     </main>
   </div>
@@ -493,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.0.56';
-const APP_BUILD   = '2026-08-03T10:55:00Z';
+const APP_VERSION = 'v1.1.0';
+const APP_BUILD   = '2026-08-03T12:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -509,7 +518,8 @@ const S = {
   portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [], loanRepayments: [],
   loanId: null,
   otherAssets: [], otherAssetTypes: [],
-  funds: [], fundContributions: [], foiIndex: [],
+  funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
+  bankConnections: [],
   dashboardSnapshots: [],
   prevSnapshot: null,
   chartSeries: { totale: true, portafogli: true, asset: true, debiti: true },
@@ -563,6 +573,23 @@ async function sbUpsert(table, body, onConflict = '') {
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
   return (await r.json())[0];
+}
+async function sbRpc(fn, body = {}) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: 'POST', headers: sbH(), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+// Le Edge Function stanno su /functions/v1 e non su /rest/v1: stessa autenticazione, base
+// diversa. L'errore arriva come { error: { message } }, non come errore PostgREST.
+async function sbFn(name, body = {}) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST', headers: sbH(), body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data?.error) throw new Error(data?.error?.message || r.statusText);
+  return data;
 }
 /* ── Session / Auth ─────────────────────────────────────────── */
 const SESSION_KEY  = 'garsal_session';
@@ -634,7 +661,7 @@ const DEFAULT_TAG_CATS = [
 ];
 /* ── Data loaders ────────────────────────────────────────────── */
 async function loadAll() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, fundParticipants, foiIndex, bankConnections] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
@@ -646,7 +673,9 @@ async function loadAll() {
     sbQ('fnz_other_asset_types','select=*&order=name.asc'),
     sbQ('fnz_funds',              'select=*&order=created_at.asc'),
     sbQ('fnz_fund_contributions', 'select=*&order=date.asc,created_at.asc'),
+    sbQ('fnz_fund_participants',  'select=*&order=name.asc'),
     sbQ('fnz_foi_index',          'select=*&order=year.asc'),
+    sbQ('cm_bank_connections',    'select=*&order=created_at.desc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -659,7 +688,9 @@ async function loadAll() {
   S.otherAssetTypes = otherAssetTypes;
   S.funds        = funds;
   S.fundContributions = fundContributions;
+  S.fundParticipants  = fundParticipants;
   S.foiIndex     = foiIndex;
+  S.bankConnections   = bankConnections;
   if (tagCats.length === 0) {
     await Promise.all(DEFAULT_TAG_CATS.map(tc => sbIns('fnz_tag_categories', { ...tc, user_id: S.session.user.id })));
     S.tagCats = await sbQ('fnz_tag_categories', 'select=*&order=name.asc');
@@ -677,7 +708,7 @@ async function loadAll() {
   await syncFundOwnership();
 }
 async function reload() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, foiIndex] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, fundParticipants, foiIndex, bankConnections] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
@@ -689,7 +720,9 @@ async function reload() {
     sbQ('fnz_other_asset_types','select=*&order=name.asc'),
     sbQ('fnz_funds',              'select=*&order=created_at.asc'),
     sbQ('fnz_fund_contributions', 'select=*&order=date.asc,created_at.asc'),
+    sbQ('fnz_fund_participants',  'select=*&order=name.asc'),
     sbQ('fnz_foi_index',          'select=*&order=year.asc'),
+    sbQ('cm_bank_connections',    'select=*&order=created_at.desc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -702,7 +735,9 @@ async function reload() {
   S.otherAssetTypes = otherAssetTypes;
   S.funds        = funds;
   S.fundContributions = fundContributions;
+  S.fundParticipants  = fundParticipants;
   S.foiIndex     = foiIndex;
+  S.bankConnections   = bankConnections;
   await loadPricesFromCache();
   S.priceHistory = await sbQ('fnz_price_history', 'select=*&order=price_date.desc');
   computePricesFromHistory();
@@ -808,39 +843,59 @@ function foiCoefficient(referenceYear, year, idxMap = foiIndexMap()) {
   if (refIdx == null || yearIdx == null) return null;
   return refIdx / yearIdx;
 }
+/* Stati che contano davvero: 'auto' (abbinato dal sync) e 'confermato' (inserito o
+   confermato a mano). 'da_rivedere' (controparte non riconosciuta) e 'escluso' restano
+   visibili nell'elenco ma non spostano di un centesimo le quote — un movimento che non si
+   sa di chi sia non può gonfiare la percentuale di nessuno.                            */
+const FUND_COUNTED_STATUS = ['auto', 'confermato'];
+const fundRowCounts = c => FUND_COUNTED_STATUS.includes(c.status || 'confermato');
+/* Chiave di raggruppamento: l'anagrafica quando c'è (partecipanti importati dalla banca),
+   altrimenti il nome scritto a mano — è così che i fondi storici, nati prima
+   dell'anagrafica, continuano a funzionare senza migrazione dei dati.                  */
+const fundParticipantKey = c => c.participant_id || `name:${(c.participant || '').trim().toUpperCase()}`;
 function computeFundShares(fundId) {
-  const contributions = S.fundContributions
+  const all = S.fundContributions
     .filter(c => c.fund_id === fundId)
     .slice()
     .sort((a, b) => (a.date + a.created_at).localeCompare(b.date + b.created_at));
-  if (contributions.length === 0) {
-    return { referenceYear: null, idxMap: foiIndexMap(), rows: [], participants: [], totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false };
-  }
+  const counted = all.filter(fundRowCounts);
   const idxMap = foiIndexMap();
-  const referenceYear = Math.min(...contributions.map(c => parseInt(c.date.slice(0, 4), 10)));
+  if (counted.length === 0) {
+    return { referenceYear: null, idxMap, rows: [], allRows: all.map(c => ({ ...c, amount: parseFloat(c.amount), year: parseInt(c.date.slice(0, 4), 10), coefficient: null, adjusted: null })), toReview: all.filter(c => c.status === 'da_rivedere'), participants: [], totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false };
+  }
+  const referenceYear = Math.min(...counted.map(c => parseInt(c.date.slice(0, 4), 10)));
   let hasMissingIndex = false;
-  const rows = contributions.map(c => {
+  const decorate = (c, flagMissing) => {
     const year = parseInt(c.date.slice(0, 4), 10);
     const amount = parseFloat(c.amount);
     const coefficient = foiCoefficient(referenceYear, year, idxMap);
-    if (coefficient == null) hasMissingIndex = true;
+    if (coefficient == null && flagMissing) hasMissingIndex = true;
     const adjusted = coefficient != null ? amount * coefficient : null;
     return { ...c, year, amount, coefficient, adjusted };
-  });
+  };
+  const rows    = counted.map(c => decorate(c, true));
+  const allRows = all.map(c => decorate(c, false));
   const byParticipant = new Map();
   for (const r of rows) {
-    const cur = byParticipant.get(r.participant) || { participant: r.participant, count: 0, totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false };
+    const key = fundParticipantKey(r);
+    const cur = byParticipant.get(key) || {
+      key, participantId: r.participant_id || null, participant: r.participant,
+      count: 0, deposits: 0, withdrawals: 0, totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false,
+    };
     cur.count += 1;
+    // Somma algebrica: un prelievo ha importo negativo e abbassa solo la quota di chi lo ha
+    // fatto, non quella di tutti gli altri.
+    if (r.amount >= 0) cur.deposits += 1; else cur.withdrawals += 1;
     cur.totalNominal += r.amount;
     if (r.adjusted != null) cur.totalAdjusted += r.adjusted; else cur.hasMissingIndex = true;
-    byParticipant.set(r.participant, cur);
+    byParticipant.set(key, cur);
   }
   const totalNominal  = rows.reduce((s, r) => s + r.amount, 0);
   const totalAdjusted = rows.reduce((s, r) => s + (r.adjusted || 0), 0);
   const participants = [...byParticipant.values()]
-    .map(p => ({ ...p, percentage: totalAdjusted > 0 ? (p.totalAdjusted / totalAdjusted) * 100 : 0 }))
+    .map(p => ({ ...p, percentage: totalAdjusted !== 0 ? (p.totalAdjusted / totalAdjusted) * 100 : 0 }))
     .sort((a, b) => b.totalAdjusted - a.totalAdjusted);
-  return { referenceYear, idxMap, rows, participants, totalNominal, totalAdjusted, hasMissingIndex };
+  return { referenceYear, idxMap, rows, allRows, toReview: all.filter(c => c.status === 'da_rivedere'), participants, totalNominal, totalAdjusted, hasMissingIndex };
 }
 /* ── Fondi — collegamento a portafoglio/altro asset ──────────────
    Un fondo può essere collegato a un portafoglio o a un altro asset:
@@ -2107,7 +2162,7 @@ function renderDossierDetail() {
 function renderFunds() {
   setHtml('view-fondi', `
     <div class="view-header">
-      <div><h2 class="page-title">Fondi</h2><p class="page-sub">Fondi comuni tra più partecipanti: calcolo quote di possesso attualizzate con indice ISTAT FOI</p></div>
+      <div><h2 class="page-title">Fondi</h2><p class="page-sub">Fondi comuni tra più partecipanti: quote di possesso rivalutate con indice ISTAT FOI, con import dei movimenti dal conto collegato</p></div>
       <div class="hstack gap-8">
         <button class="btn btn-outline btn-sm" data-action="open-foi-index">🏷️ Indice FOI</button>
         <button class="btn btn-primary btn-sm" data-action="new-fund">+ Nuovo Fondo</button>
@@ -2127,8 +2182,13 @@ function renderFunds() {
               <button class="btn-icon btn-icon-danger" data-action="del-fund" data-id="${f.id}" title="Elimina">✕</button>
             </div>
           </div>
-          <div class="settings-row text-sm">Partecipanti: <strong>${stats.participants.length}</strong> · Versamenti: <strong>${stats.rows.length}</strong></div>
+          <div class="settings-row text-sm">Partecipanti: <strong>${stats.participants.length}</strong> · Movimenti: <strong>${stats.rows.length}</strong></div>
           ${link ? `<div class="settings-row text-sm">Collegato a: <strong>${link.label}</strong> (${fmtEUR(link.value)})</div>` : ''}
+          ${(() => {
+            const conn = S.bankConnections.find(c => c.id === f.bank_connection_id);
+            return conn ? `<div class="settings-row text-sm">Conto: <strong>${conn.aspsp_name}</strong></div>` : '';
+          })()}
+          ${stats.toReview.length ? `<div class="settings-row text-sm"><span class="badge badge-warn">${stats.toReview.length} da rivedere</span></div>` : ''}
           <div class="portfolio-card-stats">
             <div>
               <div class="kpi-label">Totale attualizzato${stats.hasMissingIndex ? ' <span class="text-muted text-sm">(parziale)</span>' : ''}</div>
@@ -2142,10 +2202,23 @@ function renderFunds() {
     }
   `);
 }
+function fundStatusBadge(status) {
+  const map = {
+    auto:        ['badge-pos', 'auto'],
+    confermato:  ['badge-pos', 'confermato'],
+    da_rivedere: ['badge-warn', 'da rivedere'],
+    escluso:     ['badge-neg', 'escluso'],
+  };
+  const [cls, label] = map[status || 'confermato'] || ['badge-neutral', status];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
 function renderFundDetail() {
   const fund = S.funds.find(f => f.id === S.fundId);
   if (!fund) { navigate('fondi'); return; }
   const stats = computeFundShares(fund.id);
+  const participants = S.fundParticipants.filter(p => p.fund_id === fund.id);
+  const conn = S.bankConnections.find(c => c.id === fund.bank_connection_id);
+  const toReview = stats.toReview;
   setHtml('view-fondo-detail', `
     <div class="view-header">
       <div class="hstack gap-8">
@@ -2155,18 +2228,65 @@ function renderFundDetail() {
           <p class="page-sub">${fund.notes || 'Fondo comune'}</p>
         </div>
       </div>
-      <button class="btn btn-primary btn-sm" data-action="new-contribution" data-fund-id="${fund.id}">+ Versamento</button>
+      <div class="hstack gap-8">
+        ${conn ? `<button class="btn btn-outline btn-sm" data-action="sync-fund" data-fund-id="${fund.id}">🔄 Sincronizza da ${conn.aspsp_name}</button>` : ''}
+        <button class="btn btn-primary btn-sm" data-action="new-contribution" data-fund-id="${fund.id}">+ Movimento</button>
+      </div>
+    </div>
+    ${toReview.length ? `
+    <div class="card mb-16" style="border-color:var(--c-warning)">
+      <div class="card-title">⚠️ Da rivedere — ${toReview.length} ${toReview.length === 1 ? 'movimento' : 'movimenti'}</div>
+      <p class="text-muted text-sm mb-12">Bonifici importati dal conto la cui controparte non corrisponde a nessun partecipante: non entrano nel calcolo delle quote finché non li abbini a una persona (o li escludi).</p>
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Data</th><th>Importo</th><th>Controparte</th><th>IBAN</th><th>Causale</th><th></th></tr></thead>
+        <tbody>${toReview.map(r => `
+          <tr>
+            <td class="mono text-sm">${fmtDate(r.date)}</td>
+            <td class="mono ${parseFloat(r.amount) < 0 ? 'text-neg' : 'text-pos'}">${fmtEURc(parseFloat(r.amount))}</td>
+            <td>${r.counterparty_name || '—'}</td>
+            <td class="mono text-sm text-muted">${r.counterparty_iban || '—'}</td>
+            <td><div class="truncate" style="max-width:220px">${r.notes || '—'}</div></td>
+            <td class="hstack gap-4">
+              <button class="btn btn-sm btn-outline" data-action="assign-contribution" data-id="${r.id}">Abbina</button>
+              <button class="btn-icon btn-icon-danger" data-action="set-contribution-status" data-id="${r.id}" data-status="escluso" title="Escludi dal fondo">✕</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>` : ''}
+    <div class="card mb-16">
+      <div class="card-header-row">
+        <div class="card-title">Partecipanti</div>
+        <button class="btn btn-outline btn-sm" data-action="new-fund-participant" data-fund-id="${fund.id}">+ Partecipante</button>
+      </div>
+      <p class="text-muted text-sm mb-12">L'IBAN è la chiave con cui il sync riconosce la controparte di un bonifico; il nome è il ripiego quando l'IBAN non arriva dalla banca.</p>
+      ${participants.length === 0
+        ? `<div class="empty-sm">Nessun partecipante in anagrafica. Senza anagrafica il fondo funziona solo a inserimento manuale.</div>`
+        : `<div class="table-wrap"><table class="table">
+        <thead><tr><th>Nome</th><th>IBAN</th><th>Stato</th><th></th></tr></thead>
+        <tbody>${participants.map(p => `
+          <tr>
+            <td class="fw-600">${p.name}</td>
+            <td class="mono text-sm">${p.iban || '—'}</td>
+            <td>${p.active ? '<span class="badge badge-pos">attivo</span>' : '<span class="badge badge-neutral">non attivo</span>'}</td>
+            <td class="hstack gap-4">
+              <button class="btn-icon" data-action="edit-fund-participant" data-id="${p.id}" title="Modifica">✎</button>
+              <button class="btn-icon btn-icon-danger" data-action="del-fund-participant-row" data-id="${p.id}" title="Elimina">✕</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`}
     </div>
     ${stats.referenceYear == null
-      ? `<div class="empty-sm">Nessun versamento ancora. Aggiungi il primo versamento per iniziare il calcolo delle quote.</div>`
+      ? `<div class="empty-sm">Nessun movimento conteggiato. Aggiungi il primo versamento per iniziare il calcolo delle quote.</div>`
       : `
     <div class="kpi-grid">
       ${kpi('Anno di riferimento', stats.referenceYear, 'neutral')}
       ${kpi('Totale nominale',     fmtEUR(stats.totalNominal),  'neutral')}
-      ${kpi('Totale attualizzato', fmtEUR(stats.totalAdjusted), 'neutral')}
+      ${kpi('Totale rivalutato',   fmtEUR(stats.totalAdjusted), 'neutral')}
       ${kpi('Partecipanti',        stats.participants.length, 'neutral')}
     </div>
-    ${stats.hasMissingIndex ? `<div class="empty-sm" style="margin-bottom:14px">⚠️ Manca l'indice FOI per uno o più anni: alcuni versamenti non sono stati attualizzati. Aggiorna l'indice da "🏷️ Indice FOI".</div>` : ''}
+    ${stats.hasMissingIndex ? `<div class="empty-sm" style="margin-bottom:14px">⚠️ Manca l'indice FOI per uno o più anni: alcuni movimenti non sono stati rivalutati. Aggiorna l'indice da "🏷️ Indice FOI".</div>` : ''}
     ${(() => {
       const link = computeFundLinkedBalance(fund);
       if (!link) return '';
@@ -2175,10 +2295,11 @@ function renderFundDetail() {
     <div class="card mb-16">
       <div class="card-title">Collegamento</div>
       <div class="settings-row text-sm">${link.label} · Saldo attuale: <strong>${fmtEUR(link.value)}</strong></div>
+      ${conn ? `<div class="settings-row text-sm">Conto bancario: <strong>${conn.aspsp_name}${conn.display_name ? ' — ' + conn.display_name : ''}</strong></div>` : ''}
       ${fund.owner_participant
         ? (owner
           ? `<div class="settings-row text-sm">Possesso di <strong>${fund.owner_participant}</strong> sincronizzato automaticamente: <strong>${owner.percentage.toFixed(2)}%</strong> (campo "Possesso %" attuale sul collegamento: ${parseFloat(link.target.ownership_percentage).toFixed(2)}%)</div>`
-          : `<div class="settings-row text-sm text-muted">Nessun versamento trovato per il partecipante di riferimento "${fund.owner_participant}": la % non viene aggiornata.</div>`)
+          : `<div class="settings-row text-sm text-muted">Nessun movimento trovato per il partecipante di riferimento "${fund.owner_participant}": la % non viene aggiornata.</div>`)
         : `<div class="settings-row text-sm text-muted">Nessun partecipante di riferimento impostato: modifica il fondo per abilitare la sincronizzazione automatica della % di possesso.</div>`
       }
     </div>`;
@@ -2187,35 +2308,38 @@ function renderFundDetail() {
       <div class="card" style="grid-column:1/-1">
         <div class="card-title">Quote di possesso</div>
         <div class="table-wrap"><table class="table table-quote-fondo">
-          <thead><tr><th>Persona</th><th>Versamenti</th><th>Totale nominale</th><th>Totale attualizzato</th><th>Quota %</th><th></th></tr></thead>
+          <thead><tr><th>Persona</th><th>Movimenti</th><th>Totale nominale</th><th>Totale rivalutato</th><th>Quota %</th><th></th></tr></thead>
           <tbody>${stats.participants.map(p => `
             <tr>
               <td class="fw-600">${p.participant}</td>
-              <td class="mono">${p.count}</td>
+              <td class="mono">${p.count}${p.withdrawals ? ` <span class="text-muted text-sm">(${p.deposits} vers. / ${p.withdrawals} prel.)</span>` : ''}</td>
               <td class="mono">${fmtEUR(p.totalNominal)}</td>
               <td class="mono fw-600">${fmtEUR(p.totalAdjusted)}</td>
-              <td><span class="badge badge-pos">${p.percentage.toFixed(2)}%</span></td>
-              <td><button class="btn-icon btn-icon-danger" data-action="del-fund-participant" data-fund-id="${fund.id}" data-participant="${encodeURIComponent(p.participant)}" title="Rimuovi partecipante e i suoi versamenti">✕</button></td>
+              <td><span class="badge ${p.percentage < 0 ? 'badge-neg' : 'badge-pos'}">${p.percentage.toFixed(2)}%</span></td>
+              <td><button class="btn-icon btn-icon-danger" data-action="del-fund-participant" data-fund-id="${fund.id}" data-participant="${encodeURIComponent(p.participant)}" title="Rimuovi partecipante e i suoi movimenti">✕</button></td>
             </tr>`).join('')}
           </tbody>
         </table></div>
       </div>
     </div>
     <div class="card">
-      <div class="card-title">Versamenti</div>
+      <div class="card-title">Movimenti</div>
       <div class="table-wrap"><table class="table table-versamenti">
-        <thead><tr><th></th><th>Persona</th><th>Data</th><th>Importo nominale</th><th>Coefficiente</th><th>Importo attualizzato</th><th>Note</th></tr></thead>
-        <tbody>${stats.rows.map(r => `
-          <tr>
+        <thead><tr><th></th><th>Persona</th><th>Data</th><th>Tipo</th><th>Importo nominale</th><th>Coefficiente</th><th>Importo rivalutato</th><th>Stato</th><th>Note</th></tr></thead>
+        <tbody>${stats.allRows.map(r => `
+          <tr${FUND_COUNTED_STATUS.includes(r.status || 'confermato') ? '' : ' class="row-muted"'}>
             <td class="hstack gap-4">
               <button class="btn-icon" data-action="edit-contribution" data-id="${r.id}" title="Modifica">✎</button>
               <button class="btn-icon btn-icon-danger" data-action="del-contribution" data-id="${r.id}" title="Elimina">✕</button>
+              ${r.status === 'escluso' ? `<button class="btn-icon" data-action="set-contribution-status" data-id="${r.id}" data-status="confermato" title="Rimetti nel calcolo">↩</button>` : ''}
             </td>
             <td class="fw-600">${r.participant}</td>
             <td class="mono text-sm">${fmtDate(r.date)}</td>
-            <td class="mono">${fmtEURc(r.amount)}</td>
+            <td>${r.type === 'prelievo' ? '<span class="badge badge-neg">prelievo</span>' : '<span class="badge badge-pos">versamento</span>'}</td>
+            <td class="mono ${r.amount < 0 ? 'text-neg' : ''}">${fmtEURc(r.amount)}</td>
             <td class="mono text-muted">${r.coefficient != null ? r.coefficient.toFixed(4) : '—'}</td>
-            <td class="mono fw-600">${r.adjusted != null ? fmtEURc(r.adjusted) : '—'}</td>
+            <td class="mono fw-600 ${r.adjusted != null && r.adjusted < 0 ? 'text-neg' : ''}">${r.adjusted != null ? fmtEURc(r.adjusted) : '—'}</td>
+            <td>${fundStatusBadge(r.status)}</td>
             <td><div class="truncate" style="max-width:120px">${r.notes || '—'}</div></td>
           </tr>`).join('')}
         </tbody>
@@ -2223,6 +2347,190 @@ function renderFundDetail() {
     </div>`
     }
   `);
+}
+/* ══════════════ CONTI COLLEGATI (Enable Banking / PSD2) ════════
+   Configurazione condivisa tra i moduli: Spese Famiglia (Revolut) e Fondi (UniCredit).
+   Stava in cost-analysis.html, ma un conto bancario non appartiene a un modulo solo.
+   Il collegamento vero passa dalle Edge Function enable-banking-connect (che restituisce
+   l'URL della banca) e enable-banking-callback (che riporta qui dopo il consenso e crea
+   le righe in cm_bank_connections, una per conto restituito dalla banca).             */
+const BANK_MODULE_LABEL = { cost_analysis: '🧾 Spese Famiglia', fondo: '🤝 Fondi' };
+// Paese ASPSP di default per le banche già usate: Revolut è lituana, UniCredit italiana.
+const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', UniCredit: 'IT', N26: 'DE' };
+function renderBankConnections() {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const card = c => {
+    const fundsUsing = S.funds.filter(f => f.bank_connection_id === c.id).map(f => f.name);
+    let consent = '<span class="badge badge-neutral">nessuna scadenza impostata</span>';
+    if (c.consent_expires_at) {
+      const expiry = c.consent_expires_at.slice(0, 10);
+      const expired = expiry < todayIso;
+      const daysLeft = Math.round((new Date(expiry) - new Date(todayIso)) / 86400000);
+      consent = expired
+        ? `<span class="badge badge-neg">consenso scaduto il ${fmtDate(expiry)}</span>`
+        : `<span class="badge ${daysLeft <= 14 ? 'badge-warn' : 'badge-pos'}">consenso valido fino al ${fmtDate(expiry)}${daysLeft <= 14 ? ` (${daysLeft} gg)` : ''}</span>`;
+    }
+    return `
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-title">${c.aspsp_name}${c.display_name ? ` — ${c.display_name}` : ''}</div>
+          <div class="hstack gap-4">
+            <button class="btn-icon" data-action="edit-bank-connection" data-id="${c.id}" title="Modifica">✎</button>
+            <button class="btn-icon btn-icon-danger" data-action="del-bank-connection" data-id="${c.id}" title="Elimina">✕</button>
+          </div>
+        </div>
+        <div class="settings-row text-sm">Modulo: <strong>${BANK_MODULE_LABEL[c.module] || c.module}</strong> · Stato: <strong>${c.status}</strong></div>
+        ${fundsUsing.length ? `<div class="settings-row text-sm">Usato dal fondo: <strong>${fundsUsing.join(', ')}</strong></div>` : ''}
+        ${c.account_id ? '' : '<div class="settings-row text-sm text-muted">⚠️ Registrato a mano, senza consenso bancario: la sincronizzazione non può funzionare.</div>'}
+        <div class="settings-row">${consent}</div>
+      </div>`;
+  };
+  const group = (module, empty) => {
+    const list = S.bankConnections.filter(c => c.module === module);
+    return list.length ? `<div class="grid-auto">${list.map(card).join('')}</div>` : `<div class="empty-sm">${empty}</div>`;
+  };
+  setHtml('view-conti-collegati', `
+    <div class="view-header">
+      <div>
+        <h2 class="page-title">Conti Collegati</h2>
+        <p class="page-sub">Conti bancari collegati via Enable Banking (PSD2), condivisi tra Spese Famiglia e Fondi</p>
+      </div>
+      <button class="btn btn-primary btn-sm" data-action="new-bank-connection">+ Collega conto</button>
+    </div>
+    <div class="card mb-16">
+      <div class="card-title">${BANK_MODULE_LABEL.cost_analysis}</div>
+      <p class="text-muted text-sm mb-12">Le transazioni di questi conti finiscono in Spese Famiglia. La sincronizzazione si lancia dall'app di gestione, dove c'è anche la categorizzazione.</p>
+      ${group('cost_analysis', 'Nessun conto collegato per Spese Famiglia.')}
+    </div>
+    <div class="card">
+      <div class="card-title">${BANK_MODULE_LABEL.fondo}</div>
+      <p class="text-muted text-sm mb-12">I bonifici di questi conti diventano versamenti e prelievi del fondo collegato. La sincronizzazione si lancia dalla scheda del fondo.</p>
+      ${group('fondo', 'Nessun conto collegato per i fondi.')}
+    </div>
+  `);
+}
+function openBankConnectionModal(connectionId = null) {
+  const c = connectionId ? S.bankConnections.find(x => x.id === connectionId) : null;
+  // Su un conto già collegato si correggono solo i dati locali: banca, paese e modulo sono
+  // fissati dal consenso dato alla banca e cambiarli qui non rifarebbe il consenso.
+  openModal(c ? 'Modifica conto collegato' : 'Collega un conto', `
+    <form id="modal-form">
+      ${c ? '' : `
+      <div class="form-group">
+        <label class="form-label">A cosa serve il conto *</label>
+        <select name="module" class="form-input form-select" required>
+          <option value="fondo">${BANK_MODULE_LABEL.fondo} — bonifici da/verso i partecipanti</option>
+          <option value="cost_analysis">${BANK_MODULE_LABEL.cost_analysis} — spese da categorizzare</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cerca la banca nel catalogo Enable Banking</label>
+        <div class="hstack gap-8">
+          <input id="aspsp-country" class="form-input" maxlength="2" placeholder="Paese (IT, LT, DE…)" style="text-transform:uppercase;flex:1" value="IT" />
+          <input id="aspsp-query" class="form-input" placeholder="Nome (opzionale)" style="flex:2" />
+          <button type="button" class="btn btn-outline" data-action="search-aspsp">🔍 Cerca</button>
+        </div>
+        <div id="aspsp-results" style="max-height:180px;overflow-y:auto;margin-top:8px"></div>
+      </div>`}
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Banca (nome esatto ASPSP) *</label>
+          <input name="aspsp_name" id="aspsp-name" class="form-input" required placeholder="es. UniCredit" value="${c?.aspsp_name || ''}" ${c ? 'readonly' : ''} />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Paese ${c ? '' : '*'}</label>
+          <input name="country" id="aspsp-country-final" class="form-input" maxlength="2" style="text-transform:uppercase" placeholder="IT" ${c ? 'disabled' : 'required'} />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome del conto</label>
+        <input name="display_name" class="form-input" placeholder="es. UniCredit fondo famiglia" value="${c?.display_name || ''}" />
+      </div>
+      ${c ? `
+      <div class="form-group">
+        <label class="form-label">Consenso valido fino al</label>
+        <input name="consent_expires_at" type="date" class="form-input" value="${c.consent_expires_at ? c.consent_expires_at.slice(0, 10) : ''}" />
+        <p class="text-muted text-sm" style="margin-top:4px">Compilato dal collegamento reale: si tocca qui solo per correzioni.</p>
+      </div>` : `
+      <div class="form-group" id="owner-person-group" style="display:none">
+        <label class="form-label">Proprietario (chi ha speso) *</label>
+        <select name="owner_person_id" id="owner-person-select" class="form-input form-select"></select>
+        <p class="text-muted text-sm" style="margin-top:4px">Serve solo per Spese Famiglia: ogni transazione del conto viene attribuita a questa persona.</p>
+      </div>
+      <p class="text-muted text-sm mb-12">Premendo il pulsante si apre la banca per il consenso (per UniCredit: codice utente + PIN, poi conferma via SMS o notifica sull'app UniCredit). Al ritorno il conto compare qui.</p>`}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${c ? 'Salva' : 'Collega (apre la banca)'}</button>
+      </div>
+    </form>
+  `, async data => {
+    if (c) {
+      await sbUpd('cm_bank_connections', `id=eq.${c.id}`, {
+        display_name: (data.display_name || '').trim() || null,
+        consent_expires_at: data.consent_expires_at || null,
+      });
+      await reload(); closeModal();
+      return;
+    }
+    const res = await sbFn('enable-banking-connect', {
+      aspspName: (data.aspsp_name || '').trim(),
+      country: (data.country || '').trim().toUpperCase(),
+      displayName: (data.display_name || '').trim() || null,
+      ownerPersonId: data.owner_person_id || null,
+      module: data.module,
+    });
+    if (!res.url) throw new Error('La banca non ha restituito un URL di consenso.');
+    window.location.href = res.url;
+  });
+  if (c) return;
+  // Il proprietario serve solo a Spese Famiglia: si carica da ca_people alla prima volta che
+  // serve davvero, così aprire il modale per un conto del fondo non interroga il DB.
+  const moduleSel = document.querySelector('#modal-body select[name="module"]');
+  const ownerGroup = $('owner-person-group');
+  const ownerSelect = $('owner-person-select');
+  const syncOwnerVisibility = async () => {
+    const isCost = moduleSel.value === 'cost_analysis';
+    ownerGroup.style.display = isCost ? '' : 'none';
+    ownerSelect.required = isCost;
+    if (isCost && !ownerSelect.options.length) {
+      try {
+        const people = await sbQ('ca_people', 'select=id,name&order=name.asc');
+        ownerSelect.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      } catch (err) {
+        ownerSelect.innerHTML = '';
+        ownerGroup.innerHTML = `<p class="text-sm text-neg">Impossibile leggere le persone di Spese Famiglia: ${err.message}</p>`;
+      }
+    }
+  };
+  moduleSel.addEventListener('change', syncOwnerVisibility);
+  syncOwnerVisibility();
+  const nameInput = $('aspsp-name');
+  const countryInput = $('aspsp-country-final');
+  nameInput.addEventListener('input', () => {
+    const guess = ASPSP_DEFAULT_COUNTRY[nameInput.value.trim()];
+    if (guess && !countryInput.value) countryInput.value = guess;
+  });
+}
+async function searchAspsps() {
+  const country = ($('aspsp-country').value || '').trim().toUpperCase();
+  const query   = ($('aspsp-query').value || '').trim();
+  const box     = $('aspsp-results');
+  if (!country) { box.innerHTML = '<div class="text-sm text-muted">Indica almeno il paese.</div>'; return; }
+  box.innerHTML = '<div class="text-sm text-muted">Cerco…</div>';
+  try {
+    const data = await sbFn('enable-banking-aspsps', { country, query });
+    const results = data.results || [];
+    if (!results.length) {
+      box.innerHTML = `<div class="text-sm text-muted">Nessuna banca trovata (cercato in: ${(data.searchedCountries || []).join(', ') || country}). Il nome deve combaciare con il catalogo di Enable Banking.</div>`;
+      return;
+    }
+    S.aspspResults = results;
+    box.innerHTML = results.map((r, i) => `
+      <button type="button" class="btn btn-outline btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px"
+              data-action="pick-aspsp" data-idx="${i}">${r.name} <span class="text-muted">(${r.country})</span></button>`).join('');
+  } catch (err) {
+    box.innerHTML = `<div class="text-sm text-neg">Errore ricerca: ${err.message}</div>`;
+  }
 }
 function renderPrestiti() {
   setHtml('view-loans', `
@@ -3278,6 +3586,14 @@ function openNewFundModal(fundId = null) {
         <p class="text-muted text-sm" style="margin-top:4px">La sua quota % viene scritta automaticamente nel campo "Possesso %" del portafoglio/asset collegato, ogni volta che i versamenti o l'indice FOI cambiano.</p>
       </div>
       <div class="form-group">
+        <label class="form-label">Conto bancario da cui importare i movimenti</label>
+        <select name="bank_connection_id" class="form-input form-select">
+          <option value="">— Nessuno (solo inserimento manuale) —</option>
+          ${S.bankConnections.filter(c => c.module === 'fondo').map(c => `<option value="${c.id}" ${f?.bank_connection_id === c.id ? 'selected' : ''}>${c.aspsp_name}${c.display_name ? ' — ' + c.display_name : ''}</option>`).join('')}
+        </select>
+        <p class="text-muted text-sm" style="margin-top:4px">I conti si collegano da <strong>Configurazione → 🏦 Conti Collegati</strong>; qui compaiono solo quelli destinati ai fondi.</p>
+      </div>
+      <div class="form-group">
         <label class="form-label">Note</label>
         <textarea name="notes" class="form-input" rows="3" placeholder="Opzionale">${f?.notes || ''}</textarea>
       </div>
@@ -3295,25 +3611,41 @@ function openNewFundModal(fundId = null) {
       linked_portfolio_id:   linkKind === 'portfolio' ? linkId : null,
       linked_other_asset_id: linkKind === 'asset'     ? linkId : null,
       owner_participant: data.owner_participant.trim() || null,
+      bank_connection_id: data.bank_connection_id || null,
     };
     if (f) await sbUpd('fnz_funds', `id=eq.${f.id}`, payload);
     else   await sbIns('fnz_funds', payload);
     await reload(); closeModal();
   });
 }
+function fundParticipantNames(fundId) {
+  // Anagrafica prima, poi i nomi già usati nei movimenti: i fondi storici non hanno
+  // anagrafica e devono continuare a proporre i loro partecipanti.
+  const fromRegistry = S.fundParticipants.filter(p => p.fund_id === fundId).map(p => p.name);
+  const fromRows = S.fundContributions.filter(x => x.fund_id === fundId).map(x => x.participant);
+  return [...new Set([...fromRegistry, ...fromRows])].filter(Boolean);
+}
+// Il nome scritto a mano viene ricondotto all'anagrafica quando combacia (confronto senza
+// maiuscole/minuscole): così un movimento inserito a mano e uno importato dalla banca
+// finiscono sulla stessa persona invece di generare due righe di quota separate.
+function resolveFundParticipant(fundId, name) {
+  const norm = (name || '').trim().toUpperCase();
+  return S.fundParticipants.find(p => p.fund_id === fundId && p.name.trim().toUpperCase() === norm) || null;
+}
 function openNewContributionModal(fundId, contributionId = null) {
   const c = contributionId ? S.fundContributions.find(x => x.id === contributionId) : null;
   const targetFundId = c ? c.fund_id : fundId;
   const fund = S.funds.find(x => x.id === targetFundId);
   if (!fund) { alert('Crea prima un fondo.'); return; }
-  openModal(c ? 'Modifica Versamento' : `Nuovo Versamento — ${fund.name}`, `
+  const curType = c ? (c.type || (parseFloat(c.amount) < 0 ? 'prelievo' : 'versamento')) : 'versamento';
+  openModal(c ? 'Modifica Movimento' : `Nuovo Movimento — ${fund.name}`, `
     <form id="modal-form">
       <div class="form-row-2">
         <div class="form-group">
           <label class="form-label">Persona *</label>
           <input name="participant" class="form-input" required placeholder="es. Salvatore" value="${c?.participant || ''}" list="fund-participants-list" />
           <datalist id="fund-participants-list">
-            ${[...new Set(S.fundContributions.filter(x => x.fund_id === fund.id).map(x => x.participant))].map(p => `<option value="${p}"></option>`).join('')}
+            ${fundParticipantNames(fund.id).map(p => `<option value="${p}"></option>`).join('')}
           </datalist>
         </div>
         <div class="form-group">
@@ -3321,9 +3653,19 @@ function openNewContributionModal(fundId, contributionId = null) {
           <input name="date" type="date" class="form-input" required value="${c?.date || ''}" />
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Importo (€) *</label>
-        <input name="amount" type="number" step="0.01" min="0.01" class="form-input mono" required value="${c?.amount || ''}" />
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Tipo *</label>
+          <select name="type" class="form-input form-select" required>
+            <option value="versamento" ${curType === 'versamento' ? 'selected' : ''}>Versamento (aumenta la quota)</option>
+            <option value="prelievo"   ${curType === 'prelievo'   ? 'selected' : ''}>Prelievo (riduce la quota di chi lo fa)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Importo (€) *</label>
+          <input name="amount" type="number" step="0.01" min="0.01" class="form-input mono" required value="${c ? Math.abs(parseFloat(c.amount)) : ''}" />
+          <p class="text-muted text-sm" style="margin-top:4px">Importo sempre positivo: il segno lo mette il tipo.</p>
+        </div>
       </div>
       <div id="contrib-adjusted-preview" class="settings-row text-sm text-muted mb-12"></div>
       <div class="form-group">
@@ -3336,40 +3678,215 @@ function openNewContributionModal(fundId, contributionId = null) {
       </div>
     </form>
   `, async data => {
+    const name = data.participant.trim();
+    const amount = Math.abs(parseFloat(data.amount)) * (data.type === 'prelievo' ? -1 : 1);
     const payload = {
       user_id: S.session.user.id,
       fund_id: fund.id,
-      participant: data.participant.trim(),
+      participant: name,
+      participant_id: resolveFundParticipant(fund.id, name)?.id || null,
       date: data.date,
-      amount: parseFloat(data.amount),
+      amount,
+      type: data.type,
+      // Un movimento scritto a mano è confermato per definizione: 'da rivedere' esiste solo
+      // per quelli che arrivano dalla banca senza controparte riconosciuta.
+      status: 'confermato',
       notes: data.notes || '',
     };
     if (c) await sbUpd('fnz_fund_contributions', `id=eq.${c.id}`, payload);
     else   await sbIns('fnz_fund_contributions', payload);
+    await sbRpc('fnz_fund_recalc_adjusted', { p_fund_id: fund.id });
     await reload(); closeModal();
   });
   const dateInput   = document.querySelector('#modal-body input[name="date"]');
   const amountInput = document.querySelector('#modal-body input[name="amount"]');
+  const typeInput   = document.querySelector('#modal-body select[name="type"]');
   const preview     = $('contrib-adjusted-preview');
   const updatePreview = () => {
     const date   = dateInput.value;
-    const amount = parseFloat(amountInput.value);
+    const amount = Math.abs(parseFloat(amountInput.value)) * (typeInput.value === 'prelievo' ? -1 : 1);
     if (!date || !amount) { preview.innerHTML = ''; return; }
     const otherYears = S.fundContributions
-      .filter(x => x.fund_id === fund.id && x.id !== c?.id)
+      .filter(x => x.fund_id === fund.id && x.id !== c?.id && fundRowCounts(x))
       .map(x => parseInt(x.date.slice(0, 4), 10));
     const referenceYear = Math.min(parseInt(date.slice(0, 4), 10), ...(otherYears.length ? otherYears : [Infinity]));
     const idxMap = foiIndexMap();
     const coefficient = foiCoefficient(referenceYear, parseInt(date.slice(0, 4), 10), idxMap);
     if (coefficient == null) {
-      preview.innerHTML = `⚠️ Manca l'indice FOI per l'anno di riferimento (${referenceYear}) o per l'anno del versamento: impossibile attualizzare.`;
+      preview.innerHTML = `⚠️ Manca l'indice FOI per l'anno di riferimento (${referenceYear}) o per l'anno del movimento: impossibile rivalutare.`;
       return;
     }
     preview.innerHTML = `Valore al potere d'acquisto del ${referenceYear} (anno di riferimento del fondo): <strong>${fmtEURc(amount * coefficient)}</strong> <span class="text-muted">(coeff. ${coefficient.toFixed(4)})</span>`;
   };
   dateInput.addEventListener('input', updatePreview);
   amountInput.addEventListener('input', updatePreview);
+  typeInput.addEventListener('change', updatePreview);
   updatePreview();
+}
+/* ── Fondi — anagrafica partecipanti ─────────────────────────── */
+function openFundParticipantModal(fundId, participantId = null) {
+  const p = participantId ? S.fundParticipants.find(x => x.id === participantId) : null;
+  const targetFundId = p ? p.fund_id : fundId;
+  openModal(p ? 'Modifica Partecipante' : 'Nuovo Partecipante', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome e cognome *</label>
+        <input name="name" class="form-input" required placeholder="es. Teresa Leccisotti" value="${p?.name || ''}" />
+        <p class="text-muted text-sm" style="margin-top:4px">Usato come ripiego quando la banca non manda l'IBAN della controparte: il confronto ignora maiuscole e ordine (nome/cognome invertiti vanno bene lo stesso).</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">IBAN</label>
+        <input name="iban" class="form-input mono" placeholder="IT60X0542811101000000123456" value="${p?.iban || ''}" />
+        <p class="text-muted text-sm" style="margin-top:4px">Chiave di riconoscimento principale dei bonifici. Spazi e minuscole non contano.</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">
+          <input type="checkbox" name="active" ${!p || p.active ? 'checked' : ''} /> Attivo
+        </label>
+        <p class="text-muted text-sm" style="margin-top:4px">Un partecipante non attivo resta nello storico ma non viene più abbinato dal sync.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${p ? 'Salva' : 'Crea'}</button>
+      </div>
+    </form>
+  `, async data => {
+    const payload = {
+      user_id: S.session.user.id,
+      fund_id: targetFundId,
+      name: data.name.trim(),
+      iban: (data.iban || '').trim().toUpperCase().replace(/\s+/g, '') || null,
+      active: data.active === 'on',
+    };
+    if (p) await sbUpd('fnz_fund_participants', `id=eq.${p.id}`, payload);
+    else   await sbIns('fnz_fund_participants', payload);
+    // I movimenti già inseriti a mano con questo nome vengono agganciati all'anagrafica,
+    // altrimenti resterebbero due righe di quota per la stessa persona.
+    await reload();
+    const justSaved = S.fundParticipants.find(x => x.fund_id === targetFundId && x.name.trim().toUpperCase() === payload.name.toUpperCase());
+    if (justSaved) {
+      await sbUpd('fnz_fund_contributions',
+        `fund_id=eq.${targetFundId}&participant_id=is.null&participant=eq.${encodeURIComponent(payload.name)}`,
+        { participant_id: justSaved.id });
+      await reload();
+    }
+    closeModal();
+  });
+}
+/* ── Fondi — abbina un movimento rimasto senza partecipante ──── */
+function openAssignContributionModal(contributionId) {
+  const c = S.fundContributions.find(x => x.id === contributionId);
+  if (!c) return;
+  const participants = S.fundParticipants.filter(p => p.fund_id === c.fund_id);
+  if (!participants.length) { alert('Aggiungi prima almeno un partecipante in anagrafica.'); return; }
+  openModal('Abbina movimento', `
+    <form id="modal-form">
+      <div class="settings-row text-sm mb-12">
+        <strong>${fmtDate(c.date)}</strong> · <span class="mono">${fmtEURc(parseFloat(c.amount))}</span><br/>
+        Controparte: <strong>${c.counterparty_name || '—'}</strong><br/>
+        IBAN: <span class="mono">${c.counterparty_iban || '—'}</span><br/>
+        Causale: ${c.notes || '—'}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Partecipante *</label>
+        <select name="participant_id" class="form-input form-select" required>
+          ${participants.map(p => `<option value="${p.id}">${p.name}${p.iban ? ' — ' + p.iban : ''}</option>`).join('')}
+        </select>
+      </div>
+      <p class="text-muted text-sm mb-12">Se l'IBAN della controparte è quello del partecipante, conviene salvarlo nella sua anagrafica: i prossimi bonifici verranno riconosciuti da soli.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Abbina</button>
+      </div>
+    </form>
+  `, async data => {
+    const p = S.fundParticipants.find(x => x.id === data.participant_id);
+    await sbUpd('fnz_fund_contributions', `id=eq.${c.id}`, {
+      participant_id: p.id, participant: p.name, status: 'confermato',
+    });
+    await sbRpc('fnz_fund_recalc_adjusted', { p_fund_id: c.fund_id });
+    await reload(); closeModal();
+  });
+}
+/* ── Fondi — sincronizzazione dal conto bancario ──────────────
+   Stesso schema del sync di Spese Famiglia: prima un'anteprima in sola lettura di cosa
+   verrebbe importato e come è stata abbinata ogni controparte, poi la conferma.        */
+let _fundSyncPreview = null;
+async function syncFundNow(fundId) {
+  const fund = S.funds.find(f => f.id === fundId);
+  if (!fund) return;
+  openModal('Sincronizzazione', '<div class="empty-sm">🔍 Leggo i movimenti dal conto…</div>');
+  try {
+    const data = await sbFn('enable-banking-fondo-sync', { fundId, preview: true });
+    _fundSyncPreview = { fundId, ...data };
+    renderFundSyncPreview();
+  } catch (err) {
+    closeModal();
+    alert('Errore anteprima sincronizzazione: ' + err.message);
+  }
+}
+function renderFundSyncPreview() {
+  const d = _fundSyncPreview;
+  const items = d.items || [];
+  const matched = items.filter(i => i.status === 'auto').length;
+  const review  = items.length - matched;
+  openModal('Anteprima sincronizzazione', `
+    <p class="text-sm mb-12">
+      ${items.length} ${items.length === 1 ? 'movimento nuovo' : 'movimenti nuovi'} — <strong>${matched}</strong> abbinati a un partecipante, <strong>${review}</strong> da rivedere.<br/>
+      <span class="text-muted">Letti dalla banca: ${d.totalFetched} su ${d.pages} pagine · già importati in precedenza: ${d.alreadyImported} · scartati perché non bonifici: ${d.skippedNonTransfer}</span>
+    </p>
+    ${items.length === 0 ? '<div class="empty-sm">Niente di nuovo da importare.</div>' : `
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+      <table class="table">
+        <thead><tr><th></th><th>Data</th><th>Importo</th><th>Controparte</th><th>Abbinato a</th></tr></thead>
+        <tbody>${items.map((it, i) => `
+          <tr>
+            <td><input type="checkbox" checked data-sync-idx="${i}" /></td>
+            <td class="mono text-sm">${fmtDate(it.date)}</td>
+            <td class="mono ${it.amount < 0 ? 'text-neg' : 'text-pos'}">${fmtEURc(it.amount)}</td>
+            <td><div class="truncate" style="max-width:160px">${it.counterpartyName || '—'}</div></td>
+            <td>${it.participantName
+              ? `<strong>${it.participantName}</strong> <span class="text-muted text-sm">(${it.matchedVia})</span>`
+              : '<span class="badge badge-warn">da rivedere</span>'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
+    ${d.skippedNonTransfer ? `
+    <details style="margin-top:12px">
+      <summary class="text-sm text-muted">Movimenti scartati perché non riconosciuti come bonifici (${d.skippedNonTransfer})</summary>
+      <div class="text-sm text-muted" style="margin-top:8px">
+        ${(d.skippedNonTransferSample || []).map(x => `<div>${fmtDate(x.date)} · ${fmtEURc(x.amount)} · ${x.description || '—'}</div>`).join('') || 'Nessun dettaglio disponibile.'}
+      </div>
+    </details>` : ''}
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+      ${items.length ? '<button type="button" class="btn btn-primary" data-action="confirm-fund-sync">Importa selezionati</button>' : ''}
+    </div>
+  `);
+}
+async function confirmFundSync() {
+  const d = _fundSyncPreview;
+  if (!d) return;
+  const excludeExternalIds = [];
+  document.querySelectorAll('#modal-body input[data-sync-idx]').forEach(cb => {
+    if (!cb.checked) {
+      const it = d.items[parseInt(cb.dataset.syncIdx, 10)];
+      if (it?.externalId) excludeExternalIds.push(it.externalId);
+    }
+  });
+  openModal('Sincronizzazione', '<div class="empty-sm">🔄 Importo i movimenti…</div>');
+  try {
+    const res = await sbFn('enable-banking-fondo-sync', { fundId: d.fundId, excludeExternalIds });
+    _fundSyncPreview = null;
+    await reload();
+    closeModal();
+    alert(`✅ Sincronizzazione completata\n\nMovimenti importati: ${res.imported}` +
+          (res.toReview ? `\nDa rivedere (controparte non riconosciuta): ${res.toReview}` : ''));
+  } catch (err) {
+    closeModal();
+    alert('Errore sincronizzazione: ' + err.message);
+  }
 }
 function openFoiIndexModal() {
   const rows = S.foiIndex.slice().sort((a, b) => a.year - b.year);
@@ -4246,6 +4763,7 @@ function render() {
     case 'prodotti':           renderProdotti();           break;
     case 'analisi-costi':      caOpen($('view-analisi-costi')); break;
     case 'tag-config':         renderTagConfig();          break;
+    case 'conti-collegati':    renderBankConnections();    break;
     case 'impostazioni':       renderImpostazioni();       break;
   }
 }
@@ -4319,15 +4837,67 @@ document.addEventListener('click', async e => {
       break;
     case 'new-contribution':  openNewContributionModal(t.dataset.fundId); break;
     case 'edit-contribution': openNewContributionModal(null, t.dataset.id); break;
-    case 'del-contribution':
-      if (confirm('Eliminare questo versamento?')) { await sbDel('fnz_fund_contributions', `id=eq.${t.dataset.id}`); await reload(); }
+    case 'del-contribution': {
+      if (!confirm('Eliminare questo movimento?')) break;
+      const row = S.fundContributions.find(x => x.id === t.dataset.id);
+      await sbDel('fnz_fund_contributions', `id=eq.${t.dataset.id}`);
+      // Il movimento eliminato poteva essere il più vecchio: senza ricalcolo l'anno di
+      // riferimento del fondo resterebbe quello di una riga che non esiste più.
+      if (row) await sbRpc('fnz_fund_recalc_adjusted', { p_fund_id: row.fund_id });
+      await reload();
       break;
+    }
     case 'del-fund-participant':
-      if (confirm(`Rimuovere ${decodeURIComponent(t.dataset.participant)} e tutti i suoi versamenti da questo fondo? Le percentuali verranno ricalcolate sui restanti partecipanti.`)) {
+      if (confirm(`Rimuovere ${decodeURIComponent(t.dataset.participant)} e tutti i suoi movimenti da questo fondo? Le percentuali verranno ricalcolate sui restanti partecipanti.`)) {
         await sbDel('fnz_fund_contributions', `fund_id=eq.${t.dataset.fundId}&participant=eq.${t.dataset.participant}`);
+        await sbRpc('fnz_fund_recalc_adjusted', { p_fund_id: t.dataset.fundId });
         await reload();
       }
       break;
+    case 'new-fund-participant':  openFundParticipantModal(t.dataset.fundId); break;
+    case 'edit-fund-participant': openFundParticipantModal(null, t.dataset.id); break;
+    case 'del-fund-participant-row': {
+      const p = S.fundParticipants.find(x => x.id === t.dataset.id);
+      if (!p) break;
+      if (!confirm(`Eliminare ${p.name} dall'anagrafica? I suoi movimenti restano nel fondo, intestati al nome ma non più collegati a una scheda.`)) break;
+      await sbDel('fnz_fund_participants', `id=eq.${p.id}`);
+      await reload();
+      break;
+    }
+    case 'assign-contribution': openAssignContributionModal(t.dataset.id); break;
+    case 'set-contribution-status': {
+      const row = S.fundContributions.find(x => x.id === t.dataset.id);
+      if (!row) break;
+      await sbUpd('fnz_fund_contributions', `id=eq.${row.id}`, { status: t.dataset.status });
+      await sbRpc('fnz_fund_recalc_adjusted', { p_fund_id: row.fund_id });
+      await reload();
+      break;
+    }
+    case 'sync-fund':         await syncFundNow(t.dataset.fundId); break;
+    case 'confirm-fund-sync': await confirmFundSync(); break;
+    case 'new-bank-connection':  openBankConnectionModal(); break;
+    case 'edit-bank-connection': openBankConnectionModal(t.dataset.id); break;
+    case 'del-bank-connection': {
+      const conn = S.bankConnections.find(x => x.id === t.dataset.id);
+      if (!conn) break;
+      const usedBy = S.funds.filter(f => f.bank_connection_id === conn.id).map(f => f.name);
+      const warn = usedBy.length
+        ? `\n\nATTENZIONE: è il conto del fondo ${usedBy.join(', ')} — i movimenti già importati restano, ma il fondo non potrà più sincronizzare.`
+        : '';
+      if (!confirm(`Eliminare il collegamento a ${conn.aspsp_name}?${warn}`)) break;
+      await sbDel('cm_bank_connections', `id=eq.${conn.id}`);
+      await reload();
+      break;
+    }
+    case 'search-aspsp': await searchAspsps(); break;
+    case 'pick-aspsp': {
+      const r = (S.aspspResults || [])[parseInt(t.dataset.idx, 10)];
+      if (!r) break;
+      $('aspsp-name').value = r.name;
+      $('aspsp-country-final').value = r.country;
+      $('aspsp-results').innerHTML = `<div class="text-sm">✅ Selezionata: <strong>${r.name}</strong> (${r.country})</div>`;
+      break;
+    }
     case 'open-foi-index': openFoiIndexModal(); break;
     case 'add-foi-row': {
       const year = parseInt($('foi-year-new').value, 10);
@@ -4539,11 +5109,32 @@ async function startApp(session) {
   renderUserUI(session.user);
   $('btn-logout').addEventListener('click', logout);
   await loadAll();
+  handleBankConnectResult();
   render();
   history.replaceState({ view: S.view, portfolioId: S.portfolioId }, '');
   autoSaveSnapshot().then(() => {
     if (S.dashboardSnapshots.length > 0) renderDashboard();
   });
+}
+// Ritorno dal consenso sulla banca: enable-banking-callback reindirizza qui con
+// ?bank_connect=success|error. I parametri vengono tolti dall'URL, altrimenti un refresh
+// ripropone lo stesso messaggio all'infinito.
+function handleBankConnectResult() {
+  const params = new URLSearchParams(location.search);
+  const result = params.get('bank_connect');
+  if (!result) return;
+  const message = params.get('bank_connect_message');
+  params.delete('bank_connect');
+  params.delete('bank_connect_module');
+  params.delete('bank_connect_message');
+  const qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  S.view = 'conti-collegati';
+  setTimeout(() => {
+    alert(result === 'success'
+      ? '✅ Conto collegato correttamente.'
+      : '❌ Collegamento non riuscito: ' + (message || 'errore sconosciuto.'));
+  }, 100);
 }
 async function boot() {
   let session = null;

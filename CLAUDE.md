@@ -119,6 +119,14 @@ Tables are namespaced by app prefix:
 |---|---|
 | `cm_apps` | App registry for the launcher (title, description, html_file, score_query, active) |
 | `cm_categories` | Shared category taxonomy used by Tasks and Habit Tracker |
+| `cm_bank_connections` | Conti collegati via Enable Banking (PSD2). `module` = `'cost_analysis'` (Spese Famiglia) o `'fondo'` (modulo Fondi) |
+| `cm_sync_log` | Storico delle sincronizzazioni bancarie |
+
+Le due tabelle bancarie nascono come `ca_bank_connections` / `ca_sync_log` (Analisi Costi) e
+sono state rinominate quando i conti sono diventati condivisi con i Fondi
+(`20260803120000_cm_bank_connections_and_fondo_sync.sql`). Restano due **viste di
+compatibilità** con il vecchio nome, perché le Edge Function vengono ridistribuite solo quando
+il commit le tocca: si possono eliminare quando nessun client usa più `ca_bank_connections`.
 
 ### Tasks (`ts_`)
 | Table | Purpose |
@@ -151,6 +159,24 @@ Tables are namespaced by app prefix:
 | `el_groups` | Event category groups |
 | `el_events` | Event definitions |
 | `el_logs` | Event log entries |
+
+### Fondi (`fnz_fund*`)
+| Table | Purpose |
+|---|---|
+| `fnz_funds` | Fondi comuni; `bank_connection_id` = conto da cui importare i movimenti |
+| `fnz_fund_participants` | Anagrafica partecipanti di un fondo: `name`, `iban` (chiave di match del sync), `active` |
+| `fnz_fund_contributions` | Movimenti: importo **con segno** (`type` `'versamento'` > 0 / `'prelievo'` < 0), `status`, `participant_id`, `external_id` |
+| `fnz_foi_index` | Indice ISTAT FOI (media annua) per la rivalutazione |
+
+`fnz_fund_contributions.status` decide se il movimento conta: `auto` (abbinato dal sync) e
+`confermato` entrano nelle quote, `da_rivedere` (controparte non riconosciuta) e `escluso` no.
+`participant` (testo) resta popolato accanto a `participant_id`: i fondi nati prima
+dell'anagrafica non hanno partecipanti anagrafici e continuano a funzionare così.
+
+`amount_adjusted` è una **cache** della rivalutazione, riempita da
+`fnz_fund_recalc_adjusted(p_fund_id)`; il valore mostrato a schermo lo ricalcola comunque
+`computeFundShares()` in `finanza.html`. Chiamare la RPC dopo ogni scrittura sui movimenti o
+sull'indice FOI, altrimenti la colonna resta indietro rispetto a quello che si vede nell'app.
 
 ### Weight Quest (`ps_`)
 | Table | Purpose |
@@ -299,6 +325,9 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | Funzione | Job | Cosa fa |
 |---|---|---|
 | `get-prices` | orario | Aggiorna `fnz_price_cache` (un trigger propaga su `fnz_price_history`). Una fonte diversa per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko in batch + Coinbase come ripiego, azioni→TwelveData/GoogleFinance |
+| `enable-banking-connect` / `-callback` / `-aspsps` | — | Collegamento di un conto: catalogo banche, avvio del consenso e redirect di ritorno. Il `module` passato a `connect` viaggia nello state e decide dove riporta il callback |
+| `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
+| `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Ora legale nei cron
@@ -422,6 +451,11 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   categorizza e si configura (categorie, persone, regole, conti collegati, viaggi) — si apre dal
   collegamento *🛠️ Spese Famiglia — gestione* nella sidebar di `finanza.html` o dalla notifica
   Smart Block.
+- **Non configura più i conti bancari**: collegamento, consenso ed eliminazione stanno in
+  `finanza.html` → Configurazione → 🏦 Conti Collegati, perché gli stessi conti servono anche
+  ai Fondi. In `cost-analysis.html` resta la pagina *Sincronizza e Carte*: il sync di Spese
+  Famiglia non si può spostare perché subito dopo l'import fa girare merchant appresi, regole
+  e attribuzione per carta, che vivono solo lì.
 - La **consultazione** è stata spostata dentro le due app dove serve, come vista in sola lettura:
   `finanza.html` (Salvatore) e `situazione-teresa.html` (Teresa) — vedi sotto.
 

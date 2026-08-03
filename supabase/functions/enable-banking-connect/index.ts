@@ -7,9 +7,14 @@
 // SUPABASE_SERVICE_ROLE_KEY (per decodificare in sicurezza l'utente chiamante).
 //
 // Il callback dopo il consenso arriva su enable-banking-callback, che crea davvero la riga
-// in ca_bank_connections — questa function non scrive nel database.
+// in cm_bank_connections — questa function non scrive nel database.
 //
 // v1 — 2026-07-18
+// v2 — 2026-08-03: i conti sono condivisi tra moduli. "module" dice a quale modulo serve il
+//   conto ('cost_analysis' = Spese Famiglia, 'fondo' = modulo Fondi) e viaggia nello state
+//   fino al callback, che lo usa per riportare l'utente sulla pagina giusta. ownerPersonId
+//   (la persona di Analisi Costi a cui attribuire le spese) diventa facoltativo: per un conto
+//   del fondo non esiste "chi ha speso".
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,7 +95,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string };
+  let body: { aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string; module?: string };
   try {
     body = await req.json();
   } catch {
@@ -103,21 +108,37 @@ Deno.serve(async (req) => {
   const aspspName = (body.aspspName || '').trim();
   const country = (body.country || '').trim().toUpperCase();
   const ownerPersonId = (body.ownerPersonId || '').trim();
-  if (!aspspName || !country || !ownerPersonId) {
+  const module = (body.module || 'cost_analysis').trim();
+  if (!aspspName || !country) {
     return new Response(
-      JSON.stringify({ error: { message: 'Servono "aspspName", "country" e "ownerPersonId".' } }),
+      JSON.stringify({ error: { message: 'Servono "aspspName" e "country".' } }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (module !== 'cost_analysis' && module !== 'fondo') {
+    return new Response(
+      JSON.stringify({ error: { message: '"module" ammette solo "cost_analysis" o "fondo".' } }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  // Su Spese Famiglia ogni transazione va attribuita a una persona: senza owner il sync non
+  // saprebbe a chi intestare la spesa. Sul fondo la domanda non si pone.
+  if (module === 'cost_analysis' && !ownerPersonId) {
+    return new Response(
+      JSON.stringify({ error: { message: 'Per un conto di Spese Famiglia serve "ownerPersonId".' } }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
-  // Correlazione col callback: dati necessari per creare la riga ca_bank_connections dopo il
+  // Correlazione col callback: dati necessari per creare la riga cm_bank_connections dopo il
   // consenso, dato che il redirect dalla banca non porta con sé l'header Authorization.
   const validUntil = new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(); // 180 giorni, il massimo consentito da PSD2
   const state = base64url(JSON.stringify({
     userId,
-    ownerPersonId,
+    ownerPersonId: ownerPersonId || null,
     aspspName,
     displayName: body.displayName || null,
+    module,
     validUntil,
   }));
 

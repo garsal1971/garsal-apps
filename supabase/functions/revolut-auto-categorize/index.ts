@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
 
   // Modalità test: POST con body { "test_transactions": [ ... shape Enable Banking ... ] }
   // salta la vera chiamata a Enable Banking e usa queste transazioni finte. Nessuna scrittura
-  // (ca_transactions, ca_transaction_categories, cm_notification_queue, ca_sync_log) viene
+  // (ca_transactions, ca_transaction_categories, cm_notification_queue, cm_sync_log) viene
   // eseguita: la function calcola dedup/categorizzazione/notifica e restituisce solo l'anteprima
   // in JSON. verify_jwt resta true (default) quindi resta comunque richiesta una chiamata
   // autenticata (anon key o service role key vanno bene).
@@ -270,7 +270,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
   const { data: connection } = await supabase
-    .from('ca_bank_connections')
+    .from('cm_bank_connections')
     .select('*')
     .eq('user_id', userId)
     .eq('aspsp_name', 'Revolut')
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
   const { data: syncLog } = isDryRun
     ? { data: null }
     : await supabase
-        .from('ca_sync_log')
+        .from('cm_sync_log')
         .insert({ user_id: userId, bank_connection_id: bankConnectionId, status: 'running' })
         .select()
         .single();
@@ -763,7 +763,7 @@ Deno.serve(async (req) => {
     }
 
     if (syncLog) {
-      await supabase.from('ca_sync_log').update({
+      await supabase.from('cm_sync_log').update({
         finished_at: new Date().toISOString(),
         status: 'success',
         imported_count: importedCount,
@@ -778,7 +778,7 @@ Deno.serve(async (req) => {
     }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
     if (syncLog) {
-      await supabase.from('ca_sync_log').update({
+      await supabase.from('cm_sync_log').update({
         finished_at: new Date().toISOString(),
         status: 'error',
         error_message: (e as Error).message,
