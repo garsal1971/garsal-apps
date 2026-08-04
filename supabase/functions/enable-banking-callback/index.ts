@@ -69,26 +69,33 @@ async function createEnableBankingJWT(appId: string, privateKeyPem: string): Pro
   return `${signingInput}.${base64url(signature)}`;
 }
 
-// I conti arrivano in forme diverse a seconda dell'ASPSP: lista di oggetti (con uid,
-// account_id, resource_id o identification_hash), lista di stringhe già pronte, oppure sotto
-// la chiave account_ids invece che accounts.
+// I conti possono arrivare in tre posti diversi, e non sempre insieme: "accounts_data"
+// (oggetti completi, con IBAN), "accounts" (spesso solo gli uid come stringhe) e
+// "account_ids". Si leggono tutti e si uniscono per uid, tenendo l'IBAN quando c'è: leggere
+// solo "accounts" significa perdere il conto quando la banca popola soltanto accounts_data.
+// uid deve essere una stringa — in Enable Banking account_id è spesso l'oggetto { iban }, e
+// prenderlo per buono salverebbe "[object Object]" come identificativo del conto.
+// NOTA: questa funzione è duplicata in enable-banking-callback e
+// enable-banking-refresh-accounts (le Edge Function non condividono moduli): vanno tenute
+// allineate.
 function extractAccounts(data: any): { uid: string; iban: string | null }[] {
-  const raw: unknown[] = Array.isArray(data?.accounts)
-    ? data.accounts
-    : Array.isArray(data?.account_ids)
-      ? data.account_ids
-      : [];
-  return raw
-    .map((acc: any) => {
-      if (typeof acc === 'string') return { uid: acc, iban: null };
-      // uid deve essere una stringa: in Enable Banking account_id è spesso l'oggetto
-      // { iban }, e prenderlo per buono salverebbe "[object Object]" come id del conto.
-      const candidates = [acc?.uid, acc?.account_id, acc?.id, acc?.resource_id, acc?.resourceId, acc?.identification_hash];
-      const uid = candidates.find((v: unknown) => typeof v === 'string' && v.length > 0) as string | undefined;
-      const iban = acc?.account_id?.iban || acc?.identification?.iban || acc?.iban || null;
-      return uid ? { uid, iban: iban ? String(iban) : null } : null;
-    })
-    .filter((x): x is { uid: string; iban: string | null } => x !== null);
+  const found = new Map<string, string | null>();
+  const add = (uid: unknown, iban: unknown) => {
+    if (typeof uid !== 'string' || !uid) return;
+    const ibanStr = typeof iban === 'string' && iban ? iban : null;
+    if (!found.has(uid) || (ibanStr && !found.get(uid))) found.set(uid, ibanStr);
+  };
+  for (const key of ['accounts_data', 'accounts', 'account_ids']) {
+    const list = (data || {})[key];
+    if (!Array.isArray(list)) continue;
+    for (const acc of list) {
+      if (typeof acc === 'string') { add(acc, null); continue; }
+      const uid = [acc?.uid, acc?.account_id, acc?.id, acc?.resource_id, acc?.resourceId, acc?.identification_hash]
+        .find((v: unknown) => typeof v === 'string' && v.length > 0);
+      add(uid, acc?.account_id?.iban || acc?.identification?.iban || acc?.iban || null);
+    }
+  }
+  return [...found.entries()].map(([uid, iban]) => ({ uid, iban }));
 }
 
 // Diagnostica leggibile senza esporre l'intera risposta: chiavi presenti e forma dei campi
