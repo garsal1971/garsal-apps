@@ -18,6 +18,8 @@
 // v3 — 2026-08-04: "iban" facoltativo, passato in access.accounts (vedi il commento sulla
 //   chiamata /auth: senza, UniCredit autorizza una sessione senza nessun conto dentro).
 
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -148,6 +150,33 @@ Deno.serve(async (req) => {
   const supabaseProjectRef = new URL(Deno.env.get('SUPABASE_URL') || '').hostname.split('.')[0];
   const redirectUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/enable-banking-callback`;
 
+  // Traccia di cosa si sta per chiedere: quando la sessione torna autorizzata ma senza
+  // conti, l'unico modo per sapere se l'IBAN era stato spedito è averlo scritto qui prima
+  // di partire. L'IBAN viene mascherato: serve sapere se c'era, non qual era.
+  const accessRequested = {
+    valid_until: validUntil,
+    balances: true,
+    transactions: true,
+    ...(iban ? { accounts: [{ iban }] } : {}),
+  };
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceRoleKey) {
+      await createClient(supabaseUrl, serviceRoleKey).from('cm_sync_log').insert({
+        user_id: userId,
+        finished_at: new Date().toISOString(),
+        status: 'consent_request',
+        imported_count: 0,
+        error_message: `Richiesta consenso ${aspspName} (${country}) · modulo ${module} · IBAN ` +
+          (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO') +
+          ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}`,
+      });
+    }
+  } catch {
+    // La traccia è diagnostica: se non si riesce a scrivere, il collegamento va avanti lo stesso.
+  }
+
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
     const authRes = await fetch(`${ENABLE_BANKING_API_BASE}/auth`, {
@@ -160,12 +189,7 @@ Deno.serve(async (req) => {
         // vogliono sapere in anticipo su quale conto vale il consenso, quindi quando l'IBAN
         // è noto lo si passa esplicitamente. balances/transactions erano già i default
         // aggiunti da Enable Banking: meglio dichiararli invece di ereditarli in silenzio.
-        access: {
-          valid_until: validUntil,
-          balances: true,
-          transactions: true,
-          ...(iban ? { accounts: [{ iban }] } : {}),
-        },
+        access: accessRequested,
         aspsp: { name: aspspName, country },
         state,
         redirect_url: redirectUrl,
