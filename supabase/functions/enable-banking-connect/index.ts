@@ -99,7 +99,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string; module?: string; iban?: string };
+  let body: {
+    aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string;
+    module?: string; iban?: string; allowAllAccounts?: boolean; clientVersion?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -114,6 +117,9 @@ Deno.serve(async (req) => {
   const ownerPersonId = (body.ownerPersonId || '').trim();
   const module = (body.module || 'cost_analysis').trim();
   const iban = (body.iban || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Rinuncia esplicita all'IBAN: la manda solo la casella "la mia banca non lo richiede".
+  const allowAllAccounts = body.allowAllAccounts === true;
+  const clientVersion = (body.clientVersion || '').trim() || 'non dichiarata';
   if (!aspspName || !country) {
     return new Response(
       JSON.stringify({ error: { message: 'Servono "aspspName" e "country".' } }),
@@ -131,6 +137,20 @@ Deno.serve(async (req) => {
   if (module === 'cost_analysis' && !ownerPersonId) {
     return new Response(
       JSON.stringify({ error: { message: 'Per un conto di Spese Famiglia serve "ownerPersonId".' } }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Un consenso senza IBAN, con le banche che pretendono l'elenco dei conti, produce una
+  // sessione autorizzata e vuota: l'utente fa login e SCA per niente e se ne accorge dopo.
+  // È già successo tre volte, quindi il rifiuto sta qui e non solo nel form: una pagina
+  // vecchia (che l'IBAN non lo chiede nemmeno) deve fallire subito e a voce alta.
+  if (!iban && !allowAllAccounts) {
+    return new Response(
+      JSON.stringify({ error: { message:
+        `Manca l'IBAN del conto. Senza, alcune banche (UniCredit) autorizzano un consenso che non ` +
+        `collega nessun conto. Se la tua banca non lo richiede, spunta l'opzione apposita nel form. ` +
+        `Se non vedi il campo IBAN la pagina è una versione vecchia (client: ${clientVersion}): ricaricala.` } }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -169,8 +189,9 @@ Deno.serve(async (req) => {
         status: 'consent_request',
         imported_count: 0,
         error_message: `Richiesta consenso ${aspspName} (${country}) · modulo ${module} · IBAN ` +
-          (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO') +
-          ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}`,
+          (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
+          ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
+          ` · client ${clientVersion}`,
       });
     }
   } catch {
