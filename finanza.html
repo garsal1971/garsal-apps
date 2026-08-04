@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.1';
-const APP_BUILD   = '2026-08-03T14:10:00Z';
+const APP_VERSION = 'v1.1.2';
+const APP_BUILD   = '2026-08-04T09:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2381,8 +2381,11 @@ function renderBankConnections() {
         </div>
         <div class="settings-row text-sm">Modulo: <strong>${BANK_MODULE_LABEL[c.module] || c.module}</strong> · Stato: <strong>${c.status}</strong></div>
         ${fundsUsing.length ? `<div class="settings-row text-sm">Usato dal fondo: <strong>${fundsUsing.join(', ')}</strong></div>` : ''}
-        ${c.account_id ? '' : '<div class="settings-row text-sm text-muted">⚠️ Registrato a mano, senza consenso bancario: la sincronizzazione non può funzionare.</div>'}
+        ${c.account_id
+          ? `<div class="settings-row text-sm text-muted">ID conto: <span class="mono">${c.account_id}</span></div>`
+          : `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Nessun conto associato: la banca non ne ha elencati. La sincronizzazione non parte finché manca.</div>`}
         <div class="settings-row">${consent}</div>
+        ${c.consent_id ? `<div class="settings-row"><button class="btn btn-outline btn-sm" data-action="refresh-bank-accounts" data-id="${c.id}">🔍 Rileggi i conti dalla banca</button></div>` : ''}
       </div>`;
   };
   const group = (module, empty) => {
@@ -2551,6 +2554,37 @@ function openBankConnectionModal(connectionId = null) {
     const guess = ASPSP_DEFAULT_COUNTRY[nameInput.value.trim()];
     if (guess && !countryInput.value) countryInput.value = guess;
   });
+}
+/* Rilegge i conti di una sessione già ottenuta: la banca ha dato il consenso ma non ha
+   elencato i conti, e rifare login e SCA a ogni tentativo non ha senso. Mostra anche la
+   risposta grezza, che è l'unico modo per capire cosa manda davvero l'ASPSP.            */
+async function refreshBankAccounts(connectionId) {
+  openModal('Rilettura conti', '<div class="empty-sm">🔍 Interrogo la sessione…</div>');
+  try {
+    const res = await sbFn('enable-banking-refresh-accounts', { bankConnectionId: connectionId });
+    await reload();
+    const found = (res.accounts || []).length;
+    openModal(found ? 'Conti trovati' : 'Nessun conto nella sessione', `
+      ${found
+        ? `<p class="text-sm mb-12">Trovati <strong>${found}</strong> conti — aggiornati: ${res.updated}, aggiunti: ${res.created}.</p>
+           <div class="table-wrap"><table class="table">
+             <thead><tr><th>IBAN</th><th>ID conto</th></tr></thead>
+             <tbody>${res.accounts.map(a => `<tr><td class="mono text-sm">${a.iban || '—'}</td><td class="mono text-sm">${a.uid}</td></tr>`).join('')}</tbody>
+           </table></div>`
+        : `<p class="text-sm mb-12">La sessione è valida${res.sessionStatus ? ` (stato: <strong>${res.sessionStatus}</strong>)` : ''} ma non contiene nessun conto.</p>`}
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Risposta di Enable Banking</label>
+        <textarea class="form-input mono" rows="8" readonly style="font-size:.72rem">${(res.raw || '').replace(/</g, '&lt;')}</textarea>
+        <p class="text-muted text-sm" style="margin-top:4px">Copia questo testo se serve capire perché la banca non elenca i conti.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-action="close-modal">Chiudi</button>
+      </div>
+    `);
+  } catch (err) {
+    closeModal();
+    alert('Errore rilettura conti: ' + err.message);
+  }
 }
 async function searchAspsps() {
   const country = ($('aspsp-country').value || '').trim().toUpperCase();
@@ -4930,6 +4964,7 @@ document.addEventListener('click', async e => {
       await reload();
       break;
     }
+    case 'refresh-bank-accounts': await refreshBankAccounts(t.dataset.id); break;
     case 'search-aspsp': await searchAspsps(); break;
     case 'pick-aspsp': {
       const r = (S.aspspResults || [])[parseInt(t.dataset.idx, 10)];

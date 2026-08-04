@@ -81,9 +81,12 @@ function extractAccounts(data: any): { uid: string; iban: string | null }[] {
   return raw
     .map((acc: any) => {
       if (typeof acc === 'string') return { uid: acc, iban: null };
-      const uid = acc?.uid || acc?.account_id || acc?.id || acc?.resource_id || acc?.resourceId || acc?.identification_hash || null;
-      const iban = acc?.identification?.iban || acc?.iban || acc?.account_id?.iban || null;
-      return uid ? { uid: String(uid), iban: iban ? String(iban) : null } : null;
+      // uid deve essere una stringa: in Enable Banking account_id è spesso l'oggetto
+      // { iban }, e prenderlo per buono salverebbe "[object Object]" come id del conto.
+      const candidates = [acc?.uid, acc?.account_id, acc?.id, acc?.resource_id, acc?.resourceId, acc?.identification_hash];
+      const uid = candidates.find((v: unknown) => typeof v === 'string' && v.length > 0) as string | undefined;
+      const iban = acc?.account_id?.iban || acc?.identification?.iban || acc?.iban || null;
+      return uid ? { uid, iban: iban ? String(iban) : null } : null;
     })
     .filter((x): x is { uid: string; iban: string | null } => x !== null);
 }
