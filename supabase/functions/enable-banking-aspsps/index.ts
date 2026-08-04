@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { query?: string; country?: string };
+  let body: { query?: string; country?: string; detail?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -71,6 +71,10 @@ Deno.serve(async (req) => {
   }
   const query = (body.query || '').trim().toLowerCase();
   const country = (body.country || '').trim().toUpperCase();
+  // detail=true restituisce la voce di catalogo per intero invece del solo nome: serve a
+  // capire cosa una banca dichiara di pretendere (metodi di autenticazione, tipi di PSU,
+  // header o credenziali obbligatorie) quando il consenso riesce ma non collega niente.
+  const detail = body.detail === true;
 
   // Il catalogo /aspsps di Enable Banking va interrogato per paese: senza "country" l'API
   // sembra restituire solo un sottoinsieme di default (es. le banche del paese associato
@@ -97,7 +101,7 @@ Deno.serve(async (req) => {
         const key = name + '|' + (a.country || c);
         if (seen.has(key)) continue;
         seen.add(key);
-        allResults.push({ name, country: a.country || c, logo: a.logo || null });
+        allResults.push(detail ? { ...a, name, country: a.country || c } : { name, country: a.country || c, logo: a.logo || null });
       }
     }
 

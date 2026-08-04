@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.6';
-const APP_BUILD   = '2026-08-04T16:40:00Z';
+const APP_VERSION = 'v1.1.7';
+const APP_BUILD   = '2026-08-04T17:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2469,6 +2469,7 @@ function openBankConnectionModal(connectionId = null) {
           <button type="button" class="btn btn-outline" data-action="search-aspsp">🔍 Cerca</button>
         </div>
         <div id="aspsp-results" style="max-height:180px;overflow-y:auto;margin-top:8px"></div>
+        <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" data-action="aspsp-detail">ℹ️ Cosa richiede questa banca</button>
       </div>`}
       <div class="form-row-2">
         <div class="form-group">
@@ -2611,6 +2612,24 @@ async function refreshBankAccounts(connectionId) {
   } catch (err) {
     closeModal();
     alert('Errore rilettura conti: ' + err.message);
+  }
+}
+/* Voce di catalogo per intero: quando una banca autorizza il consenso ma non restituisce
+   conti, la differenza rispetto a una che funziona sta in quello che dichiara qui —
+   metodi di autenticazione, tipi di PSU ammessi, header o credenziali obbligatorie.     */
+async function showAspspDetail() {
+  const name    = ($('aspsp-name').value || '').trim();
+  const country = ($('aspsp-country-final').value || $('aspsp-country').value || '').trim().toUpperCase();
+  if (!name || !country) { alert('Indica prima banca e paese.'); return; }
+  const box = $('aspsp-results');
+  box.innerHTML = '<div class="text-sm text-muted">Leggo il catalogo…</div>';
+  try {
+    const data = await sbFn('enable-banking-aspsps', { country, query: name, detail: true });
+    const entry = (data.results || []).find(r => r.name.toLowerCase() === name.toLowerCase()) || (data.results || [])[0];
+    if (!entry) { box.innerHTML = '<div class="text-sm text-muted">Banca non trovata nel catalogo.</div>'; return; }
+    box.innerHTML = `<textarea class="form-input mono" rows="10" readonly style="font-size:.7rem">${JSON.stringify(entry, null, 2).replace(/</g, '&lt;')}</textarea>`;
+  } catch (err) {
+    box.innerHTML = `<div class="text-sm text-neg">Errore: ${err.message}</div>`;
   }
 }
 async function searchAspsps() {
@@ -4993,6 +5012,7 @@ document.addEventListener('click', async e => {
     }
     case 'refresh-bank-accounts': await refreshBankAccounts(t.dataset.id); break;
     case 'search-aspsp': await searchAspsps(); break;
+    case 'aspsp-detail': await showAspspDetail(); break;
     case 'pick-aspsp': {
       const r = (S.aspspResults || [])[parseInt(t.dataset.idx, 10)];
       if (!r) break;
