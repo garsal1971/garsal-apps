@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.3';
-const APP_BUILD   = '2026-08-04T09:40:00Z';
+const APP_VERSION = 'v1.1.4';
+const APP_BUILD   = '2026-08-04T15:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2486,9 +2486,12 @@ function openBankConnectionModal(connectionId = null) {
       </div>
       ${c ? '' : `
       <div class="form-group">
-        <label class="form-label">IBAN del conto</label>
-        <input name="iban" class="form-input mono" placeholder="IT60X0542811101000000123456" />
-        <p class="text-muted text-sm" style="margin-top:4px"><strong>Obbligatorio per UniCredit.</strong> Alcune banche autorizzano il consenso ma non collegano nessun conto se non sanno in anticipo di quale conto si parla (è quello che è successo al primo tentativo: sessione autorizzata, zero conti). Con Revolut si può lasciare vuoto.</p>
+        <label class="form-label">IBAN del conto *</label>
+        <input name="iban" id="conn-iban" class="form-input mono" required placeholder="IT60X0542811101000000123456" />
+        <p class="text-muted text-sm" style="margin-top:4px">Alcune banche (UniCredit) autorizzano il consenso ma non collegano nessun conto se non sanno in anticipo di quale conto si parla: la sessione risulta valida e vuota. Per questo l'IBAN è richiesto.</p>
+        <label class="text-muted text-sm" style="display:block;margin-top:6px">
+          <input type="checkbox" id="conn-iban-skip" /> La mia banca non lo richiede (es. Revolut): chiedi il consenso su tutti i conti
+        </label>
       </div>`}
       ${c ? `
       <div class="form-group">
@@ -2555,6 +2558,15 @@ function openBankConnectionModal(connectionId = null) {
   };
   moduleSel.addEventListener('change', syncOwnerVisibility);
   syncOwnerVisibility();
+  // L'IBAN è obbligatorio salvo rinuncia esplicita: lasciarlo vuoto per distrazione
+  // significa ottenere un consenso valido ma inservibile, e accorgersene solo dopo l'SCA.
+  const ibanInput = $('conn-iban');
+  const ibanSkip  = $('conn-iban-skip');
+  ibanSkip.addEventListener('change', () => {
+    ibanInput.required = !ibanSkip.checked;
+    ibanInput.disabled = ibanSkip.checked;
+    if (ibanSkip.checked) ibanInput.value = '';
+  });
   const nameInput = $('aspsp-name');
   const countryInput = $('aspsp-country-final');
   nameInput.addEventListener('input', () => {
