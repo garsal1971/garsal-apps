@@ -17,6 +17,9 @@
 //   del fondo non esiste "chi ha speso".
 // v3 — 2026-08-04: "iban" facoltativo, passato in access.accounts (vedi il commento sulla
 //   chiamata /auth: senza, UniCredit autorizza una sessione senza nessun conto dentro).
+// v4 — 2026-08-04: header PSU (psu-ip-address) su ogni chiamata a Enable Banking. UniCredit
+//   lo dichiara obbligatorio in required_psu_headers e senza autorizzava un consenso senza
+//   conti, in silenzio; Revolut non lo richiede, per questo funzionava.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -70,6 +73,22 @@ function decodeSupabaseJwtSub(token: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Alcune banche pretendono di sapere da quale IP arriva l'utente che sta autorizzando: lo
+// dichiarano in required_psu_headers nel catalogo /aspsps (UniCredit IT chiede
+// "psu-ip-address"). Senza quell'header il consenso viene comunque autorizzato, ma la banca
+// non espone nessun conto — e non arriva nessun errore che lo spieghi.
+// L'IP è quello del browser dell'utente, che raggiunge la Edge Function in x-forwarded-for:
+// se manca (chiamata da un job, senza utente davanti) l'header non si inventa.
+function psuHeaders(req: Request): Record<string, string> {
+  const fwd = req.headers.get('x-forwarded-for') || '';
+  const ip = fwd.split(',')[0].trim();
+  if (!ip) return {};
+  const headers: Record<string, string> = { 'psu-ip-address': ip };
+  const ua = req.headers.get('user-agent');
+  if (ua) headers['psu-user-agent'] = ua;
+  return headers;
 }
 
 Deno.serve(async (req) => {
@@ -173,6 +192,7 @@ Deno.serve(async (req) => {
   // Traccia di cosa si sta per chiedere: quando la sessione torna autorizzata ma senza
   // conti, l'unico modo per sapere se l'IBAN era stato spedito è averlo scritto qui prima
   // di partire. L'IBAN viene mascherato: serve sapere se c'era, non qual era.
+  const psu = psuHeaders(req);
   const accessRequested = {
     valid_until: validUntil,
     balances: true,
@@ -191,6 +211,7 @@ Deno.serve(async (req) => {
         error_message: `Richiesta consenso ${aspspName} (${country}) · modulo ${module} · IBAN ` +
           (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
           ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
+          ` · psu-ip-address: ${psu['psu-ip-address'] ? 'inviato' : 'ASSENTE'}` +
           ` · client ${clientVersion}`,
       });
     }
@@ -202,7 +223,7 @@ Deno.serve(async (req) => {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
     const authRes = await fetch(`${ENABLE_BANKING_API_BASE}/auth`, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json', ...psu },
       body: JSON.stringify({
         // Con Revolut basta chiedere "tutti i conti" (nessun elenco in access.accounts).
         // Con UniCredit no: la sessione torna AUTHORIZED e valida ma con accounts: [] e

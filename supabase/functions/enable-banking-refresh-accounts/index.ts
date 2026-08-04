@@ -86,6 +86,22 @@ function extractAccounts(data: any): { uid: string; iban: string | null }[] {
   return [...found.entries()].map(([uid, iban]) => ({ uid, iban }));
 }
 
+// Alcune banche pretendono di sapere da quale IP arriva l'utente che sta autorizzando: lo
+// dichiarano in required_psu_headers nel catalogo /aspsps (UniCredit IT chiede
+// "psu-ip-address"). Senza quell'header il consenso viene comunque autorizzato, ma la banca
+// non espone nessun conto — e non arriva nessun errore che lo spieghi.
+// L'IP è quello del browser dell'utente, che raggiunge la Edge Function in x-forwarded-for:
+// se manca (chiamata da un job, senza utente davanti) l'header non si inventa.
+function psuHeaders(req: Request): Record<string, string> {
+  const fwd = req.headers.get('x-forwarded-for') || '';
+  const ip = fwd.split(',')[0].trim();
+  if (!ip) return {};
+  const headers: Record<string, string> = { 'psu-ip-address': ip };
+  const ua = req.headers.get('user-agent');
+  if (ua) headers['psu-user-agent'] = ua;
+  return headers;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
@@ -128,7 +144,7 @@ Deno.serve(async (req) => {
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
     const res = await fetch(`${ENABLE_BANKING_API_BASE}/sessions/${connection.consent_id}`, {
-      headers: { Authorization: 'Bearer ' + jwt },
+      headers: { Authorization: 'Bearer ' + jwt, ...psuHeaders(req) },
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {

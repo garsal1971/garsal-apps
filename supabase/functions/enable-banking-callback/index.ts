@@ -121,6 +121,22 @@ function redirectTo(status: 'success' | 'error' | 'partial', message?: string, m
   return new Response(null, { status: 302, headers: { Location: url.toString() } });
 }
 
+// Alcune banche pretendono di sapere da quale IP arriva l'utente che sta autorizzando: lo
+// dichiarano in required_psu_headers nel catalogo /aspsps (UniCredit IT chiede
+// "psu-ip-address"). Senza quell'header il consenso viene comunque autorizzato, ma la banca
+// non espone nessun conto — e non arriva nessun errore che lo spieghi.
+// L'IP è quello del browser dell'utente, che raggiunge la Edge Function in x-forwarded-for:
+// se manca (chiamata da un job, senza utente davanti) l'header non si inventa.
+function psuHeaders(req: Request): Record<string, string> {
+  const fwd = req.headers.get('x-forwarded-for') || '';
+  const ip = fwd.split(',')[0].trim();
+  if (!ip) return {};
+  const headers: Record<string, string> = { 'psu-ip-address': ip };
+  const ua = req.headers.get('user-agent');
+  if (ua) headers['psu-user-agent'] = ua;
+  return headers;
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
@@ -160,9 +176,10 @@ Deno.serve(async (req) => {
 
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);
+    const psu = psuHeaders(req);
     const sessionRes = await fetch(`${ENABLE_BANKING_API_BASE}/sessions`, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json', ...psu },
       body: JSON.stringify({ code }),
     });
     const sessionData = await sessionRes.json();
@@ -183,7 +200,7 @@ Deno.serve(async (req) => {
     let detailData: any = null;
     if (!accounts.length && sessionId) {
       const detailRes = await fetch(`${ENABLE_BANKING_API_BASE}/sessions/${sessionId}`, {
-        headers: { Authorization: 'Bearer ' + jwt },
+        headers: { Authorization: 'Bearer ' + jwt, ...psu },
       });
       detailData = await detailRes.json().catch(() => ({}));
       if (detailRes.ok) {
