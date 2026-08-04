@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.5';
-const APP_BUILD   = '2026-08-04T15:50:00Z';
+const APP_VERSION = 'v1.1.6';
+const APP_BUILD   = '2026-08-04T16:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2490,7 +2490,7 @@ function openBankConnectionModal(connectionId = null) {
         <input name="iban" id="conn-iban" class="form-input mono" required placeholder="IT60X0542811101000000123456" />
         <p class="text-muted text-sm" style="margin-top:4px">Alcune banche (UniCredit) autorizzano il consenso ma non collegano nessun conto se non sanno in anticipo di quale conto si parla: la sessione risulta valida e vuota. Per questo l'IBAN è richiesto.</p>
         <label class="text-muted text-sm" style="display:block;margin-top:6px">
-          <input type="checkbox" id="conn-iban-skip" /> La mia banca non lo richiede (es. Revolut): chiedi il consenso su tutti i conti
+          <input type="checkbox" name="skip_iban" id="conn-iban-skip" /> La mia banca non lo richiede (es. Revolut): chiedi il consenso su tutti i conti
         </label>
       </div>`}
       ${c ? `
@@ -2532,6 +2532,10 @@ function openBankConnectionModal(connectionId = null) {
       ownerPersonId: data.owner_person_id || null,
       module: data.module,
       iban: (data.iban || '').trim() || null,
+      // Senza IBAN il server rifiuta, a meno che la rinuncia non sia esplicita: così una
+      // pagina vecchia non riesce più a far partire un consenso destinato a nascere vuoto.
+      allowAllAccounts: data.skip_iban === 'on',
+      clientVersion: APP_VERSION,
     });
     if (!res.url) throw new Error('La banca non ha restituito un URL di consenso.');
     window.location.href = res.url;
