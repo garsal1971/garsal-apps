@@ -149,7 +149,18 @@ Deno.serve(async (req) => {
         imported_count: 0,
         error_message: `Rilettura sessione: nessun conto. Risposta: ${rawPreview.slice(0, 900)}`,
       });
-      return json({ accounts: [], updated: 0, created: 0, sessionStatus: data?.status || null, raw: rawPreview });
+      // access.accounts dice su cosa era stato chiesto il consenso: se è null il consenso
+      // valeva genericamente per "tutti i conti", e con gli ASPSP che pretendono l'elenco
+      // (UniCredit) quella sessione resta vuota per sempre. Rileggerla non servirà mai:
+      // meglio dirlo qui che lasciar ritentare all'infinito.
+      const accessAccounts = data?.access?.accounts ?? null;
+      return json({
+        accounts: [], updated: 0, created: 0,
+        sessionStatus: data?.status || null,
+        accessAccounts,
+        hopeless: accessAccounts === null,
+        raw: rawPreview,
+      });
     }
 
     // Il primo conto completa la connessione esistente; gli altri diventano righe nuove, ma

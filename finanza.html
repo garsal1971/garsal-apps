@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.4';
-const APP_BUILD   = '2026-08-04T15:30:00Z';
+const APP_VERSION = 'v1.1.5';
+const APP_BUILD   = '2026-08-04T15:50:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2590,7 +2590,11 @@ async function refreshBankAccounts(connectionId) {
              <thead><tr><th>IBAN</th><th>ID conto</th></tr></thead>
              <tbody>${res.accounts.map(a => `<tr><td class="mono text-sm">${a.iban || '—'}</td><td class="mono text-sm">${a.uid}</td></tr>`).join('')}</tbody>
            </table></div>`
-        : `<p class="text-sm mb-12">La sessione è valida${res.sessionStatus ? ` (stato: <strong>${res.sessionStatus}</strong>)` : ''} ma non contiene nessun conto.</p>`}
+        : `<p class="text-sm mb-12">La sessione è valida${res.sessionStatus ? ` (stato: <strong>${res.sessionStatus}</strong>)` : ''} ma non contiene nessun conto.</p>
+           ${res.hopeless ? `<div class="card" style="border-color:var(--c-warning)">
+             <div class="card-title">Questa sessione resterà vuota</div>
+             <p class="text-sm">Il consenso è stato chiesto senza indicare un conto (<span class="mono">access.accounts: null</span>), e questa banca in quel caso non collega niente. Rileggere non cambierà nulla: <strong>elimina questo collegamento e rifallo indicando l'IBAN</strong>.</p>
+           </div>` : ''}`}
       <div class="form-group" style="margin-top:12px">
         <label class="form-label">Risposta di Enable Banking</label>
         <textarea class="form-input mono" rows="8" readonly style="font-size:.72rem">${(res.raw || '').replace(/</g, '&lt;')}</textarea>
