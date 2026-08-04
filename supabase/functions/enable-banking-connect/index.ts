@@ -15,6 +15,8 @@
 //   fino al callback, che lo usa per riportare l'utente sulla pagina giusta. ownerPersonId
 //   (la persona di Analisi Costi a cui attribuire le spese) diventa facoltativo: per un conto
 //   del fondo non esiste "chi ha speso".
+// v3 — 2026-08-04: "iban" facoltativo, passato in access.accounts (vedi il commento sulla
+//   chiamata /auth: senza, UniCredit autorizza una sessione senza nessun conto dentro).
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -95,7 +97,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: { aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string; module?: string };
+  let body: { aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string; module?: string; iban?: string };
   try {
     body = await req.json();
   } catch {
@@ -109,6 +111,7 @@ Deno.serve(async (req) => {
   const country = (body.country || '').trim().toUpperCase();
   const ownerPersonId = (body.ownerPersonId || '').trim();
   const module = (body.module || 'cost_analysis').trim();
+  const iban = (body.iban || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!aspspName || !country) {
     return new Response(
       JSON.stringify({ error: { message: 'Servono "aspspName" e "country".' } }),
@@ -151,7 +154,18 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        access: { valid_until: validUntil },
+        // Con Revolut basta chiedere "tutti i conti" (nessun elenco in access.accounts).
+        // Con UniCredit no: la sessione torna AUTHORIZED e valida ma con accounts: [] e
+        // accounts_data: [], cioè il consenso non collega niente. Gli ASPSP fatti così
+        // vogliono sapere in anticipo su quale conto vale il consenso, quindi quando l'IBAN
+        // è noto lo si passa esplicitamente. balances/transactions erano già i default
+        // aggiunti da Enable Banking: meglio dichiararli invece di ereditarli in silenzio.
+        access: {
+          valid_until: validUntil,
+          balances: true,
+          transactions: true,
+          ...(iban ? { accounts: [{ iban }] } : {}),
+        },
         aspsp: { name: aspspName, country },
         state,
         redirect_url: redirectUrl,
