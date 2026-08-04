@@ -325,10 +325,24 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | Funzione | Job | Cosa fa |
 |---|---|---|
 | `get-prices` | orario | Aggiorna `fnz_price_cache` (un trigger propaga su `fnz_price_history`). Una fonte diversa per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko in batch + Coinbase come ripiego, azioni→TwelveData/GoogleFinance |
-| `enable-banking-connect` / `-callback` / `-aspsps` | — | Collegamento di un conto: catalogo banche, avvio del consenso e redirect di ritorno. Il `module` passato a `connect` viaggia nello state e decide dove riporta il callback |
+| `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso, redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il `module` passato a `connect` viaggia nello state e decide dove riporta il callback |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
+
+### ⚠️ Header PSU obbligatori per alcune banche
+
+Il catalogo `/aspsps` di Enable Banking dichiara per ogni banca un `required_psu_headers`:
+**UniCredit (IT) richiede `psu-ip-address`**, Revolut no. Senza quell'header la banca
+autorizza comunque il consenso ma restituisce **zero conti**, senza nessun errore — sembra un
+problema di lettura della risposta e non lo è. Tutte le chiamate a Enable Banking passano
+quindi gli header PSU ricavati da `x-forwarded-for` (`psuHeaders()`, duplicata in ogni Edge
+Function). Un job schedulato non ha un utente davanti: in quel caso l'header non c'è e non va
+inventato.
+
+Stessa scheda di catalogo: `maximum_consent_validity` (180 giorni per UniCredit) e
+`auth_methods` per `psu_type`. Il pulsante *ℹ️ Cosa richiede questa banca* in `finanza.html`
+la mostra per intero — è il primo posto da guardare quando un collegamento riesce a metà.
 
 ### ⚠️ Ora legale nei cron
 
