@@ -14,6 +14,10 @@
 // v2 — 2026-08-03: la gestione dei conti collegati è passata a finanza.html ed è condivisa
 //   tra moduli. Il redirect finale non è più fisso su cost-analysis.html: si ricava dal
 //   "module" che enable-banking-connect ha messo nello state.
+// v3 — 2026-08-03: lettura dei conti tollerante alle varianti di formato (UniCredit non
+//   restituiva niente sul formato assunto per Revolut), con GET /sessions/{id} di riserva e
+//   salvataggio del collegamento anche quando la lista resta vuota, più traccia diagnostica
+//   in cm_sync_log.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -65,9 +69,41 @@ async function createEnableBankingJWT(appId: string, privateKeyPem: string): Pro
   return `${signingInput}.${base64url(signature)}`;
 }
 
+// I conti arrivano in forme diverse a seconda dell'ASPSP: lista di oggetti (con uid,
+// account_id, resource_id o identification_hash), lista di stringhe già pronte, oppure sotto
+// la chiave account_ids invece che accounts.
+function extractAccounts(data: any): { uid: string; iban: string | null }[] {
+  const raw: unknown[] = Array.isArray(data?.accounts)
+    ? data.accounts
+    : Array.isArray(data?.account_ids)
+      ? data.account_ids
+      : [];
+  return raw
+    .map((acc: any) => {
+      if (typeof acc === 'string') return { uid: acc, iban: null };
+      const uid = acc?.uid || acc?.account_id || acc?.id || acc?.resource_id || acc?.resourceId || acc?.identification_hash || null;
+      const iban = acc?.identification?.iban || acc?.iban || acc?.account_id?.iban || null;
+      return uid ? { uid: String(uid), iban: iban ? String(iban) : null } : null;
+    })
+    .filter((x): x is { uid: string; iban: string | null } => x !== null);
+}
+
+// Diagnostica leggibile senza esporre l'intera risposta: chiavi presenti e forma dei campi
+// che dovrebbero contenere i conti.
+function describeResponse(data: any): string {
+  try {
+    const keys = Object.keys(data || {}).join(', ');
+    const shape = (v: unknown) =>
+      Array.isArray(v) ? `array(${v.length})${v.length ? ' di ' + typeof v[0] : ''}` : v === undefined ? 'assente' : typeof v;
+    return `chiavi: [${keys}] · accounts: ${shape(data?.accounts)} · account_ids: ${shape(data?.account_ids)}`.slice(0, 900);
+  } catch {
+    return 'risposta non ispezionabile';
+  }
+}
+
 // module può mancare (consenso rifiutato prima ancora di poter leggere lo state): in quel
 // caso si torna comunque su finanza.html, dove sta la gestione dei conti.
-function redirectTo(status: 'success' | 'error', message?: string, module?: string): Response {
+function redirectTo(status: 'success' | 'error' | 'partial', message?: string, module?: string): Response {
   const url = new URL((module && MODULE_REDIRECT[module]) || DEFAULT_REDIRECT_URL);
   url.searchParams.set('bank_connect', status);
   if (module) url.searchParams.set('bank_connect_module', module);
@@ -124,28 +160,77 @@ Deno.serve(async (req) => {
       return redirectTo('error', 'Errore Enable Banking: ' + (sessionData?.message || sessionRes.status), module);
     }
 
-    const accounts: unknown[] = Array.isArray(sessionData.accounts) ? sessionData.accounts : [];
-    if (!accounts.length) {
-      return redirectTo('error', 'Nessun conto restituito dalla banca.', module);
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    const sessionId = sessionData.session_id || sessionData.sessionId || null;
+
+    // Prima versione: si leggeva solo sessionData.accounts come array di oggetti con "uid".
+    // Con Revolut funzionava, con UniCredit no — la lista dei conti è tornata vuota e il
+    // collegamento veniva buttato via con un errore, perdendo anche la sessione appena
+    // ottenuta. Ora si accettano tutte le forme plausibili e, se non basta, si richiede la
+    // sessione con una GET dedicata: certi ASPSP popolano i conti solo lì.
+    let accounts = extractAccounts(sessionData);
+    let accountsSource = 'POST /sessions';
+    let detailData: any = null;
+    if (!accounts.length && sessionId) {
+      const detailRes = await fetch(`${ENABLE_BANKING_API_BASE}/sessions/${sessionId}`, {
+        headers: { Authorization: 'Bearer ' + jwt },
+      });
+      detailData = await detailRes.json().catch(() => ({}));
+      if (detailRes.ok) {
+        accounts = extractAccounts(detailData);
+        accountsSource = 'GET /sessions/{id}';
+      }
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-    const rows = accounts.map((acc: any) => ({
-      user_id: state.userId,
-      provider: 'enable_banking',
-      aspsp_name: state.aspspName,
-      display_name: state.displayName || acc?.identification?.iban || acc?.iban || null,
-      owner_person_id: state.ownerPersonId || null,
-      account_id: acc?.uid || acc?.account_id || null,
-      consent_id: sessionData.session_id || null,
-      consent_expires_at: sessionData.access?.valid_until || state.validUntil,
-      status: 'active',
-      module,
-    }));
+    // Nessun conto nemmeno così: la riga si salva lo stesso, senza account_id. Il consenso
+    // è già stato dato e rifarlo da capo costa un altro giro di SCA; con la riga in mano si
+    // vede cosa è arrivato e si può correggere. Il sync si rifiuta di partire finché
+    // account_id è nullo, quindi non c'è il rischio di importare dal conto sbagliato.
+    const rows = accounts.length
+      ? accounts.map((acc) => ({
+          user_id: state.userId,
+          provider: 'enable_banking',
+          aspsp_name: state.aspspName,
+          display_name: state.displayName || acc.iban || null,
+          owner_person_id: state.ownerPersonId || null,
+          account_id: acc.uid,
+          consent_id: sessionId,
+          consent_expires_at: sessionData.access?.valid_until || state.validUntil,
+          status: 'active',
+          module,
+        }))
+      : [{
+          user_id: state.userId,
+          provider: 'enable_banking',
+          aspsp_name: state.aspspName,
+          display_name: state.displayName || null,
+          owner_person_id: state.ownerPersonId || null,
+          account_id: null,
+          consent_id: sessionId,
+          consent_expires_at: sessionData.access?.valid_until || state.validUntil,
+          status: 'active',
+          module,
+        }];
 
-    const { error } = await supabase.from('cm_bank_connections').insert(rows);
+    const { data: inserted, error } = await supabase.from('cm_bank_connections').insert(rows).select('id');
     if (error) {
       return redirectTo('error', 'Errore salvataggio conto: ' + error.message, module);
+    }
+
+    if (!accounts.length) {
+      // Traccia diagnostica: senza sapere cosa ha risposto davvero la banca non si può
+      // capire perché la lista è vuota. Finisce in cm_sync_log, visibile dall'app.
+      await supabase.from('cm_sync_log').insert({
+        user_id: state.userId,
+        bank_connection_id: inserted?.[0]?.id || null,
+        finished_at: new Date().toISOString(),
+        status: 'no_accounts',
+        imported_count: 0,
+        error_message: `Nessun conto nella risposta (ultimo tentativo: ${accountsSource}).` +
+          ` POST /sessions → ${describeResponse(sessionData)}` +
+          (detailData ? ` · GET /sessions/${sessionId} → ${describeResponse(detailData)}` : ''),
+      });
+      return redirectTo('partial', 'La banca non ha restituito nessun conto: il collegamento è stato salvato senza conto associato.', module);
     }
 
     return redirectTo('success', undefined, module);

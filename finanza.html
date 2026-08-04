@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.0';
-const APP_BUILD   = '2026-08-03T12:30:00Z';
+const APP_VERSION = 'v1.1.1';
+const APP_BUILD   = '2026-08-03T14:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2402,12 +2402,47 @@ function renderBankConnections() {
       <p class="text-muted text-sm mb-12">Le transazioni di questi conti finiscono in Spese Famiglia. La sincronizzazione si lancia dall'app di gestione, dove c'è anche la categorizzazione.</p>
       ${group('cost_analysis', 'Nessun conto collegato per Spese Famiglia.')}
     </div>
-    <div class="card">
+    <div class="card mb-16">
       <div class="card-title">${BANK_MODULE_LABEL.fondo}</div>
       <p class="text-muted text-sm mb-12">I bonifici di questi conti diventano versamenti e prelievi del fondo collegato. La sincronizzazione si lancia dalla scheda del fondo.</p>
       ${group('fondo', 'Nessun conto collegato per i fondi.')}
     </div>
+    <div class="card">
+      <div class="card-title">Registro sincronizzazioni</div>
+      <p class="text-muted text-sm mb-12">Ultimi collegamenti e sincronizzazioni, con il messaggio di errore quando qualcosa non è andato.</p>
+      <div id="bank-sync-log"><div class="empty-sm">Carico…</div></div>
+    </div>
   `);
+  loadBankSyncLog();
+}
+// Il registro serve solo in questa pagina: si legge quando serve invece di appesantire
+// ogni avvio dell'app.
+async function loadBankSyncLog() {
+  const box = $('bank-sync-log');
+  if (!box) return;
+  try {
+    const rows = await sbQ('cm_sync_log', 'select=*&order=started_at.desc&limit=15');
+    if (!rows.length) { box.innerHTML = '<div class="empty-sm">Nessuna sincronizzazione registrata.</div>'; return; }
+    const statusBadge = st => st === 'success' ? '<span class="badge badge-pos">ok</span>'
+      : st === 'running' ? '<span class="badge badge-neutral">in corso</span>'
+      : st === 'no_accounts' ? '<span class="badge badge-warn">nessun conto</span>'
+      : `<span class="badge badge-neg">${st || 'errore'}</span>`;
+    box.innerHTML = `<div class="table-wrap"><table class="table">
+      <thead><tr><th>Quando</th><th>Conto</th><th>Esito</th><th>Importati</th><th>Messaggio</th></tr></thead>
+      <tbody>${rows.map(r => {
+        const conn = S.bankConnections.find(c => c.id === r.bank_connection_id);
+        return `<tr>
+          <td class="mono text-sm">${r.started_at ? fmtDate(r.started_at.slice(0, 10)) + ' ' + r.started_at.slice(11, 16) : '—'}</td>
+          <td>${conn ? conn.aspsp_name : '—'}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="mono">${r.imported_count ?? 0}</td>
+          <td><div class="text-sm" style="max-width:420px;word-break:break-word">${r.error_message || '—'}</div></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  } catch (err) {
+    box.innerHTML = `<div class="text-sm text-neg">Impossibile leggere il registro: ${err.message}</div>`;
+  }
 }
 function openBankConnectionModal(connectionId = null) {
   const c = connectionId ? S.bankConnections.find(x => x.id === connectionId) : null;
@@ -2451,6 +2486,11 @@ function openBankConnectionModal(connectionId = null) {
         <label class="form-label">Consenso valido fino al</label>
         <input name="consent_expires_at" type="date" class="form-input" value="${c.consent_expires_at ? c.consent_expires_at.slice(0, 10) : ''}" />
         <p class="text-muted text-sm" style="margin-top:4px">Compilato dal collegamento reale: si tocca qui solo per correzioni.</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ID conto lato Enable Banking</label>
+        <input name="account_id" class="form-input mono" placeholder="vuoto = sincronizzazione non disponibile" value="${c.account_id || ''}" />
+        <p class="text-muted text-sm" style="margin-top:4px">Lo compila il collegamento. Si scrive a mano solo quando la banca non ha restituito i conti e l'identificativo si recupera altrove: senza questo valore il sync non parte.</p>
       </div>` : `
       <div class="form-group" id="owner-person-group" style="display:none">
         <label class="form-label">Proprietario (chi ha speso) *</label>
@@ -2468,6 +2508,7 @@ function openBankConnectionModal(connectionId = null) {
       await sbUpd('cm_bank_connections', `id=eq.${c.id}`, {
         display_name: (data.display_name || '').trim() || null,
         consent_expires_at: data.consent_expires_at || null,
+        account_id: (data.account_id || '').trim() || null,
       });
       await reload(); closeModal();
       return;
@@ -5131,9 +5172,17 @@ function handleBankConnectResult() {
   history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   S.view = 'conti-collegati';
   setTimeout(() => {
-    alert(result === 'success'
-      ? '✅ Conto collegato correttamente.'
-      : '❌ Collegamento non riuscito: ' + (message || 'errore sconosciuto.'));
+    if (result === 'success') { alert('✅ Conto collegato correttamente.'); return; }
+    // 'partial': il consenso è valido ma la banca non ha elencato nessun conto. Il
+    // collegamento è salvato lo stesso, con il dettaglio di cosa è arrivato nel registro
+    // in fondo alla pagina.
+    if (result === 'partial') {
+      alert('⚠️ Consenso ottenuto, ma la banca non ha restituito nessun conto.\n\n' +
+            (message || '') + '\n\nIl collegamento è stato salvato senza conto associato: ' +
+            'in fondo a questa pagina, nel registro sincronizzazioni, c\'è cosa ha risposto la banca.');
+      return;
+    }
+    alert('❌ Collegamento non riuscito: ' + (message || 'errore sconosciuto.'));
   }, 100);
 }
 async function boot() {
