@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.1.7';
-const APP_BUILD   = '2026-08-04T17:00:00Z';
+const APP_VERSION = 'v1.2.0';
+const APP_BUILD   = '2026-08-05T09:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2230,6 +2230,7 @@ function renderFundDetail() {
       </div>
       <div class="hstack gap-8">
         ${conn ? `<button class="btn btn-outline btn-sm" data-action="sync-fund" data-fund-id="${fund.id}">🔄 Sincronizza da ${conn.aspsp_name}</button>` : ''}
+        <button class="btn btn-outline btn-sm" data-action="import-cntrs" data-fund-id="${fund.id}">⬇️ Importa dal Conto Risparmio</button>
         <button class="btn btn-primary btn-sm" data-action="new-contribution" data-fund-id="${fund.id}">+ Movimento</button>
       </div>
     </div>
@@ -3929,6 +3930,166 @@ function openAssignContributionModal(contributionId) {
     await reload(); closeModal();
   });
 }
+/* ── Fondi — import dai movimenti del Conto Risparmio ─────────
+   I movimenti di quel conto sono già nel database (cntrs_transactions_terr, la tabella
+   dietro conto-risparmio-teresa.html): finché il collegamento PSD2 con UniCredit non
+   funziona, il fondo li prende da lì invece che dalla banca.
+
+   Il match sul partecipante è per IBAN ed è esatto: invece di estrarre un IBAN dalla
+   descrizione con una regex — che sbaglia appena la banca cambia formato — si verifica se
+   l'IBAN del partecipante compare nel testo del movimento, confrontando entrambi senza
+   spazi né punteggiatura. Se non c'è nessun IBAN si ripiega sul nome.
+
+   Convenzione dei segni identica al fondo: importo_voce positivo = versamento,
+   negativo = prelievo.                                                                  */
+const cntrsNorm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+let _cntrsPreview = null;
+async function importFromContoRisparmio(fundId) {
+  const fund = S.funds.find(f => f.id === fundId);
+  if (!fund) return;
+  const participants = S.fundParticipants.filter(p => p.fund_id === fundId && p.active);
+  if (!participants.length) {
+    alert('Aggiungi prima i partecipanti con il loro IBAN: senza anagrafica non c\'è niente su cui fare il match.');
+    return;
+  }
+  openModal('Import dal Conto Risparmio', '<div class="empty-sm">📥 Leggo i movimenti…</div>');
+  try {
+    const rows = await sbQ('cntrs_transactions_terr', 'select=id,data,descrizione,importo_voce,note&order=data.asc');
+    // Già importati: l'external_id porta l'id della riga di origine, quindi un secondo
+    // import non ripropone niente (e l'indice unico lo impedisce comunque).
+    const already = new Set(
+      S.fundContributions.filter(c => c.fund_id === fundId && (c.external_id || '').startsWith('cntrs:'))
+        .map(c => c.external_id)
+    );
+    const items = rows
+      .filter(r => parseFloat(r.importo_voce) !== 0 && !already.has(`cntrs:${r.id}`))
+      .map(r => {
+        const amount = parseFloat(r.importo_voce);
+        const haystack = cntrsNorm(`${r.descrizione || ''} ${r.note || ''}`);
+        const byIban = participants.filter(p => p.iban && haystack.includes(cntrsNorm(p.iban)));
+        const byName = byIban.length ? [] : participants.filter(p => fundNameMatches(p.name, `${r.descrizione || ''} ${r.note || ''}`));
+        const matched = byIban.length === 1 ? byIban[0] : (byName.length === 1 ? byName[0] : null);
+        return {
+          id: r.id,
+          date: r.data,
+          amount,
+          type: amount > 0 ? 'versamento' : 'prelievo',
+          description: r.descrizione || '',
+          note: r.note || '',
+          participantId: matched?.id || null,
+          matchedVia: byIban.length === 1 ? 'IBAN' : (byName.length === 1 ? 'nome' : null),
+        };
+      });
+    _cntrsPreview = { fundId, items, participants, alreadyImported: already.size };
+    renderCntrsPreview();
+  } catch (err) {
+    closeModal();
+    alert('Errore lettura movimenti: ' + err.message);
+  }
+}
+// Stesso criterio del sync bancario: i token del nome devono coincidere tutti da una parte,
+// perché un solo pezzo in comune non basta per attribuire soldi a qualcuno.
+function fundNameMatches(name, text) {
+  const tokens = s => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 2);
+  const a = tokens(name);
+  if (!a.length) return false;
+  const b = new Set(tokens(text));
+  return a.every(t => b.has(t));
+}
+function renderCntrsPreview() {
+  const d = _cntrsPreview;
+  const matched   = d.items.filter(i => i.participantId);
+  const unmatched = d.items.filter(i => !i.participantId);
+  const row = (it, i, checked) => `
+    <tr>
+      <td><input type="checkbox" data-cntrs-idx="${i}" ${checked ? 'checked' : ''} /></td>
+      <td class="mono text-sm">${fmtDate(it.date)}</td>
+      <td class="mono ${it.amount < 0 ? 'text-neg' : 'text-pos'}">${fmtEURc(it.amount)}</td>
+      <td><div class="truncate" style="max-width:220px" title="${(it.description + ' ' + it.note).replace(/"/g, '')}">${it.description || '—'}</div></td>
+      <td>
+        <select class="form-input form-select" data-cntrs-participant="${i}" style="min-width:150px">
+          <option value="">— da rivedere —</option>
+          ${d.participants.map(p => `<option value="${p.id}" ${it.participantId === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+        </select>
+        ${it.matchedVia ? `<span class="text-muted text-sm">via ${it.matchedVia}</span>` : ''}
+      </td>
+    </tr>`;
+  openModal('Import dal Conto Risparmio', `
+    <p class="text-sm mb-12">
+      <strong>${matched.length}</strong> movimenti abbinati a un partecipante, <strong>${unmatched.length}</strong> senza corrispondenza.
+      ${d.alreadyImported ? `<br/><span class="text-muted">Già importati in precedenza e quindi esclusi: ${d.alreadyImported}.</span>` : ''}
+    </p>
+    ${matched.length === 0 && unmatched.length === 0
+      ? '<div class="empty-sm">Nessun movimento nuovo da importare.</div>'
+      : `
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto">
+      <table class="table">
+        <thead><tr><th></th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Partecipante</th></tr></thead>
+        <tbody>${matched.map((it) => row(it, d.items.indexOf(it), true)).join('')}</tbody>
+      </table>
+    </div>
+    ${unmatched.length ? `
+    <button type="button" class="btn btn-outline btn-sm" style="margin-top:10px" data-action="toggle-cntrs-unmatched">
+      Mostra i ${unmatched.length} movimenti senza corrispondenza
+    </button>
+    <div id="cntrs-unmatched" style="display:none">
+      <p class="text-muted text-sm" style="margin-top:10px">Nessun IBAN né nome di un partecipante in questi movimenti. Assegnali qui se ti servono, oppure lasciali fuori.</p>
+      <div class="table-wrap" style="max-height:240px;overflow-y:auto">
+        <table class="table">
+          <thead><tr><th></th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Partecipante</th></tr></thead>
+          <tbody>${unmatched.map((it) => row(it, d.items.indexOf(it), false)).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : ''}`}
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+      ${d.items.length ? '<button type="button" class="btn btn-primary" data-action="confirm-cntrs-import">Importa selezionati</button>' : ''}
+    </div>
+  `);
+}
+async function confirmContoRisparmioImport() {
+  const d = _cntrsPreview;
+  if (!d) return;
+  const chosen = [];
+  document.querySelectorAll('#modal-body input[data-cntrs-idx]').forEach(cb => {
+    if (!cb.checked) return;
+    const i = parseInt(cb.dataset.cntrsIdx, 10);
+    const it = d.items[i];
+    const sel = document.querySelector(`#modal-body select[data-cntrs-participant="${i}"]`);
+    const participantId = sel ? sel.value : (it.participantId || '');
+    chosen.push({ ...it, participantId: participantId || null });
+  });
+  if (!chosen.length) { alert('Nessun movimento selezionato.'); return; }
+  openModal('Import dal Conto Risparmio', '<div class="empty-sm">📥 Importo i movimenti…</div>');
+  try {
+    const payload = chosen.map(it => {
+      const p = d.participants.find(x => x.id === it.participantId);
+      return {
+        user_id: S.session.user.id,
+        fund_id: d.fundId,
+        participant: p ? p.name : (it.description || '(da abbinare)').slice(0, 80),
+        participant_id: p ? p.id : null,
+        date: it.date,
+        amount: it.amount,
+        type: it.type,
+        // Abbinato = entra nelle quote; senza partecipante resta in coda di revisione.
+        status: p ? (it.matchedVia ? 'auto' : 'confermato') : 'da_rivedere',
+        external_id: `cntrs:${it.id}`,
+        notes: [it.description, it.note].filter(Boolean).join(' · '),
+      };
+    });
+    await sbIns('fnz_fund_contributions', payload);
+    await sbRpc('fnz_fund_recalc_adjusted', { p_fund_id: d.fundId });
+    _cntrsPreview = null;
+    await reload();
+    closeModal();
+    alert(`✅ Importati ${payload.length} movimenti dal Conto Risparmio.`);
+  } catch (err) {
+    closeModal();
+    alert('Errore import: ' + err.message);
+  }
+}
 /* ── Fondi — sincronizzazione dal conto bancario ──────────────
    Stesso schema del sync di Spese Famiglia: prima un'anteprima in sola lettura di cosa
    verrebbe importato e come è stata abbinata ogni controparte, poi la conferma.        */
@@ -4995,6 +5156,13 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'sync-fund':         await syncFundNow(t.dataset.fundId); break;
+    case 'import-cntrs':      await importFromContoRisparmio(t.dataset.fundId); break;
+    case 'confirm-cntrs-import': await confirmContoRisparmioImport(); break;
+    case 'toggle-cntrs-unmatched': {
+      const box = $('cntrs-unmatched');
+      if (box) box.style.display = box.style.display === 'none' ? '' : 'none';
+      break;
+    }
     case 'confirm-fund-sync': await confirmFundSync(); break;
     case 'new-bank-connection':  openBankConnectionModal(); break;
     case 'edit-bank-connection': openBankConnectionModal(t.dataset.id); break;
