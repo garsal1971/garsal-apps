@@ -173,6 +173,13 @@ il commit le tocca: si possono eliminare quando nessun client usa più `ca_bank_
 `participant` (testo) resta popolato accanto a `participant_id`: i fondi nati prima
 dell'anagrafica non hanno partecipanti anagrafici e continuano a funzionare così.
 
+I movimenti del fondo possono arrivare da tre strade: inseriti a mano, importati dal conto
+bancario via `enable-banking-fondo-sync`, oppure presi dai movimenti del Conto Risparmio già
+in `cntrs_transactions_terr` (pulsante *⬇️ Importa dal Conto Risparmio*). In quest'ultimo caso
+`external_id` vale `cntrs:<id della riga di origine>` e il partecipante si riconosce
+verificando che il **suo IBAN compaia** nel testo del movimento (confronto senza spazi né
+punteggiatura), col nome come ripiego — nessuna estrazione dell'IBAN con regex dalla causale.
+
 `amount_adjusted` è una **cache** della rivalutazione, riempita da
 `fnz_fund_recalc_adjusted(p_fund_id)`; il valore mostrato a schermo lo ricalcola comunque
 `computeFundShares()` in `finanza.html`. Chiamare la RPC dopo ogni scrittura sui movimenti o
