@@ -210,26 +210,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Correlazione col callback: dati necessari per creare la riga cm_bank_connections dopo il
-  // consenso, dato che il redirect dalla banca non porta con sé l'header Authorization.
-  const validUntil = new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(); // 180 giorni, il massimo consentito da PSD2
-
   const supabaseProjectRef = new URL(Deno.env.get('SUPABASE_URL') || '').hostname.split('.')[0];
   const redirectUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/enable-banking-callback`;
-
-  // Traccia di cosa si sta per chiedere: quando la sessione torna autorizzata ma senza
-  // conti, l'unico modo per sapere se l'IBAN era stato spedito è averlo scritto qui prima
-  // di partire. L'IBAN viene mascherato: serve sapere se c'era, non qual era.
-  // L'id della riga viaggia nello state: il callback ci scrive sopra la connessione appena
-  // creata, e da lì in poi l'app sa dire cosa era stato chiesto PER QUEL collegamento —
-  // prima poteva solo guardare access.accounts nella sessione e tirare a indovinare.
   const psu = psuHeaders(req);
-  const accessRequested = {
-    valid_until: validUntil,
-    balances: true,
-    transactions: true,
-    ...(iban ? { accounts: [{ iban }] } : {}),
-  };
+  const PSU_TYPE = 'personal';
 
   let jwt: string;
   try {
@@ -244,9 +228,11 @@ Deno.serve(async (req) => {
   // Cosa la banca dichiara di pretendere, letto al momento della richiesta e non a posteriori:
   // quando la sessione torna autorizzata e vuota, la domanda successiva è sempre "e la banca
   // cosa voleva?" — e il catalogo può cambiare tra il collegamento e il momento in cui lo si
-  // va a guardare. psu_types/auth_methods servono anche a vedere se stiamo usando quello
-  // giusto: psu_type è fisso a 'personal' e auth_method non lo mandiamo affatto.
+  // va a guardare. Da qui escono anche due valori che entrano nella richiesta: il tetto alla
+  // durata del consenso e il metodo di autenticazione.
   let aspspDeclares = 'catalogo non letto';
+  let maxValiditySeconds: number | null = null;
+  let authMethodName: string | null = null;
   try {
     const res = await fetch(`${ENABLE_BANKING_API_BASE}/aspsps?country=${encodeURIComponent(country)}`, {
       headers: { Authorization: 'Bearer ' + jwt },
@@ -260,11 +246,30 @@ Deno.serve(async (req) => {
       } else {
         const required: string[] = Array.isArray(entry.required_psu_headers) ? entry.required_psu_headers : [];
         const missing = required.filter((h) => !(h.toLowerCase() in psu));
-        const authMethods = (Array.isArray(entry.auth_methods) ? entry.auth_methods : [])
-          .map((m: any) => (typeof m === 'string' ? m : m?.name || m?.approach || JSON.stringify(m)));
+        const methods: any[] = Array.isArray(entry.auth_methods) ? entry.auth_methods : [];
+        // UniCredit ne dichiara due, entrambe REDIRECT: la prima riga di log le appiattiva
+        // sul solo nome e le rendeva indistinguibili. Quello che conta è a quale psu_type
+        // ciascuna appartiene e se pretende credenziali da passare nella richiesta — un
+        // metodo scelto da Enable Banking per il psu_type sbagliato autorizza un'utenza che
+        // non ha conti da esporre, e il sintomo sarebbe esattamente una sessione vuota.
+        const describeMethod = (m: any) => typeof m === 'string' ? m :
+          `${m?.name || m?.approach || '?'}` +
+          `${m?.psu_type ? `/${m.psu_type}` : ''}` +
+          `${m?.hidden_method ? '/hidden' : ''}` +
+          `${Array.isArray(m?.credentials) && m.credentials.length
+            ? `/credenziali:[${m.credentials.map((c: any) => c?.name || c?.title || '?').join('|')}]` : ''}`;
+        // Si manda auth_method solo quando la banca lega esplicitamente un metodo al nostro
+        // psu_type, uno solo, e gli dà un nome. Se il legame non è dichiarato la scelta resta
+        // a Enable Banking: indovinare un identificativo fa fallire /auth e basta, e questa
+        // versione serve prima di tutto a vedere com'è fatta davvero quella lista.
+        const forOurPsuType = methods.filter((m: any) => m?.psu_type === PSU_TYPE);
+        if (forOurPsuType.length === 1 && typeof forOurPsuType[0]?.name === 'string' && forOurPsuType[0].name) {
+          authMethodName = forOurPsuType[0].name;
+        }
+        maxValiditySeconds = Number.isFinite(entry.maximum_consent_validity) ? entry.maximum_consent_validity : null;
         aspspDeclares =
           `psu_types: [${(entry.psu_types || []).join(', ')}]` +
-          ` · auth_methods: [${authMethods.join(', ')}]` +
+          ` · auth_methods: [${methods.map(describeMethod).join(' ; ')}]` +
           ` · required_psu_headers: [${required.join(', ')}]${missing.length ? ` — NON INVIATI: [${missing.join(', ')}]` : ''}` +
           ` · maximum_consent_validity: ${entry.maximum_consent_validity ?? 'n/d'}` +
           (entry.beta ? ' · BETA' : '') + (entry.sandbox ? ' · SANDBOX' : '');
@@ -275,6 +280,26 @@ Deno.serve(async (req) => {
   } catch (e) {
     aspspDeclares = 'catalogo non leggibile: ' + (e as Error).message;
   }
+
+  // Durata del consenso: 180 giorni è il massimo PSD2, ma UniCredit dichiara esattamente
+  // 15 552 000 secondi — 180 giorni tondi. Chiedere il massimo esatto significa appoggiarsi
+  // al bordo: basta qualche secondo di scarto tra l'orologio di qui e quello di Enable
+  // Banking per sforare. Un'ora di margine non toglie niente a nessuno.
+  const requestedSeconds = Math.min(180 * 24 * 3600, maxValiditySeconds ?? 180 * 24 * 3600) - 3600;
+  const validUntil = new Date(Date.now() + requestedSeconds * 1000).toISOString();
+
+  // Traccia di cosa si sta per chiedere: quando la sessione torna autorizzata ma senza
+  // conti, l'unico modo per sapere se l'IBAN era stato spedito è averlo scritto qui prima
+  // di partire. L'IBAN viene mascherato: serve sapere se c'era, non qual era.
+  // L'id della riga viaggia nello state: il callback ci scrive sopra la connessione appena
+  // creata, e da lì in poi l'app sa dire cosa era stato chiesto PER QUEL collegamento —
+  // prima poteva solo guardare access.accounts nella sessione e tirare a indovinare.
+  const accessRequested = {
+    valid_until: validUntil,
+    balances: true,
+    transactions: true,
+    ...(iban ? { accounts: [{ iban }] } : {}),
+  };
 
   let logId: string | null = null;
   try {
@@ -292,7 +317,9 @@ Deno.serve(async (req) => {
             (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
             ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
             ` · psu-ip-address: ${psu['psu-ip-address'] ? 'inviato' : 'ASSENTE'}` +
-            ` · psu_type inviato: personal` +
+            ` · psu_type inviato: ${PSU_TYPE}` +
+            ` · auth_method inviato: ${authMethodName || 'nessuno (scelta lasciata a Enable Banking)'}` +
+            ` · valid_until chiesto: ${validUntil}` +
             ` · client ${clientVersion}` +
             ` · la banca dichiara → ${aspspDeclares}`,
         })
@@ -336,7 +363,10 @@ Deno.serve(async (req) => {
         aspsp: { name: aspspName, country },
         state,
         redirect_url: redirectUrl,
-        psu_type: 'personal',
+        psu_type: PSU_TYPE,
+        // Solo se il catalogo ne dichiara uno solo per il nostro psu_type e con un nome
+        // esplicito: altrimenti sceglie Enable Banking, come ha sempre fatto.
+        ...(authMethodName ? { auth_method: authMethodName } : {}),
       }),
     });
 
