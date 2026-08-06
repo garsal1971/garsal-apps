@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.1';
-const APP_BUILD   = '2026-08-06T09:00:00Z';
+const APP_VERSION = 'v1.2.2';
+const APP_BUILD   = '2026-08-06T11:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2562,7 +2562,7 @@ function openBankConnectionModal(connectionId = null, replaceOf = null) {
       <div class="form-group">
         <label class="form-label">IBAN del conto *</label>
         <input name="iban" id="conn-iban" class="form-input mono" required placeholder="IT60X0542811101000000123456" />
-        <p class="text-muted text-sm" style="margin-top:4px">Alcune banche (UniCredit) autorizzano il consenso ma non collegano nessun conto se non sanno in anticipo di quale conto si parla: la sessione risulta valida e vuota. Per questo l'IBAN è richiesto.</p>
+        <p class="text-muted text-sm" style="margin-top:4px">Dev'essere l'IBAN di un <strong>conto corrente</strong>: PSD2 copre i conti di pagamento, e un conto risparmio o un deposito la banca spesso non lo espone affatto — il consenso riesce e non collega niente.</p>
         <label class="text-muted text-sm" style="display:block;margin-top:6px">
           <input type="checkbox" name="skip_iban" id="conn-iban-skip" /> La mia banca non lo richiede (es. Revolut): chiedi il consenso su tutti i conti
         </label>
@@ -2722,14 +2722,20 @@ async function refreshBankAccounts(connectionId) {
    casi: senza (collegamenti nati prima di questa traccia) si resta sul dubbio, dichiarandolo. */
 function emptySessionExplanation(connectionId) {
   const req = (S.bankConsentRequests || {})[connectionId];
-  const base = `La banca ha autorizzato il consenso senza legarlo a nessun conto (<span class="mono">access.accounts: null</span>): rileggere questa sessione non la riempirà mai.`;
+  const base = `La sessione è autorizzata ma la banca non espone nessun conto (<span class="mono">accounts: []</span>): rileggerla non la riempirà mai.`;
   if (!req) {
-    return `${base} Non risulta tracciata la richiesta di consenso di questo collegamento (è precedente alla traccia), quindi non si sa se l'IBAN fosse stato indicato: <strong>rifai il consenso indicando l'IBAN</strong>.`;
+    return `${base} Non risulta tracciata la richiesta di consenso di questo collegamento (è precedente alla traccia), quindi non si sa cosa fosse stato spedito: <strong>rifai il consenso indicando l'IBAN</strong> e questa scheda mostrerà cosa è partito.`;
   }
   if (/IBAN NON INVIATO/.test(req.error_message || '')) {
-    return `${base} La richiesta era partita <strong>senza IBAN</strong> — l'opzione «la mia banca non lo richiede» — e con questa banca è esattamente ciò che produce una sessione vuota: <strong>rifai il consenso indicando l'IBAN</strong>.`;
+    return `${base} La richiesta era partita <strong>senza IBAN</strong> — l'opzione «la mia banca non lo richiede»: <strong>rifai il consenso indicando l'IBAN</strong>, così almeno quella variabile è fuori discussione.`;
   }
-  return `${base} L'IBAN <strong>era stato indicato</strong> nella richiesta, quindi non è una svista nella compilazione: è la banca a non averlo applicato. Prima di rifare il consenso uguale, guarda cosa dichiara di pretendere con «ℹ️ Cosa richiede questa banca» (header PSU obbligatori, metodi di autenticazione, tipo di PSU) e verifica che l'IBAN sia di un conto corrente intestato a te — UniCredit non espone carte di credito e i prepagati solo se hanno un IBAN.`;
+  return `${base} L'IBAN <strong>era stato indicato</strong> nella richiesta (vedi la riga qui sotto), quindi non è una svista nella compilazione — e nella sessione <span class="mono">access.accounts</span> torna comunque <span class="mono">null</span>: l'elenco che mandiamo non viene applicato, il consenso vale su «tutti i conti» e la banca non ne espone nessuno.
+    <br/><br/>Cosa vale la pena controllare, in quest'ordine:
+    <ul style="margin:6px 0 0 18px">
+      <li><strong>Il tipo di conto.</strong> PSD2 copre i <em>conti di pagamento</em>. Un conto risparmio, un deposito o un libretto vincolato spesso non è esposto: nessun conto da condividere, consenso vuoto. Prova con l'IBAN del <strong>conto corrente</strong>: se quello compare, il risparmio è semplicemente fuori perimetro e per il fondo resta «⬇️ Importa dal Conto Risparmio».</li>
+      <li><strong>La schermata di selezione conti sulla banca.</strong> Nel consenso UniCredit c'è un passaggio in cui si spuntano i conti da condividere: se si conferma senza spuntare niente, il consenso nasce autorizzato e vuoto proprio così.</li>
+      <li><strong>Cosa dichiara la banca</strong> — «ℹ️ Cosa richiede questa banca», e la riga di richiesta qui sotto ora riporta psu_types, auth_methods e gli header PSU obbligatori letti al momento del collegamento.</li>
+    </ul>`;
 }
 /* Voce di catalogo per intero: quando una banca autorizza il consenso ma non restituisce
    conti, la differenza rispetto a una che funziona sta in quello che dichiara qui —

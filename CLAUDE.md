@@ -340,9 +340,10 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 ### ⚠️ Header PSU obbligatori per alcune banche
 
 Il catalogo `/aspsps` di Enable Banking dichiara per ogni banca un `required_psu_headers`:
-**UniCredit (IT) richiede `psu-ip-address`**, Revolut no. Senza quell'header la banca
-autorizza comunque il consenso ma restituisce **zero conti**, senza nessun errore — sembra un
-problema di lettura della risposta e non lo è. Tutte le chiamate a Enable Banking passano
+**UniCredit (IT) richiede `psu-ip-address`**, Revolut no. Mandarlo è comunque doveroso — è la
+banca a dichiararlo obbligatorio — ma **non è la causa del consenso vuoto**: l'header viene
+inviato e la sessione UniCredit torna lo stesso senza conti (vedi *Consenso vuoto* qui sotto).
+Tutte le chiamate a Enable Banking passano
 quindi gli header PSU ricavati da `x-forwarded-for` (`psuHeaders()`, duplicata in ogni Edge
 Function). Un job schedulato non ha un utente davanti: in quel caso l'header non c'è e non va
 inventato.
@@ -357,6 +358,15 @@ Una sessione `AUTHORIZED` con `access.accounts: null` e zero conti ha **due caus
 si assomigliano: l'IBAN non è stato spedito (casella *«la mia banca non lo richiede»*), oppure
 è stato spedito e la banca non l'ha applicato. La sessione mostra solo il risultato, non la
 richiesta, quindi dedurlo da lì è tirare a indovinare.
+
+⚠️ **Con UniCredit (IT) l'elenco in `access.accounts` non viene applicato.** Le richieste del
+5 e del 6 agosto 2026 sono partite con `accounts: [{iban}]`, `psu-ip-address` inviato e client
+aggiornato, e la sessione è tornata `AUTHORIZED` con `access.accounts: null`, `accounts: []`,
+`accounts_data: []`. Quindi **né l'IBAN mancante né l'header PSU spiegano il consenso vuoto**:
+sono due ipotesi già bruciate, non ripercorrerle. Restano da verificare il **tipo di conto**
+(PSD2 copre i conti di pagamento — un conto risparmio o un deposito la banca può non esporlo
+affatto) e la **selezione dei conti sulla pagina della banca**. Finché la questione è aperta, i
+movimenti del fondo si prendono dal Conto Risparmio già in `cntrs_transactions_terr`.
 
 Per questo `enable-banking-connect` scrive in `cm_sync_log` una riga `consent_request` **prima**
 di chiamare `/auth` (IBAN mascherato, `access.accounts`, presenza di `psu-ip-address`, versione

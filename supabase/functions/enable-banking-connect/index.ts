@@ -230,6 +230,52 @@ Deno.serve(async (req) => {
     transactions: true,
     ...(iban ? { accounts: [{ iban }] } : {}),
   };
+
+  let jwt: string;
+  try {
+    jwt = await createEnableBankingJWT(appId, privateKeyPem);
+  } catch (e) {
+    return new Response(
+      JSON.stringify({ error: { message: 'Chiave Enable Banking non utilizzabile: ' + (e as Error).message } }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Cosa la banca dichiara di pretendere, letto al momento della richiesta e non a posteriori:
+  // quando la sessione torna autorizzata e vuota, la domanda successiva è sempre "e la banca
+  // cosa voleva?" — e il catalogo può cambiare tra il collegamento e il momento in cui lo si
+  // va a guardare. psu_types/auth_methods servono anche a vedere se stiamo usando quello
+  // giusto: psu_type è fisso a 'personal' e auth_method non lo mandiamo affatto.
+  let aspspDeclares = 'catalogo non letto';
+  try {
+    const res = await fetch(`${ENABLE_BANKING_API_BASE}/aspsps?country=${encodeURIComponent(country)}`, {
+      headers: { Authorization: 'Bearer ' + jwt },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list: any[] = Array.isArray(data.aspsps) ? data.aspsps : Array.isArray(data) ? data : [];
+      const entry = list.find((a) => String(a?.name || '').toLowerCase() === aspspName.toLowerCase());
+      if (!entry) {
+        aspspDeclares = `banca non trovata nel catalogo ${country}`;
+      } else {
+        const required: string[] = Array.isArray(entry.required_psu_headers) ? entry.required_psu_headers : [];
+        const missing = required.filter((h) => !(h.toLowerCase() in psu));
+        const authMethods = (Array.isArray(entry.auth_methods) ? entry.auth_methods : [])
+          .map((m: any) => (typeof m === 'string' ? m : m?.name || m?.approach || JSON.stringify(m)));
+        aspspDeclares =
+          `psu_types: [${(entry.psu_types || []).join(', ')}]` +
+          ` · auth_methods: [${authMethods.join(', ')}]` +
+          ` · required_psu_headers: [${required.join(', ')}]${missing.length ? ` — NON INVIATI: [${missing.join(', ')}]` : ''}` +
+          ` · maximum_consent_validity: ${entry.maximum_consent_validity ?? 'n/d'}` +
+          (entry.beta ? ' · BETA' : '') + (entry.sandbox ? ' · SANDBOX' : '');
+      }
+    } else {
+      aspspDeclares = `catalogo non leggibile (HTTP ${res.status})`;
+    }
+  } catch (e) {
+    aspspDeclares = 'catalogo non leggibile: ' + (e as Error).message;
+  }
+
   let logId: string | null = null;
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -246,7 +292,9 @@ Deno.serve(async (req) => {
             (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
             ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
             ` · psu-ip-address: ${psu['psu-ip-address'] ? 'inviato' : 'ASSENTE'}` +
-            ` · client ${clientVersion}`,
+            ` · psu_type inviato: personal` +
+            ` · client ${clientVersion}` +
+            ` · la banca dichiara → ${aspspDeclares}`,
         })
         .select('id')
         .single();
@@ -269,17 +317,21 @@ Deno.serve(async (req) => {
   }));
 
   try {
-    const jwt = await createEnableBankingJWT(appId, privateKeyPem);
     const authRes = await fetch(`${ENABLE_BANKING_API_BASE}/auth`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json', ...psu },
       body: JSON.stringify({
-        // Con Revolut basta chiedere "tutti i conti" (nessun elenco in access.accounts).
-        // Con UniCredit no: la sessione torna AUTHORIZED e valida ma con accounts: [] e
-        // accounts_data: [], cioè il consenso non collega niente. Gli ASPSP fatti così
-        // vogliono sapere in anticipo su quale conto vale il consenso, quindi quando l'IBAN
-        // è noto lo si passa esplicitamente. balances/transactions erano già i default
-        // aggiunti da Enable Banking: meglio dichiararli invece di ereditarli in silenzio.
+        // access.accounts elenca i conti su cui il consenso deve valere. ATTENZIONE a cosa
+        // NON fa: mandarlo non garantisce che venga applicato. Con UniCredit (IT) le sessioni
+        // del 5 e del 6 agosto 2026 sono partite con accounts: [{iban}] e sono tornate con
+        // access.accounts: null e accounts: [] — Enable Banking o la banca lo scartano, quindi
+        // il consenso finisce per valere genericamente su "tutti i conti" e la banca non ne
+        // espone nessuno. Con Revolut invece funziona anche senza elenco. Lo si manda lo
+        // stesso perché quando viene applicato è la strada giusta, ma NON è la spiegazione di
+        // una sessione vuota: quella va cercata in cosa la banca dichiara (loggato qui sopra)
+        // e nel tipo di conto — PSD2 copre i conti di pagamento, non depositi e libretti.
+        // balances/transactions erano già i default aggiunti da Enable Banking: meglio
+        // dichiararli invece di ereditarli in silenzio.
         access: accessRequested,
         aspsp: { name: aspspName, country },
         state,
