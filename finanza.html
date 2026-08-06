@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.5';
-const APP_BUILD   = '2026-08-06T13:30:00Z';
+const APP_VERSION = 'v1.2.6';
+const APP_BUILD   = '2026-08-06T14:15:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -4079,15 +4079,33 @@ function openAssignContributionModal(contributionId) {
    banca per conto suo (🏦 Importa dalla banca) e ci applica le sue categorie, quindi qui i
    movimenti arrivano già puliti e categorizzati invece che grezzi dall'API.
 
-   Il match sul partecipante è per IBAN ed è esatto: invece di estrarre un IBAN dalla
-   descrizione con una regex — che sbaglia appena la banca cambia formato — si verifica se
-   l'IBAN del partecipante compare nel testo del movimento, confrontando entrambi senza
-   spazi né punteggiatura. Se non c'è nessun IBAN si ripiega sul nome.
+   A decidere di chi è un movimento è prima di tutto la CATEGORIA con cui è stato archiviato
+   nel Conto Risparmio ("quota Teresa", "quota Salvatore"): lì la scelta l'ha già fatta una
+   persona, guardando il movimento. Le categorie si abbinano ai partecipanti per nome, e
+   l'abbinamento è modificabile nell'anteprima — entrano nel fondo solo i movimenti delle
+   categorie assegnate a qualcuno.
+
+   Dove la categoria non basta si ripiega sull'IBAN, ed è un match esatto: invece di estrarre
+   un IBAN dalla descrizione con una regex — che sbaglia appena la banca cambia formato — si
+   verifica se l'IBAN del partecipante compare nel testo del movimento, confrontando entrambi
+   senza spazi né punteggiatura. Ultimo ripiego, il nome.
 
    Convenzione dei segni identica al fondo: importo_voce positivo = versamento,
    negativo = prelievo.                                                                  */
 const cntrsNorm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 let _cntrsPreview = null;
+// Una categoria appartiene a un partecipante se ne contiene il nome: "quota Teresa" → Teresa.
+// Basta un token (il cognome nell'anagrafica del fondo di solito nella categoria non c'è), ma
+// se il nome di due partecipanti finisce nella stessa categoria l'abbinamento è ambiguo e non
+// si indovina: meglio lasciarlo scegliere.
+function cntrsCategoryOwner(categoryName, participants) {
+  const tokens = s => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 2);
+  const catTokens = new Set(tokens(categoryName));
+  if (!catTokens.size) return null;
+  const hits = participants.filter(p => tokens(p.name).some(t => catTokens.has(t)));
+  return hits.length === 1 ? hits[0].id : null;
+}
 async function importFromContoRisparmio(fundId) {
   const fund = S.funds.find(f => f.id === fundId);
   if (!fund) return;
@@ -4098,38 +4116,95 @@ async function importFromContoRisparmio(fundId) {
   }
   openModal('Import dal Conto Risparmio', '<div class="empty-sm">📥 Leggo i movimenti…</div>');
   try {
-    const rows = await sbQ('cntrs_transactions_terr', 'select=id,data,descrizione,importo_voce,note&order=data.asc');
+    const [rows, categories] = await Promise.all([
+      sbQ('cntrs_transactions_terr', 'select=id,data,descrizione,importo_voce,note,category_id&order=data.asc'),
+      sbQ('cntrs_categories_terr', 'select=id,name&order=name.asc'),
+    ]);
+    const catName = Object.fromEntries((categories || []).map(c => [c.id, c.name]));
     // Già importati: l'external_id porta l'id della riga di origine, quindi un secondo
     // import non ripropone niente (e l'indice unico lo impedisce comunque).
     const already = new Set(
       S.fundContributions.filter(c => c.fund_id === fundId && (c.external_id || '').startsWith('cntrs:'))
         .map(c => c.external_id)
     );
-    const items = rows
-      .filter(r => parseFloat(r.importo_voce) !== 0 && !already.has(`cntrs:${r.id}`))
-      .map(r => {
-        const amount = parseFloat(r.importo_voce);
-        const haystack = cntrsNorm(`${r.descrizione || ''} ${r.note || ''}`);
-        const byIban = participants.filter(p => p.iban && haystack.includes(cntrsNorm(p.iban)));
-        const byName = byIban.length ? [] : participants.filter(p => fundNameMatches(p.name, `${r.descrizione || ''} ${r.note || ''}`));
-        const matched = byIban.length === 1 ? byIban[0] : (byName.length === 1 ? byName[0] : null);
-        return {
-          id: r.id,
-          date: r.data,
-          amount,
-          type: amount > 0 ? 'versamento' : 'prelievo',
-          description: r.descrizione || '',
-          note: r.note || '',
-          participantId: matched?.id || null,
-          matchedVia: byIban.length === 1 ? 'IBAN' : (byName.length === 1 ? 'nome' : null),
-        };
-      });
-    _cntrsPreview = { fundId, items, participants, alreadyImported: already.size };
+    const nuovi = (rows || []).filter(r => parseFloat(r.importo_voce) !== 0 && !already.has(`cntrs:${r.id}`));
+    // Le categorie proposte sono solo quelle che hanno davvero movimenti nuovi: un elenco di
+    // categorie vuote da assegnare sarebbe solo rumore.
+    const catMap = {};
+    const usate = [];
+    for (const r of nuovi) {
+      const id = r.category_id || '';
+      let voce = usate.find(c => c.id === id);
+      if (!voce) {
+        voce = { id, name: catName[id] || '(senza categoria)', count: 0 };
+        usate.push(voce);
+        catMap[id] = cntrsCategoryOwner(voce.name, participants);
+      }
+      voce.count++;
+    }
+    usate.sort((a, b) => a.name.localeCompare(b.name));
+    const items = nuovi.map(r => ({
+      id: r.id,
+      date: r.data,
+      amount: parseFloat(r.importo_voce),
+      type: parseFloat(r.importo_voce) > 0 ? 'versamento' : 'prelievo',
+      description: r.descrizione || '',
+      note: r.note || '',
+      categoryId: r.category_id || '',
+      categoryName: catName[r.category_id] || '(senza categoria)',
+      participantId: null,
+      matchedVia: null,
+    }));
+    _cntrsPreview = { fundId, items, participants, categories: usate, catMap, alreadyImported: already.size };
+    applyCntrsMatching();
     renderCntrsPreview();
   } catch (err) {
     closeModal();
     alert('Errore lettura movimenti: ' + err.message);
   }
+}
+// Attribuzione, in ordine di affidabilità: la categoria è una scelta già fatta da una persona
+// guardando il movimento, l'IBAN è un dato oggettivo dentro il testo, il nome è l'ultimo
+// ripiego. Si ricalcola tutto da capo a ogni cambio di abbinamento delle categorie, così non
+// restano attribuzioni vecchie appiccicate a movimenti che nel frattempo hanno cambiato padrone.
+function applyCntrsMatching() {
+  const d = _cntrsPreview;
+  if (!d) return;
+  for (const it of d.items) {
+    // Una scelta fatta a mano riga per riga batte qualunque regola automatica: è l'ultima
+    // parola di chi sta guardando, e ricalcolarla sopra sarebbe un dispetto.
+    if (it.matchedVia === 'a mano') continue;
+    const prima = it.participantId;
+    const byCategory = d.catMap[it.categoryId] || null;
+    if (byCategory) {
+      it.participantId = byCategory;
+      it.matchedVia = 'categoria';
+    } else {
+      const haystack = cntrsNorm(`${it.description} ${it.note}`);
+      const byIban = d.participants.filter(p => p.iban && haystack.includes(cntrsNorm(p.iban)));
+      const byName = byIban.length ? [] : d.participants.filter(p => fundNameMatches(p.name, `${it.description} ${it.note}`));
+      it.participantId = byIban.length === 1 ? byIban[0].id : (byName.length === 1 ? byName[0].id : null);
+      it.matchedVia = byIban.length === 1 ? 'IBAN' : (byName.length === 1 ? 'nome' : null);
+    }
+    // Se il movimento ha cambiato padrone, la spunta torna a quella di partenza: tenere
+    // "deselezionato" su una riga appena diventata abbinata la nasconderebbe dall'import
+    // proprio nel momento in cui l'utente l'ha voluta dentro.
+    if (it.participantId !== prima) delete it.checked;
+  }
+}
+// Le scelte fatte a mano nell'anteprima (spunte e partecipante riga per riga) vanno salvate
+// prima di ridisegnare, altrimenti cambiare l'abbinamento di una categoria le cancella tutte.
+function captureCntrsSelections() {
+  const d = _cntrsPreview;
+  if (!d) return;
+  document.querySelectorAll('#modal-body input[data-cntrs-idx]').forEach(cb => {
+    const it = d.items[parseInt(cb.dataset.cntrsIdx, 10)];
+    if (it) it.checked = cb.checked;
+  });
+  document.querySelectorAll('#modal-body select[data-cntrs-participant]').forEach(sel => {
+    const it = d.items[parseInt(sel.dataset.cntrsParticipant, 10)];
+    if (it && sel.value !== (it.participantId || '')) { it.participantId = sel.value || null; it.matchedVia = 'a mano'; }
+  });
 }
 // Stesso criterio del sync bancario: i token del nome devono coincidere tutti da una parte,
 // perché un solo pezzo in comune non basta per attribuire soldi a qualcuno.
@@ -4147,10 +4222,11 @@ function renderCntrsPreview() {
   const unmatched = d.items.filter(i => !i.participantId);
   const row = (it, i, checked) => `
     <tr>
-      <td><input type="checkbox" data-cntrs-idx="${i}" ${checked ? 'checked' : ''} /></td>
+      <td><input type="checkbox" data-cntrs-idx="${i}" ${(it.checked ?? checked) ? 'checked' : ''} /></td>
       <td class="mono text-sm">${fmtDate(it.date)}</td>
       <td class="mono ${it.amount < 0 ? 'text-neg' : 'text-pos'}">${fmtEURc(it.amount)}</td>
       <td><div class="truncate" style="max-width:220px" title="${(it.description + ' ' + it.note).replace(/"/g, '')}">${it.description || '—'}</div></td>
+      <td class="text-sm text-muted">${it.categoryName}</td>
       <td>
         <select class="form-input form-select" data-cntrs-participant="${i}" style="min-width:150px">
           <option value="">— da rivedere —</option>
@@ -4160,6 +4236,26 @@ function renderCntrsPreview() {
       </td>
     </tr>`;
   openModal('Import dal Conto Risparmio', `
+    <div class="card mb-12">
+      <div class="card-title">Categorie del Conto Risparmio → partecipante</div>
+      <p class="text-muted text-sm mb-12">Entrano nel fondo i movimenti delle categorie assegnate a un partecipante. Le altre restano fuori: le trovi in fondo, se ti serve pescarne qualcuna.</p>
+      <div class="table-wrap" style="max-height:200px;overflow-y:auto">
+        <table class="table">
+          <thead><tr><th>Categoria</th><th>Movimenti</th><th>Va a</th></tr></thead>
+          <tbody>${d.categories.map(c => `
+            <tr>
+              <td>${c.name}</td>
+              <td class="mono">${c.count}</td>
+              <td>
+                <select class="form-input form-select" data-cntrs-cat="${c.id}" style="min-width:150px">
+                  <option value="">— non considerare —</option>
+                  ${d.participants.map(p => `<option value="${p.id}" ${d.catMap[c.id] === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+                </select>
+              </td>
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>
     <p class="text-sm mb-12">
       <strong>${matched.length}</strong> movimenti abbinati a un partecipante, <strong>${unmatched.length}</strong> senza corrispondenza.
       ${d.alreadyImported ? `<br/><span class="text-muted">Già importati in precedenza e quindi esclusi: ${d.alreadyImported}.</span>` : ''}
@@ -4178,10 +4274,10 @@ function renderCntrsPreview() {
       Mostra i ${unmatched.length} movimenti senza corrispondenza
     </button>
     <div id="cntrs-unmatched" style="display:none">
-      <p class="text-muted text-sm" style="margin-top:10px">Nessun IBAN né nome di un partecipante in questi movimenti. Assegnali qui se ti servono, oppure lasciali fuori.</p>
+      <p class="text-muted text-sm" style="margin-top:10px">Movimenti di categorie non assegnate, e senza IBAN né nome di un partecipante nel testo. Assegnali qui se ti servono, oppure lasciali fuori.</p>
       <div class="table-wrap" style="max-height:240px;overflow-y:auto">
         <table class="table">
-          <thead><tr><th></th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Partecipante</th></tr></thead>
+          <thead><tr><th></th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Categoria</th><th>Partecipante</th></tr></thead>
           <tbody>${unmatched.map((it) => row(it, d.items.indexOf(it), false)).join('')}</tbody>
         </table>
       </div>
@@ -4191,6 +4287,16 @@ function renderCntrsPreview() {
       ${d.items.length ? '<button type="button" class="btn btn-primary" data-action="confirm-cntrs-import">Importa selezionati</button>' : ''}
     </div>
   `);
+  // Cambiare a chi va una categoria ricalcola tutte le attribuzioni. Le scelte fatte a mano
+  // riga per riga vanno salvate prima, altrimenti ridisegnare le butta via.
+  document.querySelectorAll('#modal-body select[data-cntrs-cat]').forEach(sel => {
+    sel.addEventListener('change', () => {
+      captureCntrsSelections();
+      _cntrsPreview.catMap[sel.dataset.cntrsCat] = sel.value || null;
+      applyCntrsMatching();
+      renderCntrsPreview();
+    });
+  });
 }
 async function confirmContoRisparmioImport() {
   const d = _cntrsPreview;
@@ -4220,7 +4326,9 @@ async function confirmContoRisparmioImport() {
         // Abbinato = entra nelle quote; senza partecipante resta in coda di revisione.
         status: p ? (it.matchedVia ? 'auto' : 'confermato') : 'da_rivedere',
         external_id: `cntrs:${it.id}`,
-        notes: [it.description, it.note].filter(Boolean).join(' · '),
+        // La categoria di partenza resta scritta nel movimento: è quella che ha deciso di chi
+        // è, e fra sei mesi è l'unica cosa che spiega perché questo importo sta in questa quota.
+        notes: [it.description, it.note, it.categoryName ? `[${it.categoryName}]` : ''].filter(Boolean).join(' · '),
       };
     });
     await sbIns('fnz_fund_contributions', payload);
