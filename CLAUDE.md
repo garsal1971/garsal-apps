@@ -352,6 +352,25 @@ Stessa scheda di catalogo: `maximum_consent_validity` (180 giorni per UniCredit)
 `auth_methods` per `psu_type`. Il pulsante *ℹ️ Cosa richiede questa banca* in `finanza.html`
 la mostra per intero — è il primo posto da guardare quando un collegamento riesce a metà.
 
+### ⚠️ Restricted mode: i conti vanno messi in whitelist, o la sessione torna vuota
+
+**L'applicazione Enable Banking è in _restricted mode_** (attivata con *«Activate by linking
+accounts»*, senza contratto di produzione piena). In quella modalità l'API restituisce
+**soltanto i conti collegati nel Control Panel** con *«Link accounts»*: per un conto mai
+collegato lì il consenso viene autorizzato, la banca mostra il conto spuntato, e la sessione
+torna con `accounts: []` e `access.accounts: null` — **senza nessun errore**, perché per Enable
+Banking non è un errore ma il filtro previsto.
+
+È la spiegazione dell'intera vicenda UniCredit di agosto 2026: Revolut funzionava perché quel
+conto era stato collegato all'attivazione dell'applicazione, UniCredit no perché non lo era mai
+stato. **Prima di cercare la causa nel codice, verificare che il conto sia in whitelist**:
+Control Panel → applicazione → *Link accounts* → autenticazione in banca → autorizzazione del
+conto. Poi rifare il consenso dall'app.
+
+Corollario: nessuna modifica a `enable-banking-connect` / `-callback` può aggirarlo — IBAN in
+`access.accounts`, header PSU, `auth_method`, `psu_type` e durata del consenso sono tutti
+irrilevanti se il conto non è collegato. Sono già stati provati tutti.
+
 ### Consenso vuoto: cosa è stato chiesto vs cosa è tornato
 
 Una sessione `AUTHORIZED` con `access.accounts: null` e zero conti ha **due cause diverse** che

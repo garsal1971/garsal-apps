@@ -3,6 +3,12 @@
 // POST /auth su Enable Banking e restituisce l'URL a cui reindirizzare l'utente per il
 // consenso sulla propria banca (login + autorizzazione).
 //
+// ⚠️ RESTRICTED MODE non è un dettaglio di contorno: l'API restituisce solo i conti messi in
+// whitelist nel Control Panel di Enable Banking con "Link accounts". Per un conto non
+// collegato lì il consenso riesce, la banca mostra il conto spuntato e la sessione torna con
+// accounts: [] — senza errori, perché è il filtro previsto. Niente in questa function può
+// aggirarlo: prima di cercare la causa qui dentro, controllare la whitelist.
+//
 // Richiede i Supabase Secrets: ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY (PEM),
 // SUPABASE_SERVICE_ROLE_KEY (per decodificare in sicurezza l'utente chiamante).
 //
