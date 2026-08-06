@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.3';
-const APP_BUILD   = '2026-08-06T12:15:00Z';
+const APP_VERSION = 'v1.2.4';
+const APP_BUILD   = '2026-08-06T13:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2722,20 +2722,39 @@ async function refreshBankAccounts(connectionId) {
    casi: senza (collegamenti nati prima di questa traccia) si resta sul dubbio, dichiarandolo. */
 function emptySessionExplanation(connectionId) {
   const req = (S.bankConsentRequests || {})[connectionId];
-  const base = `La sessione è autorizzata ma la banca non espone nessun conto (<span class="mono">accounts: []</span>): rileggerla non la riempirà mai.`;
-  if (!req) {
-    return `${base} Non risulta tracciata la richiesta di consenso di questo collegamento (è precedente alla traccia), quindi non si sa cosa fosse stato spedito: <strong>rifai il consenso indicando l'IBAN</strong> e questa scheda mostrerà cosa è partito.`;
-  }
-  if (/IBAN NON INVIATO/.test(req.error_message || '')) {
-    return `${base} La richiesta era partita <strong>senza IBAN</strong> — l'opzione «la mia banca non lo richiede»: <strong>rifai il consenso indicando l'IBAN</strong>, così almeno quella variabile è fuori discussione.`;
-  }
-  return `${base} L'IBAN <strong>era stato indicato</strong> nella richiesta (vedi la riga qui sotto), quindi non è una svista nella compilazione — e nella sessione <span class="mono">access.accounts</span> torna comunque <span class="mono">null</span>: l'elenco che mandiamo non viene applicato, il consenso vale su «tutti i conti» e la banca non ne espone nessuno.
-    <br/><br/>Cosa vale la pena controllare, in quest'ordine:
+  // Causa nota, e va detta per prima perché è quella che non si vede da nessuna parte: la
+  // nostra applicazione Enable Banking è in "restricted mode" (attivata collegando i conti).
+  // In quella modalità l'API restituisce SOLO i conti messi in whitelist nel Control Panel con
+  // "Link accounts". Un conto mai collegato lì dà esattamente questo quadro — consenso
+  // autorizzato, conto spuntato in banca, sessione con accounts: [] — e nessun errore, perché
+  // per Enable Banking non è un errore ma il filtro previsto. È il motivo per cui Revolut
+  // funziona (collegato all'attivazione) e UniCredit no.
+  const restricted = `<strong>Causa più probabile: il conto non è in whitelist su Enable Banking.</strong>
+    La nostra applicazione è in <em>restricted mode</em>, e in quella modalità l'API restituisce
+    <strong>solo i conti collegati nel Control Panel</strong>: per gli altri l'autorizzazione riesce,
+    la banca mostra il conto spuntato e la sessione torna comunque con
+    <span class="mono">accounts: []</span>, senza nessun errore — è il filtro previsto, non un guasto.
+    <br/><br/><strong>Come si sistema</strong> (una volta per conto, dal sito di Enable Banking, non da qui):
+    <ol style="margin:6px 0 0 18px">
+      <li>entra nel <strong>Control Panel</strong> di Enable Banking e apri l'applicazione;</li>
+      <li>premi <strong>«Link accounts»</strong>;</li>
+      <li>autenticati con la banca e autorizza il conto che ti serve;</li>
+      <li>torna qui e <strong>rifai il consenso</strong>: da quel momento il conto compare.</li>
+    </ol>
+    L'applicazione resta «Restricted» ma «Active»: è lo stato normale finché non c'è un contratto
+    di produzione piena.`;
+  const base = `La sessione è autorizzata ma non contiene nessun conto (<span class="mono">accounts: []</span>): rileggerla non la riempirà mai.`;
+  const secondarie = `<br/><br/>Se il conto è già collegato nel Control Panel, restano da guardare:
     <ul style="margin:6px 0 0 18px">
-      <li><strong>Il tipo di conto.</strong> PSD2 copre i <em>conti di pagamento</em>. Un conto risparmio, un deposito o un libretto vincolato spesso non è esposto: nessun conto da condividere, consenso vuoto. Prova con l'IBAN del <strong>conto corrente</strong>: se quello compare, il risparmio è semplicemente fuori perimetro e per il fondo resta «⬇️ Importa dal Conto Risparmio».</li>
-      <li><strong>La schermata di selezione conti sulla banca.</strong> Nel consenso UniCredit c'è un passaggio in cui si spuntano i conti da condividere: se si conferma senza spuntare niente, il consenso nasce autorizzato e vuoto proprio così.</li>
-      <li><strong>Cosa dichiara la banca</strong> — «ℹ️ Cosa richiede questa banca», e la riga di richiesta qui sotto ora riporta psu_types, auth_methods e gli header PSU obbligatori letti al momento del collegamento.</li>
+      <li><strong>la schermata di selezione conti sulla banca</strong> — confermare senza spuntare niente produce lo stesso consenso vuoto;</li>
+      <li><strong>il tipo di conto</strong> — PSD2 copre i conti di pagamento: depositi e libretti vincolati spesso non sono esposti;</li>
+      <li><strong>cosa dichiara la banca</strong> — «ℹ️ Cosa richiede questa banca», e la riga di richiesta qui sotto riporta psu_types, auth_methods e header PSU obbligatori letti al momento del collegamento.</li>
     </ul>`;
+  if (req && /IBAN NON INVIATO/.test(req.error_message || '')) {
+    return `${base} ${restricted}${secondarie}
+      <br/><br/>Nota: questa richiesta era partita <strong>senza IBAN</strong> (opzione «la mia banca non lo richiede»). Rifacendola, indica l'IBAN.`;
+  }
+  return `${base} ${restricted}${secondarie}`;
 }
 /* Voce di catalogo per intero: quando una banca autorizza il consenso ma non restituisce
    conti, la differenza rispetto a una che funziona sta in quello che dichiara qui —
