@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.7';
-const APP_BUILD   = '2026-08-06T15:00:00Z';
+const APP_VERSION = 'v1.2.8';
+const APP_BUILD   = '2026-08-06T16:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -793,24 +793,59 @@ function computeHoldings(filter = null) {
       return { product, qty: h.qty, avgCost, costBasis: h.costBasis, currentPrice, currentValue, pnl, pnlPct, pd };
     }).filter(Boolean);
 }
+/* Liquidità di un portafoglio: i soldi versati nel fondo collegato e non ancora usati per
+   comprare titoli. Il portafoglio non ha un conto di cassa in tabella — esistono solo BUY e
+   SELL — quindi la giacenza si ricava per differenza: quanto è entrato dal fondo, meno quanto
+   è uscito per gli acquisti (commissioni comprese) più quanto è rientrato dalle vendite.
+
+   Si usa il totale NOMINALE dei versamenti, non quello rivalutato con l'indice FOI: la
+   rivalutazione è una convenzione per dividere le quote fra i partecipanti in modo equo, non
+   denaro che esiste sul conto. Contano solo i movimenti che fanno quota (auto/confermato),
+   com'è per il resto del fondo: un movimento «da rivedere» non si sa nemmeno di chi sia.
+
+   Il risultato non scende sotto zero: se si è investito più di quanto il fondo abbia versato,
+   la differenza è arrivata da un'altra tasca e la liquidità del fondo è semplicemente finita.
+   Il caso viene però segnalato nella scheda del fondo, perché di solito vuol dire che manca
+   un versamento da registrare.                                                             */
+function portfolioNetSpent(portfolioId) {
+  return S.transactions
+    .filter(t => t.portfolio_id === portfolioId)
+    .reduce((s, t) => {
+      const lordo = parseFloat(t.quantity) * parseFloat(t.price);
+      const com   = parseFloat(t.commission || 0);
+      // Un acquisto porta via anche la commissione, una vendita ne restituisce al netto.
+      return s + (t.type === 'BUY' ? lordo + com : -(lordo - com));
+    }, 0);
+}
+function computePortfolioCash(portfolioId) {
+  const fund = S.funds.find(f => f.linked_portfolio_id === portfolioId);
+  if (!fund) return 0;
+  return Math.max(0, computeFundShares(fund.id).totalNominal - portfolioNetSpent(portfolioId));
+}
 function portfolioStats() {
   return S.portfolios.map(p => {
     const own = (parseFloat(p.ownership_percentage) || 100) / 100;
     const h   = computeHoldings(p.id);
-    const tot = h.reduce((s, x) => s + (x.currentValue ?? x.costBasis), 0) * own;
+    const titoli = h.reduce((s, x) => s + (x.currentValue ?? x.costBasis), 0) * own;
+    const cash = computePortfolioCash(p.id) * own;
+    const tot = titoli + cash;
     const cost = h.reduce((s, x) => s + x.costBasis, 0) * own;
-    const pnl  = tot - cost;
+    // P&L e variazione giornaliera restano sui soli titoli: la liquidità non guadagna né
+    // perde, e sommarla qui la farebbe comparire come utile il giorno che entra sul conto.
+    const pnl  = titoli - cost;
     const previousCloseValue = h.reduce((s, x) => {
       const prevClose = x.pd?.prev_close ?? null;
       return s + (prevClose != null ? x.qty * prevClose : (x.currentValue ?? x.costBasis));
     }, 0) * own;
     const dailyChangePct = previousCloseValue > 0
-      ? ((tot - previousCloseValue) / previousCloseValue) * 100
+      ? ((titoli - previousCloseValue) / previousCloseValue) * 100
       : null;
     return {
       portfolio: p,
       holdings: h,
       totalValue: tot,
+      securitiesValue: titoli,
+      cash,
       totalCost: cost,
       pnl,
       pnlPct: cost > 0 ? (pnl / cost) * 100 : 0,
@@ -910,8 +945,10 @@ function computeFundLinkedBalance(fund) {
     const p = S.portfolios.find(x => x.id === fund.linked_portfolio_id);
     if (!p) return null;
     const holdings = computeHoldings(p.id);
-    const value = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0);
-    return { kind: 'portfolio', label: `Portafoglio: ${p.name}`, value, target: p };
+    const titoli = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0);
+    // Il saldo è quello del conto vero: titoli più la liquidità versata e non ancora investita.
+    const cash = computePortfolioCash(p.id);
+    return { kind: 'portfolio', label: `Portafoglio: ${p.name}`, value: titoli + cash, titoli, cash, investito: portfolioNetSpent(p.id), target: p };
   }
   if (fund.linked_other_asset_id) {
     const a = S.otherAssets.find(x => x.id === fund.linked_other_asset_id);
@@ -1055,13 +1092,16 @@ function buildSnapshotPayload() {
     .filter(a => a.asset_type !== 'danaro_rosa')
     .reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
 
-  const portfolios = stats.map(({ portfolio: p, holdings: h, totalValue, totalCost, pnl, pnlPct }) => {
+  const portfolios = stats.map(({ portfolio: p, holdings: h, totalValue, cash, totalCost, pnl, pnlPct }) => {
     const own = (parseFloat(p.ownership_percentage) || 100) / 100;
     return {
       id: p.id, name: p.name, color: p.color,
       ownership_pct: parseFloat(p.ownership_percentage) || 100,
       total_value: totalValue,
       total_value_full: own > 0 ? totalValue / own : totalValue,
+      // Quanto del valore è liquidità non investita: senza, uno snapshot storico non lascia
+      // capire perché il portafoglio valeva quella cifra pur avendo pochi titoli.
+      cash,
       total_cost: totalCost, pnl, pnl_pct: pnlPct,
       holdings: h.map(hh => ({
         symbol: hh.product.symbol, name: hh.product.name, asset_type: hh.product.asset_type,
@@ -1775,12 +1815,16 @@ function renderPortafoglioDetail() {
   if (!portfolio) { navigate('portafogli'); return; }
   const own = (parseFloat(portfolio.ownership_percentage) || 100) / 100;
   const holdings  = computeHoldings(portfolio.id);
-  const totalVal  = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0) * own;
+  // Titoli e liquidità restano separati: il P&L e la variazione giornaliera valgono solo sui
+  // titoli, mentre il valore del portafoglio è quello che c'è davvero sul conto.
+  const totalTitoli = holdings.reduce((s, h) => s + (h.currentValue ?? h.costBasis), 0) * own;
+  const totalCash = computePortfolioCash(portfolio.id) * own;
+  const totalVal  = totalTitoli + totalCash;
   const totalCost = holdings.reduce((s, h) => s + h.costBasis, 0) * own;
-  const totalPnl  = totalVal - totalCost;
+  const totalPnl  = totalTitoli - totalCost;
   const totalPct  = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const totalDailyPnl = holdings.reduce((s, h) => s + (h.pd?.change_amt != null ? h.pd.change_amt * h.qty * own : 0), 0);
-  const totalDailyPct = (totalVal - totalDailyPnl) > 0 ? (totalDailyPnl / (totalVal - totalDailyPnl)) * 100 : 0;
+  const totalDailyPct = (totalTitoli - totalDailyPnl) > 0 ? (totalDailyPnl / (totalTitoli - totalDailyPnl)) * 100 : 0;
   const txs       = S.transactions.filter(t => t.portfolio_id === portfolio.id);
   const ptfFilters = S.ptfFilters || {};
   let visibleHoldings = holdings;
@@ -1802,6 +1846,7 @@ function renderPortafoglioDetail() {
     </div>
     <div class="kpi-grid">
       ${kpi('Valore portafoglio (quota)', fmtEUR(totalVal),  'neutral')}
+      ${totalCash > 0 ? kpi('di cui liquidità (quota)', fmtEUR(totalCash), 'neutral') : ''}
       ${kpi('Investito (quota)',          fmtEUR(totalCost), 'neutral')}
       ${kpi('P&amp;L (quota)',            fmtEUR(totalPnl),  pnlCls(totalPnl))}
       <div class="kpi-card" data-action="toggle-ptf-pnl-mode" style="cursor:pointer" title="${S.ptfPnlMode === 'daily' ? 'Clicca per rendimento totale' : 'Clicca per rendimento giornaliero'}">
@@ -2319,7 +2364,11 @@ function renderFundDetail() {
       return `
     <div class="card mb-16">
       <div class="card-title">Collegamento</div>
-      <div class="settings-row text-sm">${link.label} · Saldo attuale: <strong>${fmtEUR(link.value)}</strong></div>
+      <div class="settings-row text-sm">${link.label} · Saldo attuale: <strong>${fmtEUR(link.value)}</strong>${
+        link.kind === 'portfolio' ? ` <span class="text-muted">(titoli ${fmtEUR(link.titoli)} + liquidità ${fmtEUR(link.cash)})</span>` : ''}</div>
+      ${link.kind === 'portfolio' && link.cash === 0 && stats.totalNominal < link.investito
+        ? `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Negli acquisti sono usciti ${fmtEUR(link.investito)}, più dei ${fmtEUR(stats.totalNominal)} versati nel fondo: la differenza è arrivata da un'altra parte, oppure manca un versamento da registrare.</div>`
+        : ''}
       ${conn ? `<div class="settings-row text-sm">Conto bancario: <strong>${conn.aspsp_name}${conn.display_name ? ' — ' + conn.display_name : ''}</strong></div>` : ''}
       ${fund.owner_participant
         ? (owner

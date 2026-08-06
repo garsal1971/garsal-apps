@@ -105,20 +105,51 @@ function computeHoldings(
 }
 
 type PortfolioStat = {
-  portfolio: Row; holdings: Holding[]; totalValue: number; totalCost: number; pnl: number; pnlPct: number;
+  portfolio: Row; holdings: Holding[]; totalValue: number; cash: number;
+  totalCost: number; pnl: number; pnlPct: number;
 };
+
+// Liquidità di un portafoglio: i soldi versati nel fondo collegato e non ancora usati per
+// comprare titoli. Il portafoglio non ha un conto di cassa in tabella — esistono solo BUY e
+// SELL — quindi la giacenza si ricava per differenza. Si usa il totale NOMINALE dei versamenti
+// (la rivalutazione FOI divide le quote fra i partecipanti, non è denaro sul conto) e contano
+// solo i movimenti che fanno quota, come nel resto del fondo.
+// ⚠️ Gemella di computePortfolioCash/portfolioNetSpent in finanza.html: se cambia una,
+// cambia anche l'altra o lo snapshot notturno diverge da quello che l'app mostra a schermo.
+const FUND_COUNTED_STATUS = ["auto", "confermato"];
+
+function portfolioCash(portfolioId: string, transactions: Row[], funds: Row[], contributions: Row[]): number {
+  const fund = funds.find((f) => f.linked_portfolio_id === portfolioId);
+  if (!fund) return 0;
+  const versato = contributions
+    .filter((c) => c.fund_id === fund.id && FUND_COUNTED_STATUS.includes(String(c.status || "confermato")))
+    .reduce((s, c) => s + num(c.amount), 0);
+  const speso = transactions
+    .filter((t) => t.portfolio_id === portfolioId)
+    .reduce((s, t) => {
+      const lordo = num(t.quantity) * num(t.price);
+      const com = num(t.commission);
+      // Un acquisto porta via anche la commissione, una vendita ne restituisce al netto.
+      return s + (t.type === "BUY" ? lordo + com : -(lordo - com));
+    }, 0);
+  return Math.max(0, versato - speso);
+}
 
 function portfolioStats(
   portfolios: Row[], transactions: Row[], products: Map<string, Row>, prices: Record<string, number>,
+  funds: Row[], contributions: Row[],
 ): PortfolioStat[] {
   return portfolios.map((p) => {
     const own = (num(p.ownership_percentage) || 100) / 100;
     const holdings = computeHoldings(transactions, products, prices, p.id);
-    const totalValue = holdings.reduce((s, x) => s + (x.currentValue ?? x.costBasis), 0) * own;
+    const titoli = holdings.reduce((s, x) => s + (x.currentValue ?? x.costBasis), 0) * own;
+    const cash = portfolioCash(p.id, transactions, funds, contributions) * own;
     const totalCost = holdings.reduce((s, x) => s + x.costBasis, 0) * own;
-    const pnl = totalValue - totalCost;
+    // P&L sui soli titoli: la liquidità non guadagna né perde, e sommarla al valore senza
+    // sommarla al costo la farebbe comparire come utile il giorno che entra sul conto.
+    const pnl = titoli - totalCost;
     return {
-      portfolio: p, holdings, totalValue, totalCost, pnl,
+      portfolio: p, holdings, totalValue: titoli + cash, cash, totalCost, pnl,
       pnlPct: totalCost > 0 ? (pnl / totalCost) * 100 : 0,
     };
   });
@@ -181,22 +212,25 @@ type SnapshotPayload = {
 
 function buildSnapshotPayload(
   portfolios: Row[], transactions: Row[], products: Map<string, Row>, prices: Record<string, number>,
-  loans: Row[], loanRepayments: Row[], otherAssets: Row[],
+  loans: Row[], loanRepayments: Row[], otherAssets: Row[], funds: Row[], contributions: Row[],
 ): SnapshotPayload {
-  const stats = portfolioStats(portfolios, transactions, products, prices);
+  const stats = portfolioStats(portfolios, transactions, products, prices, funds, contributions);
   const grandValue = stats.reduce((s, x) => s + x.totalValue, 0);
   const totalLoans = loans.reduce((s, l) => s + (computeLoanValue(l, loanRepayments) || 0), 0);
   // danaro_rosa è escluso dai totali del patrimonio (come in finanza.html)
   const visibleAssets = otherAssets.filter((a) => a.asset_type !== "danaro_rosa");
   const totalOther = visibleAssets.reduce((s, a) => s + num(a.value) * (num(a.ownership_percentage) || 100) / 100, 0);
 
-  const portfolioDetails = stats.map(({ portfolio: p, holdings, totalValue, totalCost, pnl, pnlPct }) => {
+  const portfolioDetails = stats.map(({ portfolio: p, holdings, totalValue, cash, totalCost, pnl, pnlPct }) => {
     const own = (num(p.ownership_percentage) || 100) / 100;
     return {
       id: p.id, name: p.name, color: p.color,
       ownership_pct: num(p.ownership_percentage) || 100,
       total_value: totalValue,
       total_value_full: own > 0 ? totalValue / own : totalValue,
+      // Quanto del valore è liquidità non investita: senza, uno snapshot storico non lascia
+      // capire perché il portafoglio valeva quella cifra pur avendo pochi titoli.
+      cash,
       total_cost: totalCost, pnl, pnl_pct: pnlPct,
       holdings: holdings.map((hh) => ({
         symbol: hh.product.symbol, name: hh.product.name, asset_type: hh.product.asset_type,
@@ -299,7 +333,7 @@ serve(async (req) => {
 
   // ── 2. Caricamento dati (service role: vede tutti gli utenti) ───────────
   try {
-    const [portfolios, transactions, products, priceHistory, loans, loanRepayments, otherAssets] = await Promise.all([
+    const [portfolios, transactions, products, priceHistory, loans, loanRepayments, otherAssets, funds, contributions] = await Promise.all([
       fetchAll("fnz_portfolios", "id,user_id,name,color,ownership_percentage", "id"),
       fetchAll("fnz_transactions", "portfolio_id,product_id,type,quantity,price,commission,date,created_at", "id"),
       fetchAll("fnz_products", "id,symbol,name,asset_type", "id"),
@@ -307,10 +341,15 @@ serve(async (req) => {
       fetchAll("fnz_loans", "*", "id"),
       fetchAll("fnz_loan_repayments", "loan_id,date,amount,created_at", "id"),
       fetchAll("fnz_other_assets", "id,user_id,title,asset_type,value,valuation_date,ownership_percentage", "id"),
+      // Servono per la liquidità: il fondo collegato dice quanto denaro è entrato nel
+      // portafoglio, le transazioni quanto ne è uscito per comprare titoli.
+      fetchAll("fnz_funds", "id,user_id,linked_portfolio_id", "id"),
+      fetchAll("fnz_fund_contributions", "fund_id,amount,status", "id"),
     ]);
     log("INFO", "Dati caricati", {
       portfolios: portfolios.length, transactions: transactions.length, products: products.length,
       priceHistory: priceHistory.length, loans: loans.length, otherAssets: otherAssets.length,
+      funds: funds.length, contributions: contributions.length,
     });
 
     const productMap = new Map<string, Row>(products.map((p: Row) => [p.id, p]));
@@ -333,9 +372,13 @@ serve(async (req) => {
       const loanIds = new Set(userLoans.map((l: Row) => l.id));
       const userRepayments = loanRepayments.filter((r: Row) => loanIds.has(r.loan_id));
       const userAssets = otherAssets.filter((a: Row) => a.user_id === userId);
+      const userFunds = funds.filter((f: Row) => f.user_id === userId);
+      const userFundIds = new Set(userFunds.map((f: Row) => f.id));
+      const userContributions = contributions.filter((c: Row) => userFundIds.has(c.fund_id));
 
       const { topLevel, details } = buildSnapshotPayload(
         userPortfolios, userTransactions, productMap, prices, userLoans, userRepayments, userAssets,
+        userFunds, userContributions,
       );
 
       const { error } = await supabase.from("fnz_dashboard_snapshots").upsert({
