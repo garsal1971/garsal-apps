@@ -20,6 +20,12 @@
 // v4 — 2026-08-04: header PSU (psu-ip-address) su ogni chiamata a Enable Banking. UniCredit
 //   lo dichiara obbligatorio in required_psu_headers e senza autorizzava un consenso senza
 //   conti, in silenzio; Revolut non lo richiede, per questo funzionava.
+// v5 — 2026-08-06: l'IBAN viene validato (formato + checksum mod-97) prima di partire — un
+//   IBAN sbagliato produce lo stesso consenso vuoto di un IBAN mancante, ma lo si scopre solo
+//   dopo l'SCA. La riga di traccia in cm_sync_log viene creata con l'id in mano e l'id viaggia
+//   nello state fino al callback, che lo aggancia alla connessione appena creata: così l'app
+//   può DIRE cosa è stato spedito per quel collegamento invece di dedurlo. replaceConnectionId
+//   dice quale collegamento vuoto questo consenso viene a sostituire.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -75,6 +81,20 @@ function decodeSupabaseJwtSub(token: string): string | null {
   }
 }
 
+// Un IBAN sbagliato di una cifra vale quanto un IBAN assente: la banca non riconosce nessun
+// conto e restituisce una sessione autorizzata e vuota, dopo che l'utente ha già fatto login
+// e SCA. Il checksum mod-97 (ISO 13616) costa niente e intercetta i refusi prima di partire.
+function ibanIsValid(iban: string): boolean {
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{6,30}$/.test(iban)) return false;
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let remainder = 0n;
+  for (const ch of rearranged) {
+    const digits = ch >= '0' && ch <= '9' ? ch : String(ch.charCodeAt(0) - 55);
+    remainder = BigInt(String(remainder) + digits) % 97n;
+  }
+  return remainder === 1n;
+}
+
 // Alcune banche pretendono di sapere da quale IP arriva l'utente che sta autorizzando: lo
 // dichiarano in required_psu_headers nel catalogo /aspsps (UniCredit IT chiede
 // "psu-ip-address"). Senza quell'header il consenso viene comunque autorizzato, ma la banca
@@ -121,6 +141,7 @@ Deno.serve(async (req) => {
   let body: {
     aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string;
     module?: string; iban?: string; allowAllAccounts?: boolean; clientVersion?: string;
+    replaceConnectionId?: string;
   };
   try {
     body = await req.json();
@@ -139,6 +160,10 @@ Deno.serve(async (req) => {
   // Rinuncia esplicita all'IBAN: la manda solo la casella "la mia banca non lo richiede".
   const allowAllAccounts = body.allowAllAccounts === true;
   const clientVersion = (body.clientVersion || '').trim() || 'non dichiarata';
+  // Collegamento vuoto che questo consenso viene a sostituire: il callback ci sposta sopra i
+  // fondi e poi lo elimina, così l'utente non resta con due righe e il fondo agganciato a
+  // quella morta.
+  const replaceConnectionId = (body.replaceConnectionId || '').trim() || null;
   if (!aspspName || !country) {
     return new Response(
       JSON.stringify({ error: { message: 'Servono "aspspName" e "country".' } }),
@@ -173,18 +198,21 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+  // Un IBAN spedito ma sbagliato fallisce esattamente come un IBAN non spedito, e costa un
+  // giro di SCA per scoprirlo: si controlla qui, dove passa qualunque client.
+  if (iban && !ibanIsValid(iban)) {
+    return new Response(
+      JSON.stringify({ error: { message:
+        `IBAN non valido (${iban.slice(0, 6)}…${iban.slice(-4)}): il codice di controllo non torna. ` +
+        `Ricopialo dall'estratto conto — un carattere sbagliato basta perché la banca non riconosca ` +
+        `nessun conto e il consenso nasca vuoto.` } }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 
   // Correlazione col callback: dati necessari per creare la riga cm_bank_connections dopo il
   // consenso, dato che il redirect dalla banca non porta con sé l'header Authorization.
   const validUntil = new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString(); // 180 giorni, il massimo consentito da PSD2
-  const state = base64url(JSON.stringify({
-    userId,
-    ownerPersonId: ownerPersonId || null,
-    aspspName,
-    displayName: body.displayName || null,
-    module,
-    validUntil,
-  }));
 
   const supabaseProjectRef = new URL(Deno.env.get('SUPABASE_URL') || '').hostname.split('.')[0];
   const redirectUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/enable-banking-callback`;
@@ -192,6 +220,9 @@ Deno.serve(async (req) => {
   // Traccia di cosa si sta per chiedere: quando la sessione torna autorizzata ma senza
   // conti, l'unico modo per sapere se l'IBAN era stato spedito è averlo scritto qui prima
   // di partire. L'IBAN viene mascherato: serve sapere se c'era, non qual era.
+  // L'id della riga viaggia nello state: il callback ci scrive sopra la connessione appena
+  // creata, e da lì in poi l'app sa dire cosa era stato chiesto PER QUEL collegamento —
+  // prima poteva solo guardare access.accounts nella sessione e tirare a indovinare.
   const psu = psuHeaders(req);
   const accessRequested = {
     valid_until: validUntil,
@@ -199,25 +230,43 @@ Deno.serve(async (req) => {
     transactions: true,
     ...(iban ? { accounts: [{ iban }] } : {}),
   };
+  let logId: string | null = null;
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (supabaseUrl && serviceRoleKey) {
-      await createClient(supabaseUrl, serviceRoleKey).from('cm_sync_log').insert({
-        user_id: userId,
-        finished_at: new Date().toISOString(),
-        status: 'consent_request',
-        imported_count: 0,
-        error_message: `Richiesta consenso ${aspspName} (${country}) · modulo ${module} · IBAN ` +
-          (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
-          ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
-          ` · psu-ip-address: ${psu['psu-ip-address'] ? 'inviato' : 'ASSENTE'}` +
-          ` · client ${clientVersion}`,
-      });
+      const { data: logRow } = await createClient(supabaseUrl, serviceRoleKey)
+        .from('cm_sync_log')
+        .insert({
+          user_id: userId,
+          finished_at: new Date().toISOString(),
+          status: 'consent_request',
+          imported_count: 0,
+          error_message: `Richiesta consenso ${aspspName} (${country}) · modulo ${module} · IBAN ` +
+            (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
+            ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
+            ` · psu-ip-address: ${psu['psu-ip-address'] ? 'inviato' : 'ASSENTE'}` +
+            ` · client ${clientVersion}`,
+        })
+        .select('id')
+        .single();
+      logId = logRow?.id || null;
     }
   } catch {
     // La traccia è diagnostica: se non si riesce a scrivere, il collegamento va avanti lo stesso.
   }
+
+  const state = base64url(JSON.stringify({
+    userId,
+    ownerPersonId: ownerPersonId || null,
+    aspspName,
+    displayName: body.displayName || null,
+    module,
+    validUntil,
+    logId,
+    ibanRequested: iban || null,
+    replaceConnectionId,
+  }));
 
   try {
     const jwt = await createEnableBankingJWT(appId, privateKeyPem);

@@ -351,6 +351,24 @@ Stessa scheda di catalogo: `maximum_consent_validity` (180 giorni per UniCredit)
 `auth_methods` per `psu_type`. Il pulsante *ℹ️ Cosa richiede questa banca* in `finanza.html`
 la mostra per intero — è il primo posto da guardare quando un collegamento riesce a metà.
 
+### Consenso vuoto: cosa è stato chiesto vs cosa è tornato
+
+Una sessione `AUTHORIZED` con `access.accounts: null` e zero conti ha **due cause diverse** che
+si assomigliano: l'IBAN non è stato spedito (casella *«la mia banca non lo richiede»*), oppure
+è stato spedito e la banca non l'ha applicato. La sessione mostra solo il risultato, non la
+richiesta, quindi dedurlo da lì è tirare a indovinare.
+
+Per questo `enable-banking-connect` scrive in `cm_sync_log` una riga `consent_request` **prima**
+di chiamare `/auth` (IBAN mascherato, `access.accounts`, presenza di `psu-ip-address`, versione
+del client) e ne passa l'id nello `state`; `enable-banking-callback` ci scrive sopra il
+`bank_connection_id` appena creato. È l'unico aggancio tra richiesta e collegamento: senza,
+la riga resta orfana e la diagnosi torna a essere una supposizione.
+
+`state.replaceConnectionId` (pulsante *🔁 Rifai il consenso*) dice che il nuovo consenso
+sostituisce un collegamento rimasto senza `account_id`: il callback sposta i `fnz_funds` sul
+nuovo e cancella il vecchio. Il passaggio che conta è **spostare i fondi**: farlo a mano si
+dimentica, e il fondo resta agganciato a una riga che non sincronizzerà mai.
+
 ### ⚠️ Ora legale nei cron
 
 `pg_cron` lavora in **UTC e non conosce il cambio ora**. Gli schedule sono scritti per l'ora legale

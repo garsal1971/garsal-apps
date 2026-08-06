@@ -18,6 +18,10 @@
 //   restituiva niente sul formato assunto per Revolut), con GET /sessions/{id} di riserva e
 //   salvataggio del collegamento anche quando la lista resta vuota, più traccia diagnostica
 //   in cm_sync_log.
+// v4 — 2026-08-06: la riga "consent_request" scritta da enable-banking-connect viene agganciata
+//   alla connessione appena creata (state.logId), così l'app sa dire cosa era stato chiesto per
+//   quel collegamento. Con state.replaceConnectionId il consenso rifatto prende il posto di un
+//   collegamento rimasto senza conto: i fondi ci vengono spostati sopra e la riga vuota sparisce.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -157,6 +161,9 @@ Deno.serve(async (req) => {
     displayName: string | null;
     module?: string;
     validUntil: string;
+    logId?: string | null;
+    ibanRequested?: string | null;
+    replaceConnectionId?: string | null;
   };
   try {
     state = JSON.parse(base64urlDecode(stateRaw));
@@ -209,6 +216,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Se il consenso era stato chiesto per un IBAN preciso e la banca ne restituisce più di
+    // uno, quello richiesto va per primo: è la riga che eredita il fondo quando questo
+    // consenso ne sostituisce uno vuoto.
+    const normIban = (s: string | null | undefined) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const wanted = normIban(state.ibanRequested);
+    if (wanted && accounts.length > 1) {
+      accounts.sort((a, b) => Number(normIban(b.iban) === wanted) - Number(normIban(a.iban) === wanted));
+    }
+
     // Nessun conto nemmeno così: la riga si salva lo stesso, senza account_id. Il consenso
     // è già stato dato e rifarlo da capo costa un altro giro di SCA; con la riga in mano si
     // vede cosa è arrivato e si può correggere. Il sync si rifiuta di partire finché
@@ -239,9 +255,52 @@ Deno.serve(async (req) => {
           module,
         }];
 
-    const { data: inserted, error } = await supabase.from('cm_bank_connections').insert(rows).select('id');
+    const { data: inserted, error } = await supabase.from('cm_bank_connections').insert(rows).select('id, account_id');
     if (error) {
       return redirectTo('error', 'Errore salvataggio conto: ' + error.message, module);
+    }
+    const newConnectionId = inserted?.[0]?.id || null;
+
+    // La richiesta di consenso era stata tracciata prima di partire, senza sapere quale
+    // connessione ne sarebbe nata: adesso si sa. Da qui in poi l'app può mostrare, su quel
+    // collegamento, se l'IBAN era stato spedito davvero — che è l'unica cosa che distingue
+    // "consenso chiesto male" da "banca che ignora l'IBAN".
+    if (state.logId && newConnectionId) {
+      await supabase.from('cm_sync_log')
+        .update({ bank_connection_id: newConnectionId })
+        .eq('id', state.logId)
+        .eq('user_id', state.userId);
+    }
+
+    // Consenso rifatto per rimpiazzare un collegamento rimasto senza conto: i fondi che lo
+    // usavano vanno spostati sul nuovo, altrimenti restano agganciati a una riga che non
+    // sincronizzerà mai — è il passaggio che a mano ci si dimentica. Si sostituisce solo una
+    // riga davvero vuota e davvero dell'utente. Se anche il nuovo consenso nasce senza conti
+    // la sostituzione si fa lo stesso, sul collegamento appena creato: due righe vuote per lo
+    // stesso conto non aiutano nessuno, e quella nuova ha almeno una sessione fresca da
+    // rileggere. Il fondo resta agganciato a un conto senza account_id, e l'app lo dice.
+    const firstWithAccount = (inserted || []).find((r) => r.account_id)?.id || null;
+    const replacementTarget = firstWithAccount || newConnectionId;
+    if (state.replaceConnectionId && replacementTarget && state.replaceConnectionId !== replacementTarget) {
+      const { data: old } = await supabase
+        .from('cm_bank_connections')
+        .select('id, account_id')
+        .eq('id', state.replaceConnectionId)
+        .eq('user_id', state.userId)
+        .is('account_id', null)
+        .maybeSingle();
+      if (old) {
+        await supabase.from('fnz_funds')
+          .update({ bank_connection_id: replacementTarget })
+          .eq('bank_connection_id', old.id)
+          .eq('user_id', state.userId);
+        // cm_sync_log.bank_connection_id cancella in cascata: le righe del tentativo fallito
+        // si staccano prima, sono la storia di come ci si è arrivati.
+        await supabase.from('cm_sync_log')
+          .update({ bank_connection_id: null })
+          .eq('bank_connection_id', old.id);
+        await supabase.from('cm_bank_connections').delete().eq('id', old.id).eq('user_id', state.userId);
+      }
     }
 
     if (!accounts.length) {
@@ -254,6 +313,7 @@ Deno.serve(async (req) => {
         status: 'no_accounts',
         imported_count: 0,
         error_message: `Nessun conto nella risposta (ultimo tentativo: ${accountsSource}).` +
+          ` IBAN richiesto nel consenso: ${state.ibanRequested ? 'sì' : 'NO'}.` +
           ` POST /sessions → ${describeResponse(sessionData)}` +
           (detailData ? ` · GET /sessions/${sessionId} → ${describeResponse(detailData)}` : ''),
       });

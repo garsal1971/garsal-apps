@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.0';
-const APP_BUILD   = '2026-08-05T09:30:00Z';
+const APP_VERSION = 'v1.2.1';
+const APP_BUILD   = '2026-08-06T09:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -520,6 +520,9 @@ const S = {
   otherAssets: [], otherAssetTypes: [],
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   bankConnections: [],
+  // Ultima richiesta di consenso per connessione (riga 'consent_request' di cm_sync_log):
+  // dice se l'IBAN era stato spedito, cosa che dalla sessione non si vede.
+  bankConsentRequests: {},
   dashboardSnapshots: [],
   prevSnapshot: null,
   chartSeries: { totale: true, portafogli: true, asset: true, debiti: true },
@@ -2229,11 +2232,17 @@ function renderFundDetail() {
         </div>
       </div>
       <div class="hstack gap-8">
-        ${conn ? `<button class="btn btn-outline btn-sm" data-action="sync-fund" data-fund-id="${fund.id}">🔄 Sincronizza da ${conn.aspsp_name}</button>` : ''}
+        ${conn && conn.account_id ? `<button class="btn btn-outline btn-sm" data-action="sync-fund" data-fund-id="${fund.id}">🔄 Sincronizza da ${conn.aspsp_name}</button>` : ''}
         <button class="btn btn-outline btn-sm" data-action="import-cntrs" data-fund-id="${fund.id}">⬇️ Importa dal Conto Risparmio</button>
         <button class="btn btn-primary btn-sm" data-action="new-contribution" data-fund-id="${fund.id}">+ Movimento</button>
       </div>
     </div>
+    ${conn && !conn.account_id ? `
+    <div class="card mb-16" style="border-color:var(--c-warning)">
+      <div class="card-title">⚠️ Il conto collegato non è utilizzabile</div>
+      <p class="text-sm">Il fondo punta al collegamento <strong>${conn.aspsp_name}${conn.display_name ? ' — ' + conn.display_name : ''}</strong>, che non ha nessun conto associato: la banca ha autorizzato il consenso senza legarlo a un conto, quindi non c'è niente da cui leggere i movimenti. Il pulsante di sincronizzazione resta nascosto finché la situazione non è sistemata.</p>
+      <button class="btn btn-outline btn-sm mt-12" data-action="nav" data-view="conti-collegati">🏦 Vai a Conti Collegati</button>
+    </div>` : ''}
     ${toReview.length ? `
     <div class="card mb-16" style="border-color:var(--c-warning)">
       <div class="card-title">⚠️ Da rivedere — ${toReview.length} ${toReview.length === 1 ? 'movimento' : 'movimenti'}</div>
@@ -2356,6 +2365,19 @@ function renderFundDetail() {
    l'URL della banca) e enable-banking-callback (che riporta qui dopo il consenso e crea
    le righe in cm_bank_connections, una per conto restituito dalla banca).             */
 const BANK_MODULE_LABEL = { cost_analysis: '🧾 Spese Famiglia', fondo: '🤝 Fondi' };
+// Checksum IBAN (ISO 13616, mod-97): lo stesso controllo lo rifà enable-banking-connect, ma
+// farlo qui evita di scoprire un refuso dopo login e SCA in banca.
+function ibanChecksumOk(iban) {
+  const s = (iban || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{6,30}$/.test(s)) return false;
+  const rearranged = s.slice(4) + s.slice(0, 4);
+  let remainder = 0;
+  for (const ch of rearranged) {
+    const digits = ch >= '0' && ch <= '9' ? ch : String(ch.charCodeAt(0) - 55);
+    remainder = Number(BigInt(String(remainder) + digits) % 97n);
+  }
+  return remainder === 1;
+}
 // Paese ASPSP di default per le banche già usate: Revolut è lituana, UniCredit italiana.
 const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', UniCredit: 'IT', N26: 'DE' };
 function renderBankConnections() {
@@ -2386,7 +2408,11 @@ function renderBankConnections() {
           ? `<div class="settings-row text-sm text-muted">ID conto: <span class="mono">${c.account_id}</span></div>`
           : `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Nessun conto associato: la banca non ne ha elencati. La sincronizzazione non parte finché manca.</div>`}
         <div class="settings-row">${consent}</div>
-        ${c.consent_id ? `<div class="settings-row"><button class="btn btn-outline btn-sm" data-action="refresh-bank-accounts" data-id="${c.id}">🔍 Rileggi i conti dalla banca</button></div>` : ''}
+        <div class="text-sm text-muted" id="consent-req-${c.id}"></div>
+        <div class="hstack gap-8" style="flex-wrap:wrap">
+          ${c.consent_id ? `<button class="btn btn-outline btn-sm" data-action="refresh-bank-accounts" data-id="${c.id}">🔍 Rileggi i conti dalla banca</button>` : ''}
+          ${c.account_id ? '' : `<button class="btn btn-primary btn-sm" data-action="redo-bank-consent" data-id="${c.id}">🔁 Rifai il consenso</button>`}
+        </div>
       </div>`;
   };
   const group = (module, empty) => {
@@ -2417,7 +2443,38 @@ function renderBankConnections() {
       <div id="bank-sync-log"><div class="empty-sm">Carico…</div></div>
     </div>
   `);
+  loadBankConsentRequests();
   loadBankSyncLog();
+}
+/* Cosa è stato davvero chiesto alla banca, collegamento per collegamento.
+   enable-banking-connect scrive una riga 'consent_request' prima di partire e il callback la
+   aggancia alla connessione nata da quel consenso: è l'unica prova di quello che è stato
+   spedito. Senza, davanti a una sessione vuota si può solo guardare access.accounts nella
+   risposta della banca — che dice cosa è arrivato a destinazione, non cosa era partito.   */
+async function loadBankConsentRequests() {
+  const ids = S.bankConnections.map(c => c.id);
+  if (!ids.length) return;
+  try {
+    const rows = await sbQ('cm_sync_log',
+      `select=bank_connection_id,error_message,started_at&status=eq.consent_request` +
+      `&bank_connection_id=in.(${ids.join(',')})&order=started_at.desc`);
+    S.bankConsentRequests = {};
+    for (const r of rows) {
+      if (!S.bankConsentRequests[r.bank_connection_id]) S.bankConsentRequests[r.bank_connection_id] = r;
+    }
+    for (const [connId, r] of Object.entries(S.bankConsentRequests)) {
+      const box = $(`consent-req-${connId}`);
+      if (!box) continue;
+      const sentIban = !/IBAN NON INVIATO/.test(r.error_message || '');
+      const detail = `<span class="mono text-sm" style="word-break:break-word">${(r.error_message || '').replace(/</g, '&lt;')}</span>`;
+      box.innerHTML = `<div style="margin-top:6px">` + (sentIban
+        ? `Consenso chiesto <strong>indicando l'IBAN</strong>. ${detail}`
+        : `<span style="color:var(--c-warning)">Consenso chiesto <strong>senza IBAN</strong> (tutti i conti).</span> ${detail}`)
+        + `</div>`;
+    }
+  } catch {
+    // Informazione accessoria: se il registro non si legge, le schede restano come sono.
+  }
 }
 // Il registro serve solo in questa pagina: si legge quando serve invece di appesantire
 // ogni avvio dell'app.
@@ -2448,18 +2505,33 @@ async function loadBankSyncLog() {
     box.innerHTML = `<div class="text-sm text-neg">Impossibile leggere il registro: ${err.message}</div>`;
   }
 }
-function openBankConnectionModal(connectionId = null) {
+/* connectionId → modifica dei dati locali di un collegamento esistente.
+   replaceOf → nuovo consenso che viene a prendere il posto di un collegamento rimasto senza
+   conto: il form parte già compilato con banca, paese e modulo di quello vecchio e, al ritorno
+   dalla banca, il callback sposta i fondi sul nuovo e cancella il vuoto. Senza, l'utente deve
+   cancellare a mano, ricompilare tutto e ricordarsi di ripuntare il fondo — e se se ne
+   dimentica il fondo resta agganciato a un conto che non sincronizzerà mai.               */
+function openBankConnectionModal(connectionId = null, replaceOf = null) {
   const c = connectionId ? S.bankConnections.find(x => x.id === connectionId) : null;
+  const r = replaceOf ? S.bankConnections.find(x => x.id === replaceOf) : null;
+  // Il paese ASPSP non è una colonna di cm_bank_connections: per ricompilarlo si guarda la
+  // richiesta di consenso di quel collegamento ("Richiesta consenso UniCredit (IT) · …") e,
+  // se manca, il paese di default della banca.
+  const rCountry = r
+    ? (((S.bankConsentRequests || {})[r.id]?.error_message || '').match(/Richiesta consenso .+? \(([A-Z]{2})\)/)?.[1]
+       || ASPSP_DEFAULT_COUNTRY[r.aspsp_name] || '')
+    : '';
   // Su un conto già collegato si correggono solo i dati locali: banca, paese e modulo sono
   // fissati dal consenso dato alla banca e cambiarli qui non rifarebbe il consenso.
-  openModal(c ? 'Modifica conto collegato' : 'Collega un conto', `
+  openModal(c ? 'Modifica conto collegato' : r ? 'Rifai il consenso' : 'Collega un conto', `
     <form id="modal-form">
+      ${r ? `<p class="text-sm mb-12">Nuovo consenso per <strong>${r.aspsp_name}</strong> al posto del collegamento rimasto senza conto. Al ritorno dalla banca i fondi che lo usavano passano automaticamente sul nuovo e la riga vuota viene eliminata.</p>` : ''}
       ${c ? '' : `
       <div class="form-group">
         <label class="form-label">A cosa serve il conto *</label>
         <select name="module" class="form-input form-select" required>
-          <option value="fondo">${BANK_MODULE_LABEL.fondo} — bonifici da/verso i partecipanti</option>
-          <option value="cost_analysis">${BANK_MODULE_LABEL.cost_analysis} — spese da categorizzare</option>
+          <option value="fondo" ${r?.module === 'fondo' || !r ? 'selected' : ''}>${BANK_MODULE_LABEL.fondo} — bonifici da/verso i partecipanti</option>
+          <option value="cost_analysis" ${r?.module === 'cost_analysis' ? 'selected' : ''}>${BANK_MODULE_LABEL.cost_analysis} — spese da categorizzare</option>
         </select>
       </div>
       <div class="form-group">
@@ -2475,16 +2547,16 @@ function openBankConnectionModal(connectionId = null) {
       <div class="form-row-2">
         <div class="form-group">
           <label class="form-label">Banca (nome esatto ASPSP) *</label>
-          <input name="aspsp_name" id="aspsp-name" class="form-input" required placeholder="es. UniCredit" value="${c?.aspsp_name || ''}" ${c ? 'readonly' : ''} />
+          <input name="aspsp_name" id="aspsp-name" class="form-input" required placeholder="es. UniCredit" value="${c?.aspsp_name || r?.aspsp_name || ''}" ${c ? 'readonly' : ''} />
         </div>
         <div class="form-group">
           <label class="form-label">Paese ${c ? '' : '*'}</label>
-          <input name="country" id="aspsp-country-final" class="form-input" maxlength="2" style="text-transform:uppercase" placeholder="IT" ${c ? 'disabled' : 'required'} />
+          <input name="country" id="aspsp-country-final" class="form-input" maxlength="2" style="text-transform:uppercase" placeholder="IT" value="${rCountry}" ${c ? 'disabled' : 'required'} />
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Nome del conto</label>
-        <input name="display_name" class="form-input" placeholder="es. UniCredit fondo famiglia" value="${c?.display_name || ''}" />
+        <input name="display_name" class="form-input" placeholder="es. UniCredit fondo famiglia" value="${c?.display_name || r?.display_name || ''}" />
       </div>
       ${c ? '' : `
       <div class="form-group">
@@ -2494,6 +2566,11 @@ function openBankConnectionModal(connectionId = null) {
         <label class="text-muted text-sm" style="display:block;margin-top:6px">
           <input type="checkbox" name="skip_iban" id="conn-iban-skip" /> La mia banca non lo richiede (es. Revolut): chiedi il consenso su tutti i conti
         </label>
+        <div id="conn-iban-skip-warn" style="display:none;margin-top:6px;color:var(--c-warning)" class="text-sm">
+          ⚠️ Senza IBAN il consenso vale genericamente per «tutti i conti». Revolut lo accetta;
+          UniCredit no: autorizza, chiede l'SCA e restituisce zero conti. Usa questa opzione solo
+          se sei sicuro che la tua banca non voglia l'IBAN.
+        </div>
       </div>`}
       ${c ? `
       <div class="form-group">
@@ -2527,16 +2604,34 @@ function openBankConnectionModal(connectionId = null) {
       await reload(); closeModal();
       return;
     }
+    const iban = (data.iban || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const skipIban = data.skip_iban === 'on';
+    // Un IBAN con un carattere sbagliato produce lo stesso identico esito di un IBAN mancante
+    // (sessione autorizzata e vuota), ma lo si scopre solo dopo aver rifatto login e SCA: il
+    // codice di controllo si verifica qui, prima di mandare l'utente in banca.
+    if (!skipIban && !ibanChecksumOk(iban)) {
+      throw new Error("L'IBAN non è valido: il codice di controllo non torna. Ricopialo dall'estratto conto.");
+    }
+    if (skipIban && !confirm(
+      'Stai chiedendo il consenso su TUTTI i conti, senza indicare l\'IBAN.\n\n' +
+      'Con UniCredit questo produce una sessione autorizzata ma vuota: login e SCA per niente.\n' +
+      'Procedere solo se la tua banca (Revolut, N26…) non richiede l\'IBAN.')) {
+      // Ripensarci non è un errore: il pulsante torna com'era, senza alert.
+      const submitBtn = document.querySelector('#modal-form [type=submit]');
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Collega (apre la banca)'; }
+      return;
+    }
     const res = await sbFn('enable-banking-connect', {
       aspspName: (data.aspsp_name || '').trim(),
       country: (data.country || '').trim().toUpperCase(),
       displayName: (data.display_name || '').trim() || null,
       ownerPersonId: data.owner_person_id || null,
       module: data.module,
-      iban: (data.iban || '').trim() || null,
+      iban: iban || null,
       // Senza IBAN il server rifiuta, a meno che la rinuncia non sia esplicita: così una
       // pagina vecchia non riesce più a far partire un consenso destinato a nascere vuoto.
-      allowAllAccounts: data.skip_iban === 'on',
+      allowAllAccounts: skipIban,
+      replaceConnectionId: replaceOf || null,
       clientVersion: APP_VERSION,
     });
     if (!res.url) throw new Error('La banca non ha restituito un URL di consenso.');
@@ -2568,9 +2663,11 @@ function openBankConnectionModal(connectionId = null) {
   // significa ottenere un consenso valido ma inservibile, e accorgersene solo dopo l'SCA.
   const ibanInput = $('conn-iban');
   const ibanSkip  = $('conn-iban-skip');
+  const ibanSkipWarn = $('conn-iban-skip-warn');
   ibanSkip.addEventListener('change', () => {
     ibanInput.required = !ibanSkip.checked;
     ibanInput.disabled = ibanSkip.checked;
+    ibanSkipWarn.style.display = ibanSkip.checked ? '' : 'none';
     if (ibanSkip.checked) ibanInput.value = '';
   });
   const nameInput = $('aspsp-name');
@@ -2588,6 +2685,7 @@ async function refreshBankAccounts(connectionId) {
   try {
     const res = await sbFn('enable-banking-refresh-accounts', { bankConnectionId: connectionId });
     await reload();
+    await loadBankConsentRequests();
     const found = (res.accounts || []).length;
     openModal(found ? 'Conti trovati' : 'Nessun conto nella sessione', `
       ${found
@@ -2599,7 +2697,8 @@ async function refreshBankAccounts(connectionId) {
         : `<p class="text-sm mb-12">La sessione è valida${res.sessionStatus ? ` (stato: <strong>${res.sessionStatus}</strong>)` : ''} ma non contiene nessun conto.</p>
            ${res.hopeless ? `<div class="card" style="border-color:var(--c-warning)">
              <div class="card-title">Questa sessione resterà vuota</div>
-             <p class="text-sm">Il consenso è stato chiesto senza indicare un conto (<span class="mono">access.accounts: null</span>), e questa banca in quel caso non collega niente. Rileggere non cambierà nulla: <strong>elimina questo collegamento e rifallo indicando l'IBAN</strong>.</p>
+             <p class="text-sm">${emptySessionExplanation(connectionId)}</p>
+             <button class="btn btn-primary btn-sm mt-12" data-action="redo-bank-consent" data-id="${connectionId}">🔁 Rifai il consenso</button>
            </div>` : ''}`}
       <div class="form-group" style="margin-top:12px">
         <label class="form-label">Risposta di Enable Banking</label>
@@ -2614,6 +2713,23 @@ async function refreshBankAccounts(connectionId) {
     closeModal();
     alert('Errore rilettura conti: ' + err.message);
   }
+}
+/* La sessione non contiene conti e access.accounts è null. Il perché però cambia a seconda di
+   cosa era stato spedito, e le due situazioni chiedono cose diverse: se l'IBAN non era stato
+   messo, rifare il consenso indicandolo risolve; se l'IBAN c'era ed è la banca ad averlo
+   ignorato, rifare la stessa identica cosa non porta da nessuna parte e il problema sta in
+   quello che la banca dichiara di volere. La riga 'consent_request' è ciò che distingue i due
+   casi: senza (collegamenti nati prima di questa traccia) si resta sul dubbio, dichiarandolo. */
+function emptySessionExplanation(connectionId) {
+  const req = (S.bankConsentRequests || {})[connectionId];
+  const base = `La banca ha autorizzato il consenso senza legarlo a nessun conto (<span class="mono">access.accounts: null</span>): rileggere questa sessione non la riempirà mai.`;
+  if (!req) {
+    return `${base} Non risulta tracciata la richiesta di consenso di questo collegamento (è precedente alla traccia), quindi non si sa se l'IBAN fosse stato indicato: <strong>rifai il consenso indicando l'IBAN</strong>.`;
+  }
+  if (/IBAN NON INVIATO/.test(req.error_message || '')) {
+    return `${base} La richiesta era partita <strong>senza IBAN</strong> — l'opzione «la mia banca non lo richiede» — e con questa banca è esattamente ciò che produce una sessione vuota: <strong>rifai il consenso indicando l'IBAN</strong>.`;
+  }
+  return `${base} L'IBAN <strong>era stato indicato</strong> nella richiesta, quindi non è una svista nella compilazione: è la banca a non averlo applicato. Prima di rifare il consenso uguale, guarda cosa dichiara di pretendere con «ℹ️ Cosa richiede questa banca» (header PSU obbligatori, metodi di autenticazione, tipo di PSU) e verifica che l'IBAN sia di un conto corrente intestato a te — UniCredit non espone carte di credito e i prepagati solo se hanno un IBAN.`;
 }
 /* Voce di catalogo per intero: quando una banca autorizza il consenso ma non restituisce
    conti, la differenza rispetto a una che funziona sta in quello che dichiara qui —
@@ -3711,7 +3827,7 @@ function openNewFundModal(fundId = null) {
         <label class="form-label">Conto bancario da cui importare i movimenti</label>
         <select name="bank_connection_id" class="form-input form-select">
           <option value="">— Nessuno (solo inserimento manuale) —</option>
-          ${S.bankConnections.filter(c => c.module === 'fondo').map(c => `<option value="${c.id}" ${f?.bank_connection_id === c.id ? 'selected' : ''}>${c.aspsp_name}${c.display_name ? ' — ' + c.display_name : ''}</option>`).join('')}
+          ${S.bankConnections.filter(c => c.module === 'fondo').map(c => `<option value="${c.id}" ${f?.bank_connection_id === c.id ? 'selected' : ''}>${c.aspsp_name}${c.display_name ? ' — ' + c.display_name : ''}${c.account_id ? '' : ' ⚠️ senza conto, non sincronizzabile'}</option>`).join('')}
         </select>
         <p class="text-muted text-sm" style="margin-top:4px">I conti si collegano da <strong>Configurazione → 🏦 Conti Collegati</strong>; qui compaiono solo quelli destinati ai fondi.</p>
       </div>
@@ -5179,6 +5295,7 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'refresh-bank-accounts': await refreshBankAccounts(t.dataset.id); break;
+    case 'redo-bank-consent': openBankConnectionModal(null, t.dataset.id); break;
     case 'search-aspsp': await searchAspsps(); break;
     case 'aspsp-detail': await showAspspDetail(); break;
     case 'pick-aspsp': {
