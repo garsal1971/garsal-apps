@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.6';
-const APP_BUILD   = '2026-08-06T14:15:00Z';
+const APP_VERSION = 'v1.2.7';
+const APP_BUILD   = '2026-08-06T15:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -920,13 +920,28 @@ function computeFundLinkedBalance(fund) {
   }
   return null;
 }
+/* Il partecipante di riferimento è salvato come testo (owner_participant), mentre le quote
+   sono raggruppate per anagrafica quando c'è. Il confronto va fatto senza maiuscole né spazi
+   di troppo, e provando sia l'etichetta del gruppo sia il nome in anagrafica: altrimenti
+   "Teresa" e " teresa " diventano due persone diverse e la percentuale non si aggiorna mai —
+   senza che niente lo segnali, perché il codice si limitava a saltare il fondo.          */
+function fundOwnerShare(fund, stats) {
+  const norm = s => (s || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const wanted = norm(fund.owner_participant);
+  if (!wanted) return null;
+  return stats.participants.find(p => {
+    if (norm(p.participant) === wanted) return true;
+    const reg = p.participantId ? S.fundParticipants.find(x => x.id === p.participantId) : null;
+    return reg ? norm(reg.name) === wanted : false;
+  }) || null;
+}
 async function syncFundOwnership() {
   for (const fund of S.funds) {
     if (!fund.owner_participant) continue;
     const link = computeFundLinkedBalance(fund);
     if (!link) continue;
     const stats = computeFundShares(fund.id);
-    const owner = stats.participants.find(p => p.participant === fund.owner_participant);
+    const owner = fundOwnerShare(fund, stats);
     if (!owner) continue;
     const pct = Math.round(owner.percentage * 100) / 100;
     if (Math.abs(parseFloat(link.target.ownership_percentage) - pct) < 0.005) continue;
@@ -2300,7 +2315,7 @@ function renderFundDetail() {
     ${(() => {
       const link = computeFundLinkedBalance(fund);
       if (!link) return '';
-      const owner = fund.owner_participant ? stats.participants.find(p => p.participant === fund.owner_participant) : null;
+      const owner = fundOwnerShare(fund, stats);
       return `
     <div class="card mb-16">
       <div class="card-title">Collegamento</div>
@@ -2308,9 +2323,12 @@ function renderFundDetail() {
       ${conn ? `<div class="settings-row text-sm">Conto bancario: <strong>${conn.aspsp_name}${conn.display_name ? ' — ' + conn.display_name : ''}</strong></div>` : ''}
       ${fund.owner_participant
         ? (owner
-          ? `<div class="settings-row text-sm">Possesso di <strong>${fund.owner_participant}</strong> sincronizzato automaticamente: <strong>${owner.percentage.toFixed(2)}%</strong> (campo "Possesso %" attuale sul collegamento: ${parseFloat(link.target.ownership_percentage).toFixed(2)}%)</div>`
-          : `<div class="settings-row text-sm text-muted">Nessun movimento trovato per il partecipante di riferimento "${fund.owner_participant}": la % non viene aggiornata.</div>`)
-        : `<div class="settings-row text-sm text-muted">Nessun partecipante di riferimento impostato: modifica il fondo per abilitare la sincronizzazione automatica della % di possesso.</div>`
+          ? `<div class="settings-row text-sm">Possesso di <strong>${fund.owner_participant}</strong> sincronizzato automaticamente: <strong>${owner.percentage.toFixed(2)}%</strong> (campo "Possesso %" attuale sul collegamento: ${parseFloat(link.target.ownership_percentage || 100).toFixed(2)}%)</div>`
+          : `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Il partecipante di riferimento è <strong>"${fund.owner_participant}"</strong>, ma nel fondo non ci sono movimenti a suo nome che entrino nelle quote: la % di possesso non viene aggiornata.
+             ${stats.participants.length
+               ? `Partecipanti con movimenti validi: <strong>${stats.participants.map(p => p.participant).join(', ')}</strong>. Modifica il fondo e scegli uno di questi.`
+               : `Questo fondo non ha ancora movimenti che contino (i movimenti «da rivedere» ed «esclusi» non fanno quota).`}</div>`)
+        : `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Collegamento attivo ma <strong>nessun partecipante di riferimento</strong>: senza, la % di possesso del portafoglio resta quella scritta a mano. Modifica il fondo e scegli di chi è la quota da sincronizzare.</div>`
       }
     </div>`;
     })()}
@@ -3821,9 +3839,9 @@ function openNewFundModal(fundId = null) {
   const linkedValue = f?.linked_portfolio_id ? `portfolio:${f.linked_portfolio_id}`
                     : f?.linked_other_asset_id ? `asset:${f.linked_other_asset_id}`
                     : '';
-  const participantOptions = f
-    ? [...new Set(S.fundContributions.filter(x => x.fund_id === f.id).map(x => x.participant))]
-    : [];
+  // Anagrafica + nomi già usati nei movimenti: un partecipante appena inserito in anagrafica
+  // deve poter essere scelto come riferimento prima ancora di avere movimenti.
+  const participantOptions = f ? fundParticipantNames(f.id) : [];
   openModal(f ? 'Modifica Fondo' : 'Nuovo Fondo', `
     <form id="modal-form">
       <div class="form-group">
@@ -3844,9 +3862,13 @@ function openNewFundModal(fundId = null) {
       </div>
       <div class="form-group">
         <label class="form-label">Partecipante di riferimento</label>
-        <input name="owner_participant" class="form-input" placeholder="es. Salvatore" value="${f?.owner_participant || ''}" list="fund-owner-list" />
-        <datalist id="fund-owner-list">${participantOptions.map(p => `<option value="${p}"></option>`).join('')}</datalist>
-        <p class="text-muted text-sm" style="margin-top:4px">La sua quota % viene scritta automaticamente nel campo "Possesso %" del portafoglio/asset collegato, ogni volta che i versamenti o l'indice FOI cambiano.</p>
+        <select name="owner_participant" class="form-input form-select">
+          <option value="">— Nessuno (la % resta quella scritta a mano) —</option>
+          ${participantOptions.map(p => `<option value="${p}" ${f?.owner_participant === p ? 'selected' : ''}>${p}</option>`).join('')}
+          ${f?.owner_participant && !participantOptions.includes(f.owner_participant)
+            ? `<option value="${f.owner_participant}" selected>${f.owner_participant} — ⚠️ non è tra i partecipanti di questo fondo</option>` : ''}
+        </select>
+        <p class="text-muted text-sm" style="margin-top:4px">La sua quota % viene scritta automaticamente nel campo "Possesso %" del portafoglio/asset collegato, ogni volta che i versamenti o l'indice FOI cambiano.${participantOptions.length ? '' : ' <strong>Questo fondo non ha ancora partecipanti con movimenti</strong>: finché non ce ne sono, non c\'è nessuna quota da sincronizzare.'}</p>
       </div>
       <div class="form-group">
         <label class="form-label">Conto bancario da cui importare i movimenti</label>
@@ -3873,7 +3895,7 @@ function openNewFundModal(fundId = null) {
       notes: data.notes || '',
       linked_portfolio_id:   linkKind === 'portfolio' ? linkId : null,
       linked_other_asset_id: linkKind === 'asset'     ? linkId : null,
-      owner_participant: data.owner_participant.trim() || null,
+      owner_participant: (data.owner_participant || '').trim() || null,
       bank_connection_id: data.bank_connection_id || null,
     };
     if (f) await sbUpd('fnz_funds', `id=eq.${f.id}`, payload);
