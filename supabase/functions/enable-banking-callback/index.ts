@@ -202,17 +202,28 @@ Deno.serve(async (req) => {
     // collegamento veniva buttato via con un errore, perdendo anche la sessione appena
     // ottenuta. Ora si accettano tutte le forme plausibili e, se non basta, si richiede la
     // sessione con una GET dedicata: certi ASPSP popolano i conti solo lì.
+    //
+    // La GET si ripete qualche volta con una pausa in mezzo. POST /sessions è la chiamata che
+    // chiude l'autorizzazione E va a prendere l'elenco dei conti dalla banca: se quel secondo
+    // pezzo è asincrono, rileggere la sessione un istante dopo trova la stessa lista vuota di
+    // prima e il tentativo è sprecato. Con UniCredit la schermata di selezione mostra il conto
+    // spuntato e la sessione torna comunque a zero conti, che è esattamente il quadro in cui
+    // vale la pena aspettare qualche secondo prima di dichiarare fallimento. Il costo è nel
+    // solo ramo che sta già andando male.
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     let accounts = extractAccounts(sessionData);
     let accountsSource = 'POST /sessions';
     let detailData: any = null;
-    if (!accounts.length && sessionId) {
+    const retryDelays = [0, 2000, 4000];
+    for (let i = 0; i < retryDelays.length && !accounts.length && sessionId; i++) {
+      if (retryDelays[i]) await sleep(retryDelays[i]);
       const detailRes = await fetch(`${ENABLE_BANKING_API_BASE}/sessions/${sessionId}`, {
         headers: { Authorization: 'Bearer ' + jwt, ...psu },
       });
       detailData = await detailRes.json().catch(() => ({}));
       if (detailRes.ok) {
         accounts = extractAccounts(detailData);
-        accountsSource = 'GET /sessions/{id}';
+        accountsSource = `GET /sessions/{id} (tentativo ${i + 1}/${retryDelays.length}, dopo ${retryDelays.slice(0, i + 1).reduce((a, b) => a + b, 0)} ms)`;
       }
     }
 
@@ -315,7 +326,11 @@ Deno.serve(async (req) => {
         error_message: `Nessun conto nella risposta (ultimo tentativo: ${accountsSource}).` +
           ` IBAN richiesto nel consenso: ${state.ibanRequested ? 'sì' : 'NO'}.` +
           ` POST /sessions → ${describeResponse(sessionData)}` +
-          (detailData ? ` · GET /sessions/${sessionId} → ${describeResponse(detailData)}` : ''),
+          (detailData ? ` · GET /sessions/${sessionId} → ${describeResponse(detailData)}` : '') +
+          // La forma delle chiavi non basta più: a questo punto dell'indagine serve il corpo
+          // così com'è, sia per vederci dentro sia per allegarlo a una segnalazione.
+          ` · RISPOSTA GREZZA POST /sessions: ${JSON.stringify(sessionData).slice(0, 1500)}` +
+          (detailData ? ` · RISPOSTA GREZZA GET: ${JSON.stringify(detailData).slice(0, 1500)}` : ''),
       });
       return redirectTo('partial', 'La banca non ha restituito nessun conto: il collegamento è stato salvato senza conto associato.', module);
     }
