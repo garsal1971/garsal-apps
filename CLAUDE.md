@@ -361,15 +361,35 @@ collegato lì il consenso viene autorizzato, la banca mostra il conto spuntato, 
 torna con `accounts: []` e `access.accounts: null` — **senza nessun errore**, perché per Enable
 Banking non è un errore ma il filtro previsto.
 
-È la spiegazione dell'intera vicenda UniCredit di agosto 2026: Revolut funzionava perché quel
-conto era stato collegato all'attivazione dell'applicazione, UniCredit no perché non lo era mai
-stato. **Prima di cercare la causa nel codice, verificare che il conto sia in whitelist**:
-Control Panel → applicazione → *Link accounts* → autenticazione in banca → autorizzazione del
-conto. Poi rifare il consenso dall'app.
+#### Collegare un conto nuovo: la whitelist viene prima
+
+Non è una procedura di emergenza, è **il primo passo di ogni collegamento**. Saltarlo costa un
+giro di login e SCA in banca per niente.
+
+1. Control Panel di Enable Banking → l'applicazione → **«Link accounts»**
+2. autenticazione presso la banca e autorizzazione del conto
+3. **solo adesso** il collegamento dall'app (Finanza → Configurazione → 🏦 Conti Collegati)
+
+L'applicazione resta «Restricted» ma «Active»: è lo stato normale finché non c'è un contratto di
+produzione piena.
+
+#### Perché è costato tre giorni (agosto 2026)
+
+Revolut funzionava perché quel conto era stato collegato all'attivazione dell'applicazione;
+UniCredit no perché non lo era mai stato — e il sintomo era indistinguibile da un bug nostro.
+**Prima di cercare la causa nel codice, verificare la whitelist.** Verificato funzionante il
+6 agosto 2026: messo il conto UniCredit in whitelist, il consenso rifatto dall'app ha
+restituito il conto al primo colpo.
 
 Corollario: nessuna modifica a `enable-banking-connect` / `-callback` può aggirarlo — IBAN in
 `access.accounts`, header PSU, `auth_method`, `psu_type` e durata del consenso sono tutti
-irrilevanti se il conto non è collegato. Sono già stati provati tutti.
+irrilevanti se il conto non è collegato. Sono già stati provati tutti, uno per uno.
+
+Nota di metodo: la risposta era nella documentazione di Enable Banking
+(*Whitelisting own accounts for restricted API usage*). Il primo tentativo di leggerla è
+fallito con un 403 del proxy e l'indagine è proseguita per ipotesi sul codice: quando un
+sintomo non torna, **cercare nella documentazione del fornitore prima di dedurre dal
+comportamento** — e insistere da un'altra fonte se la prima non risponde.
 
 ### Consenso vuoto: cosa è stato chiesto vs cosa è tornato
 
