@@ -444,6 +444,15 @@ confrontare i quattro totali e il JSON `details`, devono coincidere esattamente.
 Una terza copia, ridotta al solo valore dei portafogli, sta in `index.html`
 (`fetchPortfolioLiveValue`) per l'avviso "Totale portafogli" della home.
 
+Nel valore di un portafoglio rientra anche la **liquidità**: i soldi versati nel fondo
+collegato (`fnz_funds.linked_portfolio_id`) e non ancora usati per comprare titoli. Il
+portafoglio non ha un conto di cassa — esistono solo `BUY` e `SELL` — quindi si ricava per
+differenza: versamenti nominali che fanno quota (`auto`/`confermato`) meno acquisti con
+commissioni, più il netto delle vendite, mai sotto zero. **Anche questa formula vive in tutte
+e tre le copie** (`computePortfolioCash`, `portfolioCash`, `cashOf`). P&L e variazione
+giornaliera restano invece sui soli titoli: la liquidità non guadagna né perde, e sommarla al
+valore senza sommarla al costo la farebbe comparire come utile il giorno che entra sul conto.
+
 ---
 
 ## Smart Blocker — due profili, un solo codice
