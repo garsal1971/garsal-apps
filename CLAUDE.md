@@ -335,6 +335,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso, redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il `module` passato a `connect` viaggia nello state e decide dove riporta il callback |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
+| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`) | **Legge e basta**: restituisce movimenti (importo con segno) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — il Conto Risparmio ha già i suoi |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Header PSU obbligatori per alcune banche

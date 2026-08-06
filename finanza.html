@@ -502,8 +502,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.4';
-const APP_BUILD   = '2026-08-06T13:00:00Z';
+const APP_VERSION = 'v1.2.5';
+const APP_BUILD   = '2026-08-06T13:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -4073,8 +4073,11 @@ function openAssignContributionModal(contributionId) {
 }
 /* ── Fondi — import dai movimenti del Conto Risparmio ─────────
    I movimenti di quel conto sono già nel database (cntrs_transactions_terr, la tabella
-   dietro conto-risparmio-teresa.html): finché il collegamento PSD2 con UniCredit non
-   funziona, il fondo li prende da lì invece che dalla banca.
+   dietro conto-risparmio-teresa.html) e il fondo li prende da lì invece che dalla banca.
+   Nata come scorciatoia finché il collegamento PSD2 con UniCredit non funzionava, questa
+   strada resta la principale anche adesso che funziona: il Conto Risparmio importa dalla
+   banca per conto suo (🏦 Importa dalla banca) e ci applica le sue categorie, quindi qui i
+   movimenti arrivano già puliti e categorizzati invece che grezzi dall'API.
 
    Il match sul partecipante è per IBAN ed è esatto: invece di estrarre un IBAN dalla
    descrizione con una regex — che sbaglia appena la banca cambia formato — si verifica se
