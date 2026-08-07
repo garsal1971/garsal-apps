@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Conto Risparmio Teresa v1.1.0</title>
+  <title>Conto Risparmio Teresa v1.1.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -211,8 +211,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.1.0';
-    const APP_BUILD   = '2026-08-06T13:30:00Z';
+    const APP_VERSION = 'v1.1.1';
+    const APP_BUILD   = '2026-08-07T10:00:00Z';
     console.log('%c CONTO RISPARMIO ' + APP_VERSION + ' %c build: ' + APP_BUILD,
       'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
       'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -686,8 +686,8 @@
     }
 
     /* ══════════════ IMPORT DALLA BANCA (Enable Banking / PSD2) ══════════════
-       I movimenti arrivano dallo stesso conto collegato in Finanza → Configurazione →
-       🏦 Conti Collegati: qui non si configura niente, si legge e basta. La Edge Function
+       I movimenti arrivano dai conti battezzati «Conto Risparmio» in Finanza → Configurazione
+       → 🏦 Banche e Conti: qui non si configura niente, si legge e basta. La Edge Function
        enable-banking-transactions restituisce i movimenti normalizzati e non scrive nel
        database — la destinazione, le categorie e il controllo dei doppioni restano qui, dove
        si sa com'è fatto questo conto.
@@ -740,12 +740,15 @@
       box.innerHTML = '<p style="color:var(--c-muted);font-size:.85rem">Cerco i conti collegati…</p>';
       try {
         const conns = await sb('cm_bank_connections?select=*&order=created_at.desc');
-        const usable = (conns || []).filter(c => c.account_id);
+        // Solo i conti che qualcuno ha destinato a questa pagina: prima comparivano tutti i
+        // conti collegati, compresi quelli di Spese Famiglia, che qui non c'entrano niente.
+        const usable = (conns || []).filter(c => c.account_id && (c.uses || []).includes('conto_risparmio'));
         if (!usable.length) {
           box.innerHTML = `
-            <p style="font-size:.85rem;margin-bottom:14px">Nessun conto bancario utilizzabile.
-            I conti si collegano da <strong>Finanza → Configurazione → 🏦 Conti Collegati</strong>,
-            e devono essere in whitelist nel Control Panel di Enable Banking.</p>
+            <p style="font-size:.85rem;margin-bottom:14px">Nessun conto destinato al Conto Risparmio.
+            I conti si collegano da <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>, dove
+            vanno anche spuntati come «🐖 Conto Risparmio»; devono inoltre essere in whitelist nel
+            Control Panel di Enable Banking.</p>
             <div class="hstack gap-8" style="justify-content:flex-end">
               <button class="btn" onclick="closeBankImport()">Chiudi</button>
             </div>`;
@@ -762,7 +765,7 @@
           <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
             <label style="font-size:.8rem;font-weight:600">Conto
               <select id="bank-import-conn" class="form-input" style="width:100%;margin-top:4px">
-                ${usable.map(c => `<option value="${c.id}">${c.aspsp_name}${c.display_name ? ' — ' + c.display_name : ''}</option>`).join('')}
+                ${usable.map(c => `<option value="${c.id}">${c.display_name || c.iban || c.aspsp_name}</option>`).join('')}
               </select>
             </label>
             <label style="font-size:.8rem;font-weight:600">Dal giorno

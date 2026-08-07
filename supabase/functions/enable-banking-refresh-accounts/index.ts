@@ -5,12 +5,12 @@
 // SCA per riprovare. Se i conti compaiono, la connessione viene completata con il suo
 // account_id e i conti in più diventano righe nuove.
 //
-// Restituisce anche la risposta grezza della sessione (troncata): senza vedere cosa manda
-// davvero la banca non si può capire perché la lista sia vuota, e questa è l'unica finestra
-// che abbiamo su quella risposta.
-//
 // Richiede i Supabase Secrets: ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY.
 // v1 — 2026-08-04
+// v2 — 2026-08-07: i conti trovati non ricevono più un nome d'ufficio (l'IBAN va nella sua
+//   colonna) e nascono senza usi: il battesimo è un gesto dell'utente, in finanza.html.
+//   Via la risposta grezza — serviva a capire perché UniCredit tornava vuota, e la risposta
+//   era la whitelist in restricted mode, che in quel JSON non compare.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -152,9 +152,6 @@ Deno.serve(async (req) => {
     }
 
     const accounts = extractAccounts(data);
-    // La risposta grezza è la ragione d'essere di questa function: va restituita anche (anzi,
-    // soprattutto) quando i conti non ci sono.
-    const rawPreview = JSON.stringify(data).slice(0, 4000);
 
     if (!accounts.length) {
       await supabase.from('cm_sync_log').insert({
@@ -163,19 +160,16 @@ Deno.serve(async (req) => {
         finished_at: new Date().toISOString(),
         status: 'no_accounts',
         imported_count: 0,
-        error_message: `Rilettura sessione: nessun conto. Risposta: ${rawPreview.slice(0, 900)}`,
+        error_message: `Rilettura sessione ${connection.aspsp_name}: nessun conto.`,
       });
-      // access.accounts dice su cosa era stato chiesto il consenso: se è null il consenso
-      // valeva genericamente per "tutti i conti", e con gli ASPSP che pretendono l'elenco
-      // (UniCredit) quella sessione resta vuota per sempre. Rileggerla non servirà mai:
-      // meglio dirlo qui che lasciar ritentare all'infinito.
-      const accessAccounts = data?.access?.accounts ?? null;
+      // Una sessione autorizzata che non elenca conti non si riempirà rileggendola: quasi
+      // sempre il conto non è in whitelist su Enable Banking (restricted mode), e la
+      // whitelist si tocca solo dal Control Panel. L'app lo spiega e propone di rifare il
+      // consenso dopo averla sistemata.
       return json({
         accounts: [], updated: 0, created: 0,
         sessionStatus: data?.status || null,
-        accessAccounts,
-        hopeless: accessAccounts === null,
-        raw: rawPreview,
+        hopeless: true,
       });
     }
 
@@ -193,23 +187,29 @@ Deno.serve(async (req) => {
     for (const acc of accounts) {
       if (known.has(acc.uid)) continue;
       if (!connection.account_id && updated === 0) {
+        // display_name non si tocca: se l'utente aveva già battezzato la riga vuota il nome
+        // resta suo, e se non l'aveva fatto il conto va battezzato adesso, non riempito
+        // d'ufficio con l'IBAN.
         await supabase
           .from('cm_bank_connections')
-          .update({ account_id: acc.uid, display_name: connection.display_name || acc.iban || null })
+          .update({ account_id: acc.uid, iban: acc.iban })
           .eq('id', connection.id);
         updated++;
       } else {
+        // I conti in più nascono anonimi e senza usi: sono comparsi ora, nessuno ha ancora
+        // detto a cosa servono.
         await supabase.from('cm_bank_connections').insert({
           user_id: userId,
           provider: connection.provider,
+          institution_id: connection.institution_id,
           aspsp_name: connection.aspsp_name,
-          display_name: acc.iban || null,
-          owner_person_id: connection.owner_person_id,
+          display_name: null,
+          uses: [],
+          iban: acc.iban,
           account_id: acc.uid,
           consent_id: connection.consent_id,
           consent_expires_at: connection.consent_expires_at,
           status: 'active',
-          module: connection.module,
         });
         created++;
       }
@@ -221,7 +221,6 @@ Deno.serve(async (req) => {
       updated,
       created,
       sessionStatus: data?.status || null,
-      raw: rawPreview,
     });
   } catch (e) {
     return json({ error: { message: (e as Error).message } }, 502);

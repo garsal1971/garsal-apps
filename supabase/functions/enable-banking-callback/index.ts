@@ -22,19 +22,20 @@
 //   alla connessione appena creata (state.logId), così l'app sa dire cosa era stato chiesto per
 //   quel collegamento. Con state.replaceConnectionId il consenso rifatto prende il posto di un
 //   collegamento rimasto senza conto: i fondi ci vengono spostati sopra e la riga vuota sparisce.
+// v5 — 2026-08-07: i conti nascono anonimi. Il nome e gli usi non arrivano più dallo state —
+//   non c'erano ancora quando il consenso è partito — quindi ogni riga viene creata con
+//   display_name NULL e uses '{}' e finanza.html apre subito il "battesimo" sui conti di
+//   questa sessione (il session_id torna nel redirect). Via anche l'IBAN richiesto e la
+//   diagnostica del consenso: la causa delle sessioni vuote è la whitelist, non ciò che si
+//   spediva nella richiesta.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const ENABLE_BANKING_API_BASE = 'https://api.enablebanking.com';
 const APP_BASE_URL = 'https://garsal.netlify.app';
-// Dove torna l'utente dopo il consenso, per modulo. La gestione dei conti sta in
-// finanza.html (sezione Conti Collegati) per entrambi: cost-analysis.html non ha più
-// la schermata di collegamento.
-const MODULE_REDIRECT: Record<string, string> = {
-  cost_analysis: `${APP_BASE_URL}/finanza.html`,
-  fondo: `${APP_BASE_URL}/finanza.html`,
-};
-const DEFAULT_REDIRECT_URL = `${APP_BASE_URL}/finanza.html`;
+// La gestione dei conti sta tutta in finanza.html (sezione Banche e Conti): c'è un solo
+// posto dove tornare, qualunque uso avrà poi il conto.
+const REDIRECT_URL = `${APP_BASE_URL}/finanza.html`;
 
 function base64url(input: ArrayBuffer | string): string {
   const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : new Uint8Array(input);
@@ -102,25 +103,12 @@ function extractAccounts(data: any): { uid: string; iban: string | null }[] {
   return [...found.entries()].map(([uid, iban]) => ({ uid, iban }));
 }
 
-// Diagnostica leggibile senza esporre l'intera risposta: chiavi presenti e forma dei campi
-// che dovrebbero contenere i conti.
-function describeResponse(data: any): string {
-  try {
-    const keys = Object.keys(data || {}).join(', ');
-    const shape = (v: unknown) =>
-      Array.isArray(v) ? `array(${v.length})${v.length ? ' di ' + typeof v[0] : ''}` : v === undefined ? 'assente' : typeof v;
-    return `chiavi: [${keys}] · accounts: ${shape(data?.accounts)} · account_ids: ${shape(data?.account_ids)}`.slice(0, 900);
-  } catch {
-    return 'risposta non ispezionabile';
-  }
-}
-
-// module può mancare (consenso rifiutato prima ancora di poter leggere lo state): in quel
-// caso si torna comunque su finanza.html, dove sta la gestione dei conti.
-function redirectTo(status: 'success' | 'error' | 'partial', message?: string, module?: string): Response {
-  const url = new URL((module && MODULE_REDIRECT[module]) || DEFAULT_REDIRECT_URL);
+// consentId identifica la sessione appena creata: finanza.html lo usa per aprire il
+// battesimo esattamente sui conti nati da questo consenso, senza rimescolare quelli vecchi.
+function redirectTo(status: 'success' | 'error' | 'partial', message?: string, consentId?: string | null): Response {
+  const url = new URL(REDIRECT_URL);
   url.searchParams.set('bank_connect', status);
-  if (module) url.searchParams.set('bank_connect_module', module);
+  if (consentId) url.searchParams.set('bank_connect_consent', consentId);
   if (message) url.searchParams.set('bank_connect_message', message);
   return new Response(null, { status: 302, headers: { Location: url.toString() } });
 }
@@ -156,13 +144,9 @@ Deno.serve(async (req) => {
 
   let state: {
     userId: string;
-    ownerPersonId: string | null;
+    institutionId?: string | null;
     aspspName: string;
-    displayName: string | null;
-    module?: string;
     validUntil: string;
-    logId?: string | null;
-    ibanRequested?: string | null;
     replaceConnectionId?: string | null;
   };
   try {
@@ -170,15 +154,13 @@ Deno.serve(async (req) => {
   } catch {
     return redirectTo('error', 'State non valido.');
   }
-  // I collegamenti creati prima della v2 non hanno "module" nello state.
-  const module = state.module === 'fondo' ? 'fondo' : 'cost_analysis';
 
   const appId = Deno.env.get('ENABLE_BANKING_APP_ID');
   const privateKeyPem = Deno.env.get('ENABLE_BANKING_PRIVATE_KEY');
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!appId || !privateKeyPem || !supabaseUrl || !supabaseServiceRoleKey) {
-    return redirectTo('error', 'Configurazione mancante lato server.', module);
+    return redirectTo('error', 'Configurazione mancante lato server.');
   }
 
   try {
@@ -191,7 +173,7 @@ Deno.serve(async (req) => {
     });
     const sessionData = await sessionRes.json();
     if (!sessionRes.ok) {
-      return redirectTo('error', 'Errore Enable Banking: ' + (sessionData?.message || sessionRes.status), module);
+      return redirectTo('error', 'Errore Enable Banking: ' + (sessionData?.message || sessionRes.status));
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -213,75 +195,48 @@ Deno.serve(async (req) => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     let accounts = extractAccounts(sessionData);
     let accountsSource = 'POST /sessions';
-    let detailData: any = null;
     const retryDelays = [0, 2000, 4000];
     for (let i = 0; i < retryDelays.length && !accounts.length && sessionId; i++) {
       if (retryDelays[i]) await sleep(retryDelays[i]);
       const detailRes = await fetch(`${ENABLE_BANKING_API_BASE}/sessions/${sessionId}`, {
         headers: { Authorization: 'Bearer ' + jwt, ...psu },
       });
-      detailData = await detailRes.json().catch(() => ({}));
+      const detailData = await detailRes.json().catch(() => ({}));
       if (detailRes.ok) {
         accounts = extractAccounts(detailData);
-        accountsSource = `GET /sessions/{id} (tentativo ${i + 1}/${retryDelays.length}, dopo ${retryDelays.slice(0, i + 1).reduce((a, b) => a + b, 0)} ms)`;
+        accountsSource = `GET /sessions/{id}, tentativo ${i + 1}/${retryDelays.length}`;
       }
     }
 
-    // Se il consenso era stato chiesto per un IBAN preciso e la banca ne restituisce più di
-    // uno, quello richiesto va per primo: è la riga che eredita il fondo quando questo
-    // consenso ne sostituisce uno vuoto.
-    const normIban = (s: string | null | undefined) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const wanted = normIban(state.ibanRequested);
-    if (wanted && accounts.length > 1) {
-      accounts.sort((a, b) => Number(normIban(b.iban) === wanted) - Number(normIban(a.iban) === wanted));
-    }
-
-    // Nessun conto nemmeno così: la riga si salva lo stesso, senza account_id. Il consenso
-    // è già stato dato e rifarlo da capo costa un altro giro di SCA; con la riga in mano si
-    // vede cosa è arrivato e si può correggere. Il sync si rifiuta di partire finché
-    // account_id è nullo, quindi non c'è il rischio di importare dal conto sbagliato.
+    // I conti nascono anonimi: display_name NULL e uses '{}'. Il nome e gli usi si danno
+    // dopo, in finanza.html, davanti alla lista di quello che la banca ha davvero restituito
+    // — prima di quel momento non c'era niente da battezzare. L'IBAN va nella sua colonna e
+    // non più dentro display_name, dove non si capiva se era un nome o un ripiego.
+    //
+    // Nessun conto nemmeno dopo i tentativi: la riga si salva lo stesso, senza account_id.
+    // Il consenso è già stato dato e rifarlo da capo costa un altro giro di SCA; con la riga
+    // in mano si vede cosa è arrivato e si può correggere. Il sync si rifiuta di partire
+    // finché account_id è nullo, quindi non c'è il rischio di importare dal conto sbagliato.
+    const baseRow = {
+      user_id: state.userId,
+      provider: 'enable_banking',
+      institution_id: state.institutionId || null,
+      aspsp_name: state.aspspName,
+      display_name: null,
+      uses: [] as string[],
+      consent_id: sessionId,
+      consent_expires_at: sessionData.access?.valid_until || state.validUntil,
+      status: 'active',
+    };
     const rows = accounts.length
-      ? accounts.map((acc) => ({
-          user_id: state.userId,
-          provider: 'enable_banking',
-          aspsp_name: state.aspspName,
-          display_name: state.displayName || acc.iban || null,
-          owner_person_id: state.ownerPersonId || null,
-          account_id: acc.uid,
-          consent_id: sessionId,
-          consent_expires_at: sessionData.access?.valid_until || state.validUntil,
-          status: 'active',
-          module,
-        }))
-      : [{
-          user_id: state.userId,
-          provider: 'enable_banking',
-          aspsp_name: state.aspspName,
-          display_name: state.displayName || null,
-          owner_person_id: state.ownerPersonId || null,
-          account_id: null,
-          consent_id: sessionId,
-          consent_expires_at: sessionData.access?.valid_until || state.validUntil,
-          status: 'active',
-          module,
-        }];
+      ? accounts.map((acc) => ({ ...baseRow, account_id: acc.uid, iban: acc.iban }))
+      : [{ ...baseRow, account_id: null, iban: null }];
 
     const { data: inserted, error } = await supabase.from('cm_bank_connections').insert(rows).select('id, account_id');
     if (error) {
-      return redirectTo('error', 'Errore salvataggio conto: ' + error.message, module);
+      return redirectTo('error', 'Errore salvataggio conto: ' + error.message);
     }
     const newConnectionId = inserted?.[0]?.id || null;
-
-    // La richiesta di consenso era stata tracciata prima di partire, senza sapere quale
-    // connessione ne sarebbe nata: adesso si sa. Da qui in poi l'app può mostrare, su quel
-    // collegamento, se l'IBAN era stato spedito davvero — che è l'unica cosa che distingue
-    // "consenso chiesto male" da "banca che ignora l'IBAN".
-    if (state.logId && newConnectionId) {
-      await supabase.from('cm_sync_log')
-        .update({ bank_connection_id: newConnectionId })
-        .eq('id', state.logId)
-        .eq('user_id', state.userId);
-    }
 
     // Consenso rifatto per rimpiazzare un collegamento rimasto senza conto: i fondi che lo
     // usavano vanno spostati sul nuovo, altrimenti restano agganciati a una riga che non
@@ -295,12 +250,23 @@ Deno.serve(async (req) => {
     if (state.replaceConnectionId && replacementTarget && state.replaceConnectionId !== replacementTarget) {
       const { data: old } = await supabase
         .from('cm_bank_connections')
-        .select('id, account_id')
+        .select('id, account_id, display_name, uses, owner_person_id')
         .eq('id', state.replaceConnectionId)
         .eq('user_id', state.userId)
         .is('account_id', null)
         .maybeSingle();
       if (old) {
+        // Il conto è lo stesso, cambia solo il consenso: nome, usi e proprietario erano già
+        // stati dati sulla riga vuota e si trasferiscono. Senza, un consenso rifatto tornerebbe
+        // "da battezzare" e sparirebbe dagli elenchi dei moduli che lo stavano già usando.
+        await supabase.from('cm_bank_connections')
+          .update({
+            display_name: old.display_name,
+            uses: old.uses || [],
+            owner_person_id: old.owner_person_id,
+          })
+          .eq('id', replacementTarget)
+          .eq('user_id', state.userId);
         await supabase.from('fnz_funds')
           .update({ bank_connection_id: replacementTarget })
           .eq('bank_connection_id', old.id)
@@ -315,28 +281,22 @@ Deno.serve(async (req) => {
     }
 
     if (!accounts.length) {
-      // Traccia diagnostica: senza sapere cosa ha risposto davvero la banca non si può
-      // capire perché la lista è vuota. Finisce in cm_sync_log, visibile dall'app.
+      // Una riga nel registro, non un dump: la causa di una sessione vuota è quasi sempre
+      // la whitelist di Enable Banking (restricted mode), e quella non si legge nella
+      // risposta della banca — è l'app a spiegarla.
       await supabase.from('cm_sync_log').insert({
         user_id: state.userId,
-        bank_connection_id: inserted?.[0]?.id || null,
+        bank_connection_id: newConnectionId,
         finished_at: new Date().toISOString(),
         status: 'no_accounts',
         imported_count: 0,
-        error_message: `Nessun conto nella risposta (ultimo tentativo: ${accountsSource}).` +
-          ` IBAN richiesto nel consenso: ${state.ibanRequested ? 'sì' : 'NO'}.` +
-          ` POST /sessions → ${describeResponse(sessionData)}` +
-          (detailData ? ` · GET /sessions/${sessionId} → ${describeResponse(detailData)}` : '') +
-          // La forma delle chiavi non basta più: a questo punto dell'indagine serve il corpo
-          // così com'è, sia per vederci dentro sia per allegarlo a una segnalazione.
-          ` · RISPOSTA GREZZA POST /sessions: ${JSON.stringify(sessionData).slice(0, 1500)}` +
-          (detailData ? ` · RISPOSTA GREZZA GET: ${JSON.stringify(detailData).slice(0, 1500)}` : ''),
+        error_message: `Consenso ${state.aspspName} autorizzato ma senza conti (ultimo tentativo: ${accountsSource}).`,
       });
-      return redirectTo('partial', 'La banca non ha restituito nessun conto: il collegamento è stato salvato senza conto associato.', module);
+      return redirectTo('partial', 'La banca non ha restituito nessun conto: il collegamento è stato salvato senza conto associato.', sessionId);
     }
 
-    return redirectTo('success', undefined, module);
+    return redirectTo('success', undefined, sessionId);
   } catch (e) {
-    return redirectTo('error', 'Errore imprevisto: ' + (e as Error).message, module);
+    return redirectTo('error', 'Errore imprevisto: ' + (e as Error).message);
   }
 });
