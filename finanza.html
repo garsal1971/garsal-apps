@@ -47,7 +47,11 @@
     .gap-4   { gap: 4px; }
     .gap-8   { gap: 8px; }
     .mt-2    { margin-top: 2px; }
+    .mt-4    { margin-top: 4px; }
+    .mt-8    { margin-top: 8px; }
     .mt-12   { margin-top: 12px; }
+    .mb-8    { margin-bottom: 8px; }
+    .mb-12   { margin-bottom: 12px; }
     .mb-16   { margin-bottom: 16px; }
     /* ── Loading ──────────────────────────────────────────────── */
     #loading-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--c-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
@@ -429,7 +433,7 @@
       
       <div class="nav-label">Configurazione</div>
       <button class="nav-item"        data-action="nav" data-view="tag-config">🏷️ Tag</button>
-      <button class="nav-item"        data-action="nav" data-view="conti-collegati">🏦 Conti Collegati</button>
+      <button class="nav-item"        data-action="nav" data-view="conti-collegati">🏦 Banche e Conti</button>
       
       <div class="nav-sep"></div>
       <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
@@ -502,8 +506,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.8';
-const APP_BUILD   = '2026-08-06T16:00:00Z';
+const APP_VERSION = 'v1.2.9';
+const APP_BUILD   = '2026-08-07T10:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -519,10 +523,9 @@ const S = {
   loanId: null,
   otherAssets: [], otherAssetTypes: [],
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
+  // Censimento delle banche e dei broker, e i conti che ne sono nati.
+  institutions: [],
   bankConnections: [],
-  // Ultima richiesta di consenso per connessione (riga 'consent_request' di cm_sync_log):
-  // dice se l'IBAN era stato spedito, cosa che dalla sessione non si vede.
-  bankConsentRequests: {},
   dashboardSnapshots: [],
   prevSnapshot: null,
   chartSeries: { totale: true, portafogli: true, asset: true, debiti: true },
@@ -664,7 +667,7 @@ const DEFAULT_TAG_CATS = [
 ];
 /* ── Data loaders ────────────────────────────────────────────── */
 async function loadAll() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, fundParticipants, foiIndex, bankConnections] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, fundParticipants, foiIndex, bankConnections, institutions] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
@@ -679,6 +682,7 @@ async function loadAll() {
     sbQ('fnz_fund_participants',  'select=*&order=name.asc'),
     sbQ('fnz_foi_index',          'select=*&order=year.asc'),
     sbQ('cm_bank_connections',    'select=*&order=created_at.desc'),
+    sbQ('cm_institutions',        'select=*&order=name.asc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -694,6 +698,7 @@ async function loadAll() {
   S.fundParticipants  = fundParticipants;
   S.foiIndex     = foiIndex;
   S.bankConnections   = bankConnections;
+  S.institutions      = institutions;
   if (tagCats.length === 0) {
     await Promise.all(DEFAULT_TAG_CATS.map(tc => sbIns('fnz_tag_categories', { ...tc, user_id: S.session.user.id })));
     S.tagCats = await sbQ('fnz_tag_categories', 'select=*&order=name.asc');
@@ -711,7 +716,7 @@ async function loadAll() {
   await syncFundOwnership();
 }
 async function reload() {
-  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, fundParticipants, foiIndex, bankConnections] = await Promise.all([
+  const [portfolios, transactions, products, tagCats, dossiers, loans, loanRepayments, otherAssets, otherAssetTypes, funds, fundContributions, fundParticipants, foiIndex, bankConnections, institutions] = await Promise.all([
     sbQ('fnz_portfolios',     'select=*&order=created_at.asc'),
     sbQ('fnz_transactions',   'select=*&order=date.desc,created_at.desc'),
     sbQ('fnz_products',       'select=*&order=name.asc'),
@@ -726,6 +731,7 @@ async function reload() {
     sbQ('fnz_fund_participants',  'select=*&order=name.asc'),
     sbQ('fnz_foi_index',          'select=*&order=year.asc'),
     sbQ('cm_bank_connections',    'select=*&order=created_at.desc'),
+    sbQ('cm_institutions',        'select=*&order=name.asc'),
   ]);
   S.portfolios   = portfolios;
   S.transactions = transactions;
@@ -741,6 +747,7 @@ async function reload() {
   S.fundParticipants  = fundParticipants;
   S.foiIndex     = foiIndex;
   S.bankConnections   = bankConnections;
+  S.institutions      = institutions;
   await loadPricesFromCache();
   S.priceHistory = await sbQ('fnz_price_history', 'select=*&order=price_date.desc');
   computePricesFromHistory();
@@ -2249,7 +2256,7 @@ function renderFunds() {
           ${link ? `<div class="settings-row text-sm">Collegato a: <strong>${link.label}</strong> (${fmtEUR(link.value)})</div>` : ''}
           ${(() => {
             const conn = S.bankConnections.find(c => c.id === f.bank_connection_id);
-            return conn ? `<div class="settings-row text-sm">Conto: <strong>${conn.aspsp_name}</strong></div>` : '';
+            return conn ? `<div class="settings-row text-sm">Conto: <strong>${bankAccountLabel(conn)}</strong></div>` : '';
           })()}
           ${stats.toReview.length ? `<div class="settings-row text-sm"><span class="badge badge-warn">${stats.toReview.length} da rivedere</span></div>` : ''}
           <div class="portfolio-card-stats">
@@ -2292,7 +2299,7 @@ function renderFundDetail() {
         </div>
       </div>
       <div class="hstack gap-8">
-        ${conn && conn.account_id ? `<button class="btn btn-outline btn-sm" data-action="sync-fund" data-fund-id="${fund.id}">🔄 Sincronizza da ${conn.aspsp_name}</button>` : ''}
+        ${conn && conn.account_id ? `<button class="btn btn-outline btn-sm" data-action="sync-fund" data-fund-id="${fund.id}">🔄 Sincronizza da ${bankAccountLabel(conn)}</button>` : ''}
         <button class="btn btn-outline btn-sm" data-action="import-cntrs" data-fund-id="${fund.id}">⬇️ Importa dal Conto Risparmio</button>
         <button class="btn btn-primary btn-sm" data-action="new-contribution" data-fund-id="${fund.id}">+ Movimento</button>
       </div>
@@ -2300,8 +2307,8 @@ function renderFundDetail() {
     ${conn && !conn.account_id ? `
     <div class="card mb-16" style="border-color:var(--c-warning)">
       <div class="card-title">⚠️ Il conto collegato non è utilizzabile</div>
-      <p class="text-sm">Il fondo punta al collegamento <strong>${conn.aspsp_name}${conn.display_name ? ' — ' + conn.display_name : ''}</strong>, che non ha nessun conto associato: la banca ha autorizzato il consenso senza legarlo a un conto, quindi non c'è niente da cui leggere i movimenti. Il pulsante di sincronizzazione resta nascosto finché la situazione non è sistemata.</p>
-      <button class="btn btn-outline btn-sm mt-12" data-action="nav" data-view="conti-collegati">🏦 Vai a Conti Collegati</button>
+      <p class="text-sm">Il fondo punta al conto <strong>${bankAccountLabel(conn)}</strong>, che non ha nessun conto associato lato banca: il consenso è stato autorizzato senza legarlo a un conto — quasi sempre perché il conto non è in whitelist su Enable Banking — quindi non c'è niente da cui leggere i movimenti. Il pulsante di sincronizzazione resta nascosto finché la situazione non è sistemata.</p>
+      <button class="btn btn-outline btn-sm mt-12" data-action="nav" data-view="conti-collegati">🏦 Vai a Banche e Conti</button>
     </div>` : ''}
     ${toReview.length ? `
     <div class="card mb-16" style="border-color:var(--c-warning)">
@@ -2369,7 +2376,7 @@ function renderFundDetail() {
       ${link.kind === 'portfolio' && link.cash === 0 && stats.totalNominal < link.investito
         ? `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Negli acquisti sono usciti ${fmtEUR(link.investito)}, più dei ${fmtEUR(stats.totalNominal)} versati nel fondo: la differenza è arrivata da un'altra parte, oppure manca un versamento da registrare.</div>`
         : ''}
-      ${conn ? `<div class="settings-row text-sm">Conto bancario: <strong>${conn.aspsp_name}${conn.display_name ? ' — ' + conn.display_name : ''}</strong></div>` : ''}
+      ${conn ? `<div class="settings-row text-sm">Conto bancario: <strong>${bankAccountLabel(conn)}</strong></div>` : ''}
       ${fund.owner_participant
         ? (owner
           ? `<div class="settings-row text-sm">Possesso di <strong>${fund.owner_participant}</strong> sincronizzato automaticamente: <strong>${owner.percentage.toFixed(2)}%</strong> (campo "Possesso %" attuale sul collegamento: ${parseFloat(link.target.ownership_percentage || 100).toFixed(2)}%)</div>`
@@ -2425,123 +2432,140 @@ function renderFundDetail() {
     }
   `);
 }
-/* ══════════════ CONTI COLLEGATI (Enable Banking / PSD2) ════════
-   Configurazione condivisa tra i moduli: Spese Famiglia (Revolut) e Fondi (UniCredit).
-   Stava in cost-analysis.html, ma un conto bancario non appartiene a un modulo solo.
-   Il collegamento vero passa dalle Edge Function enable-banking-connect (che restituisce
-   l'URL della banca) e enable-banking-callback (che riporta qui dopo il consenso e crea
-   le righe in cm_bank_connections, una per conto restituito dalla banca).             */
-const BANK_MODULE_LABEL = { cost_analysis: '🧾 Spese Famiglia', fondo: '🤝 Fondi' };
-// Checksum IBAN (ISO 13616, mod-97): lo stesso controllo lo rifà enable-banking-connect, ma
-// farlo qui evita di scoprire un refuso dopo login e SCA in banca.
-function ibanChecksumOk(iban) {
-  const s = (iban || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{6,30}$/.test(s)) return false;
-  const rearranged = s.slice(4) + s.slice(0, 4);
-  let remainder = 0;
-  for (const ch of rearranged) {
-    const digits = ch >= '0' && ch <= '9' ? ch : String(ch.charCodeAt(0) - 55);
-    remainder = Number(BigInt(String(remainder) + digits) % 97n);
-  }
-  return remainder === 1;
+/* ══════════════ BANCHE E CONTI (Enable Banking / PSD2) ═════════
+   Una sola sezione per tutto il ciclo di vita di un collegamento, in tre momenti che
+   prima erano schiacciati in un unico form compilato al buio:
+
+     1. censimento  — cm_institutions: le mie banche e i miei broker. Un broker senza
+                      PSD2 sta qui lo stesso, marcato "non collegabile": serve saperlo,
+                      anche se non c'è niente da chiamare.
+     2. consenso    — parte dall'istituto e basta: nome ASPSP e paese li sa già
+                      l'anagrafica, e nient'altro va deciso prima di sapere cosa la
+                      banca restituirà.
+     3. battesimo   — i conti tornati dal consenso ricevono un nome e uno o più usi.
+                      Finché uses è vuoto il conto esiste ma nessun modulo lo vede.
+
+   ⚠️ Prima di collegare un conto va messo in whitelist su Enable Banking (Control Panel →
+   «Link accounts»): l'applicazione è in restricted mode e l'API restituisce SOLO i conti
+   collegati lì. Senza whitelist il consenso riesce, la banca mostra il conto spuntato e la
+   sessione torna vuota — nessun errore, perché per Enable Banking è il filtro previsto.  */
+const BANK_USE_LABEL = {
+  cost_analysis:   '🧾 Spese Famiglia',
+  fondo:           '🤝 Fondi',
+  conto_risparmio: '🐖 Conto Risparmio',
+};
+const BANK_USE_HINT = {
+  cost_analysis:   'le transazioni diventano spese da categorizzare',
+  fondo:           'i bonifici diventano versamenti e prelievi del fondo',
+  conto_risparmio: 'i movimenti si importano dal Conto Risparmio di Teresa',
+};
+const INSTITUTION_KIND_LABEL = { banca: '🏦 Banca', broker: '📈 Broker' };
+// Un conto si chiama col nome che gli ha dato l'utente. Se non gliel'ha ancora dato si
+// ripiega sull'IBAN e poi sulla banca, ma resta chiaro che è un ripiego: display_name non
+// viene più riempito d'ufficio da nessuno, quindi vuoto significa "da battezzare".
+function bankAccountLabel(c) {
+  return c.display_name || c.iban || c.aspsp_name || 'Conto senza nome';
 }
-// Paese ASPSP di default per le banche già usate: Revolut è lituana, UniCredit italiana.
-const ASPSP_DEFAULT_COUNTRY = { Revolut: 'LT', UniCredit: 'IT', N26: 'DE' };
+function bankUseChips(c) {
+  const uses = c.uses || [];
+  if (!uses.length) return '<span class="badge badge-warn">da battezzare</span>';
+  return uses.map(u => `<span class="badge badge-neutral">${BANK_USE_LABEL[u] || u}</span>`).join(' ');
+}
 function renderBankConnections() {
   const todayIso = new Date().toISOString().slice(0, 10);
-  const card = c => {
+  const consentBadge = c => {
+    if (!c.consent_expires_at) return '<span class="badge badge-neutral">nessuna scadenza impostata</span>';
+    const expiry = c.consent_expires_at.slice(0, 10);
+    const daysLeft = Math.round((new Date(expiry) - new Date(todayIso)) / 86400000);
+    if (expiry < todayIso) return `<span class="badge badge-neg">consenso scaduto il ${fmtDate(expiry)}</span>`;
+    return `<span class="badge ${daysLeft <= 14 ? 'badge-warn' : 'badge-pos'}">valido fino al ${fmtDate(expiry)}${daysLeft <= 14 ? ` (${daysLeft} gg)` : ''}</span>`;
+  };
+  const accountRow = c => {
     const fundsUsing = S.funds.filter(f => f.bank_connection_id === c.id).map(f => f.name);
-    let consent = '<span class="badge badge-neutral">nessuna scadenza impostata</span>';
-    if (c.consent_expires_at) {
-      const expiry = c.consent_expires_at.slice(0, 10);
-      const expired = expiry < todayIso;
-      const daysLeft = Math.round((new Date(expiry) - new Date(todayIso)) / 86400000);
-      consent = expired
-        ? `<span class="badge badge-neg">consenso scaduto il ${fmtDate(expiry)}</span>`
-        : `<span class="badge ${daysLeft <= 14 ? 'badge-warn' : 'badge-pos'}">consenso valido fino al ${fmtDate(expiry)}${daysLeft <= 14 ? ` (${daysLeft} gg)` : ''}</span>`;
-    }
     return `
-      <div class="card">
+      <div class="settings-row" style="display:block;padding:10px 0;border-top:1px solid var(--c-border)">
         <div class="card-header-row">
-          <div class="card-title">${c.aspsp_name}${c.display_name ? ` — ${c.display_name}` : ''}</div>
+          <div>
+            <div class="fw-600">${bankAccountLabel(c)}</div>
+            ${c.iban && c.display_name ? `<div class="mono text-sm text-muted">${c.iban}</div>` : ''}
+          </div>
           <div class="hstack gap-4">
-            <button class="btn-icon" data-action="edit-bank-connection" data-id="${c.id}" title="Modifica">✎</button>
+            <button class="btn-icon" data-action="edit-bank-connection" data-id="${c.id}" title="Battezza / rinomina">✎</button>
             <button class="btn-icon btn-icon-danger" data-action="del-bank-connection" data-id="${c.id}" title="Elimina">✕</button>
           </div>
         </div>
-        <div class="settings-row text-sm">Modulo: <strong>${BANK_MODULE_LABEL[c.module] || c.module}</strong> · Stato: <strong>${c.status}</strong></div>
-        ${fundsUsing.length ? `<div class="settings-row text-sm">Usato dal fondo: <strong>${fundsUsing.join(', ')}</strong></div>` : ''}
-        ${c.account_id
-          ? `<div class="settings-row text-sm text-muted">ID conto: <span class="mono">${c.account_id}</span></div>`
-          : `<div class="settings-row text-sm" style="color:var(--c-warning)">⚠️ Nessun conto associato: la banca non ne ha elencati. La sincronizzazione non parte finché manca.</div>`}
-        <div class="settings-row">${consent}</div>
-        <div class="text-sm text-muted" id="consent-req-${c.id}"></div>
-        <div class="hstack gap-8" style="flex-wrap:wrap">
-          ${c.consent_id ? `<button class="btn btn-outline btn-sm" data-action="refresh-bank-accounts" data-id="${c.id}">🔍 Rileggi i conti dalla banca</button>` : ''}
+        <div class="hstack gap-4 mt-4" style="flex-wrap:wrap">${bankUseChips(c)} ${consentBadge(c)}</div>
+        ${fundsUsing.length ? `<div class="text-sm text-muted mt-4">Usato dal fondo: <strong>${fundsUsing.join(', ')}</strong></div>` : ''}
+        ${c.account_id ? '' : `
+          <div class="text-sm mt-4" style="color:var(--c-warning)">
+            ⚠️ La banca non ha elencato nessun conto per questo consenso: la sincronizzazione non parte.
+            Quasi sempre il conto non è in whitelist su Enable Banking — sistemata quella, rifai il consenso.
+          </div>`}
+        <div class="hstack gap-8 mt-4" style="flex-wrap:wrap">
+          ${c.consent_id ? `<button class="btn btn-outline btn-sm" data-action="refresh-bank-accounts" data-id="${c.id}">🔍 Rileggi i conti</button>` : ''}
           ${c.account_id ? '' : `<button class="btn btn-primary btn-sm" data-action="redo-bank-consent" data-id="${c.id}">🔁 Rifai il consenso</button>`}
         </div>
       </div>`;
   };
-  const group = (module, empty) => {
-    const list = S.bankConnections.filter(c => c.module === module);
-    return list.length ? `<div class="grid-auto">${list.map(card).join('')}</div>` : `<div class="empty-sm">${empty}</div>`;
+  const institutionCard = inst => {
+    const accounts = S.bankConnections.filter(c => c.institution_id === inst.id);
+    return `
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-title">${inst.name}</div>
+          <div class="hstack gap-4">
+            ${inst.connectable ? `<button class="btn btn-primary btn-sm" data-action="connect-institution" data-id="${inst.id}">🔗 Collega</button>` : ''}
+            <button class="btn-icon" data-action="edit-institution" data-id="${inst.id}" title="Modifica">✎</button>
+            <button class="btn-icon btn-icon-danger" data-action="del-institution" data-id="${inst.id}" title="Elimina">✕</button>
+          </div>
+        </div>
+        <div class="settings-row text-sm text-muted">
+          ${INSTITUTION_KIND_LABEL[inst.kind] || inst.kind}
+          ${inst.connectable
+            ? ` · catalogo Enable Banking: <span class="mono">${inst.aspsp_name}</span> (${inst.aspsp_country})`
+            : ' · <span class="badge badge-neutral">non collegabile</span> — nessuna interfaccia PSD2, i dati si inseriscono a mano'}
+        </div>
+        ${inst.notes ? `<div class="settings-row text-sm text-muted">${inst.notes}</div>` : ''}
+        ${accounts.length
+          ? accounts.map(accountRow).join('')
+          : `<div class="empty-sm mt-8">${inst.connectable ? 'Nessun conto: premi 🔗 Collega per chiedere il consenso alla banca.' : 'Nessun conto collegato (istituto non collegabile).'}</div>`}
+      </div>`;
   };
+  // Conti nati prima del censimento, o rimasti orfani perché l'istituto è stato cancellato:
+  // si vedono lo stesso, altrimenti sparirebbero senza che nessuno se ne accorga.
+  const orphans = S.bankConnections.filter(c => !c.institution_id || !S.institutions.some(i => i.id === c.institution_id));
   setHtml('view-conti-collegati', `
     <div class="view-header">
       <div>
-        <h2 class="page-title">Conti Collegati</h2>
-        <p class="page-sub">Conti bancari collegati via Enable Banking (PSD2), condivisi tra Spese Famiglia e Fondi</p>
+        <h2 class="page-title">Banche e Conti</h2>
+        <p class="page-sub">Censimento degli istituti, collegamento via Enable Banking (PSD2) e assegnazione dei conti ai moduli</p>
       </div>
-      <button class="btn btn-primary btn-sm" data-action="new-bank-connection">+ Collega conto</button>
+      <button class="btn btn-primary btn-sm" data-action="new-institution">+ Aggiungi istituto</button>
     </div>
+    <div class="card mb-16" style="border-color:var(--c-warning)">
+      <div class="card-title">⚠️ Prima di collegare: la whitelist</div>
+      <p class="text-sm">La nostra applicazione Enable Banking è in <em>restricted mode</em> e l'API restituisce
+        <strong>solo i conti collegati nel Control Panel</strong> con «Link accounts». Per un conto non collegato lì il
+        consenso riesce, la banca mostra il conto spuntato e la sessione torna vuota — senza nessun errore, perché
+        è il filtro previsto. Metti il conto in whitelist <strong>prima</strong> di premere 🔗 Collega: saltare
+        questo passo costa un giro di login e SCA per niente.</p>
+    </div>
+    ${S.institutions.length
+      ? `<div class="grid-auto mb-16">${S.institutions.map(institutionCard).join('')}</div>`
+      : '<div class="card mb-16"><div class="empty-sm">Nessun istituto censito. Aggiungi la prima banca o il primo broker.</div></div>'}
+    ${orphans.length ? `
     <div class="card mb-16">
-      <div class="card-title">${BANK_MODULE_LABEL.cost_analysis}</div>
-      <p class="text-muted text-sm mb-12">Le transazioni di questi conti finiscono in Spese Famiglia. La sincronizzazione si lancia dall'app di gestione, dove c'è anche la categorizzazione.</p>
-      ${group('cost_analysis', 'Nessun conto collegato per Spese Famiglia.')}
-    </div>
-    <div class="card mb-16">
-      <div class="card-title">${BANK_MODULE_LABEL.fondo}</div>
-      <p class="text-muted text-sm mb-12">I bonifici di questi conti diventano versamenti e prelievi del fondo collegato. La sincronizzazione si lancia dalla scheda del fondo.</p>
-      ${group('fondo', 'Nessun conto collegato per i fondi.')}
-    </div>
+      <div class="card-title">Conti senza istituto</div>
+      <p class="text-muted text-sm mb-12">Collegamenti nati prima del censimento o rimasti senza istituto. Assegnali a un istituto dal pulsante ✎.</p>
+      ${orphans.map(accountRow).join('')}
+    </div>` : ''}
     <div class="card">
       <div class="card-title">Registro sincronizzazioni</div>
-      <p class="text-muted text-sm mb-12">Ultimi collegamenti e sincronizzazioni, con il messaggio di errore quando qualcosa non è andato.</p>
+      <p class="text-muted text-sm mb-12">Ultime sincronizzazioni e letture, con il messaggio di errore quando qualcosa non è andato.</p>
       <div id="bank-sync-log"><div class="empty-sm">Carico…</div></div>
     </div>
   `);
-  loadBankConsentRequests();
   loadBankSyncLog();
-}
-/* Cosa è stato davvero chiesto alla banca, collegamento per collegamento.
-   enable-banking-connect scrive una riga 'consent_request' prima di partire e il callback la
-   aggancia alla connessione nata da quel consenso: è l'unica prova di quello che è stato
-   spedito. Senza, davanti a una sessione vuota si può solo guardare access.accounts nella
-   risposta della banca — che dice cosa è arrivato a destinazione, non cosa era partito.   */
-async function loadBankConsentRequests() {
-  const ids = S.bankConnections.map(c => c.id);
-  if (!ids.length) return;
-  try {
-    const rows = await sbQ('cm_sync_log',
-      `select=bank_connection_id,error_message,started_at&status=eq.consent_request` +
-      `&bank_connection_id=in.(${ids.join(',')})&order=started_at.desc`);
-    S.bankConsentRequests = {};
-    for (const r of rows) {
-      if (!S.bankConsentRequests[r.bank_connection_id]) S.bankConsentRequests[r.bank_connection_id] = r;
-    }
-    for (const [connId, r] of Object.entries(S.bankConsentRequests)) {
-      const box = $(`consent-req-${connId}`);
-      if (!box) continue;
-      const sentIban = !/IBAN NON INVIATO/.test(r.error_message || '');
-      const detail = `<span class="mono text-sm" style="word-break:break-word">${(r.error_message || '').replace(/</g, '&lt;')}</span>`;
-      box.innerHTML = `<div style="margin-top:6px">` + (sentIban
-        ? `Consenso chiesto <strong>indicando l'IBAN</strong>. ${detail}`
-        : `<span style="color:var(--c-warning)">Consenso chiesto <strong>senza IBAN</strong> (tutti i conti).</span> ${detail}`)
-        + `</div>`;
-    }
-  } catch {
-    // Informazione accessoria: se il registro non si legge, le schede restano come sono.
-  }
 }
 // Il registro serve solo in questa pagina: si legge quando serve invece di appesantire
 // ogni avvio dell'app.
@@ -2553,6 +2577,7 @@ async function loadBankSyncLog() {
     if (!rows.length) { box.innerHTML = '<div class="empty-sm">Nessuna sincronizzazione registrata.</div>'; return; }
     const statusBadge = st => st === 'success' ? '<span class="badge badge-pos">ok</span>'
       : st === 'running' ? '<span class="badge badge-neutral">in corso</span>'
+      : st === 'read' ? '<span class="badge badge-neutral">lettura</span>'
       : st === 'no_accounts' ? '<span class="badge badge-warn">nessun conto</span>'
       : `<span class="badge badge-neg">${st || 'errore'}</span>`;
     box.innerHTML = `<div class="table-wrap"><table class="table">
@@ -2561,7 +2586,7 @@ async function loadBankSyncLog() {
         const conn = S.bankConnections.find(c => c.id === r.bank_connection_id);
         return `<tr>
           <td class="mono text-sm">${r.started_at ? fmtDate(r.started_at.slice(0, 10)) + ' ' + r.started_at.slice(11, 16) : '—'}</td>
-          <td>${conn ? conn.aspsp_name : '—'}</td>
+          <td>${conn ? bankAccountLabel(conn) : '—'}</td>
           <td>${statusBadge(r.status)}</td>
           <td class="mono">${r.imported_count ?? 0}</td>
           <td><div class="text-sm" style="max-width:420px;word-break:break-word">${r.error_message || '—'}</div></td>
@@ -2572,260 +2597,118 @@ async function loadBankSyncLog() {
     box.innerHTML = `<div class="text-sm text-neg">Impossibile leggere il registro: ${err.message}</div>`;
   }
 }
-/* connectionId → modifica dei dati locali di un collegamento esistente.
-   replaceOf → nuovo consenso che viene a prendere il posto di un collegamento rimasto senza
-   conto: il form parte già compilato con banca, paese e modulo di quello vecchio e, al ritorno
-   dalla banca, il callback sposta i fondi sul nuovo e cancella il vuoto. Senza, l'utente deve
-   cancellare a mano, ricompilare tutto e ricordarsi di ripuntare il fondo — e se se ne
-   dimentica il fondo resta agganciato a un conto che non sincronizzerà mai.               */
-function openBankConnectionModal(connectionId = null, replaceOf = null) {
-  const c = connectionId ? S.bankConnections.find(x => x.id === connectionId) : null;
-  const r = replaceOf ? S.bankConnections.find(x => x.id === replaceOf) : null;
-  // Il paese ASPSP non è una colonna di cm_bank_connections: per ricompilarlo si guarda la
-  // richiesta di consenso di quel collegamento ("Richiesta consenso UniCredit (IT) · …") e,
-  // se manca, il paese di default della banca.
-  const rCountry = r
-    ? (((S.bankConsentRequests || {})[r.id]?.error_message || '').match(/Richiesta consenso .+? \(([A-Z]{2})\)/)?.[1]
-       || ASPSP_DEFAULT_COUNTRY[r.aspsp_name] || '')
-    : '';
-  // Su un conto già collegato si correggono solo i dati locali: banca, paese e modulo sono
-  // fissati dal consenso dato alla banca e cambiarli qui non rifarebbe il consenso.
-  openModal(c ? 'Modifica conto collegato' : r ? 'Rifai il consenso' : 'Collega un conto', `
+/* ── Censimento ─────────────────────────────────────────────────
+   L'istituto si cerca nel catalogo Enable Banking, che è l'unico posto da cui può venire
+   il nome esatto che l'API riconosce: digitarlo a mano è il modo più comune di sbagliarlo.
+   Chi non è nel catalogo (un broker senza PSD2) si aggiunge lo stesso, non collegabile. */
+function openInstitutionModal(institutionId = null) {
+  const inst = institutionId ? S.institutions.find(i => i.id === institutionId) : null;
+  openModal(inst ? 'Modifica istituto' : 'Aggiungi istituto', `
     <form id="modal-form">
-      ${r ? `<p class="text-sm mb-12">Nuovo consenso per <strong>${r.aspsp_name}</strong> al posto del collegamento rimasto senza conto. Al ritorno dalla banca i fondi che lo usavano passano automaticamente sul nuovo e la riga vuota viene eliminata.</p>` : ''}
-      ${c ? '' : `
       <div class="form-group">
-        <label class="form-label">A cosa serve il conto *</label>
-        <select name="module" class="form-input form-select" required>
-          <option value="fondo" ${r?.module === 'fondo' || !r ? 'selected' : ''}>${BANK_MODULE_LABEL.fondo} — bonifici da/verso i partecipanti</option>
-          <option value="cost_analysis" ${r?.module === 'cost_analysis' ? 'selected' : ''}>${BANK_MODULE_LABEL.cost_analysis} — spese da categorizzare</option>
-        </select>
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. UniCredit, Directa" value="${inst?.name || ''}" />
       </div>
-      <div class="form-group">
-        <label class="form-label">Cerca la banca nel catalogo Enable Banking</label>
-        <div class="hstack gap-8">
-          <input id="aspsp-country" class="form-input" maxlength="2" placeholder="Paese (IT, LT, DE…)" style="text-transform:uppercase;flex:1" value="IT" />
-          <input id="aspsp-query" class="form-input" placeholder="Nome (opzionale)" style="flex:2" />
-          <button type="button" class="btn btn-outline" data-action="search-aspsp">🔍 Cerca</button>
-        </div>
-        <div id="aspsp-results" style="max-height:180px;overflow-y:auto;margin-top:8px"></div>
-        <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" data-action="aspsp-detail">ℹ️ Cosa richiede questa banca</button>
-      </div>`}
       <div class="form-row-2">
         <div class="form-group">
-          <label class="form-label">Banca (nome esatto ASPSP) *</label>
-          <input name="aspsp_name" id="aspsp-name" class="form-input" required placeholder="es. UniCredit" value="${c?.aspsp_name || r?.aspsp_name || ''}" ${c ? 'readonly' : ''} />
+          <label class="form-label">Tipo *</label>
+          <select name="kind" class="form-input form-select" required>
+            <option value="banca"  ${inst?.kind !== 'broker' ? 'selected' : ''}>${INSTITUTION_KIND_LABEL.banca}</option>
+            <option value="broker" ${inst?.kind === 'broker' ? 'selected' : ''}>${INSTITUTION_KIND_LABEL.broker}</option>
+          </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Paese ${c ? '' : '*'}</label>
-          <input name="country" id="aspsp-country-final" class="form-input" maxlength="2" style="text-transform:uppercase" placeholder="IT" value="${rCountry}" ${c ? 'disabled' : 'required'} />
+          <label class="form-label">Collegabile</label>
+          <label class="text-sm" style="display:block;margin-top:10px">
+            <input type="checkbox" name="connectable" id="inst-connectable" ${!inst || inst.connectable ? 'checked' : ''} />
+            È nel catalogo Enable Banking
+          </label>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Nome del conto</label>
-        <input name="display_name" class="form-input" placeholder="es. UniCredit fondo famiglia" value="${c?.display_name || r?.display_name || ''}" />
-      </div>
-      ${c ? '' : `
-      <div class="form-group">
-        <label class="form-label">IBAN del conto *</label>
-        <input name="iban" id="conn-iban" class="form-input mono" required placeholder="IT60X0542811101000000123456" />
-        <p class="text-muted text-sm" style="margin-top:4px">Dev'essere l'IBAN di un <strong>conto corrente</strong>: PSD2 copre i conti di pagamento, e un conto risparmio o un deposito la banca spesso non lo espone affatto — il consenso riesce e non collega niente.</p>
-        <label class="text-muted text-sm" style="display:block;margin-top:6px">
-          <input type="checkbox" name="skip_iban" id="conn-iban-skip" /> La mia banca non lo richiede (es. Revolut): chiedi il consenso su tutti i conti
-        </label>
-        <div id="conn-iban-skip-warn" style="display:none;margin-top:6px;color:var(--c-warning)" class="text-sm">
-          ⚠️ Senza IBAN il consenso vale genericamente per «tutti i conti». Revolut lo accetta;
-          UniCredit no: autorizza, chiede l'SCA e restituisce zero conti. Usa questa opzione solo
-          se sei sicuro che la tua banca non voglia l'IBAN.
+      <div id="inst-aspsp-block">
+        <div class="form-group">
+          <label class="form-label">Cerca nel catalogo Enable Banking</label>
+          <div class="hstack gap-8">
+            <input id="aspsp-country" class="form-input" maxlength="2" placeholder="Paese" style="text-transform:uppercase;flex:1" value="${inst?.aspsp_country || 'IT'}" />
+            <input id="aspsp-query" class="form-input" placeholder="Nome (opzionale)" style="flex:2" value="${inst?.aspsp_name || ''}" />
+            <button type="button" class="btn btn-outline" data-action="search-aspsp">🔍 Cerca</button>
+          </div>
+          <div id="aspsp-results" style="max-height:180px;overflow-y:auto;margin-top:8px"></div>
         </div>
-      </div>`}
-      ${c ? `
-      <div class="form-group">
-        <label class="form-label">Consenso valido fino al</label>
-        <input name="consent_expires_at" type="date" class="form-input" value="${c.consent_expires_at ? c.consent_expires_at.slice(0, 10) : ''}" />
-        <p class="text-muted text-sm" style="margin-top:4px">Compilato dal collegamento reale: si tocca qui solo per correzioni.</p>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Nome esatto ASPSP</label>
+            <input name="aspsp_name" id="aspsp-name" class="form-input" placeholder="es. UniCredit" value="${inst?.aspsp_name || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Paese ASPSP</label>
+            <input name="aspsp_country" id="aspsp-country-final" class="form-input" maxlength="2" style="text-transform:uppercase" placeholder="IT" value="${inst?.aspsp_country || ''}" />
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm mb-12" data-action="aspsp-detail">ℹ️ Cosa richiede questa banca</button>
       </div>
       <div class="form-group">
-        <label class="form-label">ID conto lato Enable Banking</label>
-        <input name="account_id" class="form-input mono" placeholder="vuoto = sincronizzazione non disponibile" value="${c.account_id || ''}" />
-        <p class="text-muted text-sm" style="margin-top:4px">Lo compila il collegamento. Si scrive a mano solo quando la banca non ha restituito i conti e l'identificativo si recupera altrove: senza questo valore il sync non parte.</p>
-      </div>` : `
-      <div class="form-group" id="owner-person-group" style="display:none">
-        <label class="form-label">Proprietario (chi ha speso) *</label>
-        <select name="owner_person_id" id="owner-person-select" class="form-input form-select"></select>
-        <p class="text-muted text-sm" style="margin-top:4px">Serve solo per Spese Famiglia: ogni transazione del conto viene attribuita a questa persona.</p>
+        <label class="form-label">Note</label>
+        <input name="notes" class="form-input" placeholder="facoltative" value="${inst?.notes || ''}" />
       </div>
-      <p class="text-muted text-sm mb-12">Premendo il pulsante si apre la banca per il consenso (per UniCredit: codice utente + PIN, poi conferma via SMS o notifica sull'app UniCredit). Al ritorno il conto compare qui.</p>`}
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
-        <button type="submit" class="btn btn-primary">${c ? 'Salva' : 'Collega (apre la banca)'}</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
       </div>
     </form>
   `, async data => {
-    if (c) {
-      await sbUpd('cm_bank_connections', `id=eq.${c.id}`, {
-        display_name: (data.display_name || '').trim() || null,
-        consent_expires_at: data.consent_expires_at || null,
-        account_id: (data.account_id || '').trim() || null,
-      });
-      await reload(); closeModal();
-      return;
+    const connectable = data.connectable === 'on';
+    const aspspName = (data.aspsp_name || '').trim();
+    const aspspCountry = (data.aspsp_country || '').trim().toUpperCase();
+    // Lo stesso vincolo c'è nel DB: intercettarlo qui evita di far scrivere un form intero
+    // per poi restituire un errore di constraint che non spiega niente.
+    if (connectable && (!aspspName || !aspspCountry)) {
+      throw new Error('Un istituto collegabile ha bisogno del nome esatto ASPSP e del paese: cercalo nel catalogo.');
     }
-    const iban = (data.iban || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    const skipIban = data.skip_iban === 'on';
-    // Un IBAN con un carattere sbagliato produce lo stesso identico esito di un IBAN mancante
-    // (sessione autorizzata e vuota), ma lo si scopre solo dopo aver rifatto login e SCA: il
-    // codice di controllo si verifica qui, prima di mandare l'utente in banca.
-    if (!skipIban && !ibanChecksumOk(iban)) {
-      throw new Error("L'IBAN non è valido: il codice di controllo non torna. Ricopialo dall'estratto conto.");
-    }
-    if (skipIban && !confirm(
-      'Stai chiedendo il consenso su TUTTI i conti, senza indicare l\'IBAN.\n\n' +
-      'Con UniCredit questo produce una sessione autorizzata ma vuota: login e SCA per niente.\n' +
-      'Procedere solo se la tua banca (Revolut, N26…) non richiede l\'IBAN.')) {
-      // Ripensarci non è un errore: il pulsante torna com'era, senza alert.
-      const submitBtn = document.querySelector('#modal-form [type=submit]');
-      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Collega (apre la banca)'; }
-      return;
-    }
-    const res = await sbFn('enable-banking-connect', {
-      aspspName: (data.aspsp_name || '').trim(),
-      country: (data.country || '').trim().toUpperCase(),
-      displayName: (data.display_name || '').trim() || null,
-      ownerPersonId: data.owner_person_id || null,
-      module: data.module,
-      iban: iban || null,
-      // Senza IBAN il server rifiuta, a meno che la rinuncia non sia esplicita: così una
-      // pagina vecchia non riesce più a far partire un consenso destinato a nascere vuoto.
-      allowAllAccounts: skipIban,
-      replaceConnectionId: replaceOf || null,
-      clientVersion: APP_VERSION,
-    });
-    if (!res.url) throw new Error('La banca non ha restituito un URL di consenso.');
-    window.location.href = res.url;
+    const payload = {
+      name: (data.name || '').trim(),
+      kind: data.kind,
+      connectable,
+      aspsp_name: connectable ? aspspName : null,
+      aspsp_country: connectable ? aspspCountry : null,
+      notes: (data.notes || '').trim() || null,
+    };
+    if (inst) await sbUpd('cm_institutions', `id=eq.${inst.id}`, payload);
+    else await sbIns('cm_institutions', { ...payload, user_id: S.session.user.id });
+    await reload(); closeModal();
   });
-  if (c) return;
-  // Il proprietario serve solo a Spese Famiglia: si carica da ca_people alla prima volta che
-  // serve davvero, così aprire il modale per un conto del fondo non interroga il DB.
-  const moduleSel = document.querySelector('#modal-body select[name="module"]');
-  const ownerGroup = $('owner-person-group');
-  const ownerSelect = $('owner-person-select');
-  const syncOwnerVisibility = async () => {
-    const isCost = moduleSel.value === 'cost_analysis';
-    ownerGroup.style.display = isCost ? '' : 'none';
-    ownerSelect.required = isCost;
-    if (isCost && !ownerSelect.options.length) {
-      try {
-        const people = await sbQ('ca_people', 'select=id,name&order=name.asc');
-        ownerSelect.innerHTML = people.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-      } catch (err) {
-        ownerSelect.innerHTML = '';
-        ownerGroup.innerHTML = `<p class="text-sm text-neg">Impossibile leggere le persone di Spese Famiglia: ${err.message}</p>`;
-      }
-    }
-  };
-  moduleSel.addEventListener('change', syncOwnerVisibility);
-  syncOwnerVisibility();
-  // L'IBAN è obbligatorio salvo rinuncia esplicita: lasciarlo vuoto per distrazione
-  // significa ottenere un consenso valido ma inservibile, e accorgersene solo dopo l'SCA.
-  const ibanInput = $('conn-iban');
-  const ibanSkip  = $('conn-iban-skip');
-  const ibanSkipWarn = $('conn-iban-skip-warn');
-  ibanSkip.addEventListener('change', () => {
-    ibanInput.required = !ibanSkip.checked;
-    ibanInput.disabled = ibanSkip.checked;
-    ibanSkipWarn.style.display = ibanSkip.checked ? '' : 'none';
-    if (ibanSkip.checked) ibanInput.value = '';
-  });
-  const nameInput = $('aspsp-name');
-  const countryInput = $('aspsp-country-final');
-  nameInput.addEventListener('input', () => {
-    const guess = ASPSP_DEFAULT_COUNTRY[nameInput.value.trim()];
-    if (guess && !countryInput.value) countryInput.value = guess;
-  });
+  // I campi del catalogo hanno senso solo per un istituto collegabile: mostrarli sempre
+  // suggerirebbe che un broker senza PSD2 vada comunque cercato lì dentro.
+  const connectableBox = $('inst-connectable');
+  const aspspBlock = $('inst-aspsp-block');
+  const syncAspspVisibility = () => { aspspBlock.style.display = connectableBox.checked ? '' : 'none'; };
+  connectableBox.addEventListener('change', syncAspspVisibility);
+  syncAspspVisibility();
 }
-/* Rilegge i conti di una sessione già ottenuta: la banca ha dato il consenso ma non ha
-   elencato i conti, e rifare login e SCA a ogni tentativo non ha senso. Mostra anche la
-   risposta grezza, che è l'unico modo per capire cosa manda davvero l'ASPSP.            */
-async function refreshBankAccounts(connectionId) {
-  openModal('Rilettura conti', '<div class="empty-sm">🔍 Interrogo la sessione…</div>');
+async function searchAspsps() {
+  const country = ($('aspsp-country').value || '').trim().toUpperCase();
+  const query   = ($('aspsp-query').value || '').trim();
+  const box     = $('aspsp-results');
+  if (!country) { box.innerHTML = '<div class="text-sm text-muted">Indica almeno il paese.</div>'; return; }
+  box.innerHTML = '<div class="text-sm text-muted">Cerco…</div>';
   try {
-    const res = await sbFn('enable-banking-refresh-accounts', { bankConnectionId: connectionId });
-    await reload();
-    await loadBankConsentRequests();
-    const found = (res.accounts || []).length;
-    openModal(found ? 'Conti trovati' : 'Nessun conto nella sessione', `
-      ${found
-        ? `<p class="text-sm mb-12">Trovati <strong>${found}</strong> conti — aggiornati: ${res.updated}, aggiunti: ${res.created}.</p>
-           <div class="table-wrap"><table class="table">
-             <thead><tr><th>IBAN</th><th>ID conto</th></tr></thead>
-             <tbody>${res.accounts.map(a => `<tr><td class="mono text-sm">${a.iban || '—'}</td><td class="mono text-sm">${a.uid}</td></tr>`).join('')}</tbody>
-           </table></div>`
-        : `<p class="text-sm mb-12">La sessione è valida${res.sessionStatus ? ` (stato: <strong>${res.sessionStatus}</strong>)` : ''} ma non contiene nessun conto.</p>
-           ${res.hopeless ? `<div class="card" style="border-color:var(--c-warning)">
-             <div class="card-title">Questa sessione resterà vuota</div>
-             <p class="text-sm">${emptySessionExplanation(connectionId)}</p>
-             <button class="btn btn-primary btn-sm mt-12" data-action="redo-bank-consent" data-id="${connectionId}">🔁 Rifai il consenso</button>
-           </div>` : ''}`}
-      <div class="form-group" style="margin-top:12px">
-        <label class="form-label">Risposta di Enable Banking</label>
-        <textarea class="form-input mono" rows="8" readonly style="font-size:.72rem">${(res.raw || '').replace(/</g, '&lt;')}</textarea>
-        <p class="text-muted text-sm" style="margin-top:4px">Copia questo testo se serve capire perché la banca non elenca i conti.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" data-action="close-modal">Chiudi</button>
-      </div>
-    `);
+    const data = await sbFn('enable-banking-aspsps', { country, query });
+    const results = data.results || [];
+    if (!results.length) {
+      box.innerHTML = `<div class="text-sm text-muted">Nessuna banca trovata (cercato in: ${(data.searchedCountries || []).join(', ') || country}).</div>`;
+      return;
+    }
+    S.aspspResults = results;
+    box.innerHTML = results.map((r, i) => `
+      <button type="button" class="btn btn-outline btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px"
+              data-action="pick-aspsp" data-idx="${i}">${r.name} <span class="text-muted">(${r.country})</span></button>`).join('');
   } catch (err) {
-    closeModal();
-    alert('Errore rilettura conti: ' + err.message);
+    box.innerHTML = `<div class="text-sm text-neg">Errore ricerca: ${err.message}</div>`;
   }
 }
-/* La sessione non contiene conti e access.accounts è null. Il perché però cambia a seconda di
-   cosa era stato spedito, e le due situazioni chiedono cose diverse: se l'IBAN non era stato
-   messo, rifare il consenso indicandolo risolve; se l'IBAN c'era ed è la banca ad averlo
-   ignorato, rifare la stessa identica cosa non porta da nessuna parte e il problema sta in
-   quello che la banca dichiara di volere. La riga 'consent_request' è ciò che distingue i due
-   casi: senza (collegamenti nati prima di questa traccia) si resta sul dubbio, dichiarandolo. */
-function emptySessionExplanation(connectionId) {
-  const req = (S.bankConsentRequests || {})[connectionId];
-  // Causa nota, e va detta per prima perché è quella che non si vede da nessuna parte: la
-  // nostra applicazione Enable Banking è in "restricted mode" (attivata collegando i conti).
-  // In quella modalità l'API restituisce SOLO i conti messi in whitelist nel Control Panel con
-  // "Link accounts". Un conto mai collegato lì dà esattamente questo quadro — consenso
-  // autorizzato, conto spuntato in banca, sessione con accounts: [] — e nessun errore, perché
-  // per Enable Banking non è un errore ma il filtro previsto. È il motivo per cui Revolut
-  // funziona (collegato all'attivazione) e UniCredit no.
-  const restricted = `<strong>Causa più probabile: il conto non è in whitelist su Enable Banking.</strong>
-    La nostra applicazione è in <em>restricted mode</em>, e in quella modalità l'API restituisce
-    <strong>solo i conti collegati nel Control Panel</strong>: per gli altri l'autorizzazione riesce,
-    la banca mostra il conto spuntato e la sessione torna comunque con
-    <span class="mono">accounts: []</span>, senza nessun errore — è il filtro previsto, non un guasto.
-    <br/><br/><strong>Come si sistema</strong> (una volta per conto, dal sito di Enable Banking, non da qui):
-    <ol style="margin:6px 0 0 18px">
-      <li>entra nel <strong>Control Panel</strong> di Enable Banking e apri l'applicazione;</li>
-      <li>premi <strong>«Link accounts»</strong>;</li>
-      <li>autenticati con la banca e autorizza il conto che ti serve;</li>
-      <li>torna qui e <strong>rifai il consenso</strong>: da quel momento il conto compare.</li>
-    </ol>
-    L'applicazione resta «Restricted» ma «Active»: è lo stato normale finché non c'è un contratto
-    di produzione piena.`;
-  const base = `La sessione è autorizzata ma non contiene nessun conto (<span class="mono">accounts: []</span>): rileggerla non la riempirà mai.`;
-  const secondarie = `<br/><br/>Se il conto è già collegato nel Control Panel, restano da guardare:
-    <ul style="margin:6px 0 0 18px">
-      <li><strong>la schermata di selezione conti sulla banca</strong> — confermare senza spuntare niente produce lo stesso consenso vuoto;</li>
-      <li><strong>il tipo di conto</strong> — PSD2 copre i conti di pagamento: depositi e libretti vincolati spesso non sono esposti;</li>
-      <li><strong>cosa dichiara la banca</strong> — «ℹ️ Cosa richiede questa banca», e la riga di richiesta qui sotto riporta psu_types, auth_methods e header PSU obbligatori letti al momento del collegamento.</li>
-    </ul>`;
-  if (req && /IBAN NON INVIATO/.test(req.error_message || '')) {
-    return `${base} ${restricted}${secondarie}
-      <br/><br/>Nota: questa richiesta era partita <strong>senza IBAN</strong> (opzione «la mia banca non lo richiede»). Rifacendola, indica l'IBAN.`;
-  }
-  return `${base} ${restricted}${secondarie}`;
-}
-/* Voce di catalogo per intero: quando una banca autorizza il consenso ma non restituisce
-   conti, la differenza rispetto a una che funziona sta in quello che dichiara qui —
-   metodi di autenticazione, tipi di PSU ammessi, header o credenziali obbligatorie.     */
+/* Voce di catalogo per intero: metodi di autenticazione, tipi di PSU ammessi, header
+   obbligatori e durata massima del consenso. È il primo posto da guardare quando un
+   collegamento riesce a metà.                                                        */
 async function showAspspDetail() {
   const name    = ($('aspsp-name').value || '').trim();
   const country = ($('aspsp-country-final').value || $('aspsp-country').value || '').trim().toUpperCase();
@@ -2841,25 +2724,157 @@ async function showAspspDetail() {
     box.innerHTML = `<div class="text-sm text-neg">Errore: ${err.message}</div>`;
   }
 }
-async function searchAspsps() {
-  const country = ($('aspsp-country').value || '').trim().toUpperCase();
-  const query   = ($('aspsp-query').value || '').trim();
-  const box     = $('aspsp-results');
-  if (!country) { box.innerHTML = '<div class="text-sm text-muted">Indica almeno il paese.</div>'; return; }
-  box.innerHTML = '<div class="text-sm text-muted">Cerco…</div>';
+/* ── Consenso ───────────────────────────────────────────────────
+   Non c'è più niente da compilare: banca e paese stanno nell'anagrafica, il resto si
+   decide dopo. replaceOf è il collegamento rimasto senza conto che questo consenso viene
+   a sostituire — il callback ci sposta sopra i fondi, eredita nome e usi, e cancella la
+   riga vuota: farlo a mano si dimentica, e il fondo resta agganciato a un conto morto. */
+async function connectInstitution(institutionId, replaceOf = null) {
+  const inst = S.institutions.find(i => i.id === institutionId);
+  if (!inst) { alert('Istituto non trovato.'); return; }
+  if (!confirm(
+    `Stai per chiedere il consenso a ${inst.name} (${inst.aspsp_name} / ${inst.aspsp_country}).\n\n` +
+    'Il conto è già in whitelist su Enable Banking (Control Panel → «Link accounts»)?\n' +
+    'Se non lo è, il consenso riuscirà e non collegherà nessun conto: login e SCA per niente.')) return;
   try {
-    const data = await sbFn('enable-banking-aspsps', { country, query });
-    const results = data.results || [];
-    if (!results.length) {
-      box.innerHTML = `<div class="text-sm text-muted">Nessuna banca trovata (cercato in: ${(data.searchedCountries || []).join(', ') || country}). Il nome deve combaciare con il catalogo di Enable Banking.</div>`;
+    const res = await sbFn('enable-banking-connect', {
+      institutionId,
+      replaceConnectionId: replaceOf || null,
+    });
+    if (!res.url) throw new Error('La banca non ha restituito un URL di consenso.');
+    window.location.href = res.url;
+  } catch (err) {
+    alert('Errore avvio collegamento: ' + err.message);
+  }
+}
+/* ── Battesimo ──────────────────────────────────────────────────
+   Un conto appena tornato dalla banca non ha nome e non serve a niente: qui riceve
+   entrambe le cose, con davanti l'elenco di quello che la banca ha davvero restituito.
+   Lo stesso modale rinomina un conto già battezzato — è sempre la stessa domanda.
+   connectionIds = i conti da mostrare (una sessione appena creata, o un singolo conto). */
+function openBankBaptismModal(connectionIds) {
+  const conns = connectionIds.map(id => S.bankConnections.find(c => c.id === id)).filter(Boolean);
+  if (!conns.length) { alert('Nessun conto da battezzare.'); return; }
+  const useRow = (c, use) => `
+    <label class="text-sm" style="display:block;margin-top:4px">
+      <input type="checkbox" name="use_${use}_${c.id}" class="bap-use" data-conn="${c.id}" ${(c.uses || []).includes(use) ? 'checked' : ''} />
+      ${BANK_USE_LABEL[use]} <span class="text-muted">— ${BANK_USE_HINT[use]}</span>
+    </label>`;
+  const instOptions = c => `
+    <select name="institution_${c.id}" class="form-input form-select">
+      <option value="">— nessun istituto —</option>
+      ${S.institutions.map(i => `<option value="${i.id}" ${c.institution_id === i.id ? 'selected' : ''}>${i.name}</option>`).join('')}
+    </select>`;
+  openModal(conns.length > 1 ? `Battezza i conti (${conns.length})` : 'Battezza il conto', `
+    <form id="modal-form">
+      <p class="text-sm text-muted mb-12">Dai un nome a ogni conto e indica a cosa serve. Un conto senza usi resta collegato ma non compare in nessun modulo.</p>
+      ${conns.map(c => `
+        <div class="card mb-12">
+          <div class="card-title">${c.aspsp_name}</div>
+          <div class="text-sm text-muted mb-8">
+            ${c.iban ? `IBAN <span class="mono">${c.iban}</span>` : 'IBAN non comunicato dalla banca'}
+            ${c.account_id ? ` · id <span class="mono">${c.account_id}</span>` : ' · <span style="color:var(--c-warning)">nessun conto associato</span>'}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nome del conto *</label>
+            <input name="name_${c.id}" class="form-input" required placeholder="es. UniCredit famiglia" value="${c.display_name || ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Istituto</label>
+            ${instOptions(c)}
+          </div>
+          <div class="form-group">
+            <label class="form-label">A cosa serve</label>
+            ${['cost_analysis', 'fondo', 'conto_risparmio'].map(u => useRow(c, u)).join('')}
+          </div>
+          <div class="form-group" id="owner-group-${c.id}" style="display:none">
+            <label class="form-label">Proprietario (chi ha speso) *</label>
+            <select name="owner_${c.id}" class="form-input form-select" data-owner-for="${c.id}"></select>
+            <p class="text-muted text-sm" style="margin-top:4px">Serve solo a Spese Famiglia: ogni transazione del conto viene attribuita a questa persona.</p>
+          </div>
+        </div>`).join('')}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    for (const c of conns) {
+      const uses = ['cost_analysis', 'fondo', 'conto_risparmio'].filter(u => data[`use_${u}_${c.id}`] === 'on');
+      if (uses.includes('cost_analysis') && !data[`owner_${c.id}`]) {
+        throw new Error(`«${data[`name_${c.id}`] || c.aspsp_name}» è destinato a Spese Famiglia: indica a chi attribuire le spese.`);
+      }
+      await sbUpd('cm_bank_connections', `id=eq.${c.id}`, {
+        display_name: (data[`name_${c.id}`] || '').trim() || null,
+        institution_id: data[`institution_${c.id}`] || null,
+        uses,
+        owner_person_id: uses.includes('cost_analysis') ? (data[`owner_${c.id}`] || null) : null,
+      });
+    }
+    await reload(); closeModal();
+  });
+  // Le persone di Spese Famiglia si leggono una volta sola, e solo se qualcuno spunta
+  // quell'uso: aprire il battesimo per un conto del fondo non deve interrogare ca_people.
+  let peoplePromise = null;
+  const syncOwnerVisibility = async () => {
+    for (const c of conns) {
+      const box = $(`owner-group-${c.id}`);
+      const sel = document.querySelector(`#modal-body [data-owner-for="${c.id}"]`);
+      if (!box || !sel) continue;
+      const wanted = document.querySelector(`#modal-body [name="use_cost_analysis_${c.id}"]`)?.checked;
+      box.style.display = wanted ? '' : 'none';
+      sel.required = !!wanted;
+      if (wanted && !sel.options.length) {
+        try {
+          peoplePromise = peoplePromise || sbQ('ca_people', 'select=id,name&order=name.asc');
+          const people = await peoplePromise;
+          sel.innerHTML = people.map(p => `<option value="${p.id}" ${c.owner_person_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('');
+        } catch (err) {
+          sel.innerHTML = '';
+          box.innerHTML = `<p class="text-sm text-neg">Impossibile leggere le persone di Spese Famiglia: ${err.message}</p>`;
+        }
+      }
+    }
+  };
+  document.querySelectorAll('#modal-body .bap-use').forEach(el => el.addEventListener('change', syncOwnerVisibility));
+  syncOwnerVisibility();
+}
+/* Rilegge i conti di una sessione già ottenuta: la banca ha dato il consenso ma non ha
+   elencato i conti, e rifare login e SCA a ogni tentativo non ha senso.               */
+async function refreshBankAccounts(connectionId) {
+  openModal('Rilettura conti', '<div class="empty-sm">🔍 Interrogo la sessione…</div>');
+  try {
+    const conn = S.bankConnections.find(c => c.id === connectionId);
+    const consentId = conn?.consent_id;
+    const res = await sbFn('enable-banking-refresh-accounts', { bankConnectionId: connectionId });
+    await reload();
+    const found = (res.accounts || []).length;
+    if (found) {
+      // I conti ci sono: la domanda successiva è sempre "e adesso come li chiamo",
+      // quindi si passa direttamente al battesimo invece di mostrare una tabella morta.
+      const ids = S.bankConnections.filter(c => c.consent_id === consentId).map(c => c.id);
+      closeModal();
+      openBankBaptismModal(ids);
       return;
     }
-    S.aspspResults = results;
-    box.innerHTML = results.map((r, i) => `
-      <button type="button" class="btn btn-outline btn-sm" style="display:block;width:100%;text-align:left;margin-bottom:4px"
-              data-action="pick-aspsp" data-idx="${i}">${r.name} <span class="text-muted">(${r.country})</span></button>`).join('');
+    openModal('Nessun conto nella sessione', `
+      <p class="text-sm mb-12">La sessione è valida${res.sessionStatus ? ` (stato: <strong>${res.sessionStatus}</strong>)` : ''} ma non contiene nessun conto, e rileggerla non la riempirà.</p>
+      <div class="card" style="border-color:var(--c-warning)">
+        <div class="card-title">Il conto non è in whitelist</div>
+        <p class="text-sm">In <em>restricted mode</em> Enable Banking restituisce solo i conti collegati nel Control Panel.
+          Apri il Control Panel, premi <strong>«Link accounts»</strong>, autorizza il conto presso la banca e poi rifai il consenso da qui.</p>
+        <p class="text-sm mt-8">Se il conto è già collegato lì, restano due cose da guardare: la schermata di selezione
+          sulla banca (confermare senza spuntare niente dà lo stesso esito) e il <strong>tipo di conto</strong> —
+          PSD2 copre i conti di pagamento, depositi e libretti vincolati spesso non sono esposti.</p>
+        <button class="btn btn-primary btn-sm mt-12" data-action="redo-bank-consent" data-id="${connectionId}">🔁 Rifai il consenso</button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Chiudi</button>
+      </div>
+    `);
   } catch (err) {
-    box.innerHTML = `<div class="text-sm text-neg">Errore ricerca: ${err.message}</div>`;
+    closeModal();
+    alert('Errore rilettura conti: ' + err.message);
   }
 }
 function renderPrestiti() {
@@ -3923,9 +3938,9 @@ function openNewFundModal(fundId = null) {
         <label class="form-label">Conto bancario da cui importare i movimenti</label>
         <select name="bank_connection_id" class="form-input form-select">
           <option value="">— Nessuno (solo inserimento manuale) —</option>
-          ${S.bankConnections.filter(c => c.module === 'fondo').map(c => `<option value="${c.id}" ${f?.bank_connection_id === c.id ? 'selected' : ''}>${c.aspsp_name}${c.display_name ? ' — ' + c.display_name : ''}${c.account_id ? '' : ' ⚠️ senza conto, non sincronizzabile'}</option>`).join('')}
+          ${S.bankConnections.filter(c => (c.uses || []).includes('fondo')).map(c => `<option value="${c.id}" ${f?.bank_connection_id === c.id ? 'selected' : ''}>${bankAccountLabel(c)}${c.account_id ? '' : ' ⚠️ senza conto, non sincronizzabile'}</option>`).join('')}
         </select>
-        <p class="text-muted text-sm" style="margin-top:4px">I conti si collegano da <strong>Configurazione → 🏦 Conti Collegati</strong>; qui compaiono solo quelli destinati ai fondi.</p>
+        <p class="text-muted text-sm" style="margin-top:4px">I conti si collegano da <strong>Configurazione → 🏦 Banche e Conti</strong>; qui compaiono solo quelli battezzati per i fondi.</p>
       </div>
       <div class="form-group">
         <label class="form-label">Note</label>
@@ -5487,8 +5502,24 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'confirm-fund-sync': await confirmFundSync(); break;
-    case 'new-bank-connection':  openBankConnectionModal(); break;
-    case 'edit-bank-connection': openBankConnectionModal(t.dataset.id); break;
+    case 'new-institution':  openInstitutionModal(); break;
+    case 'edit-institution': openInstitutionModal(t.dataset.id); break;
+    case 'del-institution': {
+      const inst = S.institutions.find(x => x.id === t.dataset.id);
+      if (!inst) break;
+      // I conti restano (institution_id va a null): buttarli via insieme all'istituto
+      // significherebbe perdere consensi validi per una correzione all'anagrafica.
+      const accounts = S.bankConnections.filter(c => c.institution_id === inst.id).length;
+      const warn = accounts
+        ? `\n\nI ${accounts} conti collegati non vengono eliminati: finiscono in «Conti senza istituto».`
+        : '';
+      if (!confirm(`Eliminare l'istituto ${inst.name}?${warn}`)) break;
+      await sbDel('cm_institutions', `id=eq.${inst.id}`);
+      await reload();
+      break;
+    }
+    case 'connect-institution': await connectInstitution(t.dataset.id); break;
+    case 'edit-bank-connection': openBankBaptismModal([t.dataset.id]); break;
     case 'del-bank-connection': {
       const conn = S.bankConnections.find(x => x.id === t.dataset.id);
       if (!conn) break;
@@ -5496,13 +5527,19 @@ document.addEventListener('click', async e => {
       const warn = usedBy.length
         ? `\n\nATTENZIONE: è il conto del fondo ${usedBy.join(', ')} — i movimenti già importati restano, ma il fondo non potrà più sincronizzare.`
         : '';
-      if (!confirm(`Eliminare il collegamento a ${conn.aspsp_name}?${warn}`)) break;
+      if (!confirm(`Eliminare il conto ${bankAccountLabel(conn)}?${warn}`)) break;
       await sbDel('cm_bank_connections', `id=eq.${conn.id}`);
       await reload();
       break;
     }
     case 'refresh-bank-accounts': await refreshBankAccounts(t.dataset.id); break;
-    case 'redo-bank-consent': openBankConnectionModal(null, t.dataset.id); break;
+    case 'redo-bank-consent': {
+      const conn = S.bankConnections.find(x => x.id === t.dataset.id);
+      if (!conn) break;
+      if (!conn.institution_id) { alert("Questo conto non ha un istituto: assegnalo con ✎ prima di rifare il consenso."); break; }
+      await connectInstitution(conn.institution_id, conn.id);
+      break;
+    }
     case 'search-aspsp': await searchAspsps(); break;
     case 'aspsp-detail': await showAspspDetail(); break;
     case 'pick-aspsp': {
@@ -5510,6 +5547,10 @@ document.addEventListener('click', async e => {
       if (!r) break;
       $('aspsp-name').value = r.name;
       $('aspsp-country-final').value = r.country;
+      // Il nome dell'istituto è libero (posso chiamarlo come voglio), ma se è ancora vuoto
+      // quello del catalogo è la proposta più sensata.
+      const nameInput = document.querySelector('#modal-body [name="name"]');
+      if (nameInput && !nameInput.value.trim()) nameInput.value = r.name;
       $('aspsp-results').innerHTML = `<div class="text-sm">✅ Selezionata: <strong>${r.name}</strong> (${r.country})</div>`;
       break;
     }
@@ -5732,28 +5773,35 @@ async function startApp(session) {
   });
 }
 // Ritorno dal consenso sulla banca: enable-banking-callback reindirizza qui con
-// ?bank_connect=success|error. I parametri vengono tolti dall'URL, altrimenti un refresh
-// ripropone lo stesso messaggio all'infinito.
+// ?bank_connect=success|partial|error e, quando c'è, il session_id del consenso. I parametri
+// vengono tolti dall'URL, altrimenti un refresh ripropone lo stesso messaggio all'infinito.
+// Sul successo si apre subito il battesimo: i conti sono appena nati senza nome e senza usi,
+// e rimandare quel passaggio significa ritrovarseli in elenco senza sapere quali sono.
 function handleBankConnectResult() {
   const params = new URLSearchParams(location.search);
   const result = params.get('bank_connect');
   if (!result) return;
   const message = params.get('bank_connect_message');
+  const consentId = params.get('bank_connect_consent');
   params.delete('bank_connect');
-  params.delete('bank_connect_module');
+  params.delete('bank_connect_consent');
   params.delete('bank_connect_message');
   const qs = params.toString();
   history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
   S.view = 'conti-collegati';
   setTimeout(() => {
-    if (result === 'success') { alert('✅ Conto collegato correttamente.'); return; }
+    if (result === 'success') {
+      const ids = S.bankConnections.filter(c => c.consent_id === consentId).map(c => c.id);
+      if (ids.length) { openBankBaptismModal(ids); return; }
+      alert('✅ Conto collegato correttamente.');
+      return;
+    }
     // 'partial': il consenso è valido ma la banca non ha elencato nessun conto. Il
-    // collegamento è salvato lo stesso, con il dettaglio di cosa è arrivato nel registro
-    // in fondo alla pagina.
+    // collegamento è salvato lo stesso — quasi sempre manca la whitelist.
     if (result === 'partial') {
       alert('⚠️ Consenso ottenuto, ma la banca non ha restituito nessun conto.\n\n' +
-            (message || '') + '\n\nIl collegamento è stato salvato senza conto associato: ' +
-            'in fondo a questa pagina, nel registro sincronizzazioni, c\'è cosa ha risposto la banca.');
+            (message || '') + '\n\nControlla che il conto sia in whitelist su Enable Banking ' +
+            '(Control Panel → «Link accounts»), poi rifai il consenso da questa pagina.');
       return;
     }
     alert('❌ Collegamento non riuscito: ' + (message || 'errore sconosciuto.'));

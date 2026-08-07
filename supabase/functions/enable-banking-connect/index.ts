@@ -12,26 +12,22 @@
 // Richiede i Supabase Secrets: ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY (PEM),
 // SUPABASE_SERVICE_ROLE_KEY (per decodificare in sicurezza l'utente chiamante).
 //
-// Il callback dopo il consenso arriva su enable-banking-callback, che crea davvero la riga
-// in cm_bank_connections — questa function non scrive nel database.
+// Il callback dopo il consenso arriva su enable-banking-callback, che crea davvero le righe
+// in cm_bank_connections — questa function non scrive nel database, legge solo l'istituto.
 //
 // v1 — 2026-07-18
-// v2 — 2026-08-03: i conti sono condivisi tra moduli. "module" dice a quale modulo serve il
-//   conto ('cost_analysis' = Spese Famiglia, 'fondo' = modulo Fondi) e viaggia nello state
-//   fino al callback, che lo usa per riportare l'utente sulla pagina giusta. ownerPersonId
-//   (la persona di Analisi Costi a cui attribuire le spese) diventa facoltativo: per un conto
-//   del fondo non esiste "chi ha speso".
-// v3 — 2026-08-04: "iban" facoltativo, passato in access.accounts (vedi il commento sulla
-//   chiamata /auth: senza, UniCredit autorizza una sessione senza nessun conto dentro).
-// v4 — 2026-08-04: header PSU (psu-ip-address) su ogni chiamata a Enable Banking. UniCredit
-//   lo dichiara obbligatorio in required_psu_headers e senza autorizzava un consenso senza
-//   conti, in silenzio; Revolut non lo richiede, per questo funzionava.
-// v5 — 2026-08-06: l'IBAN viene validato (formato + checksum mod-97) prima di partire — un
-//   IBAN sbagliato produce lo stesso consenso vuoto di un IBAN mancante, ma lo si scopre solo
-//   dopo l'SCA. La riga di traccia in cm_sync_log viene creata con l'id in mano e l'id viaggia
-//   nello state fino al callback, che lo aggancia alla connessione appena creata: così l'app
-//   può DIRE cosa è stato spedito per quel collegamento invece di dedurlo. replaceConnectionId
-//   dice quale collegamento vuoto questo consenso viene a sostituire.
+// v2 — 2026-08-03: i conti sono condivisi tra moduli.
+// v3/v4/v5 — 2026-08-04/06: IBAN in access.accounts, header PSU, traccia diagnostica del
+//   consenso. Tutta questa parte è stata ritirata in v6, vedi sotto.
+// v6 — 2026-08-07: la chiamata parte da un istituto censito (cm_institutions) e non da un
+//   form. Il body si riduce a { institutionId, replaceConnectionId }: nome ASPSP e paese si
+//   leggono dall'anagrafica, mentre nome del conto, usi e proprietario non si chiedono più
+//   prima del consenso — si assegnano dopo, quando i conti che la banca ha restituito sono
+//   sotto gli occhi ("battesimo"). Sparisce anche l'IBAN: era obbligatorio perché si credeva
+//   che un consenso senza access.accounts fosse la causa delle sessioni vuote di UniCredit,
+//   ma la causa era la whitelist in restricted mode, e le richieste con l'IBAN tornavano
+//   vuote esattamente come le altre. Con l'IBAN se ne va la riga 'consent_request' in
+//   cm_sync_log, che serviva solo a distinguere quei due casi.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -87,20 +83,6 @@ function decodeSupabaseJwtSub(token: string): string | null {
   }
 }
 
-// Un IBAN sbagliato di una cifra vale quanto un IBAN assente: la banca non riconosce nessun
-// conto e restituisce una sessione autorizzata e vuota, dopo che l'utente ha già fatto login
-// e SCA. Il checksum mod-97 (ISO 13616) costa niente e intercetta i refusi prima di partire.
-function ibanIsValid(iban: string): boolean {
-  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{6,30}$/.test(iban)) return false;
-  const rearranged = iban.slice(4) + iban.slice(0, 4);
-  let remainder = 0n;
-  for (const ch of rearranged) {
-    const digits = ch >= '0' && ch <= '9' ? ch : String(ch.charCodeAt(0) - 55);
-    remainder = BigInt(String(remainder) + digits) % 97n;
-  }
-  return remainder === 1n;
-}
-
 // Alcune banche pretendono di sapere da quale IP arriva l'utente che sta autorizzando: lo
 // dichiarano in required_psu_headers nel catalogo /aspsps (UniCredit IT chiede
 // "psu-ip-address"). Senza quell'header il consenso viene comunque autorizzato, ma la banca
@@ -144,11 +126,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  let body: {
-    aspspName?: string; country?: string; ownerPersonId?: string; displayName?: string;
-    module?: string; iban?: string; allowAllAccounts?: boolean; clientVersion?: string;
-    replaceConnectionId?: string;
-  };
+  let body: { institutionId?: string; replaceConnectionId?: string };
   try {
     body = await req.json();
   } catch {
@@ -158,63 +136,51 @@ Deno.serve(async (req) => {
     );
   }
 
-  const aspspName = (body.aspspName || '').trim();
-  const country = (body.country || '').trim().toUpperCase();
-  const ownerPersonId = (body.ownerPersonId || '').trim();
-  const module = (body.module || 'cost_analysis').trim();
-  const iban = (body.iban || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  // Rinuncia esplicita all'IBAN: la manda solo la casella "la mia banca non lo richiede".
-  const allowAllAccounts = body.allowAllAccounts === true;
-  const clientVersion = (body.clientVersion || '').trim() || 'non dichiarata';
+  const institutionId = (body.institutionId || '').trim();
   // Collegamento vuoto che questo consenso viene a sostituire: il callback ci sposta sopra i
   // fondi e poi lo elimina, così l'utente non resta con due righe e il fondo agganciato a
   // quella morta.
   const replaceConnectionId = (body.replaceConnectionId || '').trim() || null;
-  if (!aspspName || !country) {
+  if (!institutionId) {
     return new Response(
-      JSON.stringify({ error: { message: 'Servono "aspspName" e "country".' } }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-  if (module !== 'cost_analysis' && module !== 'fondo') {
-    return new Response(
-      JSON.stringify({ error: { message: '"module" ammette solo "cost_analysis" o "fondo".' } }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-  // Su Spese Famiglia ogni transazione va attribuita a una persona: senza owner il sync non
-  // saprebbe a chi intestare la spesa. Sul fondo la domanda non si pone.
-  if (module === 'cost_analysis' && !ownerPersonId) {
-    return new Response(
-      JSON.stringify({ error: { message: 'Per un conto di Spese Famiglia serve "ownerPersonId".' } }),
+      JSON.stringify({ error: { message: 'Serve "institutionId": il collegamento parte da un istituto censito.' } }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
-  // Un consenso senza IBAN, con le banche che pretendono l'elenco dei conti, produce una
-  // sessione autorizzata e vuota: l'utente fa login e SCA per niente e se ne accorge dopo.
-  // È già successo tre volte, quindi il rifiuto sta qui e non solo nel form: una pagina
-  // vecchia (che l'IBAN non lo chiede nemmeno) deve fallire subito e a voce alta.
-  if (!iban && !allowAllAccounts) {
+  // Banca e paese vengono dall'anagrafica, non dal client: sono gli unici due valori che
+  // Enable Banking accetta per identificare la banca, e ridigitarli a ogni collegamento era
+  // il modo più semplice per sbagliarli.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) {
+    return new Response(
+      JSON.stringify({ error: { message: 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY non configurate.' } }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  const { data: institution } = await createClient(supabaseUrl, serviceRoleKey)
+    .from('cm_institutions')
+    .select('id,name,kind,connectable,aspsp_name,aspsp_country')
+    .eq('id', institutionId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!institution) {
+    return new Response(
+      JSON.stringify({ error: { message: 'Istituto non trovato.' } }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (!institution.connectable || !institution.aspsp_name || !institution.aspsp_country) {
     return new Response(
       JSON.stringify({ error: { message:
-        `Manca l'IBAN del conto. Senza, alcune banche (UniCredit) autorizzano un consenso che non ` +
-        `collega nessun conto. Se la tua banca non lo richiede, spunta l'opzione apposita nel form. ` +
-        `Se non vedi il campo IBAN la pagina è una versione vecchia (client: ${clientVersion}): ricaricala.` } }),
+        `«${institution.name}» è censito come non collegabile: non è nel catalogo Enable Banking, ` +
+        `quindi non c'è nessun consenso da chiedere.` } }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-  // Un IBAN spedito ma sbagliato fallisce esattamente come un IBAN non spedito, e costa un
-  // giro di SCA per scoprirlo: si controlla qui, dove passa qualunque client.
-  if (iban && !ibanIsValid(iban)) {
-    return new Response(
-      JSON.stringify({ error: { message:
-        `IBAN non valido (${iban.slice(0, 6)}…${iban.slice(-4)}): il codice di controllo non torna. ` +
-        `Ricopialo dall'estratto conto — un carattere sbagliato basta perché la banca non riconosca ` +
-        `nessun conto e il consenso nasca vuoto.` } }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  const aspspName = institution.aspsp_name;
+  const country = String(institution.aspsp_country).toUpperCase();
 
   const supabaseProjectRef = new URL(Deno.env.get('SUPABASE_URL') || '').hostname.split('.')[0];
   const redirectUrl = `https://${supabaseProjectRef}.supabase.co/functions/v1/enable-banking-callback`;
@@ -231,12 +197,10 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Cosa la banca dichiara di pretendere, letto al momento della richiesta e non a posteriori:
-  // quando la sessione torna autorizzata e vuota, la domanda successiva è sempre "e la banca
-  // cosa voleva?" — e il catalogo può cambiare tra il collegamento e il momento in cui lo si
-  // va a guardare. Da qui escono anche due valori che entrano nella richiesta: il tetto alla
-  // durata del consenso e il metodo di autenticazione.
-  let aspspDeclares = 'catalogo non letto';
+  // Dal catalogo servono due soli valori, ed entrambi entrano nella richiesta: il tetto alla
+  // durata del consenso e — quando la banca lo lega esplicitamente al nostro psu_type — il
+  // metodo di autenticazione. Se il catalogo non si legge si prosegue con i default: non
+  // sapere cosa dichiara la banca non è un motivo per non provare a collegarla.
   let maxValiditySeconds: number | null = null;
   let authMethodName: string | null = null;
   try {
@@ -247,44 +211,20 @@ Deno.serve(async (req) => {
       const data = await res.json();
       const list: any[] = Array.isArray(data.aspsps) ? data.aspsps : Array.isArray(data) ? data : [];
       const entry = list.find((a) => String(a?.name || '').toLowerCase() === aspspName.toLowerCase());
-      if (!entry) {
-        aspspDeclares = `banca non trovata nel catalogo ${country}`;
-      } else {
-        const required: string[] = Array.isArray(entry.required_psu_headers) ? entry.required_psu_headers : [];
-        const missing = required.filter((h) => !(h.toLowerCase() in psu));
-        const methods: any[] = Array.isArray(entry.auth_methods) ? entry.auth_methods : [];
-        // UniCredit ne dichiara due, entrambe REDIRECT: la prima riga di log le appiattiva
-        // sul solo nome e le rendeva indistinguibili. Quello che conta è a quale psu_type
-        // ciascuna appartiene e se pretende credenziali da passare nella richiesta — un
-        // metodo scelto da Enable Banking per il psu_type sbagliato autorizza un'utenza che
-        // non ha conti da esporre, e il sintomo sarebbe esattamente una sessione vuota.
-        const describeMethod = (m: any) => typeof m === 'string' ? m :
-          `${m?.name || m?.approach || '?'}` +
-          `${m?.psu_type ? `/${m.psu_type}` : ''}` +
-          `${m?.hidden_method ? '/hidden' : ''}` +
-          `${Array.isArray(m?.credentials) && m.credentials.length
-            ? `/credenziali:[${m.credentials.map((c: any) => c?.name || c?.title || '?').join('|')}]` : ''}`;
+      if (entry) {
         // Si manda auth_method solo quando la banca lega esplicitamente un metodo al nostro
         // psu_type, uno solo, e gli dà un nome. Se il legame non è dichiarato la scelta resta
-        // a Enable Banking: indovinare un identificativo fa fallire /auth e basta, e questa
-        // versione serve prima di tutto a vedere com'è fatta davvero quella lista.
+        // a Enable Banking: indovinare un identificativo fa fallire /auth e basta.
+        const methods: any[] = Array.isArray(entry.auth_methods) ? entry.auth_methods : [];
         const forOurPsuType = methods.filter((m: any) => m?.psu_type === PSU_TYPE);
         if (forOurPsuType.length === 1 && typeof forOurPsuType[0]?.name === 'string' && forOurPsuType[0].name) {
           authMethodName = forOurPsuType[0].name;
         }
         maxValiditySeconds = Number.isFinite(entry.maximum_consent_validity) ? entry.maximum_consent_validity : null;
-        aspspDeclares =
-          `psu_types: [${(entry.psu_types || []).join(', ')}]` +
-          ` · auth_methods: [${methods.map(describeMethod).join(' ; ')}]` +
-          ` · required_psu_headers: [${required.join(', ')}]${missing.length ? ` — NON INVIATI: [${missing.join(', ')}]` : ''}` +
-          ` · maximum_consent_validity: ${entry.maximum_consent_validity ?? 'n/d'}` +
-          (entry.beta ? ' · BETA' : '') + (entry.sandbox ? ' · SANDBOX' : '');
       }
-    } else {
-      aspspDeclares = `catalogo non leggibile (HTTP ${res.status})`;
     }
-  } catch (e) {
-    aspspDeclares = 'catalogo non leggibile: ' + (e as Error).message;
+  } catch {
+    // Catalogo non leggibile: si va avanti con i default.
   }
 
   // Durata del consenso: 180 giorni è il massimo PSD2, ma UniCredit dichiara esattamente
@@ -294,58 +234,11 @@ Deno.serve(async (req) => {
   const requestedSeconds = Math.min(180 * 24 * 3600, maxValiditySeconds ?? 180 * 24 * 3600) - 3600;
   const validUntil = new Date(Date.now() + requestedSeconds * 1000).toISOString();
 
-  // Traccia di cosa si sta per chiedere: quando la sessione torna autorizzata ma senza
-  // conti, l'unico modo per sapere se l'IBAN era stato spedito è averlo scritto qui prima
-  // di partire. L'IBAN viene mascherato: serve sapere se c'era, non qual era.
-  // L'id della riga viaggia nello state: il callback ci scrive sopra la connessione appena
-  // creata, e da lì in poi l'app sa dire cosa era stato chiesto PER QUEL collegamento —
-  // prima poteva solo guardare access.accounts nella sessione e tirare a indovinare.
-  const accessRequested = {
-    valid_until: validUntil,
-    balances: true,
-    transactions: true,
-    ...(iban ? { accounts: [{ iban }] } : {}),
-  };
-
-  let logId: string | null = null;
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (supabaseUrl && serviceRoleKey) {
-      const { data: logRow } = await createClient(supabaseUrl, serviceRoleKey)
-        .from('cm_sync_log')
-        .insert({
-          user_id: userId,
-          finished_at: new Date().toISOString(),
-          status: 'consent_request',
-          imported_count: 0,
-          error_message: `Richiesta consenso ${aspspName} (${country}) · modulo ${module} · IBAN ` +
-            (iban ? `${iban.slice(0, 6)}…${iban.slice(-4)}` : 'NON INVIATO (rinuncia esplicita)') +
-            ` · access.accounts: ${accessRequested.accounts ? 'valorizzato' : 'null (tutti i conti)'}` +
-            ` · psu-ip-address: ${psu['psu-ip-address'] ? 'inviato' : 'ASSENTE'}` +
-            ` · psu_type inviato: ${PSU_TYPE}` +
-            ` · auth_method inviato: ${authMethodName || 'nessuno (scelta lasciata a Enable Banking)'}` +
-            ` · valid_until chiesto: ${validUntil}` +
-            ` · client ${clientVersion}` +
-            ` · la banca dichiara → ${aspspDeclares}`,
-        })
-        .select('id')
-        .single();
-      logId = logRow?.id || null;
-    }
-  } catch {
-    // La traccia è diagnostica: se non si riesce a scrivere, il collegamento va avanti lo stesso.
-  }
-
   const state = base64url(JSON.stringify({
     userId,
-    ownerPersonId: ownerPersonId || null,
+    institutionId,
     aspspName,
-    displayName: body.displayName || null,
-    module,
     validUntil,
-    logId,
-    ibanRequested: iban || null,
     replaceConnectionId,
   }));
 
@@ -354,18 +247,14 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + jwt, 'Content-Type': 'application/json', ...psu },
       body: JSON.stringify({
-        // access.accounts elenca i conti su cui il consenso deve valere. ATTENZIONE a cosa
-        // NON fa: mandarlo non garantisce che venga applicato. Con UniCredit (IT) le sessioni
-        // del 5 e del 6 agosto 2026 sono partite con accounts: [{iban}] e sono tornate con
-        // access.accounts: null e accounts: [] — Enable Banking o la banca lo scartano, quindi
-        // il consenso finisce per valere genericamente su "tutti i conti" e la banca non ne
-        // espone nessuno. Con Revolut invece funziona anche senza elenco. Lo si manda lo
-        // stesso perché quando viene applicato è la strada giusta, ma NON è la spiegazione di
-        // una sessione vuota: quella va cercata in cosa la banca dichiara (loggato qui sopra)
-        // e nel tipo di conto — PSD2 copre i conti di pagamento, non depositi e libretti.
-        // balances/transactions erano già i default aggiunti da Enable Banking: meglio
-        // dichiararli invece di ereditarli in silenzio.
-        access: accessRequested,
+        // Nessun access.accounts: il consenso vale su tutti i conti che la banca espone, ed
+        // è la banca a farceli scegliere sulla sua schermata. L'elenco degli IBAN c'è stato
+        // per due giorni, nella convinzione che fosse la cura per le sessioni vuote di
+        // UniCredit; le richieste del 5 e 6 agosto 2026 sono partite con accounts: [{iban}]
+        // e sono tornate identiche a quelle senza — access.accounts: null, accounts: [].
+        // La causa era la whitelist in restricted mode. balances/transactions erano già i
+        // default di Enable Banking: meglio dichiararli che ereditarli in silenzio.
+        access: { valid_until: validUntil, balances: true, transactions: true },
         aspsp: { name: aspspName, country },
         state,
         redirect_url: redirectUrl,

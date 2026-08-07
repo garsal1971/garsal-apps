@@ -119,14 +119,31 @@ Tables are namespaced by app prefix:
 |---|---|
 | `cm_apps` | App registry for the launcher (title, description, html_file, score_query, active) |
 | `cm_categories` | Shared category taxonomy used by Tasks and Habit Tracker |
-| `cm_bank_connections` | Conti collegati via Enable Banking (PSD2). `module` = `'cost_analysis'` (Spese Famiglia) o `'fondo'` (modulo Fondi) |
+| `cm_institutions` | Censimento di banche e broker. `connectable = false` per chi non è nel catalogo Enable Banking (broker senza PSD2): sta in anagrafica ma non si collega |
+| `cm_bank_connections` | Un conto per riga, nato da un consenso. `uses text[]` dice a cosa serve |
 | `cm_sync_log` | Storico delle sincronizzazioni bancarie |
 
 Le due tabelle bancarie nascono come `ca_bank_connections` / `ca_sync_log` (Analisi Costi) e
 sono state rinominate quando i conti sono diventati condivisi con i Fondi
-(`20260803120000_cm_bank_connections_and_fondo_sync.sql`). Restano due **viste di
-compatibilità** con il vecchio nome, perché le Edge Function vengono ridistribuite solo quando
-il commit le tocca: si possono eliminare quando nessun client usa più `ca_bank_connections`.
+(`20260803120000_cm_bank_connections_and_fondo_sync.sql`). Le viste di compatibilità con il
+vecchio nome sono state eliminate da `20260807100000_cm_institutions_and_account_uses.sql`.
+
+**Il collegamento di un conto è in tre momenti distinti** (tutti in `finanza.html` →
+Configurazione → 🏦 Banche e Conti):
+
+1. **censimento** — si aggiunge l'istituto a `cm_institutions`, cercandolo nel catalogo
+   Enable Banking (o a mano, non collegabile);
+2. **consenso** — `enable-banking-connect` riceve solo `{ institutionId, replaceConnectionId }`:
+   nome ASPSP e paese vengono dall'anagrafica e non si compila nient'altro;
+3. **battesimo** — i conti restituiti dalla banca nascono con `display_name NULL` e
+   `uses '{}'`, e l'utente dà a ciascuno un nome e uno o più usi.
+
+`cm_bank_connections.uses` ammette `'cost_analysis'` (Spese Famiglia), `'fondo'` e
+`'conto_risparmio'`: **un conto può servire a più moduli**, e `uses` vuoto significa «scoperto
+ma non ancora battezzato» — il conto esiste e si vede, ma nessun modulo lo elenca. Ha sostituito
+la vecchia colonna `module`, che ne ammetteva uno solo e andava scelta *prima* del consenso.
+`display_name` è **solo** il nome dato dall'utente: nessuna Edge Function lo riempie più
+d'ufficio con l'IBAN, che ha la sua colonna `iban`.
 
 ### Tasks (`ts_`)
 | Table | Purpose |
@@ -332,7 +349,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | Funzione | Job | Cosa fa |
 |---|---|---|
 | `get-prices` | orario | Aggiorna `fnz_price_cache` (un trigger propaga su `fnz_price_history`). Una fonte diversa per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko in batch + Coinbase come ripiego, azioni→TwelveData/GoogleFinance |
-| `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso, redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il `module` passato a `connect` viaggia nello state e decide dove riporta il callback |
+| `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso (`connect` riceve solo `institutionId` e legge banca e paese da `cm_institutions`), redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il callback crea i conti anonimi e riporta sempre su `finanza.html`, con il `session_id` del consenso perché la pagina apra subito il battesimo |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`) | **Legge e basta**: restituisce movimenti (importo con segno) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — il Conto Risparmio ha già i suoi |
@@ -341,13 +358,11 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 ### ⚠️ Header PSU obbligatori per alcune banche
 
 Il catalogo `/aspsps` di Enable Banking dichiara per ogni banca un `required_psu_headers`:
-**UniCredit (IT) richiede `psu-ip-address`**, Revolut no. Mandarlo è comunque doveroso — è la
-banca a dichiararlo obbligatorio — ma **non è la causa del consenso vuoto**: l'header viene
-inviato e la sessione UniCredit torna lo stesso senza conti (vedi *Consenso vuoto* qui sotto).
-Tutte le chiamate a Enable Banking passano
-quindi gli header PSU ricavati da `x-forwarded-for` (`psuHeaders()`, duplicata in ogni Edge
-Function). Un job schedulato non ha un utente davanti: in quel caso l'header non c'è e non va
-inventato.
+**UniCredit (IT) richiede `psu-ip-address`**, Revolut no. Tutte le chiamate a Enable Banking
+passano quindi gli header PSU ricavati da `x-forwarded-for` (`psuHeaders()`, duplicata in ogni
+Edge Function). Un job schedulato non ha un utente davanti: in quel caso l'header non c'è e non
+va inventato. Mandarlo è doveroso, ma **non è mai stato la causa del consenso vuoto**: quella è
+la whitelist (sezione qui sotto).
 
 Stessa scheda di catalogo: `maximum_consent_validity` (180 giorni per UniCredit) e
 `auth_methods` per `psu_type`. Il pulsante *ℹ️ Cosa richiede questa banca* in `finanza.html`
@@ -369,7 +384,7 @@ giro di login e SCA in banca per niente.
 
 1. Control Panel di Enable Banking → l'applicazione → **«Link accounts»**
 2. autenticazione presso la banca e autorizzazione del conto
-3. **solo adesso** il collegamento dall'app (Finanza → Configurazione → 🏦 Conti Collegati)
+3. **solo adesso** il collegamento dall'app (Finanza → Configurazione → 🏦 Banche e Conti)
 
 L'applicazione resta «Restricted» ma «Active»: è lo stato normale finché non c'è un contratto di
 produzione piena.
@@ -392,32 +407,32 @@ fallito con un 403 del proxy e l'indagine è proseguita per ipotesi sul codice: 
 sintomo non torna, **cercare nella documentazione del fornitore prima di dedurre dal
 comportamento** — e insistere da un'altra fonte se la prima non risponde.
 
-### Consenso vuoto: cosa è stato chiesto vs cosa è tornato
+### Consenso vuoto: la richiesta non c'entra
 
-Una sessione `AUTHORIZED` con `access.accounts: null` e zero conti ha **due cause diverse** che
-si assomigliano: l'IBAN non è stato spedito (casella *«la mia banca non lo richiede»*), oppure
-è stato spedito e la banca non l'ha applicato. La sessione mostra solo il risultato, non la
-richiesta, quindi dedurlo da lì è tirare a indovinare.
+Una sessione `AUTHORIZED` con `access.accounts: null` e zero conti **ha una causa sola, ed è la
+whitelist** (sezione qui sopra). Per tre giorni si è cercata nella richiesta: IBAN in
+`access.accounts`, header PSU, `auth_method`, `psu_type`, durata del consenso. Le richieste del
+5 e del 6 agosto 2026 sono partite con `accounts: [{iban}]` e `psu-ip-address` inviato, e sono
+tornate identiche a quelle senza — `access.accounts: null`, `accounts: []`, `accounts_data: []`.
+**Sono ipotesi bruciate: non ripercorrerle.**
 
-⚠️ **Con UniCredit (IT) l'elenco in `access.accounts` non viene applicato.** Le richieste del
-5 e del 6 agosto 2026 sono partite con `accounts: [{iban}]`, `psu-ip-address` inviato e client
-aggiornato, e la sessione è tornata `AUTHORIZED` con `access.accounts: null`, `accounts: []`,
-`accounts_data: []`. Quindi **né l'IBAN mancante né l'header PSU spiegano il consenso vuoto**:
-sono due ipotesi già bruciate, non ripercorrerle. Restano da verificare il **tipo di conto**
-(PSD2 copre i conti di pagamento — un conto risparmio o un deposito la banca può non esporlo
-affatto) e la **selezione dei conti sulla pagina della banca**. Finché la questione è aperta, i
-movimenti del fondo si prendono dal Conto Risparmio già in `cntrs_transactions_terr`.
+Di conseguenza `enable-banking-connect` non manda più nessun `access.accounts`, l'IBAN non si
+chiede più da nessuna parte e la riga `consent_request` in `cm_sync_log` — che esisteva solo per
+distinguere «IBAN spedito» da «IBAN non spedito» — è stata ritirata insieme al resto della
+diagnostica (dump della risposta di Enable Banking compreso). `cm_sync_log` è tornato a essere
+il registro delle sincronizzazioni.
 
-Per questo `enable-banking-connect` scrive in `cm_sync_log` una riga `consent_request` **prima**
-di chiamare `/auth` (IBAN mascherato, `access.accounts`, presenza di `psu-ip-address`, versione
-del client) e ne passa l'id nello `state`; `enable-banking-callback` ci scrive sopra il
-`bank_connection_id` appena creato. È l'unico aggancio tra richiesta e collegamento: senza,
-la riga resta orfana e la diagnosi torna a essere una supposizione.
+Se un conto in whitelist continua a non comparire, restano due cose da guardare, entrambe fuori
+dal nostro codice: la **selezione dei conti sulla pagina della banca** (confermare senza
+spuntare niente dà lo stesso esito) e il **tipo di conto** — PSD2 copre i conti di pagamento, e
+un deposito o un libretto vincolato la banca può non esporlo affatto.
 
 `state.replaceConnectionId` (pulsante *🔁 Rifai il consenso*) dice che il nuovo consenso
 sostituisce un collegamento rimasto senza `account_id`: il callback sposta i `fnz_funds` sul
-nuovo e cancella il vecchio. Il passaggio che conta è **spostare i fondi**: farlo a mano si
-dimentica, e il fondo resta agganciato a una riga che non sincronizzerà mai.
+nuovo, gli **eredita `display_name`, `uses` e `owner_person_id`** del vecchio e poi lo cancella.
+I due passaggi che contano sono spostare i fondi ed ereditare gli usi: a mano ci si dimentica, e
+il fondo resta agganciato a una riga che non sincronizzerà mai, oppure il conto rifatto torna
+«da battezzare» e sparisce dagli elenchi dei moduli che lo stavano già usando.
 
 ### ⚠️ Ora legale nei cron
 
@@ -546,14 +561,15 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
 ### `cost-analysis.html` — Analisi Costi
 - **Non compare più tra le bolle della home**: `cm_apps.active = false` (migration
   `20260802180000_ca_readonly_teresa_and_hide_app.sql`). Resta l'unica app dove si importa, si
-  categorizza e si configura (categorie, persone, regole, conti collegati, viaggi) — si apre dal
+  categorizza e si configura (categorie, persone, regole, viaggi) — si apre dal
   collegamento *🛠️ Spese Famiglia — gestione* nella sidebar di `finanza.html` o dalla notifica
   Smart Block.
-- **Non configura più i conti bancari**: collegamento, consenso ed eliminazione stanno in
-  `finanza.html` → Configurazione → 🏦 Conti Collegati, perché gli stessi conti servono anche
-  ai Fondi. In `cost-analysis.html` resta la pagina *Sincronizza e Carte*: il sync di Spese
-  Famiglia non si può spostare perché subito dopo l'import fa girare merchant appresi, regole
-  e attribuzione per carta, che vivono solo lì.
+- **Non configura più i conti bancari**: censimento degli istituti, collegamento, consenso,
+  battesimo dei conti ed eliminazione stanno in `finanza.html` → Configurazione →
+  🏦 Banche e Conti, perché gli stessi conti servono anche ai Fondi e al Conto Risparmio. Qui
+  compaiono in sola lettura i conti con `'cost_analysis'` in `uses`, nella pagina
+  *Sincronizza e Carte*: il sync di Spese Famiglia non si può spostare perché subito dopo
+  l'import fa girare merchant appresi, regole e attribuzione per carta, che vivono solo lì.
 - La **consultazione** è stata spostata dentro le due app dove serve, come vista in sola lettura:
   `finanza.html` (Salvatore) e `situazione-teresa.html` (Teresa) — vedi sotto.
 

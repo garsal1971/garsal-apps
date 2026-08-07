@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.63</title>
+    <title>Analisi Costi v1.0.64</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -421,7 +421,7 @@
 
         <!-- ====== SINCRONIZZAZIONE E CARTE ======
              La configurazione dei conti (collegamento alla banca, consenso, eliminazione) è
-             passata a finanza.html → Configurazione → Conti Collegati, perché gli stessi conti
+             passata a finanza.html → Configurazione → Banche e Conti, perché gli stessi conti
              servono anche al modulo Fondi. Qui resta la sincronizzazione, che non si può
              spostare: dopo l'import fa girare merchant appresi, regole e attribuzione per
              carta, cioè roba di Analisi Costi. -->
@@ -430,7 +430,7 @@
                 <h1 class="page-title">Sincronizza e Carte</h1>
                 <a class="btn btn-secondary" href="finanza.html" style="text-decoration:none">🏦 Gestisci i conti in Finanza</a>
             </div>
-            <p class="form-hint" style="margin-bottom:1rem;">I conti si collegano e si eliminano da <strong>Finanza → Configurazione → Conti Collegati</strong>. Qui si lancia la sincronizzazione delle transazioni di Spese Famiglia, con anteprima di cosa verrebbe importato.</p>
+            <p class="form-hint" style="margin-bottom:1rem;">I conti si collegano, si battezzano e si eliminano da <strong>Finanza → Configurazione → Banche e Conti</strong>. Qui compaiono quelli destinati a Spese Famiglia, e si lancia la sincronizzazione delle transazioni con anteprima di cosa verrebbe importato.</p>
             <div id="bankConnectionsList"></div>
 
             <h2 class="page-title" style="font-size:1.05rem;margin-top:2rem;">Carte — attribuzione "chi ha speso"</h2>
@@ -822,8 +822,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.63';
-    var BUILD_TIME  = '2026-08-03T12:30:00Z';
+    var APP_VERSION = 'v1.0.64';
+    var BUILD_TIME  = '2026-08-07T10:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1779,9 +1779,9 @@
         const container = document.getElementById('bankConnectionsList');
         // Solo i conti di Spese Famiglia: quelli dei fondi si sincronizzano dalla scheda
         // del fondo, con una logica di import completamente diversa.
-        const list = bankConnections.filter(bc => (bc.module || 'cost_analysis') === 'cost_analysis');
+        const list = bankConnections.filter(bc => (bc.uses || []).includes('cost_analysis'));
         if (!list.length) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏦</div><p>Nessun conto collegato per Spese Famiglia.<br><a href="finanza.html">Collegane uno da Finanza</a>.</p></div>';
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏦</div><p>Nessun conto destinato a Spese Famiglia.<br><a href="finanza.html">Collegalo e battezzalo da Finanza → Banche e Conti</a>.</p></div>';
             return;
         }
         const todayIso = new Date().toISOString().slice(0, 10);
@@ -1799,7 +1799,7 @@
             }
             return `<div class="card">
                 <div>
-                    <div style="font-weight:700;">${bc.aspsp_name}${bc.display_name ? ' — ' + bc.display_name : ''}</div>
+                    <div style="font-weight:700;">${bc.display_name || bc.iban || bc.aspsp_name}</div>
                     <div class="tx-meta">Proprietario: ${owner ? owner.name : '—'} · Stato: ${bc.status}</div>
                 </div>
                 <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
