@@ -702,6 +702,16 @@ Pushing to a `claude/**` branch triggers `.github/workflows/deploy.yml` which:
 1. Merges the branch into `master` automatically (no PR needed)
 2. Netlify picks up the master push and deploys within seconds
 
+⚠️ **Il workflow non usa `supabase link`.** Fra le altre cose `link` chiama
+`GET /v1/projects/{ref}/api-keys`, che dal 7 agosto 2026 risponde con un errore di validazione
+del suo stesso schema (`SchemaError` su `inserted_at`): l'intero deploy moriva lì, portandosi
+dietro migration ed Edge Function, che con le API keys non c'entrano niente. Lo step
+*Prepare Supabase connection* scrive a mano i due file che `link` metteva in `supabase/.temp`
+(`project-ref` e `pooler-url`, quest'ultimo letto dall'API del pooler e forzato in session
+mode), poi `db push --linked` e `functions deploy --project-ref` funzionano da soli. La
+password del database non serve: senza `DB_PASSWORD` la CLI si crea da sola un ruolo di login
+temporaneo. **Se un giorno l'endpoint torna sano, `link` resta comunque superfluo.**
+
 Pushing to a `dev/**` branch triggers `.github/workflows/deploy-dev.yml` which:
 1. **Does NOT merge to master**
 2. Netlify creates a branch preview deploy at `dev--<branch>--<sitename>.netlify.app`
