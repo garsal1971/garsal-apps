@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Ada v1.0.3</title>
+  <title>Spese Ada v1.1.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -176,7 +176,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Spese Ada · <span class="mono">v1.0.3</span>
+    Spese Ada · <span class="mono">v1.1.0</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -205,8 +205,8 @@
    (che legge e basta: filtro, doppioni e categorie stanno qui).
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.3';
-var BUILD_TIME  = '2026-08-08T15:40:00Z';
+var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-08-08T16:20:00Z';
 console.log('%c SPESE ADA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -216,7 +216,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const S = {
   session: null, view: 'dashboard',
-  transactions: [], categories: [], merchants: [],
+  transactions: [], categories: [], supers: [], merchants: [],
   charts: {}, selectedYear: null,
   filters: { mese: '', categoria: '', testo: '' },
 };
@@ -293,23 +293,53 @@ const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
 const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const PALETTE = ['#7c3aed','#16a34a','#d97706','#dc2626','#0891b2','#db2777','#65a30d','#4f46e5','#0f766e','#b45309'];
 
+/* ── Categorie e super-categorie ─────────────────────────────
+   Due livelli: la super-categoria è l'unica che porta il colore, la voce lo eredita. Una voce
+   può non avere super: sono le sei di partenza, e finché non le si appende da qualche parte
+   compaiono raggruppate sotto «senza super-categoria», non spariscono dai riepiloghi.  */
+const NO_SUPER_COLOR = '#94a3b8';
 const catById = id => S.categories.find(c => c.id === id) || null;
+const superById = id => S.supers.find(s => s.id === id) || null;
+// Il colore di una voce non è suo: è quello della sua super-categoria.
+const colorOfCat = id => superById(catById(id)?.super_id)?.color || NO_SUPER_COLOR;
+
 function catChip(id) {
   const c = catById(id);
   if (!c) return '<span class="badge badge-none">senza categoria</span>';
-  return `<span class="text-sm"><span class="cat-dot" style="background:${c.color || '#94a3b8'}"></span>${c.icon || ''} ${esc(c.name)}</span>`;
+  const s = superById(c.super_id);
+  return `<span class="text-sm"><span class="cat-dot" style="background:${colorOfCat(id)}"></span>${c.icon || ''} ${esc(c.name)}`
+    + (s ? `<span class="text-muted"> · ${s.icon || ''} ${esc(s.name)}</span>` : '')
+    + '</span>';
 }
-const catOptions = (selected, placeholder = '— senza categoria —') =>
+function superChip(id) {
+  const s = superById(id);
+  if (!s) return '<span class="badge badge-none">senza super-categoria</span>';
+  return `<span class="text-sm"><span class="cat-dot" style="background:${s.color || NO_SUPER_COLOR}"></span>${s.icon || ''} ${esc(s.name)}</span>`;
+}
+
+// Le voci nella tendina sono raggruppate per super-categoria: con due livelli un elenco piatto
+// diventa illeggibile appena le voci passano la decina.
+function catOptions(selected, placeholder = '— senza categoria —') {
+  const gruppo = (label, voci) => voci.length
+    ? `<optgroup label="${esc(label)}">${voci.map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('')}</optgroup>`
+    : '';
+  return `<option value="">${placeholder}</option>`
+    + S.supers.map(s => gruppo(`${s.icon || ''} ${s.name}`.trim(), S.categories.filter(c => c.super_id === s.id))).join('')
+    + gruppo('— senza super-categoria —', S.categories.filter(c => !c.super_id));
+}
+const superOptions = (selected, placeholder = '— senza super-categoria —') =>
   `<option value="">${placeholder}</option>` +
-  S.categories.map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('');
+  S.supers.map(s => `<option value="${s.id}" ${selected === s.id ? 'selected' : ''}>${s.icon || ''} ${esc(s.name)}</option>`).join('');
 
 /* ── Dati ───────────────────────────────────────────────────── */
 async function loadData() {
-  const [cats, txs, mm] = await Promise.all([
+  const [supers, cats, txs, mm] = await Promise.all([
+    sbQ('ada_super_categories', 'select=*&order=name.asc'),
     sbQ('ada_categories', 'select=*&order=name.asc'),
     sbQ('ada_transactions', 'select=*&order=date.desc,created_at.desc'),
     sbQ('ada_merchant_map', 'select=*'),
   ]);
+  S.supers = supers || [];
   S.categories = cats || [];
   S.transactions = txs || [];
   S.merchants = mm || [];
@@ -440,6 +470,20 @@ function showToast(msg) {
 }
 
 /* ── Grafici ────────────────────────────────────────────────── */
+// Le voci della stessa super-categoria hanno per definizione lo stesso colore, e nella ciambella
+// per voce diventerebbero fette indistinguibili. Si schiariscono progressivamente: restano
+// riconoscibili come famiglia, ma si contano.
+function shade(hex, step) {
+  const h = (hex || NO_SUPER_COLOR).replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (isNaN(n)) return NO_SUPER_COLOR;
+  const f = Math.min(0.55, step * 0.17);
+  const mix = c => Math.round(c + (255 - c) * f);
+  const [r, g, b] = [mix((n >> 16) & 255), mix((n >> 8) & 255), mix(n & 255)];
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
 function drawChart(id, config) {
   if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
   const canvas = $(id);
@@ -458,13 +502,21 @@ function renderDashboard() {
   const senzaCat = spese.filter(t => !t.category_id).length;
   const mesiConDati = new Set(spese.map(t => t.date.slice(0, 7))).size || 1;
 
-  // Per categoria
+  // Per voce di spesa
   const perCat = new Map();
   spese.forEach(t => {
     const k = t.category_id || '';
     perCat.set(k, (perCat.get(k) || 0) + spesaDi(t));
   });
   const catRows = [...perCat.entries()].sort((a, b) => b[1] - a[1]);
+
+  // Per super-categoria: le voci senza super finiscono in un gruppo a parte invece di sparire.
+  const perSuper = new Map();
+  spese.forEach(t => {
+    const k = catById(t.category_id)?.super_id || '';
+    perSuper.set(k, (perSuper.get(k) || 0) + spesaDi(t));
+  });
+  const superRows = [...perSuper.entries()].sort((a, b) => b[1] - a[1]);
 
   // Per mese
   const perMese = Array.from({ length: 12 }, () => 0);
@@ -491,20 +543,25 @@ function renderDashboard() {
           <p>Nessuna spesa per il ${anno}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca.</p></div></div>`
       : `<div class="grid-2">
           <div class="card">
-            <div class="card-title">Spesa per categoria</div>
-            <div class="chart-wrap"><canvas id="chart-cat"></canvas></div>
+            <div class="card-title">Spesa per super-categoria</div>
+            <div class="chart-wrap"><canvas id="chart-super"></canvas></div>
           </div>
           <div class="card">
-            <div class="card-title">Andamento mensile</div>
-            <div class="chart-wrap"><canvas id="chart-mese"></canvas></div>
+            <div class="card-title">Spesa per voce</div>
+            <div class="chart-wrap"><canvas id="chart-cat"></canvas></div>
           </div>
         </div>
         <div class="card">
-          <div class="card-title">Dettaglio per categoria</div>
+          <div class="card-title">Andamento mensile</div>
+          <div class="chart-wrap"><canvas id="chart-mese"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Dettaglio</div>
           <div class="table-wrap"><table class="table">
-            <thead><tr><th>Categoria</th><th class="text-right">Spesa</th><th class="text-right">%</th><th class="text-right">Movimenti</th></tr></thead>
+            <thead><tr><th>Super-categoria</th><th>Voce</th><th class="text-right">Spesa</th><th class="text-right">%</th><th class="text-right">Movimenti</th></tr></thead>
             <tbody>${catRows.map(([id, val]) => `<tr>
-              <td>${catChip(id || null)}</td>
+              <td>${superChip(catById(id)?.super_id || null)}</td>
+              <td>${catById(id) ? `${catById(id).icon || ''} ${esc(catById(id).name)}` : '<span class="badge badge-none">senza categoria</span>'}</td>
               <td class="text-right mono fw-600">${fmtEUR(val)}</td>
               <td class="text-right mono text-muted">${totale ? Math.round(val / totale * 100) : 0}%</td>
               <td class="text-right mono text-muted">${spese.filter(t => (t.category_id || '') === id).length}</td>
@@ -514,17 +571,41 @@ function renderDashboard() {
   `);
 
   if (!spese.length) return;
-  drawChart('chart-cat', {
+  const doughnut = { cutout: '58%', plugins: { legend: { position: 'right', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 10 } } }, animation: { duration: 400 } };
+  drawChart('chart-super', {
     type: 'doughnut',
     data: {
-      labels: catRows.map(([id]) => { const c = catById(id); return c ? c.name : 'Senza categoria'; }),
+      labels: superRows.map(([id]) => superById(id)?.name || 'Senza super-categoria'),
       datasets: [{
-        data: catRows.map(([, v]) => Math.round(v * 100) / 100),
-        backgroundColor: catRows.map(([id], i) => (catById(id)?.color) || PALETTE[i % PALETTE.length]),
+        data: superRows.map(([, v]) => Math.round(v * 100) / 100),
+        backgroundColor: superRows.map(([id], i) => superById(id)?.color || (id ? PALETTE[i % PALETTE.length] : NO_SUPER_COLOR)),
         borderWidth: 2, borderColor: '#fff',
       }],
     },
-    options: { cutout: '58%', plugins: { legend: { position: 'right', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 10 } } }, animation: { duration: 400 } },
+    options: doughnut,
+  });
+  drawChart('chart-cat', {
+    type: 'doughnut',
+    data: {
+      labels: catRows.map(([id]) => catById(id)?.name || 'Senza categoria'),
+      datasets: [{
+        data: catRows.map(([, v]) => Math.round(v * 100) / 100),
+        // Il colore resta quello della super-categoria — le due ciambelle vanno lette insieme, e
+        // colori scorrelati le farebbero sembrare due cose diverse — schiarito di un gradino per
+        // ogni voce successiva dello stesso gruppo.
+        backgroundColor: (() => {
+          const visti = new Map();
+          return catRows.map(([id]) => {
+            const gruppo = catById(id)?.super_id || '';
+            const step = visti.get(gruppo) || 0;
+            visti.set(gruppo, step + 1);
+            return shade(colorOfCat(id), step);
+          });
+        })(),
+        borderWidth: 2, borderColor: '#fff',
+      }],
+    },
+    options: doughnut,
   });
   drawChart('chart-mese', {
     type: 'bar',
@@ -549,7 +630,10 @@ function filteredTransactions() {
     if (annoDi(t) !== anno) return false;
     if (mese && t.date.slice(5, 7) !== mese) return false;
     if (categoria === '__none__' && t.category_id) return false;
-    if (categoria && categoria !== '__none__' && t.category_id !== categoria) return false;
+    // "super:<id>" filtra tutte le voci di una super-categoria in un colpo solo.
+    if (categoria.startsWith('super:')) {
+      if (catById(t.category_id)?.super_id !== categoria.slice(6)) return false;
+    } else if (categoria && categoria !== '__none__' && t.category_id !== categoria) return false;
     if (q && !(t.description || '').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -590,7 +674,8 @@ function renderTransazioni() {
           <select class="form-input form-select" data-filter="categoria">
             <option value="">tutte</option>
             <option value="__none__" ${S.filters.categoria === '__none__' ? 'selected' : ''}>— senza categoria —</option>
-            ${S.categories.map(c => `<option value="${c.id}" ${S.filters.categoria === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('')}
+            ${S.supers.map(s => `<option value="super:${s.id}" ${S.filters.categoria === 'super:' + s.id ? 'selected' : ''}>${s.icon || ''} ${esc(s.name)} (tutta la super)</option>`).join('')}
+            ${catOptions(S.filters.categoria, '').replace(/^<option value=""><\/option>/, '')}
           </select>
         </div>
         <div style="flex:1;min-width:160px">
@@ -621,27 +706,57 @@ function renderTransazioni() {
 /* ── Categorie ──────────────────────────────────────────────── */
 function renderCategorie() {
   const usoDi = id => S.transactions.filter(t => t.category_id === id);
+  // Le voci raggruppate sotto la loro super-categoria, e in fondo quelle che non ne hanno: così
+  // si vede a colpo d'occhio cosa resta da sistemare.
+  const gruppi = [
+    ...S.supers.map(s => ({ sup: s, voci: S.categories.filter(c => c.super_id === s.id) })),
+    { sup: null, voci: S.categories.filter(c => !c.super_id) },
+  ].filter(g => g.sup || g.voci.length);
+
+  const rigaVoce = c => {
+    const uso = usoDi(c.id);
+    return `<tr>
+      <td style="padding-left:22px">${c.icon || ''} ${esc(c.name)}</td>
+      <td class="text-right mono text-muted">${uso.length}</td>
+      <td class="text-right mono">${fmtEUR(uso.reduce((s, t) => s + spesaDi(t), 0))}</td>
+      <td class="nowrap text-right">
+        <button class="btn-icon" data-action="edit-cat" data-id="${c.id}" title="Modifica">✎</button>
+        <button class="btn-icon btn-icon-danger" data-action="del-cat" data-id="${c.id}" title="Elimina">✕</button>
+      </td>
+    </tr>`;
+  };
+
   setHtml('view-categorie', `
     <div class="view-header">
-      <div><h2 class="page-title">Categorie</h2><p class="page-sub">Le voci con cui si classificano le spese</p></div>
-      <button class="btn btn-primary btn-sm" data-action="new-cat">+ Categoria</button>
+      <div><h2 class="page-title">Categorie</h2><p class="page-sub">Due livelli: la super-categoria porta il colore, le voci lo ereditano</p></div>
+      <div class="hstack gap-8 wrap">
+        <button class="btn btn-outline btn-sm" data-action="new-super">+ Super-categoria</button>
+        <button class="btn btn-primary btn-sm" data-action="new-cat">+ Voce</button>
+      </div>
     </div>
+    ${S.supers.length === 0 ? `<div class="card" style="border-color:#fde68a;background:#fffbeb">
+      <p class="text-sm">Non hai ancora nessuna super-categoria: le voci qui sotto sono tutte
+      «senza super-categoria» e nei riepiloghi finiscono in un gruppo unico grigio.
+      Creane una con <strong>+ Super-categoria</strong> — il colore si sceglie lì — e poi appendi le voci con ✎.</p>
+    </div>` : ''}
     <div class="card">
-      ${S.categories.length === 0
+      ${S.categories.length === 0 && S.supers.length === 0
         ? `<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessuna categoria.</p></div>`
         : `<div class="table-wrap"><table class="table">
-            <thead><tr><th>Categoria</th><th class="text-right">Movimenti</th><th class="text-right">Totale</th><th></th></tr></thead>
-            <tbody>${S.categories.map(c => {
-              const uso = usoDi(c.id);
-              return `<tr>
-                <td>${catChip(c.id)}</td>
-                <td class="text-right mono text-muted">${uso.length}</td>
-                <td class="text-right mono">${fmtEUR(uso.reduce((s, t) => s + spesaDi(t), 0))}</td>
-                <td class="nowrap text-right">
-                  <button class="btn-icon" data-action="edit-cat" data-id="${c.id}" title="Modifica">✎</button>
-                  <button class="btn-icon btn-icon-danger" data-action="del-cat" data-id="${c.id}" title="Elimina">✕</button>
-                </td>
-              </tr>`;
+            <thead><tr><th>Voce</th><th class="text-right">Movimenti</th><th class="text-right">Totale</th><th></th></tr></thead>
+            <tbody>${gruppi.map(g => {
+              const tot = g.voci.reduce((s, c) => s + usoDi(c.id).reduce((a, t) => a + spesaDi(t), 0), 0);
+              const nMov = g.voci.reduce((s, c) => s + usoDi(c.id).length, 0);
+              return `<tr style="background:#fafbfd">
+                  <td class="fw-600">${superChip(g.sup?.id || null)}</td>
+                  <td class="text-right mono text-muted">${nMov}</td>
+                  <td class="text-right mono fw-600">${fmtEUR(tot)}</td>
+                  <td class="nowrap text-right">${g.sup ? `
+                    <button class="btn-icon" data-action="edit-super" data-id="${g.sup.id}" title="Modifica">✎</button>
+                    <button class="btn-icon btn-icon-danger" data-action="del-super" data-id="${g.sup.id}" title="Elimina">✕</button>` : ''}</td>
+                </tr>`
+                + (g.voci.length ? g.voci.map(rigaVoce).join('')
+                  : '<tr><td colspan="4" class="text-muted text-sm" style="padding-left:22px">nessuna voce — assegnane una con ✎</td></tr>');
             }).join('')}</tbody>
           </table></div>`}
     </div>
@@ -669,9 +784,10 @@ function renderCategorie() {
   `);
 }
 
+// Voce di spesa: niente colore, lo eredita dalla super-categoria a cui la si appende.
 function openCatModal(editId = null) {
   const cat = editId ? catById(editId) : null;
-  openModal(cat ? 'Modifica categoria' : 'Nuova categoria', `
+  openModal(cat ? 'Modifica voce' : 'Nuova voce', `
     <form id="modal-form">
       <div class="form-group">
         <label class="form-label">Nome *</label>
@@ -683,10 +799,11 @@ function openCatModal(editId = null) {
           <input name="icon" class="form-input" placeholder="es. 💊" maxlength="4" value="${esc(cat?.icon || '')}" />
         </div>
         <div class="form-group">
-          <label class="form-label">Colore</label>
-          <input name="color" type="color" class="form-input" value="${cat?.color || '#7c3aed'}" />
+          <label class="form-label">Super-categoria</label>
+          <select name="super_id" class="form-input form-select">${superOptions(cat?.super_id || '')}</select>
         </div>
       </div>
+      <p class="import-note">Il colore della voce è quello della sua super-categoria: si cambia lì, non qui.</p>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
         <button type="submit" class="btn btn-primary">${cat ? 'Salva' : 'Aggiungi'}</button>
@@ -696,7 +813,7 @@ function openCatModal(editId = null) {
   $('modal-form').addEventListener('submit', async e => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
-    const payload = { name: (d.name || '').trim(), icon: (d.icon || '').trim() || null, color: d.color || null };
+    const payload = { name: (d.name || '').trim(), icon: (d.icon || '').trim() || null, super_id: d.super_id || null };
     if (!payload.name) return;
     try {
       if (cat) await sbUpd('ada_categories', `id=eq.${cat.id}`, payload);
@@ -705,7 +822,52 @@ function openCatModal(editId = null) {
       await reload();
     } catch (err) {
       alert(/duplicate|uq_ada_categories/i.test(err.message)
-        ? `Esiste già una categoria che si chiama «${payload.name}».`
+        ? `Esiste già una voce che si chiama «${payload.name}».`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+// Super-categoria: è l'unico livello che porta il colore.
+function openSuperModal(editId = null) {
+  const sup = editId ? superById(editId) : null;
+  openModal(sup ? 'Modifica super-categoria' : 'Nuova super-categoria', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Salute" value="${esc(sup?.name || '')}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Icona</label>
+          <input name="icon" class="form-input" placeholder="es. 💊" maxlength="4" value="${esc(sup?.icon || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Colore *</label>
+          <input name="color" type="color" class="form-input" value="${sup?.color || '#7c3aed'}" />
+        </div>
+      </div>
+      <p class="import-note">Tutte le voci appese a questa super-categoria prendono questo colore nei grafici,
+      con una sfumatura diversa per ciascuna.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${sup ? 'Salva' : 'Aggiungi'}</button>
+      </div>
+    </form>
+  `);
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const payload = { name: (d.name || '').trim(), icon: (d.icon || '').trim() || null, color: d.color || null };
+    if (!payload.name) return;
+    try {
+      if (sup) await sbUpd('ada_super_categories', `id=eq.${sup.id}`, payload);
+      else await sbIns('ada_super_categories', { ...payload, user_id: S.session.user.id });
+      closeModal();
+      await reload();
+    } catch (err) {
+      alert(/duplicate|uq_ada_super_categories/i.test(err.message)
+        ? `Esiste già una super-categoria che si chiama «${payload.name}».`
         : 'Errore: ' + err.message);
     }
   });
@@ -785,7 +947,8 @@ async function renderImpostazioni() {
       <div class="card">
         <div class="card-title">Dati</div>
         <div class="summary-row"><span>Movimenti</span><strong>${S.transactions.length}</strong></div>
-        <div class="summary-row"><span>Categorie</span><strong>${S.categories.length}</strong></div>
+        <div class="summary-row"><span>Super-categorie</span><strong>${S.supers.length}</strong></div>
+        <div class="summary-row"><span>Voci di spesa</span><strong>${S.categories.length}</strong></div>
         <div class="summary-row"><span>Negozi imparati</span><strong>${S.merchants.length}</strong></div>
         <div class="summary-row text-sm text-muted">${APP_VERSION} · build ${BUILD_TIME}</div>
       </div>
@@ -1058,7 +1221,7 @@ function render() {
     case 'categorie': renderCategorie(); break;
     case 'impostazioni': renderImpostazioni(); break;
   }
-  $('footer-info').textContent = `${S.transactions.length} movimenti · ${S.categories.length} categorie`;
+  $('footer-info').textContent = `${S.transactions.length} movimenti · ${S.supers.length} super · ${S.categories.length} voci`;
 }
 
 async function reload() {
@@ -1086,10 +1249,20 @@ document.addEventListener('click', async e => {
     } catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'new-cat') openCatModal();
   else if (action === 'edit-cat') openCatModal(btn.dataset.id);
+  else if (action === 'new-super') openSuperModal();
+  else if (action === 'edit-super') openSuperModal(btn.dataset.id);
+  else if (action === 'del-super') {
+    const s = superById(btn.dataset.id);
+    const voci = S.categories.filter(c => c.super_id === btn.dataset.id).length;
+    if (!confirm(`Eliminare la super-categoria «${s?.name}»?`
+      + (voci ? `\n\n${voci} voci restano, senza super-categoria: nessun movimento perde la sua voce.` : ''))) return;
+    try { await sbDel('ada_super_categories', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  }
   else if (action === 'del-cat') {
     const c = catById(btn.dataset.id);
     const uso = S.transactions.filter(t => t.category_id === btn.dataset.id).length;
-    if (!confirm(`Eliminare la categoria «${c?.name}»?` + (uso ? `\n\n${uso} movimenti resteranno senza categoria.` : ''))) return;
+    if (!confirm(`Eliminare la voce «${c?.name}»?` + (uso ? `\n\n${uso} movimenti resteranno senza categoria.` : ''))) return;
     try { await sbDel('ada_categories', `id=eq.${btn.dataset.id}`); await reload(); }
     catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'edit-merchant') {
