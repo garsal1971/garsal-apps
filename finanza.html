@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza</title>
+  <title>GarsalFinanza v1.3.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -506,8 +506,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.2.9';
-const APP_BUILD   = '2026-08-07T10:00:00Z';
+const APP_VERSION = 'v1.3.0';
+const APP_BUILD   = '2026-08-08T12:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2449,13 +2449,20 @@ function renderFundDetail() {
    «Link accounts»): l'applicazione è in restricted mode e l'API restituisce SOLO i conti
    collegati lì. Senza whitelist il consenso riesce, la banca mostra il conto spuntato e la
    sessione torna vuota — nessun errore, perché per Enable Banking è il filtro previsto.  */
+// Un conto può servire a più moduli: lo stesso conto delle spese comuni è insieme
+// 'cost_analysis' (le transazioni diventano spese) e 'contribuzione' (i bonifici in entrata
+// diventano versamenti di Teresa o Salvatore). L'elenco sta qui una volta sola: è anche quello
+// che il battesimo salva in cm_bank_connections.uses, dove un CHECK ammette solo questi valori.
+const BANK_USES = ['cost_analysis', 'contribuzione', 'fondo', 'conto_risparmio'];
 const BANK_USE_LABEL = {
   cost_analysis:   '🧾 Spese Famiglia',
+  contribuzione:   '💰 Contribuzione',
   fondo:           '🤝 Fondi',
   conto_risparmio: '🐖 Conto Risparmio',
 };
 const BANK_USE_HINT = {
   cost_analysis:   'le transazioni diventano spese da categorizzare',
+  contribuzione:   'i bonifici in entrata diventano versamenti di Teresa o Salvatore',
   fondo:           'i bonifici diventano versamenti e prelievi del fondo',
   conto_risparmio: 'i movimenti si importano dal Conto Risparmio di Teresa',
 };
@@ -2785,7 +2792,7 @@ function openBankBaptismModal(connectionIds) {
           </div>
           <div class="form-group">
             <label class="form-label">A cosa serve</label>
-            ${['cost_analysis', 'fondo', 'conto_risparmio'].map(u => useRow(c, u)).join('')}
+            ${BANK_USES.map(u => useRow(c, u)).join('')}
           </div>
           <div class="form-group" id="owner-group-${c.id}" style="display:none">
             <label class="form-label">Proprietario (chi ha speso) *</label>
@@ -2800,7 +2807,7 @@ function openBankBaptismModal(connectionIds) {
     </form>
   `, async data => {
     for (const c of conns) {
-      const uses = ['cost_analysis', 'fondo', 'conto_risparmio'].filter(u => data[`use_${u}_${c.id}`] === 'on');
+      const uses = BANK_USES.filter(u => data[`use_${u}_${c.id}`] === 'on');
       if (uses.includes('cost_analysis') && !data[`owner_${c.id}`]) {
         throw new Error(`«${data[`name_${c.id}`] || c.aspsp_name}» è destinato a Spese Famiglia: indica a chi attribuire le spese.`);
       }

@@ -138,8 +138,9 @@ Configurazione → 🏦 Banche e Conti):
 3. **battesimo** — i conti restituiti dalla banca nascono con `display_name NULL` e
    `uses '{}'`, e l'utente dà a ciascuno un nome e uno o più usi.
 
-`cm_bank_connections.uses` ammette `'cost_analysis'` (Spese Famiglia), `'fondo'` e
-`'conto_risparmio'`: **un conto può servire a più moduli**, e `uses` vuoto significa «scoperto
+`cm_bank_connections.uses` ammette `'cost_analysis'` (Spese Famiglia), `'contribuzione'`,
+`'fondo'` e `'conto_risparmio'`: **un conto può servire a più moduli** — il conto delle spese
+comuni è insieme `cost_analysis` e `contribuzione` — e `uses` vuoto significa «scoperto
 ma non ancora battezzato» — il conto esiste e si vede, ma nessun modulo lo elenca. Ha sostituito
 la vecchia colonna `module`, che ne ammetteva uno solo e andava scelta *prima* del consenso.
 `display_name` è **solo** il nome dato dall'utente: nessuna Edge Function lo riempie più
@@ -563,8 +564,10 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   fino al 2023, 1/3–2/3 dal 2024. Dati in `acct_transactions` (`persona` `TERESA`|`SALVATORE`,
   `tipo` `BONIFICO`|`ALTRO`|`MENSA`, `importo` sempre positivo).
 - Si apre dal collegamento *💰 contribuzione* nella sidebar di `finanza.html`.
-- **Si alimenta dallo stesso conto che alimenta Spese Famiglia** — quello con `'cost_analysis'` in
-  `cm_bank_connections.uses` — via `enable-banking-transactions`, che legge e basta: filtro
+- **Si alimenta dallo stesso conto che alimenta Spese Famiglia**, che va spuntato anche come
+  `'contribuzione'` in `cm_bank_connections.uses` (gli usi si sommano sullo stesso conto: il CHECK
+  è stato allargato da `20260808120000_cm_bank_connections_uses_contribuzione.sql`) — via
+  `enable-banking-transactions`, che legge e basta: filtro
   (solo **entrate** riconosciute come bonifici), attribuzione a Teresa o Salvatore e controllo dei
   doppioni stanno nella pagina. L'import da CSV Revolut resta come ripiego per lo storico più
   vecchio di quanto la banca espone.
