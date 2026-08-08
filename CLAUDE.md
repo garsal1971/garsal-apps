@@ -520,6 +520,18 @@ Teresa smette di ricevere notifiche **senza nessun errore** — semplicemente ne
 Il controllo "esiste già una notifica pending" è **per destinatario**, non per regola: le due righe
 condividono lo stesso `rule_id` (l'unica riga ancora di `cm_notification_rules`), quindi un controllo
 per regola farebbe sparire la notifica di uno ogni volta che l'altro non ha ancora smaltito la sua.
+Ed è **a scadenza**: una pending di più di 6 ore non è una notifica in viaggio, è una riga che
+nessuno sta consumando (telefono spento, APK non installato, overlay negato) — e finché resta lì
+zittisce ogni notifica successiva di quel destinatario, per sempre. Passate le 6 ore si butta e se
+ne accoda una aggiornata: il contenuto è comunque una fotografia rifatta da capo a ogni run.
+
+⚠️ **Il conto da cui parte tutto è quello spuntato `'cost_analysis'` in `cm_bank_connections.uses`**,
+non "quello di Revolut". Fino alla v1.5 la Edge Function lo cercava per `aspsp_name = 'Revolut'`,
+cioè per nome della banca: da quando il collegamento parte dal censimento degli istituti quel nome
+è quello del catalogo Enable Banking, e rifare il consenso bastava a far sparire il conto dalla
+query — con lui il sync e tutte le notifiche, senza una riga da nessuna parte. Ora, quando non si
+accoda niente, il perché è scritto: in `cm_sync_log` se il sync non parte proprio, nella risposta
+JSON (`notifications: [{who, outcome}]`) e nei log della function per ogni destinatario.
 
 Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock` restituisce sempre
 `true`): il PIN è di Salvatore e su quel telefono un blocco rosso sarebbe insbloccabile.

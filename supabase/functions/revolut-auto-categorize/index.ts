@@ -44,6 +44,12 @@
 // già fatta da enable-banking-sync via ca_card_person_map). Le due righe si distinguono per
 // metadata.device_token, quindi il controllo "ne esiste già una pending" è ora per destinatario
 // e non più per regola: altrimenti la pending di uno bloccherebbe la notifica dell'altro.
+// v1.6 — 2026-08-08: le notifiche Spese Famiglia avevano tre modi di smettere in silenzio, e
+// tutti e tre finivano in un 200 senza una riga da nessuna parte. Ora:
+//   · il conto si cerca per uses (vedi sotto) e non per nome della banca;
+//   · una pending che nessuno consuma non zittisce più tutte le notifiche successive;
+//   · quando non si accoda niente, il perché resta scritto — in cm_sync_log se il sync non
+//     parte proprio, nella risposta e nei log della function per ogni destinatario.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -269,18 +275,70 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-  const { data: connection } = await supabase
+  // Il conto di Spese Famiglia è quello spuntato 'cost_analysis' in cm_bank_connections.uses —
+  // lo stesso criterio con cui lo elenca cost-analysis.html. Prima si cercava per
+  // aspsp_name = 'Revolut', cioè per NOME DELLA BANCA: da quando il collegamento parte dal
+  // censimento degli istituti (20260807100000) quel nome è quello scelto nel catalogo Enable
+  // Banking e non è più detto che sia esattamente 'Revolut'. Rifare il consenso bastava a far
+  // sparire il conto da questa query, e con lui il sync e tutte le sue notifiche.
+  // Niente maybeSingle(): con due conti in regola tornava un errore (qui nemmeno letto) e data
+  // null, cioè lo stesso identico silenzio del conto inesistente.
+  // Il filtro su uses si fa in JS e non con un `cs.{…}` lato PostgREST, come già fa
+  // cost-analysis.html: i conti attivi sono una manciata, e un filtro sull'array sbagliato
+  // tornerebbe zero righe, cioè esattamente il silenzio da cui si sta uscendo.
+  const { data: activeAccounts, error: connError } = await supabase
     .from('cm_bank_connections')
     .select('*')
     .eq('user_id', userId)
-    .eq('aspsp_name', 'Revolut')
     .eq('status', 'active')
     .not('account_id', 'is', null)
-    .maybeSingle();
+    .order('created_at', { ascending: true });
+
+  if (connError && !isDryRun) {
+    await supabase.from('cm_sync_log').insert({
+      user_id: userId,
+      status: 'error',
+      finished_at: new Date().toISOString(),
+      error_message: 'Lettura dei conti collegati fallita: ' + connError.message,
+    });
+    return new Response(
+      JSON.stringify({ error: { message: connError.message } }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const costAnalysisAccounts = (activeAccounts || []).filter((c: any) =>
+    Array.isArray(c.uses) && c.uses.includes('cost_analysis')
+  );
+  const connection = costAnalysisAccounts[0] ?? null;
+  // Un secondo conto di Spese Famiglia oggi non esiste, ma il giorno che esistesse resterebbe
+  // fuori dal sync: che sia scritto invece di scoprirlo dai totali che non tornano.
+  if (costAnalysisAccounts.length > 1) {
+    console.warn(
+      `[revolut-auto-categorize] ${costAnalysisAccounts.length} conti con uso 'cost_analysis': ` +
+      `sincronizzo solo ${connection.display_name || connection.aspsp_name} (${connection.id})`
+    );
+  }
 
   if (!connection && !isDryRun) {
+    // Prima era un 200 'skipped' e basta: nessuna riga da nessuna parte, quindi un sync fermo
+    // era indistinguibile da un sync senza novità. La ragione resta in cm_sync_log, che è dove
+    // la si va a cercare.
+    const others = (activeAccounts || [])
+      .map((c: any) => `${c.display_name || c.aspsp_name} [${(c.uses || []).join(', ') || 'da battezzare'}]`)
+      .join('; ');
+    const message =
+      "Nessun conto attivo con l'uso 'cost_analysis' (Spese Famiglia). Il conto va spuntato in " +
+      'Finanza → Configurazione → 🏦 Banche e Conti. Conti attivi: ' + (others || 'nessuno') + '.';
+    await supabase.from('cm_sync_log').insert({
+      user_id: userId,
+      status: 'error',
+      finished_at: new Date().toISOString(),
+      error_message: message,
+    });
+    console.error('[revolut-auto-categorize] ' + message);
     return new Response(
-      JSON.stringify({ skipped: 'no_active_revolut_connection' }),
+      JSON.stringify({ skipped: 'no_cost_analysis_account', message }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -594,6 +652,12 @@ Deno.serve(async (req) => {
     const uncategorizedIds = allTx.filter((t: any) => !categorizedIds.has(t.id)).map((t: any) => t.id as string);
     const uncategorizedCount = uncategorizedIds.length;
 
+    // Cosa è successo a ogni notifica. Finiva tutto e solo nei console.log della function, che
+    // nessuno guarda finché non si accorge che le notifiche non arrivano più — e a quel punto
+    // dei run passati non resta niente. Ora la risposta lo dice, e chiamare la function a mano
+    // basta a sapere perché il telefono è muto.
+    const notificationReport: { who: string; outcome: string }[] = [];
+
     if (uncategorizedCount > 0) {
       // Un solo utente ha app='cost_analysis'+channel='smart_block': niente filtro su
       // entity_id (è uuid in produzione, non una stringa libera come 'revolut-sync').
@@ -605,6 +669,7 @@ Deno.serve(async (req) => {
         .eq('channel', 'smart_block')
         .maybeSingle();
       if (!rule) {
+        notificationReport.push({ who: 'tutti', outcome: 'no_rule' });
         console.error('[revolut-auto-categorize] riga ancora cm_notification_rules (app=cost_analysis) non trovata — notifica non inviata');
       } else {
         // Le righe già pending vanno lette CON il metadata, non solo contate: i destinatari sono
@@ -613,12 +678,16 @@ Deno.serve(async (req) => {
         // Salvatore non ha ancora smaltito la sua, e viceversa.
         const { data: pendingRows } = await supabase
           .from('cm_notification_queue')
-          .select('id, metadata')
+          .select('id, metadata, fire_at')
           .eq('rule_id', rule.id)
           .eq('status', 'pending');
-        const pendingTokens = new Set(
-          (pendingRows || []).map((r: any) => (r.metadata?.device_token as string) || '')
-        );
+        const pendingByToken = new Map<string, { id: string; fire_at: string }[]>();
+        for (const row of (pendingRows || []) as any[]) {
+          const token = (row.metadata?.device_token as string) || '';
+          const list = pendingByToken.get(token) || [];
+          list.push({ id: row.id, fire_at: row.fire_at });
+          pendingByToken.set(token, list);
+        }
 
         // Senza metadata.device_token l'app Android (SupabaseApi.queryQueue → myToken) non
         // considera mai questa riga "sua" e il blocco non compare mai sul telefono — stesso
@@ -708,14 +777,44 @@ Deno.serve(async (req) => {
         ];
 
         for (const r of recipients) {
-          if (!r.ids.length) continue;
+          if (!r.ids.length) {
+            notificationReport.push({ who: r.who, outcome: 'nothing_to_do' });
+            continue;
+          }
           if (!r.token) {
+            notificationReport.push({ who: r.who, outcome: 'no_device_token' });
             console.error(`[revolut-auto-categorize] device token mancante per ${r.who} — notifica non accodata`);
             continue;
           }
-          if (pendingTokens.has(r.token)) {
+
+          // Una pending appena accodata è la notifica in viaggio, e accodarne un'altra vuol dire
+          // due blocchi per lo stesso lavoro. Una pending di ore invece è una riga che nessuno
+          // sta consumando — telefono spento, APK non installato, overlay negato — e finché
+          // resta lì zittisce ogni notifica successiva di quel destinatario, per sempre: è il
+          // modo in cui queste notifiche smettono di arrivare senza che si rompa niente. Passato
+          // STALE_PENDING_MS la riga vecchia si butta e se ne accoda una aggiornata; non si
+          // perde niente, perché il contenuto è comunque una fotografia rifatta da capo qui
+          // sotto sulle transazioni ancora senza categoria.
+          const STALE_PENDING_MS = 6 * 60 * 60 * 1000;
+          const pending = pendingByToken.get(r.token) || [];
+          const freshest = pending.reduce((max, p) => {
+            const t = new Date(p.fire_at).getTime();
+            return isNaN(t) ? max : Math.max(max, t);
+          }, 0);
+          if (pending.length && Date.now() - freshest < STALE_PENDING_MS) {
+            notificationReport.push({ who: r.who, outcome: 'already_pending' });
             console.log(`[revolut-auto-categorize] notifica già pending per ${r.who}, non ne accodo un'altra`);
             continue;
+          }
+          if (pending.length) {
+            await supabase
+              .from('cm_notification_queue')
+              .delete()
+              .in('id', pending.map((p) => p.id));
+            console.warn(
+              `[revolut-auto-categorize] ${pending.length} notifica/e pending da più di 6 ore per ${r.who}: ` +
+              'sostituite con una aggiornata'
+            );
           }
 
           // Payload per la categorizzazione interattiva dalla schermata di blocco (Android,
@@ -757,6 +856,7 @@ Deno.serve(async (req) => {
               cost_analysis: { transactions: embeddedTx, categories: visibleCategories },
             },
           });
+          notificationReport.push({ who: r.who, outcome: 'queued' });
           console.log(`[revolut-auto-categorize] notifica accodata per ${r.who}: ${count} transazioni`);
         }
       }
@@ -775,6 +875,11 @@ Deno.serve(async (req) => {
       uncategorized: uncategorizedCount,
       totalFetched: rawTransactions.length,
       pages: pageCount,
+      account: connection
+        ? { id: connection.id, name: connection.display_name || connection.aspsp_name }
+        : null,
+      accountsWithCostAnalysisUse: costAnalysisAccounts.length,
+      notifications: notificationReport,
     }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
     if (syncLog) {
