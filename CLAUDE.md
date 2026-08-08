@@ -585,7 +585,13 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   restituisce `card.identification` quando la banca la espone) per isolare le spese di Ada su un
   conto con più carte. La carta scelta resta in `localStorage` (`ada_card_filter`).
 - Non c'è una schermata di regole: dare una categoria a un movimento **impara la descrizione**
-  in `ada_merchant_map`, e al giro dopo quel negozio si categorizza da solo.
+  in `ada_merchant_map`. La regola vale in tre momenti — sulle righe proposte in anteprima, sugli
+  altri movimenti dello stesso negozio già in archivio (`applyLearnedMerchants`, subito dopo
+  l'assegnazione manuale e dopo ogni import) e col pulsante *✨ Applica i negozi imparati*.
+  **Tocca solo i movimenti senza categoria**: quello che è già classificato non si sovrascrive.
+- **Nessuna categorizzazione da MCC**: `enable-banking-transactions` non restituisce il
+  `merchant_category_code` (lo estrae solo `enable-banking-sync`, per Spese Famiglia). Qui
+  l'automatismo è tutto nei negozi imparati.
 
 ### `conto-spese-teresa.html` — Contribuzione
 - Chi ha versato quanto sul conto delle spese comuni, e quanto dovrebbe aver versato: quote 2/5–3/5
