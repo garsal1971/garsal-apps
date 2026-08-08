@@ -697,6 +697,12 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   l'import fa girare merchant appresi, regole e attribuzione per carta, che vivono solo lì.
 - La **consultazione** è stata spostata dentro le due app dove serve, come vista in sola lettura:
   `finanza.html` (Salvatore) e `situazione-teresa.html` (Teresa) — vedi sotto.
+- **Navigazione con hamburger** come le altre app del conto familiare: su desktop la sidebar da
+  280 px resta fissa, sotto i 768 px diventa un cassetto a scomparsa aperto dal ⬛ nella top bar
+  (prima era una striscia di sole icone incollata sotto la barra blu, senza etichette). Il menù
+  elenca le pagine dell'app e, dopo un separatore, i collegamenti alle altre pagine del conto
+  familiare (Finanza, contribuzione, conto risparmio, Spese Ada, Casa Rosa): da qui non si
+  tornava a nessun'altra pagina senza passare da `finanza.html`.
 
 ### Vista "Spese Famiglia" in sola lettura — blocco duplicato
 *(la vista si chiamava "Analisi Costi"; nelle due pagine è etichettata **Spese Famiglia**, mentre

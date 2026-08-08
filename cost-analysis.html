@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.66</title>
+    <title>Analisi Costi v1.0.67</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -43,6 +43,11 @@
             padding: 0 20px; gap: 10px; z-index: 3000;
         }
         #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+        /* Hamburger: unica via di navigazione su mobile, dove la sidebar è un cassetto a scomparsa */
+        .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
+        .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+        #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 999; }
+        #mobile-nav-overlay.open { display: block; }
 
         /* ===== LAYOUT ===== */
         .app-container { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
@@ -62,10 +67,14 @@
         }
         .nav-item:hover { background: rgba(255, 255, 255, 0.1); transform: translateX(5px); }
         .nav-item.active { background: var(--primary); color: #fff; }
+        .nav-item::after { content: " " attr(data-text); }
+        /* Collegamenti alle altre pagine del conto familiare: il testo è nel nodo, non in data-text */
+        a.nav-item { display: block; text-decoration: none; color: inherit; }
+        .nav-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0.9rem 0.6rem 0.35rem; }
+        .nav-sep { height: 1px; background: var(--border); margin: 0.5rem 0.4rem; }
 
         @media (min-width: 769px) {
             .sidebar { display: block !important; position: relative !important; left: 0 !important; }
-            .nav-item::after { content: " " attr(data-text); }
         }
 
         /* ===== MAIN ===== */
@@ -205,19 +214,21 @@
 
         /* ===== MOBILE ===== */
         @media (max-width: 768px) {
+            .btn-hamburger { display: flex; align-items: center; }
             .app-container { grid-template-columns: 1fr; }
+            /* Cassetto a scomparsa aperto dall'hamburger, al posto della vecchia striscia di icone */
             .sidebar {
-                display: flex !important; position: fixed !important; top: 56px !important; left: 0 !important;
-                right: 0 !important; width: 100% !important; height: auto !important; background: #F3F4F6 !important;
-                border-bottom: 2px solid var(--border) !important; border-right: none !important;
-                padding: 0.1rem 0 !important; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                position: fixed; top: 56px; left: 0; z-index: 1000;
+                width: 260px; max-width: 82vw; height: calc(100dvh - 56px);
+                overflow-y: auto; background: #F3F4F6;
+                border-right: 1px solid var(--border);
+                transform: translateX(-100%); transition: transform .25s ease;
+                box-shadow: 4px 0 20px rgba(0,0,0,.12);
             }
-            .logo { display: none !important; }
-            .nav-menu { display: flex !important; flex-direction: row !important; width: 100% !important; justify-content: space-around !important; align-items: center !important; gap: 0.2rem !important; margin: 0 !important; }
-            .nav-item { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; padding: 0.2rem 0.1rem !important; margin: 0 !important; font-size: 1.6rem !important; min-width: 0 !important; flex: 1 !important; text-align: center !important; transform: none !important; }
-            .nav-item:hover { transform: none !important; }
-            .nav-item::after { content: none !important; }
-            .main-content { padding: 0 0.75rem 1rem !important; padding-top: 4.5rem !important; }
+            .sidebar.open { transform: translateX(0); }
+            .logo { margin-bottom: 1rem; font-size: 1.2rem; }
+            .nav-item:hover { transform: none; }
+            .main-content { padding: 1rem 0.75rem; }
             .stats-strip { grid-template-columns: repeat(2, 1fr); }
             .page-title { font-size: 1.7rem; }
         }
@@ -227,11 +238,13 @@
 
     <!-- GARSAL TOP BAR -->
     <div id="garsal-top-bar">
-        <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+        <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
             <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
             <div id="garsal-top-bar-text">Garsal Apps</div>
         </a>
+        <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu"><span></span><span></span><span></span></button>
     </div>
+    <div id="mobile-nav-overlay"></div>
 
     <!-- AUTH OVERLAY -->
     <div id="authOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,15,30,0.97); z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:1.5rem; font-family:inherit;">
@@ -255,6 +268,15 @@
             <div class="nav-item" onclick="showPage('rulesPage', this)" data-text="Regole">🧩</div>
             <div class="nav-item" onclick="showPage('bankConnectionsPage', this)" data-text="Sincronizza e Carte">🏦</div>
             <div class="nav-item" onclick="showPage('tripsPage', this)" data-text="Viaggi">✈️</div>
+
+            <!-- Conto familiare: le altre pagine si raggiungevano solo tornando a Finanza -->
+            <div class="nav-sep"></div>
+            <div class="nav-label">Conto familiare</div>
+            <a class="nav-item" href="finanza.html">💰 Finanza</a>
+            <a class="nav-item" href="conto-spese-teresa.html">💳 Contribuzione</a>
+            <a class="nav-item" href="conto-risparmio-teresa.html">🏡 Conto risparmio</a>
+            <a class="nav-item" href="spese-ada.html">🧾 Spese Ada</a>
+            <a class="nav-item" href="casarosa.html">🏠 Casa Rosa</a>
         </nav>
     </aside>
 
@@ -821,8 +843,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.66';
-    var BUILD_TIME  = '2026-08-08T14:30:00Z';
+    var APP_VERSION = 'v1.0.67';
+    var BUILD_TIME  = '2026-08-08T20:10:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -969,8 +991,20 @@
         document.getElementById(pageId).classList.add('active');
         document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
         if (navEl) navEl.classList.add('active');
+        closeMobileNav();
         renderPageContent(pageId);
     }
+
+    // ── Menu hamburger (mobile) ──────────────────────────────
+    function closeMobileNav() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('mobile-nav-overlay').classList.remove('open');
+    }
+    document.getElementById('btn-hamburger').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('mobile-nav-overlay').classList.toggle('open');
+    });
+    document.getElementById('mobile-nav-overlay').addEventListener('click', closeMobileNav);
 
     function renderActivePage() {
         const activePage = document.querySelector('.page.active');
