@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spese Ada v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f6fb;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-primary:   #7c3aed;
+      --c-primary-h: #6d28d9;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; padding-top: 56px; }
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .pos    { color: var(--c-success); }
+    .neg    { color: var(--c-danger); }
+    .text-muted { color: var(--c-muted); }
+    .text-sm    { font-size: .82rem; }
+    .fw-600  { font-weight: 600; }
+    .text-right  { text-align: right; }
+    .hstack  { display: flex; align-items: center; }
+    .gap-8   { gap: 8px; }
+    .gap-12  { gap: 12px; }
+    .mt-8    { margin-top: 8px; }
+    .mt-12   { margin-top: 12px; }
+    .mb-16   { margin-bottom: 16px; }
+    .wrap    { flex-wrap: wrap; }
+    #loading-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--c-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #screen-app { display: none; flex-direction: column; min-height: 100dvh; }
+    #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
+    #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+    .topbar-spacer { flex: 1; }
+    .app-layout { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 200px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #f3e8ff; color: var(--c-primary); }
+    .nav-label { font-size: .68rem; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .08em; padding: 14px 11px 6px; }
+    .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .page-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+    .page-sub { color: var(--c-muted); font-size: .84rem; margin-top: 2px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; font-weight: 500; cursor: pointer; border: none; transition: background .15s, color .15s, border-color .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: var(--c-surface); color: var(--c-text); border: 1.5px solid var(--c-border); }
+    .btn-outline:hover { border-color: #aab0bc; background: #f8f9fb; }
+    .btn-danger { background: #fee2e2; color: var(--c-danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 6px 12px; font-size: .82rem; }
+    .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--c-muted); font-size: .9rem; line-height: 1; transition: background .12s, color .12s; }
+    .btn-icon:hover { background: var(--c-bg); color: var(--c-text); }
+    .btn-icon-danger:hover { background: #fee2e2; color: var(--c-danger); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; text-align: right; }
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+    .card-title { font-size: .96rem; font-weight: 600; margin-bottom: 14px; }
+    .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+    .card-header-row .card-title { margin-bottom: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
+    .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); }
+    .table td.nowrap { white-space: nowrap; }
+    .table tbody tr:hover td { background: #fafbfd; }
+    .cat-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-none { background: #fef3c7; color: #92400e; }
+    .chart-wrap { height: 220px; display: flex; align-items: center; justify-content: center; }
+    .chart-wrap canvas { max-height: 220px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: .82rem; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+    .form-input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .9rem; color: var(--c-text); outline: none; transition: border-color .15s; background: var(--c-surface); }
+    .form-input:focus { border-color: var(--c-primary); }
+    .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+    .filters .form-input { width: auto; min-width: 130px; }
+    #modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+    #modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 540px; max-height: 90dvh; overflow-y: auto; }
+    #modal-card.modal-wide { max-width: 860px; }
+    #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--c-border); }
+    #modal-header h3 { font-size: 1.05rem; font-weight: 700; }
+    #modal-close { background: none; border: none; font-size: 1.1rem; color: var(--c-muted); cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
+    #modal-close:hover { background: var(--c-bg); color: var(--c-text); }
+    #modal-body { padding: 18px 22px 22px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--c-muted); }
+    .empty-icon { font-size: 2.4rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .88rem; line-height: 1.6; }
+    .summary-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--c-border); font-size: .9rem; }
+    .summary-row:last-child { border-bottom: none; }
+    .import-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .import-table th { text-align: left; color: var(--c-muted); font-weight: 600; padding: 4px 6px; white-space: nowrap; }
+    .import-table td { padding: 5px 6px; border-top: 1px solid var(--c-border); vertical-align: top; }
+    .import-table tr.is-dup td { opacity: .5; }
+    .import-note { font-size: .78rem; color: var(--c-muted); }
+    .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
+    .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; display: flex; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+      .app-main { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+      .kpi-card { padding: 10px 12px; }
+      .kpi-label { font-size: .62rem; margin-bottom: 3px; }
+      .kpi-value { font-size: 1rem; }
+      .form-row-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="garsal-top-bar">
+  <a href="finanza.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
+    <span style="width:22px;height:22px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🧾</span>
+    <div id="garsal-top-bar-text">Spese Ada</div>
+  </a>
+  <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu"><span></span><span></span><span></span></button>
+</div>
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <span class="text-muted text-sm">Caricamento…</span>
+</div>
+
+<div id="screen-app">
+  <div id="mobile-nav-overlay"></div>
+  <div class="app-layout">
+    <nav class="sidebar" id="sidebar">
+      <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-item" data-action="nav" data-view="transazioni">🧾 Transazioni</button>
+      <div class="nav-label">Gestione</div>
+      <button class="nav-item" data-action="nav" data-view="categorie">🏷️ Categorie</button>
+      <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
+      <div class="nav-label">Altro</div>
+      <a class="nav-item" href="finanza.html" style="text-decoration:none">💰 Finanza</a>
+    </nav>
+    <main class="app-main">
+      <div id="view-dashboard" class="view active"></div>
+      <div id="view-transazioni" class="view"></div>
+      <div id="view-categorie" class="view"></div>
+      <div id="view-impostazioni" class="view"></div>
+    </main>
+  </div>
+  <footer class="version-bar">
+    Spese Ada · <span class="mono">v1.0.0</span>
+    <span class="topbar-spacer"></span>
+    <span id="footer-info"></span>
+  </footer>
+</div>
+
+<div id="modal-overlay" class="hidden">
+  <div id="modal-card">
+    <div id="modal-header">
+      <h3 id="modal-title"></h3>
+      <button id="modal-close" data-action="close-modal">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   SPESE ADA — import dal conto, categorie, dashboard.
+   Contabilità separata da Spese Famiglia: tabelle ada_*, non ca_*.
+   I movimenti arrivano dal conto spuntato come «👵 Spese Ada» in
+   Finanza → Banche e Conti, letti da enable-banking-transactions
+   (che legge e basta: filtro, doppioni e categorie stanno qui).
+   ═══════════════════════════════════════════════════════════════ */
+
+var APP_VERSION = 'v1.0.0';
+var BUILD_TIME  = '2026-08-08T14:00:00Z';
+console.log('%c SPESE ADA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+const S = {
+  session: null, view: 'dashboard',
+  transactions: [], categories: [], merchants: [],
+  charts: {}, selectedYear: null,
+  filters: { mese: '', categoria: '', testo: '' },
+};
+
+/* ── Supabase REST ──────────────────────────────────────────── */
+const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+function sbH(extra = {}) {
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json', ...extra };
+}
+async function sbQ(table, params = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbIns(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbUpd(table, filter, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbDel(table, filter) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+}
+async function sbFn(name, payload) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST', headers: sbH(), body: JSON.stringify(payload),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data?.error) throw new Error(data?.error?.message || r.statusText);
+  return data;
+}
+
+/* ── Sessione ───────────────────────────────────────────────── */
+const loadSession = () => { try { return JSON.parse(localStorage.getItem('garsal_session')); } catch { return null; } };
+async function initFromSbToken(token) {
+  try {
+    const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+    })).json();
+    if (user?.id) return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+  } catch {}
+  return null;
+}
+async function refreshSession(session) {
+  if (!session?.refresh_token) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    localStorage.setItem('garsal_session', JSON.stringify(ns));
+    return ns;
+  } catch { return null; }
+}
+
+/* ── Formattazione ──────────────────────────────────────────── */
+const fmtEUR = n => (n == null || isNaN(n)) ? '—' : (+n).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+const $ = id => document.getElementById(id);
+const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const PALETTE = ['#7c3aed','#16a34a','#d97706','#dc2626','#0891b2','#db2777','#65a30d','#4f46e5','#0f766e','#b45309'];
+
+const catById = id => S.categories.find(c => c.id === id) || null;
+function catChip(id) {
+  const c = catById(id);
+  if (!c) return '<span class="badge badge-none">senza categoria</span>';
+  return `<span class="text-sm"><span class="cat-dot" style="background:${c.color || '#94a3b8'}"></span>${c.icon || ''} ${esc(c.name)}</span>`;
+}
+const catOptions = (selected, placeholder = '— senza categoria —') =>
+  `<option value="">${placeholder}</option>` +
+  S.categories.map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('');
+
+/* ── Dati ───────────────────────────────────────────────────── */
+async function loadData() {
+  const [cats, txs, mm] = await Promise.all([
+    sbQ('ada_categories', 'select=*&order=name.asc'),
+    sbQ('ada_transactions', 'select=*&order=date.desc,created_at.desc'),
+    sbQ('ada_merchant_map', 'select=*'),
+  ]);
+  S.categories = cats || [];
+  S.transactions = txs || [];
+  S.merchants = mm || [];
+}
+
+const annoDi = t => parseInt((t.date || '').slice(0, 4), 10);
+function getAnni() {
+  const anni = [...new Set(S.transactions.map(annoDi).filter(Boolean))].sort((a, b) => b - a);
+  return anni.length ? anni : [new Date().getFullYear()];
+}
+// Una spesa è un importo negativo; l'app ragiona su quanto si è speso, quindi in positivo.
+const spesaDi = t => (+t.amount < 0 ? -(+t.amount) : 0);
+
+/* ── Merchant appresi ───────────────────────────────────────── */
+// Stessa normalizzazione di Spese Famiglia: maiuscolo, spazi compressi e via il codice
+// numerico finale che le banche appiccicano allo stesso negozio ("ESSELUNGA *12345").
+const normalizeMerchant = desc => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ').replace(/[*#]?\s*\d{3,}$/, '').trim();
+const merchantCategory = desc => {
+  const key = normalizeMerchant(desc);
+  if (!key) return null;
+  const m = S.merchants.find(x => x.merchant_key === key);
+  return m ? m.category_id : null;
+};
+async function learnMerchant(desc, categoryId) {
+  const key = normalizeMerchant(desc);
+  if (!key) return;
+  try {
+    if (categoryId) {
+      await fetch(`${SUPABASE_URL}/rest/v1/ada_merchant_map?on_conflict=user_id,merchant_key`, {
+        method: 'POST',
+        headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+        body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, updated_at: new Date().toISOString() }),
+      });
+    } else {
+      // Per id, non per chiave: un merchant_key con virgole o spazi va citato nei filtri
+      // PostgREST, e sbagliare la citazione qui vorrebbe dire cancellare la regola sbagliata.
+      const row = S.merchants.find(x => x.merchant_key === key);
+      if (!row) return;
+      await sbDel('ada_merchant_map', `id=eq.${row.id}`);
+    }
+    S.merchants = await sbQ('ada_merchant_map', 'select=*');
+  } catch (e) {
+    console.error('Merchant non imparato:', e);
+  }
+}
+
+/* ── Grafici ────────────────────────────────────────────────── */
+function drawChart(id, config) {
+  if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
+  const canvas = $(id);
+  if (!canvas) return;
+  S.charts[id] = new Chart(canvas.getContext('2d'), config);
+}
+
+/* ── Dashboard ──────────────────────────────────────────────── */
+function renderDashboard() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
+  const anno = S.selectedYear;
+  const txs = S.transactions.filter(t => annoDi(t) === anno);
+  const spese = txs.filter(t => +t.amount < 0);
+  const totale = spese.reduce((s, t) => s + spesaDi(t), 0);
+  const senzaCat = spese.filter(t => !t.category_id).length;
+  const mesiConDati = new Set(spese.map(t => t.date.slice(0, 7))).size || 1;
+
+  // Per categoria
+  const perCat = new Map();
+  spese.forEach(t => {
+    const k = t.category_id || '';
+    perCat.set(k, (perCat.get(k) || 0) + spesaDi(t));
+  });
+  const catRows = [...perCat.entries()].sort((a, b) => b[1] - a[1]);
+
+  // Per mese
+  const perMese = Array.from({ length: 12 }, () => 0);
+  spese.forEach(t => { perMese[parseInt(t.date.slice(5, 7), 10) - 1] += spesaDi(t); });
+
+  setHtml('view-dashboard', `
+    <div class="view-header">
+      <div><h2 class="page-title">Dashboard</h2><p class="page-sub">Spese di Ada — ${anno}</p></div>
+      <div class="hstack gap-8 wrap">
+        <select class="form-input form-select" data-action="year-filter" style="width:auto">
+          ${anni.map(a => `<option value="${a}" ${a === anno ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
+      </div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Totale speso</div><div class="kpi-value mono neg">${fmtEUR(totale)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Media mensile</div><div class="kpi-value mono">${fmtEUR(totale / mesiConDati)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Movimenti</div><div class="kpi-value mono">${spese.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Da categorizzare</div><div class="kpi-value mono ${senzaCat ? 'neg' : ''}">${senzaCat}</div></div>
+    </div>
+    ${spese.length === 0
+      ? `<div class="card"><div class="empty-state"><div class="empty-icon">🧾</div>
+          <p>Nessuna spesa per il ${anno}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca.</p></div></div>`
+      : `<div class="grid-2">
+          <div class="card">
+            <div class="card-title">Spesa per categoria</div>
+            <div class="chart-wrap"><canvas id="chart-cat"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Andamento mensile</div>
+            <div class="chart-wrap"><canvas id="chart-mese"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Dettaglio per categoria</div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>Categoria</th><th class="text-right">Spesa</th><th class="text-right">%</th><th class="text-right">Movimenti</th></tr></thead>
+            <tbody>${catRows.map(([id, val]) => `<tr>
+              <td>${catChip(id || null)}</td>
+              <td class="text-right mono fw-600">${fmtEUR(val)}</td>
+              <td class="text-right mono text-muted">${totale ? Math.round(val / totale * 100) : 0}%</td>
+              <td class="text-right mono text-muted">${spese.filter(t => (t.category_id || '') === id).length}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>`}
+  `);
+
+  if (!spese.length) return;
+  drawChart('chart-cat', {
+    type: 'doughnut',
+    data: {
+      labels: catRows.map(([id]) => { const c = catById(id); return c ? c.name : 'Senza categoria'; }),
+      datasets: [{
+        data: catRows.map(([, v]) => Math.round(v * 100) / 100),
+        backgroundColor: catRows.map(([id], i) => (catById(id)?.color) || PALETTE[i % PALETTE.length]),
+        borderWidth: 2, borderColor: '#fff',
+      }],
+    },
+    options: { cutout: '58%', plugins: { legend: { position: 'right', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 10 } } }, animation: { duration: 400 } },
+  });
+  drawChart('chart-mese', {
+    type: 'bar',
+    data: {
+      labels: MESI.map(m => m.slice(0, 3)),
+      datasets: [{ label: 'Speso', data: perMese.map(v => Math.round(v * 100) / 100), backgroundColor: '#7c3aed80', borderColor: '#7c3aed', borderWidth: 2 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => '€' + v.toLocaleString('it-IT') } } },
+    },
+  });
+}
+
+/* ── Transazioni ────────────────────────────────────────────── */
+function filteredTransactions() {
+  const anno = S.selectedYear;
+  const { mese, categoria, testo } = S.filters;
+  const q = (testo || '').trim().toLowerCase();
+  return S.transactions.filter(t => {
+    if (annoDi(t) !== anno) return false;
+    if (mese && t.date.slice(5, 7) !== mese) return false;
+    if (categoria === '__none__' && t.category_id) return false;
+    if (categoria && categoria !== '__none__' && t.category_id !== categoria) return false;
+    if (q && !(t.description || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function renderTransazioni() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
+  const txs = filteredTransactions();
+  const totale = txs.reduce((s, t) => s + spesaDi(t), 0);
+
+  setHtml('view-transazioni', `
+    <div class="view-header">
+      <div><h2 class="page-title">Transazioni</h2><p class="page-sub">${txs.length} movimenti · ${fmtEUR(totale)} di spesa</p></div>
+      <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
+    </div>
+    <div class="card">
+      <div class="filters">
+        <div>
+          <label class="form-label">Anno</label>
+          <select class="form-input form-select" data-action="year-filter">
+            ${anni.map(a => `<option value="${a}" ${a === S.selectedYear ? 'selected' : ''}>${a}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Mese</label>
+          <select class="form-input form-select" data-filter="mese">
+            <option value="">tutti</option>
+            ${MESI.map((m, i) => { const v = String(i + 1).padStart(2, '0'); return `<option value="${v}" ${S.filters.mese === v ? 'selected' : ''}>${m}</option>`; }).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Categoria</label>
+          <select class="form-input form-select" data-filter="categoria">
+            <option value="">tutte</option>
+            <option value="__none__" ${S.filters.categoria === '__none__' ? 'selected' : ''}>— senza categoria —</option>
+            ${S.categories.map(c => `<option value="${c.id}" ${S.filters.categoria === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label class="form-label">Cerca</label>
+          <input class="form-input" data-filter="testo" placeholder="descrizione…" value="${esc(S.filters.testo)}" />
+        </div>
+      </div>
+      ${txs.length === 0
+        ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>Nessun movimento con questi filtri.</p></div>`
+        : `<div class="table-wrap"><table class="table">
+            <thead><tr><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th><th></th></tr></thead>
+            <tbody>${txs.map(t => `<tr>
+              <td class="mono text-sm nowrap">${fmtDate(t.date)}</td>
+              <td>${esc(t.description) || '—'}${t.card_identification ? `<span class="text-muted text-sm"> · 💳 ${esc(t.card_identification)}</span>` : ''}</td>
+              <td class="text-right mono fw-600 nowrap ${+t.amount < 0 ? 'neg' : 'pos'}">${fmtEUR(t.amount)}</td>
+              <td class="nowrap">
+                <select class="form-input form-select" data-set-cat="${t.id}" style="padding:5px 8px;font-size:.8rem;width:auto;min-width:150px">
+                  ${catOptions(t.category_id)}
+                </select>
+              </td>
+              <td class="nowrap"><button class="btn-icon btn-icon-danger" data-action="del-tx" data-id="${t.id}" title="Elimina">✕</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>`}
+    </div>
+  `);
+}
+
+/* ── Categorie ──────────────────────────────────────────────── */
+function renderCategorie() {
+  const usoDi = id => S.transactions.filter(t => t.category_id === id);
+  setHtml('view-categorie', `
+    <div class="view-header">
+      <div><h2 class="page-title">Categorie</h2><p class="page-sub">Le voci con cui si classificano le spese</p></div>
+      <button class="btn btn-primary btn-sm" data-action="new-cat">+ Categoria</button>
+    </div>
+    <div class="card">
+      ${S.categories.length === 0
+        ? `<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessuna categoria.</p></div>`
+        : `<div class="table-wrap"><table class="table">
+            <thead><tr><th>Categoria</th><th class="text-right">Movimenti</th><th class="text-right">Totale</th><th></th></tr></thead>
+            <tbody>${S.categories.map(c => {
+              const uso = usoDi(c.id);
+              return `<tr>
+                <td>${catChip(c.id)}</td>
+                <td class="text-right mono text-muted">${uso.length}</td>
+                <td class="text-right mono">${fmtEUR(uso.reduce((s, t) => s + spesaDi(t), 0))}</td>
+                <td class="nowrap text-right">
+                  <button class="btn-icon" data-action="edit-cat" data-id="${c.id}" title="Modifica">✎</button>
+                  <button class="btn-icon btn-icon-danger" data-action="del-cat" data-id="${c.id}" title="Elimina">✕</button>
+                </td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>`}
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Negozi imparati</div>
+        <span class="text-muted text-sm">${S.merchants.length} regole</span>
+      </div>
+      <p class="text-muted text-sm">Quando dai una categoria a un movimento, la descrizione resta imparata: al prossimo
+      import gli stessi negozi si categorizzano da soli. Se una regola sbaglia, dimenticala.</p>
+      ${S.merchants.length === 0 ? '' : `<div class="table-wrap mt-12"><table class="table">
+        <thead><tr><th>Descrizione</th><th>Categoria</th><th></th></tr></thead>
+        <tbody>${S.merchants.slice().sort((a, b) => a.merchant_key.localeCompare(b.merchant_key)).map(m => `<tr>
+          <td class="mono text-sm">${esc(m.merchant_key)}</td>
+          <td>${catChip(m.category_id)}</td>
+          <td class="text-right"><button class="btn-icon btn-icon-danger" data-action="del-merchant" data-id="${m.id}" title="Dimentica">✕</button></td>
+        </tr>`).join('')}</tbody></table></div>`}
+    </div>
+  `);
+}
+
+function openCatModal(editId = null) {
+  const cat = editId ? catById(editId) : null;
+  openModal(cat ? 'Modifica categoria' : 'Nuova categoria', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Farmacia" value="${esc(cat?.name || '')}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Icona</label>
+          <input name="icon" class="form-input" placeholder="es. 💊" maxlength="4" value="${esc(cat?.icon || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Colore</label>
+          <input name="color" type="color" class="form-input" value="${cat?.color || '#7c3aed'}" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${cat ? 'Salva' : 'Aggiungi'}</button>
+      </div>
+    </form>
+  `);
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const payload = { name: (d.name || '').trim(), icon: (d.icon || '').trim() || null, color: d.color || null };
+    if (!payload.name) return;
+    try {
+      if (cat) await sbUpd('ada_categories', `id=eq.${cat.id}`, payload);
+      else await sbIns('ada_categories', { ...payload, user_id: S.session.user.id });
+      closeModal();
+      await reload();
+    } catch (err) {
+      alert(/duplicate|uq_ada_categories/i.test(err.message)
+        ? `Esiste già una categoria che si chiama «${payload.name}».`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+/* ── Impostazioni ───────────────────────────────────────────── */
+async function renderImpostazioni() {
+  const u = S.session.user;
+  let conti = [];
+  try {
+    conti = (await sbQ('cm_bank_connections', 'select=*&order=created_at.desc')).filter(c => (c.uses || []).includes('spese_ada'));
+  } catch {}
+  setHtml('view-impostazioni', `
+    <div class="view-header"><h2 class="page-title">Impostazioni</h2></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Account</div>
+        <div class="fw-600">${esc(u.user_metadata?.full_name || u.email?.split('@')[0] || 'Utente')}</div>
+        <div class="text-muted text-sm">${esc(u.email || '—')}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Dati</div>
+        <div class="summary-row"><span>Movimenti</span><strong>${S.transactions.length}</strong></div>
+        <div class="summary-row"><span>Categorie</span><strong>${S.categories.length}</strong></div>
+        <div class="summary-row"><span>Negozi imparati</span><strong>${S.merchants.length}</strong></div>
+        <div class="summary-row text-sm text-muted">${APP_VERSION} · build ${BUILD_TIME}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Conto collegato</div>
+      ${conti.length
+        ? conti.map(c => `<div class="summary-row"><span>${esc(c.display_name || c.iban || c.aspsp_name)}</span><span class="text-muted text-sm mono">${esc(c.iban || c.account_id || '')}</span></div>`).join('')
+        : `<p class="text-muted text-sm">Nessun conto spuntato come «👵 Spese Ada».
+           Aprilo da <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>, battezza il conto UniCredit
+           e spunta quella casella: gli usi si sommano, quindi il conto continua a servire anche agli altri moduli.</p>`}
+    </div>
+  `);
+}
+
+/* ── Import dal conto ───────────────────────────────────────────
+   enable-banking-transactions legge e basta. Il sottoinsieme che è "di Ada" lo decide questa
+   pagina: le uscite, filtrate per carta quando la banca la espone — su un conto con più carte
+   è l'unico modo per non spuntare a mano duecento righe ogni mese. La carta scelta resta nel
+   browser, così il giro dopo è già impostata.  */
+const CARD_FILTER_KEY = 'ada_card_filter';
+let _import = null;
+
+async function openImport() {
+  openModal('Importa dal conto', '<p class="import-note">Cerco i conti collegati…</p>', true);
+  try {
+    const conns = (await sbQ('cm_bank_connections', 'select=*&order=created_at.desc'))
+      .filter(c => c.account_id && (c.uses || []).includes('spese_ada'));
+    if (!conns.length) {
+      $('modal-body').innerHTML = `
+        <p class="text-sm">Nessun conto destinato a Spese Ada.</p>
+        <p class="import-note mt-8">Apri <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>,
+        battezza il conto UniCredit e spunta <strong>«👵 Spese Ada»</strong>. Gli usi si sommano: il conto
+        può servire anche agli altri moduli. Deve inoltre essere in whitelist nel Control Panel di
+        Enable Banking, altrimenti il consenso riesce ma la banca non restituisce niente.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+      return;
+    }
+    const ultima = S.transactions.map(t => t.date).filter(Boolean).sort().pop();
+    const defaultFrom = ultima
+      ? new Date(new Date(ultima + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10)
+      : new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    $('modal-body').innerHTML = `
+      <p class="import-note">Legge i movimenti del conto e propone le uscite. Niente viene salvato finché non confermi.</p>
+      <div class="form-row-2 mt-12">
+        <div class="form-group">
+          <label class="form-label">Conto</label>
+          <select id="imp-conn" class="form-input form-select">
+            ${conns.map(c => `<option value="${c.id}">${esc(c.display_name || c.iban || c.aspsp_name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dal giorno</label>
+          <input type="date" id="imp-from" class="form-input" value="${defaultFrom}" />
+        </div>
+      </div>
+      <label class="hstack gap-8 text-sm"><input type="checkbox" id="imp-entrate" /> Mostra anche le entrate</label>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button class="btn btn-primary" data-action="imp-read">Leggi i movimenti</button>
+      </div>`;
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+async function readMovements() {
+  const bankConnectionId = $('imp-conn').value;
+  const dateFrom = $('imp-from').value || undefined;
+  const conEntrate = $('imp-entrate').checked;
+  $('modal-body').innerHTML = '<p class="import-note">Leggo i movimenti dalla banca…</p>';
+  try {
+    const res = await sbFn('enable-banking-transactions', { bankConnectionId, dateFrom });
+    const tutti = (res.transactions || []).filter(t => t.amount !== 0 && (t.bookingDate || t.valueDate));
+    const movimenti = conEntrate ? tutti : tutti.filter(t => t.amount < 0);
+    if (!movimenti.length) {
+      $('modal-body').innerHTML = `<p class="text-sm">Nessun movimento nel periodo scelto.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+      return;
+    }
+    // Già importati: si riconoscono dall'external_id, la chiave con cui la banca identifica la
+    // riga. Rileggere un periodo già letto è la normalità, non l'eccezione.
+    const gia = new Set(S.transactions.map(t => t.external_id).filter(Boolean));
+    // Se la banca non manda un external_id, l'indice unico non protegge (in Postgres due NULL
+    // sono distinti) e il doppione entrerebbe a ogni rilettura: per quelle righe si ripiega su
+    // data + importo + descrizione, che qui identificano il movimento abbastanza bene.
+    const giaSenzaId = new Set(S.transactions.map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
+    const carte = [...new Set(movimenti.map(t => t.card?.identification).filter(Boolean))].sort();
+    const cardFilter = localStorage.getItem(CARD_FILTER_KEY) || '';
+
+    const items = movimenti.map(t => {
+      const data = (t.bookingDate || t.valueDate).slice(0, 10);
+      const descrizione = [t.description, t.counterpartyName].map(s => (s || '').trim()).filter(Boolean)
+        .filter((p, i, arr) => !arr.slice(0, i).some(q => q.toLowerCase().includes(p.toLowerCase())))
+        .join(' · ') || t.bankTransactionCode || 'Movimento';
+      return {
+        data, descrizione,
+        importo: t.amount,
+        currency: t.currency || null,
+        externalId: t.externalId || null,
+        card: t.card?.identification || null,
+        type: t.bankTransactionCode || null,
+        categoryId: merchantCategory(descrizione),
+        gia: t.externalId
+          ? gia.has(t.externalId)
+          : giaSenzaId.has(`${data}|${(+t.amount).toFixed(2)}|${descrizione.trim().toLowerCase()}`),
+        raw: t,
+      };
+    }).sort((a, b) => a.data.localeCompare(b.data));
+
+    _import = { items, bankConnectionId, account: res.account, carte, truncated: !!res.truncated };
+    renderImportList(cardFilter && carte.includes(cardFilter) ? cardFilter : '');
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+function renderImportList(cardFilter) {
+  if (!_import) return;
+  const { items, carte, account } = _import;
+  _import.cardFilter = cardFilter;
+  const visibili = items.map((it, i) => ({ it, i })).filter(({ it }) => !cardFilter || it.card === cardFilter);
+  const nuovi = visibili.filter(({ it }) => !it.gia).length;
+  const senzaCarta = items.filter(it => !it.card).length;
+
+  $('modal-body').innerHTML = `
+    <p class="import-note">
+      ${visibili.length} movimenti da <strong>${esc(account?.aspspName || 'banca')}</strong> —
+      ${nuovi} nuovi, ${visibili.length - nuovi} già importati (deselezionati).
+      ${_import.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo.' : ''}
+    </p>
+    ${carte.length ? `
+      <div class="form-group mt-12">
+        <label class="form-label">Carta</label>
+        <select id="imp-card" class="form-input form-select">
+          <option value="">tutte le carte${senzaCarta ? ` (${senzaCarta} movimenti senza carta)` : ''}</option>
+          ${carte.map(c => `<option value="${esc(c)}" ${cardFilter === c ? 'selected' : ''}>💳 •••• ${esc(c)} (${items.filter(i => i.card === c).length})</option>`).join('')}
+        </select>
+        <p class="import-note mt-8">Se Ada ha la sua carta sul conto, scegliendola qui restano solo le sue spese. La scelta viene ricordata.</p>
+      </div>` : ''}
+    <div class="hstack gap-8 mt-8">
+      <button class="btn btn-outline btn-sm" data-action="imp-all">Seleziona tutti</button>
+      <button class="btn btn-outline btn-sm" data-action="imp-none">Nessuno</button>
+    </div>
+    <div style="max-height:44vh;overflow-y:auto;margin:12px 0">
+      <table class="import-table">
+        <thead><tr><th></th><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th></tr></thead>
+        <tbody>${visibili.map(({ it, i }) => `
+          <tr class="${it.gia ? 'is-dup' : ''}">
+            <td><input type="checkbox" data-imp-idx="${i}" ${it.gia ? '' : 'checked'} /></td>
+            <td class="mono" style="white-space:nowrap">${fmtDate(it.data)}</td>
+            <td>${esc(it.descrizione)}
+              ${it.card ? `<span class="text-muted"> · 💳 ${esc(it.card)}</span>` : ''}
+              ${it.gia ? '<span class="text-muted"> · già importato</span>' : ''}</td>
+            <td class="mono text-right" style="white-space:nowrap;${it.importo < 0 ? 'color:var(--c-danger)' : ''}">${fmtEUR(it.importo)}</td>
+            <td><select class="form-input form-select" data-imp-cat="${i}" style="padding:3px 6px;font-size:.78rem">${catOptions(it.categoryId)}</select></td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button class="btn btn-primary" data-action="imp-confirm">Importa selezionati</button>
+    </div>`;
+
+  const sel = $('imp-card');
+  if (sel) sel.addEventListener('change', () => {
+    localStorage.setItem(CARD_FILTER_KEY, sel.value);
+    renderImportList(sel.value);
+  });
+}
+
+async function confirmImport() {
+  if (!_import) return;
+  const scelti = [];
+  document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => {
+    if (!cb.checked) return;
+    const i = parseInt(cb.dataset.impIdx, 10);
+    const catSel = document.querySelector(`#modal-body [data-imp-cat="${i}"]`);
+    scelti.push({ ..._import.items[i], categoryId: catSel ? (catSel.value || null) : _import.items[i].categoryId });
+  });
+  if (!scelti.length) { alert('Nessun movimento selezionato.'); return; }
+  $('modal-body').innerHTML = '<p class="import-note">Importo…</p>';
+
+  const rows = scelti.map(it => ({
+    user_id: S.session.user.id,
+    bank_connection_id: _import.bankConnectionId,
+    external_id: it.externalId,
+    date: it.data,
+    amount: it.importo,
+    currency: it.currency,
+    description: it.descrizione,
+    category_id: it.categoryId,
+    card_identification: it.card,
+    type: it.type,
+    import_source: 'bank',
+    raw: it.raw,
+  }));
+  try {
+    // ON CONFLICT DO NOTHING sull'indice unico (bank_connection_id, external_id): se una riga è
+    // già dentro non entra due volte nemmeno spuntandola per sbaglio.
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/ada_transactions?on_conflict=bank_connection_id,external_id`, {
+      method: 'POST',
+      headers: sbH({ 'Prefer': 'resolution=ignore-duplicates,return=representation' }),
+      body: JSON.stringify(rows),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+    const inserted = await r.json();
+    // Quello che l'utente ha categorizzato a mano in anteprima diventa una regola: la prossima
+    // volta quel negozio si riconosce da solo.
+    for (const it of scelti) {
+      if (it.categoryId && merchantCategory(it.descrizione) !== it.categoryId) await learnMerchant(it.descrizione, it.categoryId);
+    }
+    closeModal();
+    alert(`✅ Importazione completata\n\nMovimenti caricati: ${inserted.length}` +
+      (inserted.length < scelti.length ? `\nGià presenti, saltati: ${scelti.length - inserted.length}` : ''));
+    await reload();
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+/* ── Modale ─────────────────────────────────────────────────── */
+function openModal(title, bodyHtml, wide = false) {
+  $('modal-title').textContent = title;
+  $('modal-body').innerHTML = bodyHtml;
+  $('modal-card').classList.toggle('modal-wide', wide);
+  $('modal-overlay').classList.remove('hidden');
+}
+function closeModal() {
+  $('modal-overlay').classList.add('hidden');
+  $('modal-card').classList.remove('modal-wide');
+  $('modal-body').innerHTML = '';
+  _import = null;
+}
+
+/* ── Nav / render ───────────────────────────────────────────── */
+function navigate(view) {
+  S.view = view;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
+  $(`view-${view}`)?.classList.add('active');
+  document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
+  $('sidebar')?.classList.remove('open');
+  $('mobile-nav-overlay')?.classList.remove('open');
+  history.pushState({ view }, '');
+  render();
+}
+window.addEventListener('popstate', e => {
+  if (!e.state) return;
+  S.view = e.state.view || 'dashboard';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
+  $(`view-${S.view}`)?.classList.add('active');
+  document.querySelector(`.nav-item[data-view="${S.view}"]`)?.classList.add('active');
+  render();
+});
+
+function render() {
+  switch (S.view) {
+    case 'dashboard': renderDashboard(); break;
+    case 'transazioni': renderTransazioni(); break;
+    case 'categorie': renderCategorie(); break;
+    case 'impostazioni': renderImpostazioni(); break;
+  }
+  $('footer-info').textContent = `${S.transactions.length} movimenti · ${S.categories.length} categorie`;
+}
+
+async function reload() {
+  await loadData();
+  render();
+}
+
+/* ── Eventi ─────────────────────────────────────────────────── */
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'nav') navigate(btn.dataset.view);
+  else if (action === 'close-modal') closeModal();
+  else if (action === 'import') openImport();
+  else if (action === 'imp-read') readMovements();
+  else if (action === 'imp-confirm') confirmImport();
+  else if (action === 'imp-all' || action === 'imp-none') {
+    document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => { cb.checked = action === 'imp-all'; });
+  } else if (action === 'new-cat') openCatModal();
+  else if (action === 'edit-cat') openCatModal(btn.dataset.id);
+  else if (action === 'del-cat') {
+    const c = catById(btn.dataset.id);
+    const uso = S.transactions.filter(t => t.category_id === btn.dataset.id).length;
+    if (!confirm(`Eliminare la categoria «${c?.name}»?` + (uso ? `\n\n${uso} movimenti resteranno senza categoria.` : ''))) return;
+    try { await sbDel('ada_categories', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'del-merchant') {
+    try { await sbDel('ada_merchant_map', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'del-tx') {
+    if (!confirm('Eliminare questo movimento?')) return;
+    try { await sbDel('ada_transactions', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  }
+});
+
+document.addEventListener('change', async e => {
+  const el = e.target;
+  if (el.matches('[data-action="year-filter"]')) {
+    S.selectedYear = parseInt(el.value, 10);
+    render();
+  } else if (el.matches('[data-filter]')) {
+    S.filters[el.dataset.filter] = el.value;
+    renderTransazioni();
+  } else if (el.matches('[data-set-cat]')) {
+    const id = el.dataset.setCat;
+    const tx = S.transactions.find(t => t.id === id);
+    const categoryId = el.value || null;
+    try {
+      await sbUpd('ada_transactions', `id=eq.${id}`, { category_id: categoryId });
+      if (tx) tx.category_id = categoryId;
+      // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
+      // impara, senza una schermata di regole da compilare.
+      if (tx && categoryId) await learnMerchant(tx.description, categoryId);
+      render();
+    } catch (err) { alert('Errore: ' + err.message); }
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.matches('[data-filter="testo"]')) {
+    S.filters.testo = e.target.value;
+    clearTimeout(window._searchTimer);
+    window._searchTimer = setTimeout(() => {
+      renderTransazioni();
+      const input = document.querySelector('[data-filter="testo"]');
+      if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    }, 250);
+  }
+});
+
+$('btn-hamburger').addEventListener('click', () => {
+  $('sidebar').classList.toggle('open');
+  $('mobile-nav-overlay').classList.toggle('open');
+});
+$('mobile-nav-overlay').addEventListener('click', () => {
+  $('sidebar').classList.remove('open');
+  $('mobile-nav-overlay').classList.remove('open');
+});
+$('modal-close').addEventListener('click', closeModal);
+$('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+/* ── Avvio ──────────────────────────────────────────────────── */
+async function init() {
+  let session = null;
+  const sbToken = localStorage.getItem('sb_token');
+  if (sbToken) session = await initFromSbToken(sbToken);
+  if (!session) {
+    session = loadSession();
+    if (session && session.expires_at < Date.now()) session = await refreshSession(session);
+  }
+  if (!session) { location.href = 'finanza.html'; return; }
+  S.session = session;
+
+  const _authChannel = new BroadcastChannel('appsphere_auth');
+  _authChannel.onmessage = ev => {
+    if (!ev.data) return;
+    if (ev.data.type === 'LOGOUT') { localStorage.removeItem('sb_token'); location.href = 'finanza.html'; }
+    else if (ev.data.type === 'TOKEN_REFRESH' && ev.data.sbToken) {
+      localStorage.setItem('sb_token', ev.data.sbToken);
+      if (S.session) S.session.access_token = ev.data.sbToken;
+    }
+  };
+
+  try {
+    await loadData();
+  } catch (err) {
+    console.error('Errore caricamento dati:', err);
+    alert('Errore nel caricamento dei dati: ' + err.message);
+  }
+
+  $('screen-app').style.display = 'flex';
+  $('loading-overlay').classList.add('hidden');
+  navigate('dashboard');
+  history.replaceState({ view: 'dashboard' }, '');
+}
+
+init();
+</script>
+</body>
+</html>

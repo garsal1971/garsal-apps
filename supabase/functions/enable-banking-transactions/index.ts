@@ -70,6 +70,18 @@ function pick(obj: any, ...keys: string[]): unknown {
 
 const normIban = (s: string | null | undefined): string => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+// La carta con cui è stata fatta la spesa, quando la banca la espone: sta in
+// debtor_account_additional_identification, la stessa fonte da cui enable-banking-sync ricava
+// "chi ha speso" per Spese Famiglia. Nessuna carta (bonifico, addebito) → null.
+function cardOf(tx: any): { issuer: string | null; identification: string | null } | null {
+  const list = pick(tx, 'debtor_account_additional_identification', 'debtorAccountAdditionalIdentification') as any[];
+  const card = Array.isArray(list) && list.length ? list[0] : null;
+  if (!card) return null;
+  const issuer = (pick(card, 'issuer') as string) || null;
+  const identification = (pick(card, 'identification') as string) || null;
+  return issuer || identification ? { issuer, identification } : null;
+}
+
 // Alcune banche pretendono di sapere da quale IP arriva l'utente: lo dichiarano in
 // required_psu_headers nel catalogo /aspsps (UniCredit IT chiede "psu-ip-address").
 function psuHeaders(req: Request): Record<string, string> {
@@ -212,6 +224,10 @@ Deno.serve(async (req) => {
               (pick(partyAccount, 'identification') as string))) as string
         ) || null,
         externalId: (pick(tx, 'entry_reference', 'entryReference', 'transaction_id', 'transactionId') as string) || null,
+        // Carta usata (emittente + ultime cifre), quando la banca la espone. Su un conto con più
+        // carte è l'unico modo per dire di chi è una spesa senza spuntarle a mano una per una:
+        // Spese Ada ci filtra sopra. Chi non la usa la ignora — il campo è solo in più.
+        card: cardOf(tx),
         // Codice ISO 20022 (domain/family/sub_family): non è la causale numerica UniCredit che
         // usa l'import da CSV, ma è l'unica classificazione che passa dall'API.
         bankTransactionCode: code
