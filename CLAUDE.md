@@ -589,13 +589,19 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   anteprima, sugli altri movimenti già in archivio (`applyLearnedMerchants`, subito dopo
   l'assegnazione manuale e dopo ogni import) e col pulsante *✨ Applica i negozi imparati*.
   **Tocca solo i movimenti senza categoria**: quello che è già classificato non si sovrascrive.
-- Il confronto è **«la descrizione contiene la chiave»**, non un'uguaglianza: la banca infila
-  nella causale il riferimento dell'operazione e la data (`AMAZON.IT *MK7HG2LO3`), quindi due
-  acquisti dallo stesso negozio non hanno mai la stessa descrizione. La regola **nasce lunga**
-  (tutta la descrizione, default prudente) e si **accorcia a mano** al solo nome del negozio da
-  Categorie → Negozi imparati, dove il campo mostra in tempo reale quanti movimenti aggancerebbe.
+- Il confronto è **«la descrizione contiene la chiave»**, non un'uguaglianza, e la chiave si
+  ricava da **quello che UniCredit scrive dopo l'importo**, che è l'esercente:
+  `PAGAMENTO POS … del 15/07/2026 CARTA 31342819 DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA`
+  → chiave `SAN DONATO ALIMENTARI. BOLOGNA` (`POS_MERCHANT_RE` in `merchantText()`). Tutto quello
+  che precede l'importo — modalità di pagamento, data, numero di carta, importo — cambia a ogni
+  movimento. Se il pezzo non c'è (addebiti, bonifici, altre banche) si tiene la descrizione
+  intera e la regola si **accorcia a mano** da Categorie → Negozi imparati, dove il campo mostra
+  in tempo reale quanti movimenti aggancerebbe.
   Fra più regole che agganciano **vince la più lunga**, cioè la più specifica: senza quella
   precedenza una regola corta imparata prima si prenderebbe i movimenti di una più specifica.
+- La stessa causale porta il numero di carta (`CARTA 31342819`): `cardFromDescription()` lo usa
+  come ripiego quando l'API non espone la carta nei campi strutturati, altrimenti il filtro per
+  carta — l'unico modo per isolare le spese di Ada su un conto condiviso — resterebbe vuoto.
 - **Nessuna categorizzazione da MCC**: `enable-banking-transactions` non restituisce il
   `merchant_category_code` (lo estrae solo `enable-banking-sync`, per Spese Famiglia). Qui
   l'automatismo è tutto nei negozi imparati.
