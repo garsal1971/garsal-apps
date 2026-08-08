@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Ada v1.0.0</title>
+  <title>Spese Ada v1.0.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -123,6 +123,8 @@
     .import-table tr.is-dup td { opacity: .5; }
     .import-note { font-size: .78rem; color: var(--c-muted); }
     .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
+    #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(120%); background: var(--c-text); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: .85rem; box-shadow: var(--shadow); z-index: 4000; transition: transform .22s ease; max-width: 90vw; text-align: center; }
+    #toast.show { transform: translateX(-50%) translateY(0); }
     .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
     .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
     #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
@@ -174,11 +176,13 @@
     </main>
   </div>
   <footer class="version-bar">
-    Spese Ada · <span class="mono">v1.0.0</span>
+    Spese Ada · <span class="mono">v1.0.1</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
 </div>
+
+<div id="toast"></div>
 
 <div id="modal-overlay" class="hidden">
   <div id="modal-card">
@@ -201,8 +205,8 @@
    (che legge e basta: filtro, doppioni e categorie stanno qui).
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-08-08T14:00:00Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-08-08T14:40:00Z';
 console.log('%c SPESE ADA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -352,6 +356,42 @@ async function learnMerchant(desc, categoryId) {
   }
 }
 
+// Un negozio imparato adesso vale anche per quello che è già in archivio: senza questo,
+// categorizzare la prima "FARMACIA X" lasciava le altre dodici già importate vuote, e la regola
+// si vedeva funzionare solo al prossimo import. Tocca SOLO i movimenti senza categoria: quello
+// che è già stato classificato — a mano o da una regola vecchia — non viene mai sovrascritto.
+// onlyKey limita l'applicazione a un singolo negozio (dopo un'assegnazione manuale).
+async function applyLearnedMerchants(onlyKey = null) {
+  const perCategoria = new Map();
+  S.transactions.forEach(t => {
+    if (t.category_id) return;
+    const key = normalizeMerchant(t.description);
+    if (!key || (onlyKey && key !== onlyKey)) return;
+    const m = S.merchants.find(x => x.merchant_key === key);
+    if (!m) return;
+    if (!perCategoria.has(m.category_id)) perCategoria.set(m.category_id, []);
+    perCategoria.get(m.category_id).push(t);
+  });
+  let n = 0;
+  for (const [categoryId, txs] of perCategoria) {
+    const ids = txs.map(t => t.id);
+    // Un solo UPDATE per categoria invece di uno per riga: PostgREST filtra con in.(...).
+    await sbUpd('ada_transactions', `id=in.(${ids.join(',')})`, { category_id: categoryId });
+    txs.forEach(t => { t.category_id = categoryId; });
+    n += ids.length;
+  }
+  return n;
+}
+
+function showToast(msg) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
 /* ── Grafici ────────────────────────────────────────────────── */
 function drawChart(id, config) {
   if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
@@ -477,7 +517,11 @@ function renderTransazioni() {
   setHtml('view-transazioni', `
     <div class="view-header">
       <div><h2 class="page-title">Transazioni</h2><p class="page-sub">${txs.length} movimenti · ${fmtEUR(totale)} di spesa</p></div>
-      <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
+      <div class="hstack gap-8 wrap">
+        ${S.transactions.some(t => !t.category_id) && S.merchants.length
+          ? '<button class="btn btn-outline btn-sm" data-action="apply-rules">✨ Applica i negozi imparati</button>' : ''}
+        <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
+      </div>
     </div>
     <div class="card">
       <div class="filters">
@@ -850,7 +894,12 @@ async function confirmImport() {
     closeModal();
     alert(`✅ Importazione completata\n\nMovimenti caricati: ${inserted.length}` +
       (inserted.length < scelti.length ? `\nGià presenti, saltati: ${scelti.length - inserted.length}` : ''));
-    await reload();
+    await loadData();
+    // I negozi imparati durante questo import valgono anche per le righe entrate prima che li
+    // imparassimo, dentro lo stesso giro.
+    const auto = await applyLearnedMerchants();
+    if (auto) showToast(`✨ Categorizzati ${auto} movimenti con i negozi imparati`);
+    render();
   } catch (e) {
     $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
       <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
@@ -920,6 +969,12 @@ document.addEventListener('click', async e => {
   else if (action === 'imp-confirm') confirmImport();
   else if (action === 'imp-all' || action === 'imp-none') {
     document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => { cb.checked = action === 'imp-all'; });
+  } else if (action === 'apply-rules') {
+    try {
+      const n = await applyLearnedMerchants();
+      showToast(n ? `✨ Categorizzati ${n} movimenti` : 'Nessun movimento da categorizzare con i negozi imparati');
+      render();
+    } catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'new-cat') openCatModal();
   else if (action === 'edit-cat') openCatModal(btn.dataset.id);
   else if (action === 'del-cat') {
@@ -955,7 +1010,14 @@ document.addEventListener('change', async e => {
       if (tx) tx.category_id = categoryId;
       // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
       // impara, senza una schermata di regole da compilare.
-      if (tx && categoryId) await learnMerchant(tx.description, categoryId);
+      if (tx && categoryId) {
+        await learnMerchant(tx.description, categoryId);
+        // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
+        // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
+        // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
+        const altri = await applyLearnedMerchants(normalizeMerchant(tx.description));
+        if (altri) showToast(`✨ Categorizzati altri ${altri} movimenti dello stesso negozio`);
+      }
       render();
     } catch (err) { alert('Errore: ' + err.message); }
   }
