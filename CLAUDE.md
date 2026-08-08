@@ -584,11 +584,18 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   `enable-banking-transactions`: solo le **uscite**, con un **filtro per carta** (la funzione
   restituisce `card.identification` quando la banca la espone) per isolare le spese di Ada su un
   conto con più carte. La carta scelta resta in `localStorage` (`ada_card_filter`).
-- Non c'è una schermata di regole: dare una categoria a un movimento **impara la descrizione**
-  in `ada_merchant_map`. La regola vale in tre momenti — sulle righe proposte in anteprima, sugli
-  altri movimenti dello stesso negozio già in archivio (`applyLearnedMerchants`, subito dopo
+- Non c'è una schermata dove si scrivono regole: dare una categoria a un movimento **impara la
+  descrizione** in `ada_merchant_map`. La regola vale in tre momenti — sulle righe proposte in
+  anteprima, sugli altri movimenti già in archivio (`applyLearnedMerchants`, subito dopo
   l'assegnazione manuale e dopo ogni import) e col pulsante *✨ Applica i negozi imparati*.
   **Tocca solo i movimenti senza categoria**: quello che è già classificato non si sovrascrive.
+- Il confronto è **«la descrizione contiene la chiave»**, non un'uguaglianza: la banca infila
+  nella causale il riferimento dell'operazione e la data (`AMAZON.IT *MK7HG2LO3`), quindi due
+  acquisti dallo stesso negozio non hanno mai la stessa descrizione. La regola **nasce lunga**
+  (tutta la descrizione, default prudente) e si **accorcia a mano** al solo nome del negozio da
+  Categorie → Negozi imparati, dove il campo mostra in tempo reale quanti movimenti aggancerebbe.
+  Fra più regole che agganciano **vince la più lunga**, cioè la più specifica: senza quella
+  precedenza una regola corta imparata prima si prenderebbe i movimenti di una più specifica.
 - **Nessuna categorizzazione da MCC**: `enable-banking-transactions` non restituisce il
   `merchant_category_code` (lo estrae solo `enable-banking-sync`, per Spese Famiglia). Qui
   l'automatismo è tutto nei negozi imparati.
