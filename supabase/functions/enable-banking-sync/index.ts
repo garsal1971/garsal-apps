@@ -327,10 +327,35 @@ Deno.serve(async (req) => {
         .range(from, to)
     );
 
+    // 0) Transazioni GIÀ importate da questo stesso conto in un sync precedente: si riconoscono
+    // dall'external_id, che è la chiave con cui la banca identifica la riga (ed è anche l'indice
+    // unico (bank_connection_id, external_id) su cui l'upsert fa ON CONFLICT DO NOTHING).
+    // Senza questo controllo l'anteprima le contava tutte come "nuove" — la scrittura le
+    // scartava comunque, ma il numero mostrato all'utente era quello di tutto lo storico
+    // riletto dalla banca, non delle transazioni davvero nuove. Peggio: una transazione già
+    // importata poteva finire "da collegare" su una riga CSV, e l'UPDATE falliva in silenzio
+    // contro l'indice unico.
+    const alreadyImported = await fetchAllRows((from, to) =>
+      supabase
+        .from('ca_transactions')
+        .select('external_id')
+        .eq('user_id', userId)
+        .eq('bank_connection_id', bankConnectionId)
+        .not('external_id', 'is', null)
+        .range(from, to)
+    );
+    const seenExternalIds = new Set(alreadyImported.map((r) => r.external_id as string));
+
     const candidatePool = [...unlinked, ...pendingSameConnection];
     const toInsert: typeof rows = [];
     const toMerge: { existingId: string; row: (typeof rows)[number] }[] = [];
+    let skippedCount = 0;
     for (const row of effectiveRows) {
+      // Già in archivio per questo conto — oppure ripetuta due volte nella stessa risposta,
+      // che capita quando due pagine della paginazione si sovrappongono.
+      if (row.externalId && seenExternalIds.has(row.externalId)) { skippedCount++; continue; }
+      if (row.externalId) seenExternalIds.add(row.externalId);
+
       const desc = (row.matchDescription || '').trim().toLowerCase();
       const sameAmount = (c: (typeof candidatePool)[number]) => Math.abs(Number(c.amount) - row.amount) < AMOUNT_EPSILON;
 
@@ -377,6 +402,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         preview: true,
         items: previewItems,
+        skipped: skippedCount,
         totalFetched: rawTransactions.length,
         pages: pageCount,
         oldestDate,
@@ -497,6 +523,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       imported: inserted.length,
       merged: mergedCount,
+      skipped: skippedCount,
       totalFetched: rawTransactions.length,
       pages: pageCount,
       oldestDate,
