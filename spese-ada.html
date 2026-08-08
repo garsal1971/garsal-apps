@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Ada v1.0.2</title>
+  <title>Spese Ada v1.0.3</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -176,7 +176,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Spese Ada · <span class="mono">v1.0.2</span>
+    Spese Ada · <span class="mono">v1.0.3</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -205,8 +205,8 @@
    (che legge e basta: filtro, doppioni e categorie stanno qui).
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.2';
-var BUILD_TIME  = '2026-08-08T15:10:00Z';
+var APP_VERSION = 'v1.0.3';
+var BUILD_TIME  = '2026-08-08T15:40:00Z';
 console.log('%c SPESE ADA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -324,9 +324,29 @@ function getAnni() {
 const spesaDi = t => (+t.amount < 0 ? -(+t.amount) : 0);
 
 /* ── Merchant appresi ───────────────────────────────────────── */
-// Stessa normalizzazione di Spese Famiglia: maiuscolo, spazi compressi e via il codice
-// numerico finale che le banche appiccicano allo stesso negozio ("ESSELUNGA *12345").
-const normalizeMerchant = desc => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ').replace(/[*#]?\s*\d{3,}$/, '').trim();
+// UniCredit scrive la causale di un pagamento POS così:
+//   PAGAMENTO POS PAGAMENTO APPLE PAY NFC del 15/07/2026 CARTA 31342819 DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA
+// Tutto quello che sta PRIMA dell'importo è preambolo che cambia a ogni movimento — modalità di
+// pagamento, data, numero di carta, importo — e non dice niente su dove si è speso. L'esercente
+// (con la città) è quello che viene DOPO l'importo, ed è sempre uguale per lo stesso negozio:
+// due acquisti al San Donato in date e con carte diverse danno la stessa chiave.
+// Se il pezzo non c'è (addebiti, bonifici, altre banche) si tiene la descrizione intera: la
+// regola resta lunga e la si accorcia a mano, come prima. Non si inventa niente.
+const POS_MERCHANT_RE = /\bDI\s+[A-Z]{3}\s+[\d.,]+\s+(.+)$/i;
+function merchantText(desc) {
+  const s = (desc || '').replace(/\s+/g, ' ').trim();
+  const m = s.match(POS_MERCHANT_RE);
+  return (m && m[1].trim()) || s;
+}
+// La stessa causale porta anche il numero della carta usata: è il ripiego quando la banca non
+// espone la carta nei campi strutturati dell'API, e senza di esso il filtro per carta —
+// l'unico modo per isolare le spese di Ada su un conto condiviso — resterebbe vuoto.
+const CARD_IN_DESC_RE = /\bCARTA\s+(\d{4,})\b/i;
+const cardFromDescription = desc => ((desc || '').match(CARD_IN_DESC_RE) || [])[1] || null;
+
+// Poi la solita normalizzazione: maiuscolo, spazi compressi e via il codice numerico finale che
+// alcune banche appiccicano allo stesso negozio ("ESSELUNGA *12345").
+const normalizeMerchant = desc => merchantText(desc).toUpperCase().replace(/[*#]?\s*\d{3,}$/, '').trim();
 // Il confronto è per CONTENUTO, non per uguaglianza: la banca infila nella causale il
 // riferimento dell'operazione e la data ("AMAZON.IT *MK7HG2LO3"), quindi due acquisti dallo
 // stesso negozio non hanno mai la stessa descrizione e un confronto esatto non avrebbe
@@ -584,7 +604,7 @@ function renderTransazioni() {
             <thead><tr><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th><th></th></tr></thead>
             <tbody>${txs.map(t => `<tr>
               <td class="mono text-sm nowrap">${fmtDate(t.date)}</td>
-              <td>${esc(t.description) || '—'}${t.card_identification ? `<span class="text-muted text-sm"> · 💳 ${esc(t.card_identification)}</span>` : ''}</td>
+              <td title="${esc(t.description)}">${esc(merchantText(t.description)) || '—'}${t.card_identification ? `<span class="text-muted text-sm"> · 💳 ${esc(t.card_identification)}</span>` : ''}</td>
               <td class="text-right mono fw-600 nowrap ${+t.amount < 0 ? 'neg' : 'pos'}">${fmtEUR(t.amount)}</td>
               <td class="nowrap">
                 <select class="form-input form-select" data-set-cat="${t.id}" style="padding:5px 8px;font-size:.8rem;width:auto;min-width:150px">
@@ -854,7 +874,7 @@ async function readMovements() {
     // sono distinti) e il doppione entrerebbe a ogni rilettura: per quelle righe si ripiega su
     // data + importo + descrizione, che qui identificano il movimento abbastanza bene.
     const giaSenzaId = new Set(S.transactions.map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
-    const carte = [...new Set(movimenti.map(t => t.card?.identification).filter(Boolean))].sort();
+    const carte = [...new Set(movimenti.map(t => t.card?.identification || cardFromDescription(t.description)).filter(Boolean))].sort();
     const cardFilter = localStorage.getItem(CARD_FILTER_KEY) || '';
 
     const items = movimenti.map(t => {
@@ -867,7 +887,7 @@ async function readMovements() {
         importo: t.amount,
         currency: t.currency || null,
         externalId: t.externalId || null,
-        card: t.card?.identification || null,
+        card: t.card?.identification || cardFromDescription(t.description) || null,
         type: t.bankTransactionCode || null,
         categoryId: merchantCategory(descrizione),
         gia: t.externalId
@@ -919,7 +939,7 @@ function renderImportList(cardFilter) {
           <tr class="${it.gia ? 'is-dup' : ''}">
             <td><input type="checkbox" data-imp-idx="${i}" ${it.gia ? '' : 'checked'} /></td>
             <td class="mono" style="white-space:nowrap">${fmtDate(it.data)}</td>
-            <td>${esc(it.descrizione)}
+            <td title="${esc(it.descrizione)}">${esc(merchantText(it.descrizione))}
               ${it.card ? `<span class="text-muted"> · 💳 ${esc(it.card)}</span>` : ''}
               ${it.gia ? '<span class="text-muted"> · già importato</span>' : ''}</td>
             <td class="mono text-right" style="white-space:nowrap;${it.importo < 0 ? 'color:var(--c-danger)' : ''}">${fmtEUR(it.importo)}</td>
