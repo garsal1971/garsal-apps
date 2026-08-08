@@ -139,8 +139,8 @@ Configurazione → 🏦 Banche e Conti):
    `uses '{}'`, e l'utente dà a ciascuno un nome e uno o più usi.
 
 `cm_bank_connections.uses` ammette `'cost_analysis'` (Spese Famiglia), `'contribuzione'`,
-`'fondo'` e `'conto_risparmio'`: **un conto può servire a più moduli** — il conto delle spese
-comuni è insieme `cost_analysis` e `contribuzione` — e `uses` vuoto significa «scoperto
+`'spese_ada'`, `'fondo'` e `'conto_risparmio'`: **un conto può servire a più moduli** — il conto
+delle spese comuni è insieme `cost_analysis` e `contribuzione` — e `uses` vuoto significa «scoperto
 ma non ancora battezzato» — il conto esiste e si vede, ma nessun modulo lo elenca. Ha sostituito
 la vecchia colonna `module`, che ne ammetteva uno solo e andava scelta *prima* del consenso.
 `display_name` è **solo** il nome dato dall'utente: nessuna Edge Function lo riempie più
@@ -207,6 +207,17 @@ sull'indice FOI, altrimenti la colonna resta indietro rispetto a quello che si v
 | Table | Purpose |
 |---|---|
 | `ps_weight_tracking` | Weight measurement entries |
+
+### Spese Ada (`ada_`)
+| Table | Purpose |
+|---|---|
+| `ada_categories` | Voci di spesa (nome unico per utente, `icon`, `color`) |
+| `ada_transactions` | Movimenti importati dal conto: `amount` **con segno**, **una sola** `category_id`, `card_identification`, `external_id` (unico per `bank_connection_id`) |
+| `ada_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria |
+
+Sono volutamente **separate dalle `ca_*`**: le spese di Ada non devono entrare nei totali di
+Spese Famiglia, e una separazione per campo sarebbe retta solo finché ogni query si ricorda di
+filtrarla.
 
 ### Spuntiamola (`sp_`)
 | Table | Purpose |
@@ -353,7 +364,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso (`connect` riceve solo `institutionId` e legge banca e paese da `cm_institutions`), redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il callback crea i conti anonimi e riporta sempre su `finanza.html`, con il `session_id` del consenso perché la pagina apra subito il battesimo |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
-| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html` e `conto-spese-teresa.html`) | **Legge e basta**: restituisce movimenti (importo con segno) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — il Conto Risparmio e la Contribuzione hanno già i propri |
+| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html` e `spese-ada.html`) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Header PSU obbligatori per alcune banche
@@ -558,6 +569,23 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
 - Chart.js weight graph centred on today (30-day window, scrollable)
 - Google Fit integration via OAuth token
 - Minimal inline Supabase client (no CDN); milestone and objective tracking
+
+### `spese-ada.html` — Spese Ada
+- Import dal conto, categorie e dashboard per le spese di Ada. Si apre dal collegamento
+  *🧾 Spese Ada* nella sidebar di `finanza.html`.
+- **Tabelle proprie `ada_*`, non le `ca_*`** (`20260808130000_ada_spese_tables.sql`):
+  `ada_categories`, `ada_transactions` (una sola categoria per movimento), `ada_merchant_map`.
+  La separazione è per tabella e non per campo perché le `ca_*` sono lette da quattro punti
+  diversi (`cost-analysis.html`, la vista in `finanza.html` e in `situazione-teresa.html`,
+  `revolut-auto-categorize`): un campo da filtrare avrebbe mescolato le spese di Ada nei totali
+  di famiglia il giorno che una query se ne fosse dimenticata.
+- Il conto è quello spuntato come `'spese_ada'` in `cm_bank_connections.uses` — lo stesso conto
+  UniCredit può servire anche ad altri moduli. I movimenti arrivano da
+  `enable-banking-transactions`: solo le **uscite**, con un **filtro per carta** (la funzione
+  restituisce `card.identification` quando la banca la espone) per isolare le spese di Ada su un
+  conto con più carte. La carta scelta resta in `localStorage` (`ada_card_filter`).
+- Non c'è una schermata di regole: dare una categoria a un movimento **impara la descrizione**
+  in `ada_merchant_map`, e al giro dopo quel negozio si categorizza da solo.
 
 ### `conto-spese-teresa.html` — Contribuzione
 - Chi ha versato quanto sul conto delle spese comuni, e quanto dovrebbe aver versato: quote 2/5–3/5
