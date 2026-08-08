@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.1</title>
+  <title>GarsalFinanza v1.3.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -509,8 +509,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.1';
-const APP_BUILD   = '2026-08-08T14:00:00Z';
+const APP_VERSION = 'v1.3.2';
+const APP_BUILD   = '2026-08-08T17:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2456,13 +2456,14 @@ function renderFundDetail() {
 // 'cost_analysis' (le transazioni diventano spese) e 'contribuzione' (i bonifici in entrata
 // diventano versamenti di Teresa o Salvatore). L'elenco sta qui una volta sola: è anche quello
 // che il battesimo salva in cm_bank_connections.uses, dove un CHECK ammette solo questi valori.
-const BANK_USES = ['cost_analysis', 'contribuzione', 'spese_ada', 'fondo', 'conto_risparmio'];
+const BANK_USES = ['cost_analysis', 'contribuzione', 'spese_ada', 'fondo', 'conto_risparmio', 'casa_rosa'];
 const BANK_USE_LABEL = {
   cost_analysis:   '🧾 Spese Famiglia',
   contribuzione:   '💰 Contribuzione',
   spese_ada:       '👵 Spese Ada',
   fondo:           '🤝 Fondi',
   conto_risparmio: '🐖 Conto Risparmio',
+  casa_rosa:       '🏠 Casa Rosa',
 };
 const BANK_USE_HINT = {
   cost_analysis:   'le transazioni diventano spese da categorizzare',
@@ -2470,6 +2471,7 @@ const BANK_USE_HINT = {
   spese_ada:       'le uscite si importano in Spese Ada, contabilità separata',
   fondo:           'i bonifici diventano versamenti e prelievi del fondo',
   conto_risparmio: 'i movimenti si importano dal Conto Risparmio di Teresa',
+  casa_rosa:       'i movimenti si importano nella Cassa Casa Rosa',
 };
 const INSTITUTION_KIND_LABEL = { banca: '🏦 Banca', broker: '📈 Broker' };
 // Un conto si chiama col nome che gli ha dato l'utente. Se non gliel'ha ancora dato si
