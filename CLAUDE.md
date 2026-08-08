@@ -211,7 +211,8 @@ sull'indice FOI, altrimenti la colonna resta indietro rispetto a quello che si v
 ### Spese Ada (`ada_`)
 | Table | Purpose |
 |---|---|
-| `ada_categories` | Voci di spesa (nome unico per utente, `icon`, `color`) |
+| `ada_super_categories` | Super-categorie: **l'unico livello che porta il `color`** |
+| `ada_categories` | Voci di spesa (nome unico per utente, `icon`, `super_id`); `color` non è più usato |
 | `ada_transactions` | Movimenti importati dal conto: `amount` **con segno**, **una sola** `category_id`, `card_identification`, `external_id` (unico per `bank_connection_id`) |
 | `ada_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria |
 
@@ -579,6 +580,13 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   diversi (`cost-analysis.html`, la vista in `finanza.html` e in `situazione-teresa.html`,
   `revolut-auto-categorize`): un campo da filtrare avrebbe mescolato le spese di Ada nei totali
   di famiglia il giorno che una query se ne fosse dimenticata.
+- **Due livelli di categoria** (`20260808140000_ada_super_categories.sql`): super-categoria → voce.
+  Il **colore vive solo sulla super-categoria** e la voce lo eredita; nella ciambella per voce le
+  voci della stessa super si distinguono per sfumatura (`shade()`), così le due ciambelle
+  affiancate si leggono come una cosa sola. Tabella separata e non un `parent_id`: una voce senza
+  super deve poter esistere (sono le sei di partenza) e con l'autoreferenza sarebbe
+  indistinguibile da una super-categoria. `super_id` è `ON DELETE SET NULL` — cancellare una
+  super non porta via le voci, e quindi nessun movimento perde la categoria.
 - Il conto è quello spuntato come `'spese_ada'` in `cm_bank_connections.uses` — lo stesso conto
   UniCredit può servire anche ad altri moduli. I movimenti arrivano da
   `enable-banking-transactions`: solo le **uscite**, con un **filtro per carta** (la funzione
