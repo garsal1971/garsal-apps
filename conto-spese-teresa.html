@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Conto Spese Teresa</title>
+  <title>Conto Spese Teresa v1.9.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -122,6 +122,12 @@
     .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     #modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
     #modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 540px; max-height: 90dvh; overflow-y: auto; }
+    #modal-card.modal-wide { max-width: 820px; }
+    .import-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .import-table th { text-align: left; color: var(--c-muted); font-weight: 600; padding: 4px 6px; white-space: nowrap; }
+    .import-table td { padding: 5px 6px; border-top: 1px solid var(--c-border); vertical-align: top; }
+    .import-table tr.is-dup td { opacity: .55; }
+    .import-note { font-size: .78rem; color: var(--c-muted); }
     #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--c-border); }
     #modal-title { font-size: 1rem; font-weight: 700; }
     #modal-close { background: none; border: none; cursor: pointer; color: var(--c-muted); font-size: 1.2rem; padding: 2px 6px; border-radius: var(--radius-sm); transition: background .12s; }
@@ -181,7 +187,7 @@
       <div class="nav-label">Movimenti</div>
       <button class="nav-item" data-action="nav" data-view="bonifici">💳 Bonifici</button>
       <button class="nav-item" data-action="nav" data-view="spese">🧾 Altre Spese</button>
-      <button class="nav-item" data-action="nav" data-view="revolut">📥 Import Revolut</button>
+      <button class="nav-item" data-action="nav" data-view="import">📥 Importa movimenti</button>
       <div class="nav-label">Report</div>
       <button class="nav-item" data-action="nav" data-view="report">📈 Report Annuali</button>
       <div class="nav-label">Gestione</div>
@@ -192,12 +198,12 @@
       <div id="view-bonifici" class="view"></div>
       <div id="view-spese" class="view"></div>
       <div id="view-report" class="view"></div>
-      <div id="view-revolut" class="view"></div>
+      <div id="view-import" class="view"></div>
       <div id="view-impostazioni" class="view"></div>
     </main>
   </div>
   <footer class="version-bar">
-    Conto Spese Teresa · <span class="mono">v1.8</span>
+    Conto Spese Teresa · <span class="mono">v1.9.0</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -215,6 +221,12 @@
 
 <script>
 'use strict';
+
+var APP_VERSION = 'v1.9.0';
+var BUILD_TIME  = '2026-08-08T12:00:00Z';
+console.log('%c CONTO SPESE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
 
 const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -247,6 +259,14 @@ async function sbUpd(table, filter, body) {
 async function sbDel(table, filter) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbH() });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+}
+async function sbFn(name, payload) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST', headers: sbH(), body: JSON.stringify(payload),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data?.error) throw new Error(data?.error?.message || r.statusText);
+  return data;
 }
 
 const loadSession = () => { try { return JSON.parse(localStorage.getItem('garsal_session')); } catch { return null; } };
@@ -627,36 +647,48 @@ function renderReport() {
   }
 }
 
-function renderRevolut() {
+function renderImport() {
   const anni = getAnni();
   if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0] || new Date().getFullYear();
   const annoSel = S.selectedYear;
-  const imported = S.transactions.filter(t => t.causale === 'Importato da Revolut' && t.anno === annoSel);
+  const imported = S.transactions.filter(t => t.provenienza === 'IMPORTATO' && t.anno === annoSel);
 
-  setHtml('view-revolut', `
+  setHtml('view-import', `
     <div class="view-header">
-      <div><h2 class="page-title">Importa da Revolut</h2><p class="page-sub">Carica un file CSV esportato da Revolut</p></div>
-      <select class="year-select" data-action="year-filter" data-target="revolut">
+      <div><h2 class="page-title">Importa movimenti</h2><p class="page-sub">I bonifici in entrata arrivano dallo stesso conto che alimenta Spese Famiglia</p></div>
+      <select class="year-select" data-action="year-filter" data-target="import">
         ${anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('')}
       </select>
     </div>
     <div class="card">
       <div class="card-header-row">
-        <div class="card-title">Carica CSV</div>
-        <label class="btn btn-primary btn-sm" style="cursor:pointer">
+        <div class="card-title">Dal conto collegato</div>
+        <button class="btn btn-primary btn-sm" data-action="bank-import">🏦 Leggi i bonifici dal conto</button>
+      </div>
+      <p class="text-muted text-sm">Legge i movimenti del conto destinato a Spese Famiglia e propone
+      i <strong>bonifici in entrata</strong>, attribuiti a Teresa o a Salvatore in base alla controparte.
+      Niente viene salvato finché non confermi. Gli indizi che riconoscono le persone si cambiano in
+      <strong>Impostazioni</strong>.</p>
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Da file CSV Revolut (storico)</div>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer">
           📥 Scegli file CSV
           <input type="file" id="revolut-csv-input" accept=".csv" style="display:none" />
         </label>
       </div>
-      <p class="text-muted text-sm">Il file deve contenere le colonne: Tipo, Data, Importo, Descrizione. Verranno importati solo i bonifici entranti (righe con "Ricarica" nel campo Tipo).</p>
+      <p class="text-muted text-sm">Serve per lo storico più vecchio di quanto la banca espone via PSD2.
+      Il file deve contenere le colonne: Tipo, Data, Importo, Descrizione. Vengono importati solo i
+      bonifici entranti (righe con "Ricarica" nel campo Tipo).</p>
     </div>
     <div class="card">
       <div class="card-header-row">
-        <div class="card-title">Importati da Revolut (${annoSel})</div>
-        ${imported.length > 0 ? `<button class="btn btn-danger btn-sm" data-action="del-revolut-all">🗑️ Cancella tutti</button>` : ''}
+        <div class="card-title">Importati (${annoSel})</div>
+        ${imported.length > 0 ? `<button class="btn btn-danger btn-sm" data-action="del-imported-all">🗑️ Cancella tutti</button>` : ''}
       </div>
       ${imported.length === 0
-        ? `<div class="empty-state"><div class="empty-icon">📥</div><p>Nessuna transazione importata da Revolut per ${annoSel}.</p></div>`
+        ? `<div class="empty-state"><div class="empty-icon">📥</div><p>Nessuna transazione importata per ${annoSel}.</p></div>`
         : `<div class="table-wrap"><table class="table">
           <thead><tr><th>Persona</th><th>Data</th><th>Importo</th><th>Descrizione</th><th>Provenienza</th><th></th></tr></thead>
           <tbody>${imported.map(t => `<tr>
@@ -679,6 +711,7 @@ function renderRevolut() {
 function renderImpostazioni() {
   const u = S.session.user;
   const anni = getAnni();
+  const hints = personHints();
   setHtml('view-impostazioni', `
     <div class="view-header"><h2 class="page-title">Impostazioni</h2></div>
     <div class="grid-2">
@@ -693,21 +726,56 @@ function renderImpostazioni() {
         <div class="summary-row"><span>Transazioni</span><strong>${S.transactions.length}</strong></div>
         <div class="summary-row"><span>Anni</span><strong>${anni.join(', ')}</strong></div>
         <div class="summary-row text-sm text-muted">${SUPABASE_URL}</div>
+        <div class="summary-row text-sm text-muted">${APP_VERSION} · build ${BUILD_TIME}</div>
+      </div>
+    </div>
+    <div class="card mt-12">
+      <div class="card-title">Chi ha versato — riconoscimento dei bonifici</div>
+      <p class="text-muted text-sm">Un indizio per riga: l'<strong>IBAN</strong> della persona (il più
+      affidabile) oppure un pezzo del nome come compare sul bonifico. Un bonifico che non corrisponde a
+      nessuno, o che corrisponde a tutti e due, resta «da attribuire» e lo si sceglie a mano
+      nell'anteprima. Vale su questo browser.</p>
+      <div class="form-row-2 mt-12">
+        <div class="form-group">
+          <label class="form-label">Teresa</label>
+          <textarea id="hints-TERESA" class="form-input" rows="4" style="font-family:var(--font-mono);font-size:.8rem">${(hints.TERESA || []).join('\n')}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salvatore</label>
+          <textarea id="hints-SALVATORE" class="form-input" rows="4" style="font-family:var(--font-mono);font-size:.8rem">${(hints.SALVATORE || []).join('\n')}</textarea>
+        </div>
+      </div>
+      <div class="hstack gap-8">
+        <button class="btn btn-primary btn-sm" data-action="save-hints">Salva indizi</button>
+        <span id="hints-saved" class="text-sm pos"></span>
       </div>
     </div>
   `);
 }
 
+function savePersonHintsFromForm() {
+  const hints = {};
+  for (const p of PERSONE) {
+    hints[p] = ($(`hints-${p}`)?.value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  }
+  savePersonHints(hints);
+  const el = $('hints-saved');
+  if (el) { el.textContent = '✅ Salvato'; setTimeout(() => { if ($('hints-saved')) $('hints-saved').textContent = ''; }, 2500); }
+}
+
 // ══════════ MODAL ══════════
 
-function openModal(title, bodyHtml) {
+function openModal(title, bodyHtml, wide = false) {
   $('modal-title').textContent = title;
   $('modal-body').innerHTML = bodyHtml;
+  $('modal-card').classList.toggle('modal-wide', wide);
   $('modal-overlay').classList.remove('hidden');
 }
 function closeModal() {
   $('modal-overlay').classList.add('hidden');
+  $('modal-card').classList.remove('modal-wide');
   $('modal-body').innerHTML = '';
+  _bankImport = null;
 }
 
 function openNewTxModal(editId = null, preTipo = null) {
@@ -782,6 +850,259 @@ function openNewTxModal(editId = null, preTipo = null) {
       alert('Errore: ' + err.message);
     }
   });
+}
+
+// ══════════ IMPORT DAL CONTO BANCARIO ══════════
+// La contribuzione si alimenta dallo STESSO conto che alimenta Spese Famiglia: i conti sono
+// quelli di cm_bank_connections con 'cost_analysis' fra gli uses, collegati e battezzati in
+// Finanza → Configurazione → 🏦 Banche e Conti.
+//
+// enable-banking-transactions legge e basta: non scrive niente nel database, quindi il filtro
+// (solo bonifici entranti), l'attribuzione a Teresa o Salvatore e il controllo dei doppioni
+// restano qui, dove si sa com'è fatta questa contabilità.
+
+const PERSONE = ['TERESA', 'SALVATORE'];
+
+const normText = s => (s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+const normIban = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const isIbanLike = s => /^[A-Z]{2}[0-9]{2}[A-Z0-9]{8,}$/.test(normIban(s));
+
+// Indizi che riconoscono chi ha versato: un IBAN (chiave sicura) o un pezzo di nome. I valori
+// di partenza sono quelli che usava l'import da CSV; si cambiano da Impostazioni e restano nel
+// browser, perché sono una preferenza di lettura e non un dato della contabilità.
+const PERSON_HINTS_KEY = 'cst_person_hints';
+const DEFAULT_PERSON_HINTS = { TERESA: ['TERESA', 'GARSIA'], SALVATORE: ['SALVATORE'] };
+function personHints() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PERSON_HINTS_KEY));
+    if (saved && PERSONE.every(p => Array.isArray(saved[p]))) return saved;
+  } catch {}
+  return DEFAULT_PERSON_HINTS;
+}
+function savePersonHints(hints) {
+  localStorage.setItem(PERSON_HINTS_KEY, JSON.stringify(hints));
+}
+
+// Chi ha versato si decide in tre gradini, dal segnale più affidabile al più fragile: IBAN
+// della controparte, nome della controparte, e solo per ultimo il testo della causale — che è
+// quello su cui sbagliava l'import da CSV, dove un "bonifico per Teresa" scritto da Salvatore
+// diventava un versamento di Teresa. Se nessuno risponde, o rispondono in due, la riga resta
+// "da attribuire" e la si sceglie a mano nell'anteprima invece di indovinare.
+function guessPersona(tx) {
+  const hints = personHints();
+  const hitsIban = p => (hints[p] || []).some(h => isIbanLike(h) && normIban(h) === normIban(tx.counterpartyIban));
+  const hitsText = (p, hay) => (hints[p] || []).some(h => (h || '').trim() && !isIbanLike(h) && hay.includes(normText(h)));
+
+  if (tx.counterpartyIban) {
+    const perIban = PERSONE.filter(hitsIban);
+    if (perIban.length === 1) return { persona: perIban[0], via: 'IBAN' };
+  }
+  const nome = normText(tx.counterpartyName);
+  if (nome) {
+    const perNome = PERSONE.filter(p => hitsText(p, nome));
+    if (perNome.length === 1) return { persona: perNome[0], via: 'nome' };
+  }
+  const testo = normText(`${tx.counterpartyName || ''} ${tx.description || ''}`);
+  const perTesto = PERSONE.filter(p => hitsText(p, testo));
+  if (perTesto.length === 1) return { persona: perTesto[0], via: 'causale' };
+  return { persona: null, via: null };
+}
+
+// Solo bonifici: i pagamenti carta, i prelievi e gli addebiti che passano sullo stesso conto
+// sono spese, non contribuzioni. Enable Banking espone il codice ISO 20022 (domain/family/
+// sub_family): i bonifici stanno in ICDT (inviati) e RCDT (ricevuti), la carta in CCRD/POSD, il
+// prelievo in CWDL. I codici veri di questo conto non sono verificati su una risposta reale:
+// quando il codice manca si ripiega sul testo e sulla presenza di un IBAN di controparte, e
+// quello che resta fuori è comunque contato e mostrabile con una spunta, così se il filtro
+// sbaglia si vede invece di perdere movimenti in silenzio.
+const CODICE_BONIFICO = /\b(ICDT|RCDT)\b/;
+const CODICE_NON_BONIFICO = /\b(CCRD|CWDL|POSD)\b/;
+const TESTO_NON_BONIFICO = /(PRELIEVO|BANCOMAT|\bATM\b|\bPOS\b|CARTA|COMMISSION|CANONE|IMPOSTA|BOLLO)/i;
+function isBonifico(tx) {
+  const code = (tx.bankTransactionCode || '').toUpperCase();
+  if (CODICE_NON_BONIFICO.test(code)) return false;
+  if (CODICE_BONIFICO.test(code)) return true;
+  if (TESTO_NON_BONIFICO.test(`${tx.description || ''} ${tx.counterpartyName || ''}`)) return false;
+  return !!tx.counterpartyIban;
+}
+
+function bankTxDescription(tx) {
+  const parts = [tx.description, tx.counterpartyName].map(s => (s || '').trim()).filter(Boolean);
+  // Causale e nome della controparte spesso si ripetono: scriverlo due volte non aiuta.
+  const uniq = parts.filter((p, i) => !parts.slice(0, i).some(q => q.toLowerCase().includes(p.toLowerCase())));
+  return uniq.join(' · ') || tx.bankTransactionCode || 'Bonifico';
+}
+
+let _bankImport = null;
+
+async function openBankImport() {
+  openModal('Importa dal conto', '<p class="import-note">Cerco i conti collegati…</p>', true);
+  try {
+    const conns = await sbQ('cm_bank_connections', 'select=*&order=created_at.desc');
+    // Lo stesso conto che alimenta Spese Famiglia, non un conto qualsiasi fra quelli collegati.
+    const usable = (conns || []).filter(c => c.account_id && (c.uses || []).includes('cost_analysis'));
+    if (!usable.length) {
+      $('modal-body').innerHTML = `
+        <p class="text-sm">Nessun conto destinato a Spese Famiglia.</p>
+        <p class="import-note mt-8">I conti si collegano da <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>,
+        dove vanno anche spuntati come «🧾 Spese Famiglia»; devono inoltre essere in whitelist nel
+        Control Panel di Enable Banking.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+      return;
+    }
+    // Si riparte dal giorno dopo l'ultimo movimento già presente: rileggere ogni volta tutto lo
+    // storico serve solo a far ricontrollare cose già viste.
+    const ultimaData = S.transactions.map(t => t.data).filter(Boolean).sort().pop();
+    const defaultFrom = ultimaData
+      ? new Date(new Date(ultimaData + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10)
+      : new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    $('modal-body').innerHTML = `
+      <p class="import-note">Legge i bonifici in entrata dal conto collegato. Niente viene salvato finché non confermi.</p>
+      <div class="form-row-2 mt-12">
+        <div class="form-group">
+          <label class="form-label">Conto</label>
+          <select id="bank-import-conn" class="form-input form-select">
+            ${usable.map(c => `<option value="${c.id}">${c.display_name || c.iban || c.aspsp_name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dal giorno</label>
+          <input type="date" id="bank-import-from" class="form-input" value="${defaultFrom}" />
+        </div>
+      </div>
+      <label class="hstack gap-8 text-sm"><input type="checkbox" id="bank-import-all" /> Mostra anche le entrate che non sembrano bonifici</label>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button class="btn btn-primary" data-action="bank-import-read">Leggi i movimenti</button>
+      </div>`;
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${e.message}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+async function loadBankMovements() {
+  const bankConnectionId = $('bank-import-conn').value;
+  const dateFrom = $('bank-import-from').value || undefined;
+  const mostraTutto = $('bank-import-all').checked;
+  $('modal-body').innerHTML = '<p class="import-note">Leggo i movimenti dalla banca…</p>';
+  try {
+    const res = await sbFn('enable-banking-transactions', { bankConnectionId, dateFrom });
+    // Solo entrate: un bonifico in uscita da questo conto è una spesa, non una contribuzione.
+    const entrate = (res.transactions || []).filter(t => t.amount > 0 && (t.bookingDate || t.valueDate));
+    const scartati = entrate.filter(t => !isBonifico(t));
+    const candidati = mostraTutto ? entrate : entrate.filter(isBonifico);
+    if (!candidati.length) {
+      $('modal-body').innerHTML = `
+        <p class="text-sm">Nessun bonifico in entrata nel periodo scelto${scartati.length ? ` (${scartati.length} entrate scartate perché non sembrano bonifici)` : ''}.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+      return;
+    }
+
+    // Doppioni: stessa data, stesso importo e stessa descrizione è la stessa riga, e rileggere
+    // un periodo già importato è la normalità. Stessa data e stesso importo con descrizione
+    // diversa è quasi sempre la stessa contribuzione già entrata da CSV con un'altra dicitura:
+    // qui si tratta di soldi che entrano nelle quote, quindi si parte deselezionata e la si
+    // rimette a mano, invece di raddoppiare un versamento in silenzio.
+    const chiave = t => `${t.data}|${Math.abs(+t.importo).toFixed(2)}`;
+    const esatti = new Set(S.transactions.map(t => `${chiave(t)}|${(t.descrizione || '').trim().toLowerCase()}`));
+    const stessoGiornoImporto = new Set(S.transactions.map(chiave));
+
+    const items = candidati.map(t => {
+      const data = (t.bookingDate || t.valueDate).slice(0, 10);
+      const descrizione = bankTxDescription(t);
+      const importo = Math.abs(t.amount);
+      const k = `${data}|${importo.toFixed(2)}`;
+      const duplicato = esatti.has(`${k}|${descrizione.trim().toLowerCase()}`);
+      const g = guessPersona(t);
+      return {
+        data, descrizione, importo,
+        persona: g.persona, via: g.via,
+        bonifico: isBonifico(t),
+        counterpartyName: t.counterpartyName || '',
+        duplicato,
+        simile: !duplicato && stessoGiornoImporto.has(k),
+      };
+    }).sort((a, b) => a.data.localeCompare(b.data));
+
+    _bankImport = { items, account: res.account };
+    const nuovi = items.filter(i => !i.duplicato && !i.simile).length;
+    const daAttribuire = items.filter(i => !i.persona).length;
+    $('modal-body').innerHTML = `
+      <p class="import-note">
+        ${items.length} movimenti da <strong>${res.account?.aspspName || 'banca'}</strong> —
+        ${nuovi} nuovi, ${items.length - nuovi} già presenti o sospetti (deselezionati).
+        ${scartati.length && !mostraTutto ? `<br/>${scartati.length} entrate scartate perché non sembrano bonifici.` : ''}
+        ${daAttribuire ? `<br/>⚠️ ${daAttribuire} da attribuire: controlla la persona prima di importare.` : ''}
+        ${res.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo per vederli tutti.' : ''}
+      </p>
+      <div style="max-height:46vh;overflow-y:auto;margin:12px 0">
+        <table class="import-table">
+          <thead><tr><th></th><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Da</th></tr></thead>
+          <tbody>${items.map((it, i) => `
+            <tr class="${it.duplicato || it.simile ? 'is-dup' : ''}">
+              <td><input type="checkbox" data-bank-idx="${i}" ${it.duplicato || it.simile ? '' : 'checked'} /></td>
+              <td class="mono" style="white-space:nowrap">${fmtDate(it.data)}</td>
+              <td>${it.descrizione.replace(/</g, '&lt;')}
+                ${it.duplicato ? '<span class="text-muted"> · già presente</span>' : ''}
+                ${it.simile ? '<span style="color:var(--c-warning)"> · ⚠️ stessa data e importo di un movimento presente</span>' : ''}
+                ${it.bonifico ? '' : '<span style="color:var(--c-warning)"> · ⚠️ non sembra un bonifico</span>'}</td>
+              <td class="mono text-right" style="white-space:nowrap">${fmtEUR(it.importo)}</td>
+              <td>
+                <select class="form-input form-select" data-bank-persona="${i}" style="padding:3px 6px;font-size:.78rem">
+                  ${PERSONE.map(p => `<option value="${p}" ${it.persona === p ? 'selected' : ''}>${p === 'TERESA' ? 'Teresa' : 'Salvatore'}</option>`).join('')}
+                </select>
+                <div class="import-note">${it.persona ? `da ${it.via}` : '⚠️ da attribuire'}</div>
+              </td>
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button class="btn btn-primary" data-action="bank-import-confirm">Importa selezionati</button>
+      </div>`;
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${e.message}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+async function confirmBankImport() {
+  if (!_bankImport) return;
+  const scelti = [];
+  document.querySelectorAll('#modal-body input[data-bank-idx]').forEach(cb => {
+    if (!cb.checked) return;
+    const i = parseInt(cb.dataset.bankIdx, 10);
+    const sel = document.querySelector(`#modal-body [data-bank-persona="${i}"]`);
+    scelti.push({ ..._bankImport.items[i], persona: sel ? sel.value : 'SALVATORE' });
+  });
+  if (!scelti.length) { alert('Nessun movimento selezionato.'); return; }
+  $('modal-body').innerHTML = '<p class="import-note">Importo…</p>';
+  let importati = 0;
+  const errori = [];
+  for (const it of scelti) {
+    try {
+      await sbIns('acct_transactions', {
+        user_id: S.session.user.id,
+        anno: parseInt(it.data.slice(0, 4), 10),
+        data: it.data,
+        persona: it.persona,
+        tipo: 'BONIFICO',
+        importo: it.importo,
+        descrizione: it.descrizione,
+        causale: 'Importato dal conto Spese Famiglia',
+        provenienza: 'IMPORTATO',
+      });
+      importati++;
+    } catch (e) {
+      errori.push(`${fmtDate(it.data)} ${fmtEUR(it.importo)}: ${e.message}`);
+    }
+  }
+  closeModal();
+  _bankImport = null;
+  alert(`✅ Importazione completata\n\nMovimenti caricati: ${importati}` +
+    (errori.length ? `\n\n⚠️ Non caricati: ${errori.length}\n${errori.slice(0, 5).join('\n')}` : ''));
+  await reload();
 }
 
 async function handleRevolutCSV(file) {
@@ -915,7 +1236,7 @@ function render() {
     case 'bonifici': renderBonifici(); break;
     case 'spese': renderSpese(); break;
     case 'report': renderReport(); break;
-    case 'revolut': renderRevolut(); break;
+    case 'import': renderImport(); break;
     case 'impostazioni': renderImpostazioni(); break;
   }
 }
@@ -944,12 +1265,20 @@ document.addEventListener('click', e => {
     if (confirm('Eliminare questo movimento?')) {
       sbDel('acct_transactions', `id=eq.${btn.dataset.id}`).then(reload);
     }
-  } else if (action === 'del-revolut-all') {
-    if (confirm('Eliminare TUTTE le transazioni importate da Revolut per quest\'anno?')) {
-      const ids = S.transactions.filter(t => t.causale === 'Importato da Revolut' && t.anno === S.selectedYear).map(t => t.id);
+  } else if (action === 'del-imported-all') {
+    if (confirm('Eliminare TUTTE le transazioni importate (banca e CSV) per quest\'anno?')) {
+      const ids = S.transactions.filter(t => t.provenienza === 'IMPORTATO' && t.anno === S.selectedYear).map(t => t.id);
       if (ids.length === 0) return;
       Promise.all(ids.map(id => sbDel('acct_transactions', `id=eq.${id}`))).then(reload);
     }
+  } else if (action === 'bank-import') {
+    openBankImport();
+  } else if (action === 'bank-import-read') {
+    loadBankMovements();
+  } else if (action === 'bank-import-confirm') {
+    confirmBankImport();
+  } else if (action === 'save-hints') {
+    savePersonHintsFromForm();
   } else if (action === 'logout') {
     logout();
   }

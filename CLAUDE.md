@@ -352,7 +352,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso (`connect` riceve solo `institutionId` e legge banca e paese da `cm_institutions`), redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il callback crea i conti anonimi e riporta sempre su `finanza.html`, con il `session_id` del consenso perché la pagina apra subito il battesimo |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
-| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`) | **Legge e basta**: restituisce movimenti (importo con segno) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — il Conto Risparmio ha già i suoi |
+| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html` e `conto-spese-teresa.html`) | **Legge e basta**: restituisce movimenti (importo con segno) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — il Conto Risparmio e la Contribuzione hanno già i propri |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Header PSU obbligatori per alcune banche
@@ -557,6 +557,24 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
 - Chart.js weight graph centred on today (30-day window, scrollable)
 - Google Fit integration via OAuth token
 - Minimal inline Supabase client (no CDN); milestone and objective tracking
+
+### `conto-spese-teresa.html` — Contribuzione
+- Chi ha versato quanto sul conto delle spese comuni, e quanto dovrebbe aver versato: quote 2/5–3/5
+  fino al 2023, 1/3–2/3 dal 2024. Dati in `acct_transactions` (`persona` `TERESA`|`SALVATORE`,
+  `tipo` `BONIFICO`|`ALTRO`|`MENSA`, `importo` sempre positivo).
+- Si apre dal collegamento *💰 contribuzione* nella sidebar di `finanza.html`.
+- **Si alimenta dallo stesso conto che alimenta Spese Famiglia** — quello con `'cost_analysis'` in
+  `cm_bank_connections.uses` — via `enable-banking-transactions`, che legge e basta: filtro
+  (solo **entrate** riconosciute come bonifici), attribuzione a Teresa o Salvatore e controllo dei
+  doppioni stanno nella pagina. L'import da CSV Revolut resta come ripiego per lo storico più
+  vecchio di quanto la banca espone.
+- L'attribuzione scende per gradini — IBAN della controparte, poi nome della controparte, poi testo
+  della causale — e quello che non torna resta *da attribuire*: si sceglie a mano nell'anteprima,
+  non si indovina. Gli indizi (IBAN o pezzi di nome) stanno in `localStorage` (`cst_person_hints`),
+  modificabili da Impostazioni: sono una preferenza di lettura, non un dato della contabilità.
+- I doppioni si riconoscono su data + importo: identici anche nella descrizione sono la stessa riga,
+  stessa data e stesso importo con descrizione diversa è quasi sempre la stessa contribuzione già
+  entrata da CSV. Entrambi i casi partono **deselezionati** — qui un doppione raddoppia una quota.
 
 ### `cost-analysis.html` — Analisi Costi
 - **Non compare più tra le bolle della home**: `cm_apps.active = false` (migration
