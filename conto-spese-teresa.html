@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Conto Spese Teresa v1.9.0</title>
+  <title>Conto Spese Teresa v1.9.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -203,7 +203,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Conto Spese Teresa · <span class="mono">v1.9.0</span>
+    Conto Spese Teresa · <span class="mono">v1.9.1</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -222,8 +222,8 @@
 <script>
 'use strict';
 
-var APP_VERSION = 'v1.9.0';
-var BUILD_TIME  = '2026-08-08T12:00:00Z';
+var APP_VERSION = 'v1.9.1';
+var BUILD_TIME  = '2026-08-08T12:30:00Z';
 console.log('%c CONTO SPESE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -655,7 +655,7 @@ function renderImport() {
 
   setHtml('view-import', `
     <div class="view-header">
-      <div><h2 class="page-title">Importa movimenti</h2><p class="page-sub">I bonifici in entrata arrivano dallo stesso conto che alimenta Spese Famiglia</p></div>
+      <div><h2 class="page-title">Importa movimenti</h2><p class="page-sub">I bonifici in entrata arrivano dal conto spuntato come «💰 Contribuzione», lo stesso che alimenta Spese Famiglia</p></div>
       <select class="year-select" data-action="year-filter" data-target="import">
         ${anni.map(a => `<option value="${a}" ${a === annoSel ? 'selected' : ''}>${a}</option>`).join('')}
       </select>
@@ -665,7 +665,8 @@ function renderImport() {
         <div class="card-title">Dal conto collegato</div>
         <button class="btn btn-primary btn-sm" data-action="bank-import">🏦 Leggi i bonifici dal conto</button>
       </div>
-      <p class="text-muted text-sm">Legge i movimenti del conto destinato a Spese Famiglia e propone
+      <p class="text-muted text-sm">Legge i movimenti del conto spuntato come «💰 Contribuzione» in
+      Finanza — lo stesso che alimenta Spese Famiglia — e propone
       i <strong>bonifici in entrata</strong>, attribuiti a Teresa o a Salvatore in base alla controparte.
       Niente viene salvato finché non confermi. Gli indizi che riconoscono le persone si cambiano in
       <strong>Impostazioni</strong>.</p>
@@ -939,14 +940,17 @@ async function openBankImport() {
   openModal('Importa dal conto', '<p class="import-note">Cerco i conti collegati…</p>', true);
   try {
     const conns = await sbQ('cm_bank_connections', 'select=*&order=created_at.desc');
-    // Lo stesso conto che alimenta Spese Famiglia, non un conto qualsiasi fra quelli collegati.
-    const usable = (conns || []).filter(c => c.account_id && (c.uses || []).includes('cost_analysis'));
+    // È lo stesso conto che alimenta Spese Famiglia, ma va spuntato anche come «Contribuzione»:
+    // uses ammette più moduli sullo stesso conto, e dirlo esplicitamente evita di leggere i
+    // bonifici da un conto che serve solo a categorizzare le spese.
+    const usable = (conns || []).filter(c => c.account_id && (c.uses || []).includes('contribuzione'));
     if (!usable.length) {
       $('modal-body').innerHTML = `
-        <p class="text-sm">Nessun conto destinato a Spese Famiglia.</p>
-        <p class="import-note mt-8">I conti si collegano da <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>,
-        dove vanno anche spuntati come «🧾 Spese Famiglia»; devono inoltre essere in whitelist nel
-        Control Panel di Enable Banking.</p>
+        <p class="text-sm">Nessun conto destinato alla Contribuzione.</p>
+        <p class="import-note mt-8">Apri <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>,
+        battezza il conto delle spese comuni e spunta <strong>«💰 Contribuzione»</strong> (è lo stesso
+        conto già spuntato come «🧾 Spese Famiglia»: gli usi si sommano). Il conto deve inoltre essere
+        in whitelist nel Control Panel di Enable Banking.</p>
         <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
       return;
     }
