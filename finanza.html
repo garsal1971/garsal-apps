@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.2</title>
+  <title>GarsalFinanza v1.3.3</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -509,8 +509,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.2';
-const APP_BUILD   = '2026-08-08T17:00:00Z';
+const APP_VERSION = 'v1.3.3';
+const APP_BUILD   = '2026-08-08T19:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -525,6 +525,9 @@ const S = {
   portfolios: [], transactions: [], products: [], tagCats: [], dossiers: [], loans: [], loanRepayments: [],
   loanId: null,
   otherAssets: [], otherAssetTypes: [],
+  // Movimenti del conto di Rosa: caricati solo quando si apre la sua pagina (null = mai letti),
+  // non a ogni reload — è una vista che si guarda di rado e non entra in nessun totale.
+  rosaTx: null,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -1225,6 +1228,9 @@ const fmtEUR0 = fmtEUR;
 const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: 6 }).format(n);
 const fmtPct = n => n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+// Testo che arriva dalla banca (descrizioni, nomi di controparte) prima di finire in un
+// template HTML: non è scritto da noi e non deve poter chiudere un tag.
+const esc = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Orario di scrittura di uno snapshot. Mostra la sola ora quando è stato scritto
 // nel giorno cui lo snapshot si riferisce (il caso normale); se è stato scritto
 // in un altro giorno aggiunge la data, altrimenti l'ora da sola ingannerebbe.
@@ -2456,7 +2462,7 @@ function renderFundDetail() {
 // 'cost_analysis' (le transazioni diventano spese) e 'contribuzione' (i bonifici in entrata
 // diventano versamenti di Teresa o Salvatore). L'elenco sta qui una volta sola: è anche quello
 // che il battesimo salva in cm_bank_connections.uses, dove un CHECK ammette solo questi valori.
-const BANK_USES = ['cost_analysis', 'contribuzione', 'spese_ada', 'fondo', 'conto_risparmio', 'casa_rosa'];
+const BANK_USES = ['cost_analysis', 'contribuzione', 'spese_ada', 'fondo', 'conto_risparmio', 'casa_rosa', 'danaro_rosa'];
 const BANK_USE_LABEL = {
   cost_analysis:   '🧾 Spese Famiglia',
   contribuzione:   '💰 Contribuzione',
@@ -2464,6 +2470,7 @@ const BANK_USE_LABEL = {
   fondo:           '🤝 Fondi',
   conto_risparmio: '🐖 Conto Risparmio',
   casa_rosa:       '🏠 Casa Rosa',
+  danaro_rosa:     '🌹 Danaro di Rosa',
 };
 const BANK_USE_HINT = {
   cost_analysis:   'le transazioni diventano spese da categorizzare',
@@ -2472,6 +2479,7 @@ const BANK_USE_HINT = {
   fondo:           'i bonifici diventano versamenti e prelievi del fondo',
   conto_risparmio: 'i movimenti si importano dal Conto Risparmio di Teresa',
   casa_rosa:       'i movimenti si importano nella Cassa Casa Rosa',
+  danaro_rosa:     'i movimenti si leggono in Danaro di Rosa (senza categorie) e il saldo aggiorna la voce',
 };
 const INSTITUTION_KIND_LABEL = { banca: '🏦 Banca', broker: '📈 Broker' };
 // Un conto si chiama col nome che gli ha dato l'utente. Se non gliel'ha ancora dato si
@@ -3026,9 +3034,27 @@ function renderOtherAssets() {
     }
   `);
 }
+/* ── Movimenti del conto di Rosa ──────────────────────────────
+   Il conto si collega come tutti gli altri (Configurazione → 🏦 Banche e Conti) e si spunta
+   come «🌹 Danaro di Rosa». Qui i movimenti si leggono e si archiviano in
+   fnz_rosa_transactions senza categorie: questa pagina tiene il registro del conto e il saldo,
+   non analizza la spesa. */
+function rosaBankAccounts() {
+  return (S.bankConnections || []).filter(c => c.account_id && (c.uses || []).includes('danaro_rosa'));
+}
+async function loadRosaTransactions() {
+  S.rosaTx = await sbQ('fnz_rosa_transactions', 'select=*&order=date.desc,created_at.desc');
+}
 function renderDanaroRosa() {
   const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
   const totalVal   = rosaAssets.reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
+  // Primo ingresso nella pagina: si disegna subito con quello che c'è e si ridisegna quando i
+  // movimenti sono arrivati, invece di lasciare la pagina vuota durante la query.
+  if (S.rosaTx === null) {
+    S.rosaTx = [];
+    loadRosaTransactions().then(() => { if (S.view === 'danaro-rosa') renderDanaroRosa(); }).catch(e => console.error('Movimenti Rosa:', e));
+  }
+  const accounts = rosaBankAccounts();
 
   setHtml('view-danaro-rosa', `
     <div class="view-header">
@@ -3037,6 +3063,7 @@ function renderDanaroRosa() {
         <button class="btn btn-primary btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa" data-pre-title="BTP ITALIA">+ BTP</button>
         <button class="btn btn-primary btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa" data-pre-title="CONTO ARANCIO">+ Conto Arancio</button>
         <button class="btn btn-outline btn-sm" data-action="new-other-asset" data-pre-type="danaro_rosa">+ Altro</button>
+        <button class="btn btn-outline btn-sm" data-action="rosa-bank-read">🏦 Leggi dal conto</button>
       </div>
     </div>
     <div class="kpi-grid">
@@ -3068,7 +3095,272 @@ function renderDanaroRosa() {
         </div>`;
         }).join('')}</div>`
     }
+    ${renderRosaMovimenti(accounts)}
   `);
+}
+
+// Registro dei movimenti letti dal conto: nessuna categoria, solo data, descrizione,
+// controparte e importo con segno.
+function renderRosaMovimenti(accounts) {
+  const txs = S.rosaTx || [];
+  const entrate = txs.filter(t => +t.amount > 0).reduce((s, t) => s + +t.amount, 0);
+  const uscite  = txs.filter(t => +t.amount < 0).reduce((s, t) => s + +t.amount, 0);
+  const accountName = id => {
+    const c = (S.bankConnections || []).find(x => x.id === id);
+    return c ? bankAccountLabel(c) : '—';
+  };
+  const piuConti = new Set(txs.map(t => t.bank_connection_id)).size > 1;
+
+  if (!accounts.length && !txs.length) {
+    return `<div class="card mt-12">
+      <div class="card-title">Movimenti del conto</div>
+      <p class="text-muted text-sm mt-8">Nessun conto destinato a Danaro di Rosa. Si collega da
+      <strong>Configurazione → 🏦 Banche e Conti</strong>, dove va spuntato come «🌹 Danaro di Rosa»;
+      dev'essere anche in whitelist nel Control Panel di Enable Banking.</p>
+    </div>`;
+  }
+  return `<div class="card mt-12">
+    <div class="card-header-row">
+      <div class="card-title">Movimenti del conto <span class="text-muted text-sm">(${txs.length})</span></div>
+      <button class="btn btn-outline btn-sm" data-action="rosa-bank-read">🏦 Leggi dal conto</button>
+    </div>
+    <div class="hstack gap-8 text-sm mt-8" style="flex-wrap:wrap;column-gap:16px">
+      <span>Entrate: <strong class="mono pos">${fmtEURc(entrate)}</strong></span>
+      <span>Uscite: <strong class="mono neg">${fmtEURc(uscite)}</strong></span>
+      <span>Saldo movimenti: <strong class="mono">${fmtEURc(entrate + uscite)}</strong></span>
+    </div>
+    ${txs.length === 0
+      ? `<p class="text-muted text-sm mt-12">Nessun movimento archiviato. Usa «🏦 Leggi dal conto» per leggerli dalla banca.</p>`
+      : `<div class="table-wrap mt-12" style="max-height:52vh;overflow-y:auto">
+          <table class="table">
+            <thead><tr>
+              <th>Data</th><th>Descrizione</th>
+              ${piuConti ? '<th>Conto</th>' : ''}
+              <th class="text-right">Importo</th><th></th>
+            </tr></thead>
+            <tbody>${txs.map(t => `
+              <tr>
+                <td class="mono text-sm" style="white-space:nowrap">${fmtDate(t.date)}</td>
+                <td>${esc(t.description) || '—'}
+                  ${t.counterparty ? `<span class="text-muted text-sm"> · ${esc(t.counterparty)}</span>` : ''}</td>
+                ${piuConti ? `<td class="text-muted text-sm">${esc(accountName(t.bank_connection_id))}</td>` : ''}
+                <td class="mono text-right ${+t.amount < 0 ? 'text-neg' : 'text-pos'}" style="white-space:nowrap">${fmtEURc(+t.amount)}</td>
+                <td class="text-right"><button class="btn-icon btn-icon-danger" data-action="del-rosa-tx" data-id="${t.id}" title="Elimina">✕</button></td>
+              </tr>`).join('')}</tbody>
+          </table>
+        </div>`}
+  </div>`;
+}
+
+/* ── Lettura dal conto: movimenti + saldo ─────────────────────
+   enable-banking-transactions legge e basta. Qui i movimenti si archiviano senza toccarli
+   (nessuna categoria, nessuna regola) e il saldo, se lo si vuole, va a riscrivere valore e
+   data di una delle voci di Danaro di Rosa — quale lo si sceglie qui, perché lo stesso conto
+   può avere accanto un BTP o un altro deposito che con quel saldo non c'entrano.       */
+let _rosaBankRead = null;
+
+// Il saldo da proporre: quello contabile di fine giornata quando la banca lo espone, poi il
+// disponibile. Il nome arriva a volte come codice ISO 20022 (CLBD) e a volte per esteso
+// ("closingBooked"), quindi si cercano entrambe le forme su un nome ridotto alle sole lettere.
+const ROSA_BALANCE_PREFERENCE = [
+  ['CLBD', 'CLOSINGBOOKED'],
+  ['CLAV', 'CLOSINGAVAILABLE'],
+  ['ITAV', 'INTERIMAVAILABLE'],
+  ['ITBD', 'INTERIMBOOKED'],
+  ['XPCD', 'EXPECTED'],
+  ['PRCD', 'PREVIOUSLYCLOSEDBOOKED'],
+];
+function pickDefaultBalanceIndex(balances) {
+  const norm = b => (b.name || '').toUpperCase().replace(/[^A-Z]/g, '');
+  for (const forme of ROSA_BALANCE_PREFERENCE) {
+    const i = balances.findIndex(b => forme.some(f => norm(b).includes(f)));
+    if (i >= 0) return i;
+  }
+  return balances.length ? 0 : -1;
+}
+
+function openRosaBankModal() {
+  const accounts = rosaBankAccounts();
+  if (!accounts.length) {
+    openModal('Leggi dal conto', `
+      <p class="text-sm">Nessun conto destinato a Danaro di Rosa.</p>
+      <p class="text-muted text-sm mt-8">Collegalo da <strong>Configurazione → 🏦 Banche e Conti</strong>
+      e spuntalo come «🌹 Danaro di Rosa». Ricordati che il conto dev'essere anche in whitelist nel
+      Control Panel di Enable Banking, altrimenti il consenso riesce ma la sessione torna vuota.</p>
+      <div class="modal-footer"><button type="button" class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`);
+    return;
+  }
+  // Si riparte dal giorno dopo l'ultimo movimento già archiviato: rileggere ogni volta tutto
+  // lo storico serve solo a far ricontrollare righe già viste.
+  const lastDate = (S.rosaTx || []).map(t => t.date).sort().pop();
+  const defaultFrom = lastDate
+    ? new Date(new Date(lastDate + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10)
+    : new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+
+  openModal('Leggi dal conto', `
+    <p class="text-muted text-sm mb-12">Legge i movimenti e il saldo dal conto collegato. Niente
+    viene salvato finché non confermi.</p>
+    <div class="form-group">
+      <label class="form-label">Conto</label>
+      <select id="rosa-bank-conn" class="form-input form-select">
+        ${accounts.map(c => `<option value="${c.id}">${esc(bankAccountLabel(c))}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dal giorno</label>
+      <input type="date" id="rosa-bank-from" class="form-input" value="${defaultFrom}" />
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button type="button" class="btn btn-primary" data-action="rosa-bank-load">Leggi dalla banca</button>
+    </div>`);
+}
+
+async function loadRosaBankMovements() {
+  const bankConnectionId = $('rosa-bank-conn').value;
+  const dateFrom = $('rosa-bank-from').value || undefined;
+  openModal('Leggi dal conto', '<div class="empty-sm">🔍 Leggo movimenti e saldo dalla banca…</div>');
+  try {
+    const res = await sbFn('enable-banking-transactions', { bankConnectionId, dateFrom });
+    const known = new Set((S.rosaTx || []).filter(t => t.external_id).map(t => `${t.bank_connection_id}|${t.external_id}`));
+    // Senza externalId la banca non dà niente su cui riconoscere una riga: si ripiega su data,
+    // importo e descrizione, che è quanto basta per non riscrivere due volte lo stesso movimento.
+    const knownLoose = new Set((S.rosaTx || []).map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
+    const items = (res.transactions || [])
+      .filter(t => t.bookingDate || t.valueDate)
+      .map(t => {
+        const date = (t.bookingDate || t.valueDate).slice(0, 10);
+        const description = (t.description || '').trim();
+        const giaPresente = t.externalId
+          ? known.has(`${bankConnectionId}|${t.externalId}`)
+          : knownLoose.has(`${date}|${(+t.amount).toFixed(2)}|${description.toLowerCase()}`);
+        return {
+          date, description, amount: +t.amount, currency: t.currency || null,
+          counterparty: (t.counterpartyName || '').trim(),
+          counterpartyIban: t.counterpartyIban || null,
+          bankCode: t.bankTransactionCode || null,
+          externalId: t.externalId || null,
+          giaPresente,
+        };
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    const balances = res.balances || [];
+    _rosaBankRead = { bankConnectionId, items, balances, account: res.account, truncated: res.truncated };
+    renderRosaBankPreview();
+  } catch (err) {
+    closeModal();
+    alert('Errore lettura dal conto: ' + err.message);
+  }
+}
+
+function renderRosaBankPreview() {
+  const d = _rosaBankRead;
+  const nuovi = d.items.filter(i => !i.giaPresente).length;
+  const rosaAssets = S.otherAssets.filter(a => a.asset_type === 'danaro_rosa');
+  const balIdx = pickDefaultBalanceIndex(d.balances);
+  // Voce da aggiornare col saldo: si prova ad azzeccarla dal nome del conto, altrimenti la
+  // prima che parla di conto. Resta comunque una tendina: la scelta è dell'utente.
+  const accName = (d.account?.displayName || d.account?.aspspName || '').toUpperCase();
+  const guess = rosaAssets.find(a => accName && (a.title || '').toUpperCase() === accName)
+             || rosaAssets.find(a => (a.title || '').toUpperCase().includes('CONTO'))
+             || rosaAssets[0];
+
+  openModal('Movimenti e saldo del conto', `
+    <p class="text-sm mb-12">
+      ${d.items.length} ${d.items.length === 1 ? 'movimento letto' : 'movimenti letti'} da
+      <strong>${esc(d.account?.displayName || d.account?.aspspName || 'banca')}</strong> —
+      <strong>${nuovi}</strong> nuovi, ${d.items.length - nuovi} già archiviati (deselezionati).
+      ${d.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo per vederli tutti.' : ''}
+    </p>
+    ${d.balances.length ? `
+      <div class="form-group">
+        <label class="form-label">Saldo letto dalla banca</label>
+        <select id="rosa-bank-balance" class="form-input form-select">
+          ${d.balances.map((b, i) => `<option value="${i}" ${i === balIdx ? 'selected' : ''}>${esc(b.name || 'saldo')} · ${fmtEURc(b.amount)}${b.date ? ` · ${esc(String(b.date).slice(0, 10))}` : ''}</option>`).join('')}
+        </select>
+      </div>
+      ${rosaAssets.length ? `
+        <div class="form-group">
+          <label class="form-label">
+            <input type="checkbox" id="rosa-bank-apply" checked /> Aggiorna con questo saldo la voce:
+          </label>
+          <select id="rosa-bank-asset" class="form-input form-select">
+            ${rosaAssets.map(a => `<option value="${a.id}" ${guess && a.id === guess.id ? 'selected' : ''}>${esc(a.title || '(senza titolo)')} · ${fmtEURc(+a.value)} del ${fmtDate(a.valuation_date)}</option>`).join('')}
+          </select>
+        </div>`
+        : '<p class="text-muted text-sm mb-12">Nessuna voce di Danaro di Rosa da aggiornare: creane una con «+ Conto Arancio».</p>'}`
+      : '<p class="text-muted text-sm mb-12">La banca non ha restituito nessun saldo: si possono archiviare solo i movimenti.</p>'}
+    ${d.items.length === 0 ? '<div class="empty-sm">Nessun movimento nel periodo scelto.</div>' : `
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+      <table class="table">
+        <thead><tr><th></th><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th></tr></thead>
+        <tbody>${d.items.map((it, i) => `
+          <tr${it.giaPresente ? ' style="opacity:.55"' : ''}>
+            <td><input type="checkbox" data-rosa-idx="${i}" ${it.giaPresente ? '' : 'checked'} /></td>
+            <td class="mono text-sm" style="white-space:nowrap">${fmtDate(it.date)}</td>
+            <td>${esc(it.description) || '—'}
+              ${it.counterparty ? `<span class="text-muted text-sm"> · ${esc(it.counterparty)}</span>` : ''}
+              ${it.giaPresente ? '<span class="text-muted text-sm"> · già archiviato</span>' : ''}</td>
+            <td class="mono text-right ${it.amount < 0 ? 'text-neg' : 'text-pos'}" style="white-space:nowrap">${fmtEURc(it.amount)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`}
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button type="button" class="btn btn-primary" data-action="rosa-bank-confirm">Archivia e aggiorna</button>
+    </div>`);
+}
+
+async function confirmRosaBankRead() {
+  const d = _rosaBankRead;
+  if (!d) return;
+  const scelti = [];
+  document.querySelectorAll('#modal-body input[data-rosa-idx]').forEach(cb => {
+    if (cb.checked) scelti.push(d.items[parseInt(cb.dataset.rosaIdx, 10)]);
+  });
+  const balSel = $('rosa-bank-balance');
+  const applyEl = $('rosa-bank-apply');
+  const assetEl = $('rosa-bank-asset');
+  const balance = balSel ? d.balances[parseInt(balSel.value, 10)] : null;
+  const assetId = applyEl && applyEl.checked && assetEl ? assetEl.value : null;
+  if (!scelti.length && !assetId) { alert('Niente da fare: nessun movimento selezionato e nessun saldo da applicare.'); return; }
+
+  openModal('Movimenti e saldo del conto', '<div class="empty-sm">💾 Archivio i movimenti…</div>');
+  try {
+    if (scelti.length) {
+      // Upsert e non insert: se una riga già archiviata viene rispuntata a mano, l'indice unico
+      // (bank_connection_id, external_id) la fa riscrivere invece di far fallire tutto il blocco.
+      await sbUpsert('fnz_rosa_transactions', scelti.map(it => ({
+        user_id: S.session.user.id,
+        bank_connection_id: d.bankConnectionId,
+        external_id: it.externalId,
+        date: it.date,
+        amount: it.amount,
+        currency: it.currency,
+        description: it.description,
+        counterparty: it.counterparty,
+        counterparty_iban: it.counterpartyIban,
+        bank_code: it.bankCode,
+      })), 'bank_connection_id,external_id');
+    }
+    if (assetId && balance) {
+      await sbUpd('fnz_other_assets', `id=eq.${assetId}`, {
+        value: balance.amount,
+        valuation_date: (balance.date ? String(balance.date).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+      });
+    }
+    _rosaBankRead = null;
+    await loadRosaTransactions();
+    await reload();
+    closeModal();
+    alert(`✅ Lettura completata\n\nMovimenti archiviati: ${scelti.length}` +
+          (assetId && balance ? `\nSaldo aggiornato: ${fmtEURc(balance.amount)}` : ''));
+  } catch (err) {
+    closeModal();
+    alert('Errore: ' + err.message);
+  }
 }
 function renderPrezzi() {
   const oggi = new Date().toISOString().slice(0, 10);
@@ -5608,6 +5900,16 @@ document.addEventListener('click', async e => {
     case 'edit-other-asset': openOtherAssetModal(t.dataset.id); break;
     case 'del-other-asset':
       if (confirm('Eliminare questo asset?')) { await sbDel('fnz_other_assets', `id=eq.${t.dataset.id}`); await reload(); }
+      break;
+    case 'rosa-bank-read':    openRosaBankModal(); break;
+    case 'rosa-bank-load':    await loadRosaBankMovements(); break;
+    case 'rosa-bank-confirm': await confirmRosaBankRead(); break;
+    case 'del-rosa-tx':
+      if (confirm('Eliminare questo movimento?')) {
+        await sbDel('fnz_rosa_transactions', `id=eq.${t.dataset.id}`);
+        await loadRosaTransactions();
+        renderDanaroRosa();
+      }
       break;
     case 'new-product':     openNewProductModal(); break;
     case 'edit-product':    openNewProductModal(t.dataset.id); break;

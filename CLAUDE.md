@@ -139,8 +139,8 @@ Configurazione → 🏦 Banche e Conti):
    `uses '{}'`, e l'utente dà a ciascuno un nome e uno o più usi.
 
 `cm_bank_connections.uses` ammette `'cost_analysis'` (Spese Famiglia), `'contribuzione'`,
-`'spese_ada'`, `'fondo'`, `'conto_risparmio'` e `'casa_rosa'`: **un conto può servire a più
-moduli** — il conto
+`'spese_ada'`, `'fondo'`, `'conto_risparmio'`, `'casa_rosa'` e `'danaro_rosa'`: **un conto può
+servire a più moduli** — il conto
 delle spese comuni è insieme `cost_analysis` e `contribuzione` — e `uses` vuoto significa «scoperto
 ma non ancora battezzato» — il conto esiste e si vede, ma nessun modulo lo elenca. Ha sostituito
 la vecchia colonna `module`, che ne ammetteva uno solo e andava scelta *prima* del consenso.
@@ -203,6 +203,27 @@ punteggiatura), col nome come ripiego — nessuna estrazione dell'IBAN con regex
 `fnz_fund_recalc_adjusted(p_fund_id)`; il valore mostrato a schermo lo ricalcola comunque
 `computeFundShares()` in `finanza.html`. Chiamare la RPC dopo ogni scrittura sui movimenti o
 sull'indice FOI, altrimenti la colonna resta indietro rispetto a quello che si vede nell'app.
+
+### Danaro di Rosa (`fnz_other_assets` + `fnz_rosa_transactions`)
+| Table | Purpose |
+|---|---|
+| `fnz_other_assets` con `asset_type = 'danaro_rosa'` | Le voci di Rosa (BTP, Conto Arancio, altro): `value` è il saldo/valore di mercato, `valuation_date` la data cui si riferisce |
+| `fnz_rosa_transactions` | Movimenti del conto di Rosa letti dalla banca: `amount` **con segno**, `external_id` unico per `bank_connection_id` |
+
+**Nessuna categoria, di proposito**: questa pagina tiene il registro del conto e il saldo, non
+analizza la spesa come Spese Famiglia o Spese Ada. Una colonna categoria che nessuno riempie è
+solo un invito a reimplementare la categorizzazione una quarta volta.
+
+Il conto si collega come tutti gli altri (`finanza.html` → Configurazione → 🏦 Banche e Conti) e
+si spunta come `'danaro_rosa'` in `cm_bank_connections.uses`. Da lì *🏦 Leggi dal conto* chiama
+`enable-banking-transactions` — che legge e basta — e la stessa finestra fa due cose distinte:
+archivia i movimenti scelti e, se lo si conferma, riscrive `value` e `valuation_date` di **una**
+voce di Danaro di Rosa col saldo letto. La voce si sceglie nella tendina: il conto non è legato a
+una riga di `fnz_other_assets`, perché accanto al Conto Arancio ci sono un BTP e altre voci che
+con quel saldo non c'entrano.
+
+Rosa vede le voci in `situazione-rosa.html` (via `cm_guest_access`), **non i movimenti**:
+`fnz_rosa_transactions` ha la sola policy owner.
 
 ### Weight Quest (`ps_`)
 | Table | Purpose |
@@ -366,7 +387,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso (`connect` riceve solo `institutionId` e legge banca e paese da `cm_institutions`), redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il callback crea i conti anonimi e riporta sempre su `finanza.html`, con il `session_id` del consenso perché la pagina apra subito il battesimo |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
-| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html` e `casarosa.html`) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
+| `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html`, `casarosa.html` e da `finanza.html` → 🌹 Danaro di Rosa) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Header PSU obbligatori per alcune banche
