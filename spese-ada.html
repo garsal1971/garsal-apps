@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Ada v1.0.1</title>
+  <title>Spese Ada v1.0.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -176,7 +176,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Spese Ada · <span class="mono">v1.0.1</span>
+    Spese Ada · <span class="mono">v1.0.2</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -205,8 +205,8 @@
    (che legge e basta: filtro, doppioni e categorie stanno qui).
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.1';
-var BUILD_TIME  = '2026-08-08T14:40:00Z';
+var APP_VERSION = 'v1.0.2';
+var BUILD_TIME  = '2026-08-08T15:10:00Z';
 console.log('%c SPESE ADA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -327,32 +327,58 @@ const spesaDi = t => (+t.amount < 0 ? -(+t.amount) : 0);
 // Stessa normalizzazione di Spese Famiglia: maiuscolo, spazi compressi e via il codice
 // numerico finale che le banche appiccicano allo stesso negozio ("ESSELUNGA *12345").
 const normalizeMerchant = desc => (desc || '').toUpperCase().trim().replace(/\s+/g, ' ').replace(/[*#]?\s*\d{3,}$/, '').trim();
-const merchantCategory = desc => {
-  const key = normalizeMerchant(desc);
-  if (!key) return null;
-  const m = S.merchants.find(x => x.merchant_key === key);
-  return m ? m.category_id : null;
+// Il confronto è per CONTENUTO, non per uguaglianza: la banca infila nella causale il
+// riferimento dell'operazione e la data ("AMAZON.IT *MK7HG2LO3"), quindi due acquisti dallo
+// stesso negozio non hanno mai la stessa descrizione e un confronto esatto non avrebbe
+// riagganciato niente. La regola nasce lunga (tutta la descrizione) e la si accorcia a mano
+// tenendo solo il nome del negozio.
+//
+// Fra più regole che agganciano vince la PIÙ LUNGA, cioè la più specifica: senza questa
+// precedenza una regola corta imparata prima ("FARMACIA") si prenderebbe anche i movimenti di
+// "FARMACIA S.ANNA" a cui era stata data un'altra categoria.
+const merchantRule = desc => {
+  const hay = normalizeMerchant(desc);
+  if (!hay) return null;
+  return S.merchants
+    .filter(x => x.merchant_key && hay.includes(x.merchant_key))
+    .sort((a, b) => b.merchant_key.length - a.merchant_key.length)[0] || null;
 };
+const merchantCategory = desc => merchantRule(desc)?.category_id || null;
+// Quanti movimenti in archivio aggancerebbe una regola: si vede mentre la si accorcia, così
+// non è un tiro al buio.
+const merchantMatchCount = key => {
+  const k = (key || '').trim().toUpperCase();
+  return k ? S.transactions.filter(t => normalizeMerchant(t.description).includes(k)).length : 0;
+};
+// La regola nasce con TUTTA la descrizione normalizzata: è il default prudente, perché una
+// chiave corta inventata in automatico aggancerebbe cose che non c'entrano. Accorciarla al solo
+// nome del negozio si fa a mano da Categorie → Negozi imparati, vedendo quanti movimenti
+// aggancia mentre la si scrive.
 async function learnMerchant(desc, categoryId) {
   const key = normalizeMerchant(desc);
-  if (!key) return;
+  if (!key) return null;
   try {
     if (categoryId) {
-      await fetch(`${SUPABASE_URL}/rest/v1/ada_merchant_map?on_conflict=user_id,merchant_key`, {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/ada_merchant_map?on_conflict=user_id,merchant_key`, {
         method: 'POST',
         headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
         body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, updated_at: new Date().toISOString() }),
       });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+      S.merchants = await sbQ('ada_merchant_map', 'select=*');
+      return S.merchants.find(x => x.merchant_key === key) || null;
     } else {
       // Per id, non per chiave: un merchant_key con virgole o spazi va citato nei filtri
       // PostgREST, e sbagliare la citazione qui vorrebbe dire cancellare la regola sbagliata.
       const row = S.merchants.find(x => x.merchant_key === key);
-      if (!row) return;
+      if (!row) return null;
       await sbDel('ada_merchant_map', `id=eq.${row.id}`);
+      S.merchants = await sbQ('ada_merchant_map', 'select=*');
     }
-    S.merchants = await sbQ('ada_merchant_map', 'select=*');
+    return null;
   } catch (e) {
     console.error('Merchant non imparato:', e);
+    return null;
   }
 }
 
@@ -360,17 +386,18 @@ async function learnMerchant(desc, categoryId) {
 // categorizzare la prima "FARMACIA X" lasciava le altre dodici già importate vuote, e la regola
 // si vedeva funzionare solo al prossimo import. Tocca SOLO i movimenti senza categoria: quello
 // che è già stato classificato — a mano o da una regola vecchia — non viene mai sovrascritto.
-// onlyKey limita l'applicazione a un singolo negozio (dopo un'assegnazione manuale).
-async function applyLearnedMerchants(onlyKey = null) {
+// onlyRuleId limita l'applicazione ai movimenti che una singola regola si aggiudica (dopo
+// un'assegnazione manuale): non basta che la descrizione contenga quella chiave, deve essere
+// quella regola a vincere, altrimenti si scavalcherebbe una regola più specifica.
+async function applyLearnedMerchants(onlyRuleId = null) {
   const perCategoria = new Map();
   S.transactions.forEach(t => {
     if (t.category_id) return;
-    const key = normalizeMerchant(t.description);
-    if (!key || (onlyKey && key !== onlyKey)) return;
-    const m = S.merchants.find(x => x.merchant_key === key);
-    if (!m) return;
-    if (!perCategoria.has(m.category_id)) perCategoria.set(m.category_id, []);
-    perCategoria.get(m.category_id).push(t);
+    const rule = merchantRule(t.description);
+    if (!rule) return;
+    if (onlyRuleId && rule.id !== onlyRuleId) return;
+    if (!perCategoria.has(rule.category_id)) perCategoria.set(rule.category_id, []);
+    perCategoria.get(rule.category_id).push(t);
   });
   let n = 0;
   for (const [categoryId, txs] of perCategoria) {
@@ -603,14 +630,20 @@ function renderCategorie() {
         <div class="card-title">Negozi imparati</div>
         <span class="text-muted text-sm">${S.merchants.length} regole</span>
       </div>
-      <p class="text-muted text-sm">Quando dai una categoria a un movimento, la descrizione resta imparata: al prossimo
-      import gli stessi negozi si categorizzano da soli. Se una regola sbaglia, dimenticala.</p>
+      <p class="text-muted text-sm">Quando dai una categoria a un movimento, la descrizione resta imparata e da lì in poi
+      i movimenti che la <strong>contengono</strong> si categorizzano da soli. La regola nasce con la descrizione intera:
+      <strong>accorciala al solo nome del negozio</strong> con ✎ perché agganci anche gli acquisti futuri, che la banca
+      scrive con un riferimento diverso ogni volta. Fra più regole che agganciano vince la più lunga.</p>
       ${S.merchants.length === 0 ? '' : `<div class="table-wrap mt-12"><table class="table">
-        <thead><tr><th>Descrizione</th><th>Categoria</th><th></th></tr></thead>
+        <thead><tr><th>Se la descrizione contiene…</th><th>Categoria</th><th class="text-right">Aggancia</th><th></th></tr></thead>
         <tbody>${S.merchants.slice().sort((a, b) => a.merchant_key.localeCompare(b.merchant_key)).map(m => `<tr>
           <td class="mono text-sm">${esc(m.merchant_key)}</td>
           <td>${catChip(m.category_id)}</td>
-          <td class="text-right"><button class="btn-icon btn-icon-danger" data-action="del-merchant" data-id="${m.id}" title="Dimentica">✕</button></td>
+          <td class="text-right mono text-muted">${merchantMatchCount(m.merchant_key)}</td>
+          <td class="text-right nowrap">
+            <button class="btn-icon" data-action="edit-merchant" data-id="${m.id}" title="Modifica">✎</button>
+            <button class="btn-icon btn-icon-danger" data-action="del-merchant" data-id="${m.id}" title="Dimentica">✕</button>
+          </td>
         </tr>`).join('')}</tbody></table></div>`}
     </div>
   `);
@@ -653,6 +686,62 @@ function openCatModal(editId = null) {
     } catch (err) {
       alert(/duplicate|uq_ada_categories/i.test(err.message)
         ? `Esiste già una categoria che si chiama «${payload.name}».`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+// Modifica di una regola. Il campo mostra in tempo reale quanti movimenti in archivio
+// aggancerebbe: accorciare "AMAZON.IT *MK7HG2LO3" a "AMAZON.IT" è utile solo se si vede
+// subito che passa da 1 a 14, e che non sta agganciando mezzo estratto conto.
+function openMerchantModal(id) {
+  const rule = S.merchants.find(m => m.id === id);
+  if (!rule) return;
+  openModal('Modifica regola', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Se la descrizione contiene… *</label>
+        <input name="key" id="rule-key" class="form-input mono" required value="${esc(rule.merchant_key)}" />
+        <p class="import-note mt-8" id="rule-count"></p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoria *</label>
+        <select name="category_id" class="form-input form-select" required>${catOptions(rule.category_id, '— scegli —')}</select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `);
+  const input = $('rule-key');
+  const info = $('rule-count');
+  const refresh = () => {
+    const k = input.value.trim().toUpperCase();
+    if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
+    const n = merchantMatchCount(k);
+    const senzaCat = S.transactions.filter(t => !t.category_id && normalizeMerchant(t.description).includes(k)).length;
+    info.textContent = `Aggancia ${n} movimenti in archivio${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
+  };
+  input.addEventListener('input', refresh);
+  refresh();
+
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const key = (d.key || '').trim().toUpperCase();
+    if (key.length < 3) { alert('La regola deve avere almeno 3 caratteri.'); return; }
+    if (!d.category_id) { alert('Scegli una categoria.'); return; }
+    try {
+      await sbUpd('ada_merchant_map', `id=eq.${rule.id}`, { merchant_key: key, category_id: d.category_id, updated_at: new Date().toISOString() });
+      closeModal();
+      await loadData();
+      const n = await applyLearnedMerchants(rule.id);
+      if (n) showToast(`✨ Categorizzati ${n} movimenti con la regola aggiornata`);
+      render();
+    } catch (err) {
+      alert(/duplicate|uq_ada_merchant_map/i.test(err.message)
+        ? `Esiste già una regola «${key}». Modifica quella, o cancella questa.`
         : 'Errore: ' + err.message);
     }
   });
@@ -983,6 +1072,8 @@ document.addEventListener('click', async e => {
     if (!confirm(`Eliminare la categoria «${c?.name}»?` + (uso ? `\n\n${uso} movimenti resteranno senza categoria.` : ''))) return;
     try { await sbDel('ada_categories', `id=eq.${btn.dataset.id}`); await reload(); }
     catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'edit-merchant') {
+    openMerchantModal(btn.dataset.id);
   } else if (action === 'del-merchant') {
     try { await sbDel('ada_merchant_map', `id=eq.${btn.dataset.id}`); await reload(); }
     catch (err) { alert('Errore: ' + err.message); }
@@ -1010,12 +1101,14 @@ document.addEventListener('change', async e => {
       if (tx) tx.category_id = categoryId;
       // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
       // impara, senza una schermata di regole da compilare.
-      if (tx && categoryId) {
-        await learnMerchant(tx.description, categoryId);
+      // Si impara solo se una regola non dava già quella categoria: correggere a mano una riga
+      // che era già giusta non deve creare una seconda regola identica nel risultato.
+      if (tx && categoryId && merchantCategory(tx.description) !== categoryId) {
+        const rule = await learnMerchant(tx.description, categoryId);
         // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
         // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
         // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
-        const altri = await applyLearnedMerchants(normalizeMerchant(tx.description));
+        const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
         if (altri) showToast(`✨ Categorizzati altri ${altri} movimenti dello stesso negozio`);
       }
       render();
