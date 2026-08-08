@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.64</title>
+    <title>Analisi Costi v1.0.65</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -822,8 +822,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.64';
-    var BUILD_TIME  = '2026-08-07T10:00:00Z';
+    var APP_VERSION = 'v1.0.65';
+    var BUILD_TIME  = '2026-08-08T10:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1917,10 +1917,12 @@
                 return;
             }
             if (!data.items || !data.items.length) {
-                showToast('Nessuna transazione nuova da sincronizzare');
+                showToast(data.skipped
+                    ? `Nessuna transazione nuova — ${data.skipped} già importate in precedenza`
+                    : 'Nessuna transazione nuova da sincronizzare');
                 return;
             }
-            _syncPreview = { bankConnectionId: id, items: data.items, oldestDate: data.oldestDate, totalFetched: data.totalFetched, pages: data.pages };
+            _syncPreview = { bankConnectionId: id, items: data.items, skipped: data.skipped || 0, oldestDate: data.oldestDate, totalFetched: data.totalFetched, pages: data.pages };
             openSyncPreviewModal();
         } catch (err) {
             hideProcessing();
@@ -1941,8 +1943,13 @@
         if (!_syncPreview) return;
         const insertCount = _syncPreview.items.filter(i => i.action === 'insert').length;
         const mergeCount = _syncPreview.items.filter(i => i.action === 'merge').length;
+        const skipped = _syncPreview.skipped || 0;
+        // "Trovate" = tutto lo storico riletto dalla banca, di cui la maggior parte è già in
+        // archivio dai sync precedenti: va detto, altrimenti il numero delle nuove sembra assurdo.
         document.getElementById('syncPreviewSummary').textContent =
-            `${_syncPreview.items.length} transazioni trovate — ${insertCount} nuove, ${mergeCount} da collegare/aggiornare su righe già presenti (CSV o pending diventata booked). Deseleziona quelle che non vuoi importare.`;
+            `${insertCount + mergeCount + skipped} transazioni lette dalla banca — ${insertCount} nuove, ${mergeCount} da collegare/aggiornare su righe già presenti (CSV o pending diventata booked)`
+            + (skipped ? `, ${skipped} già importate da questo conto (saltate, non elencate qui)` : '')
+            + `. Deseleziona quelle che non vuoi importare.`;
         const list = document.getElementById('syncPreviewList');
         list.innerHTML = _syncPreview.items.map((it, i) => `
             <label style="display:flex;align-items:flex-start;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);cursor:pointer;">
@@ -1993,7 +2000,8 @@
                 ? `\nStorico recuperato fino al: ${formatDateIt(data.oldestDate)}\nTransazioni lette dalla banca: ${data.totalFetched} (su ${data.pages} pagine)`
                 : '';
             const mergedInfo = data.merged ? `\nCollegate/aggiornate su transazioni già presenti — CSV o pending diventata booked (nessun duplicato creato): ${data.merged}` : '';
-            alert(`✅ Sincronizzazione completata\n\nNuove transazioni importate: ${data.imported}${mergedInfo}${oldestInfo}`);
+            const skippedInfo = data.skipped ? `\nGià importate da questo conto in un sync precedente (saltate): ${data.skipped}` : '';
+            alert(`✅ Sincronizzazione completata\n\nNuove transazioni importate: ${data.imported}${mergedInfo}${skippedInfo}${oldestInfo}`);
             // Il sync applica solo la categorizzazione MCC (server-side); qui in più proponiamo
             // (con anteprima) merchant appreso/regole sulle transazioni ancora senza categoria.
             if (data.imported > 0 || data.merged > 0) {
