@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.0</title>
+  <title>Spese Personali v1.0.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -176,7 +176,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Spese Personali · <span class="mono">v1.0.0</span>
+    Spese Personali · <span class="mono">v1.0.1</span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -211,8 +211,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-08-09T10:00:00Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-08-09T12:30:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -330,13 +330,17 @@ function superChip(id) {
 
 // Le voci nella tendina sono raggruppate per super-categoria: con due livelli un elenco piatto
 // diventa illeggibile appena le voci passano la decina.
-function catOptions(selected, placeholder = '— senza categoria —') {
+// withNew aggiunge in fondo «➕ Nuova voce…»: si sceglie la categoria dove la si sta cercando,
+// senza andare in Categorie, crearla e poi tornare indietro a cercare il movimento.
+const NEW_CAT_OPTION = '__new__';
+function catOptions(selected, placeholder = '— senza categoria —', withNew = false) {
   const gruppo = (label, voci) => voci.length
     ? `<optgroup label="${esc(label)}">${voci.map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('')}</optgroup>`
     : '';
   return `<option value="">${placeholder}</option>`
     + S.supers.map(s => gruppo(`${s.icon || ''} ${s.name}`.trim(), S.categories.filter(c => c.super_id === s.id))).join('')
-    + gruppo('— senza super-categoria —', S.categories.filter(c => !c.super_id));
+    + gruppo('— senza super-categoria —', S.categories.filter(c => !c.super_id))
+    + (withNew ? `<option value="${NEW_CAT_OPTION}">➕ Nuova voce…</option>` : '');
 }
 const superOptions = (selected, placeholder = '— senza super-categoria —') =>
   `<option value="">${placeholder}</option>` +
@@ -418,19 +422,26 @@ const merchantMatchCount = key => {
 // chiave corta inventata in automatico aggancerebbe cose che non c'entrano. Accorciarla al solo
 // nome del negozio si fa a mano da Categorie → Negozi imparati, vedendo quanti movimenti
 // aggancia mentre la si scrive.
+// Scrittura della regola, con la chiave già decisa dal chiamante. Qui gli errori risalgono: chi
+// la regola l'ha scritta a mano deve sapere se non è stata salvata. learnMerchant, che impara di
+// nascosto mentre si fa altro, se li tiene invece per sé (vedi sotto).
+async function saveMerchantRule(key, categoryId) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/sal_merchant_map?on_conflict=user_id,merchant_key`, {
+    method: 'POST',
+    headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+    body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, updated_at: new Date().toISOString() }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  S.merchants = await sbQ('sal_merchant_map', 'select=*');
+  return S.merchants.find(x => x.merchant_key === key) || null;
+}
+
 async function learnMerchant(desc, categoryId) {
   const key = normalizeMerchant(desc);
   if (!key) return null;
   try {
     if (categoryId) {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/sal_merchant_map?on_conflict=user_id,merchant_key`, {
-        method: 'POST',
-        headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
-        body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, updated_at: new Date().toISOString() }),
-      });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
-      S.merchants = await sbQ('sal_merchant_map', 'select=*');
-      return S.merchants.find(x => x.merchant_key === key) || null;
+      return await saveMerchantRule(key, categoryId);
     } else {
       // Per id, non per chiave: un merchant_key con virgole o spazi va citato nei filtri
       // PostgREST, e sbagliare la citazione qui vorrebbe dire cancellare la regola sbagliata.
@@ -472,6 +483,27 @@ async function applyLearnedMerchants(onlyRuleId = null) {
     n += ids.length;
   }
   return n;
+}
+
+// Assegnazione della categoria a un movimento già in archivio.
+// learn:false quando la regola è già stata scritta a mano (voce creata al volo dalla tendina):
+// lì la chiave l'ha decisa l'utente, e impararne una seconda con la descrizione intera
+// aggiungerebbe una regola che nessuno ha chiesto.
+async function setTxCategory(tx, categoryId, { learn = true } = {}) {
+  await sbUpd('sal_transactions', `id=eq.${tx.id}`, { category_id: categoryId });
+  tx.category_id = categoryId;
+  // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
+  // impara, senza una schermata di regole da compilare.
+  // Si impara solo se una regola non dava già quella categoria: correggere a mano una riga
+  // che era già giusta non deve creare una seconda regola identica nel risultato.
+  if (learn && categoryId && merchantCategory(tx.description) !== categoryId) {
+    const rule = await learnMerchant(tx.description, categoryId);
+    // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
+    // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
+    // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
+    const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
+    if (altri) showToast(`✨ Categorizzati altri ${altri} movimenti dello stesso negozio`);
+  }
 }
 
 function showToast(msg) {
@@ -756,7 +788,7 @@ function renderTransazioni() {
               <td class="text-right mono fw-600 nowrap ${isUscita(t) ? 'neg' : 'pos'}">${fmtEUR(t.amount)}</td>
               <td class="nowrap">
                 <select class="form-input form-select" data-set-cat="${t.id}" style="padding:5px 8px;font-size:.8rem;width:auto;min-width:150px">
-                  ${catOptions(t.category_id)}
+                  ${catOptions(t.category_id, undefined, true)}
                 </select>
               </td>
               <td class="nowrap"><button class="btn-icon btn-icon-danger" data-action="del-tx" data-id="${t.id}" title="Elimina">✕</button></td>
@@ -995,6 +1027,144 @@ function openMerchantModal(id) {
   });
 }
 
+/* ── Nuova voce al volo, dal movimento ──────────────────────── */
+// «➕ Nuova voce…» nella tendina di un movimento: si crea la voce e, nella stessa finestra, si
+// scrive la regola che d'ora in poi ci manderà i movimenti dello stesso negozio. Le due cose
+// nascono insieme perché è lì che si sa qual è il negozio: creare la voce da Categorie e poi
+// tornare sul movimento significa scrivere la regola a memoria, o non scriverla affatto.
+// La chiave è quella che si imparerebbe da sola (la descrizione intera normalizzata), ma qui è
+// modificabile subito — con il conteggio di quanti movimenti aggancia, come in Modifica regola.
+function nuovaVoceFormHtml(descrizione) {
+  return `
+    <form id="newcat-form">
+      <p class="import-note">Movimento: <strong>${esc(merchantText(descrizione))}</strong></p>
+      <div class="form-group mt-12">
+        <label class="form-label">Nome della voce *</label>
+        <input name="name" id="newcat-name" class="form-input" required placeholder="es. Ristoranti" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Icona</label>
+          <input name="icon" class="form-input" placeholder="es. 🍝" maxlength="4" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Super-categoria</label>
+          <select name="super_id" class="form-input form-select">${superOptions('')}</select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="hstack gap-8 text-sm"><input type="checkbox" id="newcat-with-rule" checked /> Impara anche la regola: se la descrizione contiene…</label>
+        <input id="newcat-key" class="form-input mono mt-8" value="${esc(normalizeMerchant(descrizione))}" />
+        <p class="import-note mt-8" id="newcat-count"></p>
+      </div>
+      <p class="import-note">Il colore della voce è quello della sua super-categoria.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="newcat-cancel">Annulla</button>
+        <button type="submit" class="btn btn-primary">Crea e assegna</button>
+      </div>
+    </form>`;
+}
+
+// onDone riceve la voce creata e la regola scritta (null se la spunta era tolta): cosa farne
+// cambia fra la lista movimenti e l'anteprima di import, ed è il chiamante a saperlo.
+function wireNuovaVoceForm({ onDone, onCancel }) {
+  const form = $('newcat-form');
+  const keyInput = $('newcat-key');
+  const chk = $('newcat-with-rule');
+  const info = $('newcat-count');
+
+  const refresh = () => {
+    keyInput.disabled = !chk.checked;
+    if (!chk.checked) { info.textContent = 'Senza regola: la voce vale solo per questo movimento.'; return; }
+    const k = keyInput.value.trim().toUpperCase();
+    if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
+    const n = merchantMatchCount(k);
+    const senzaCat = S.transactions.filter(t => !t.category_id && normalizeMerchant(t.description).includes(k)).length;
+    info.textContent = `Aggancia ${n} movimenti in archivio${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
+  };
+  keyInput.addEventListener('input', refresh);
+  chk.addEventListener('change', refresh);
+  refresh();
+  $('newcat-name').focus();
+  $('newcat-cancel').addEventListener('click', () => onCancel && onCancel());
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const name = (d.name || '').trim();
+    if (!name) return;
+    const key = chk.checked ? keyInput.value.trim().toUpperCase() : '';
+    if (chk.checked && key.length < 3) { alert('La regola deve avere almeno 3 caratteri, oppure togli la spunta.'); return; }
+    // Stessa chiave di una regola che c'è già: il salvataggio la riscriverebbe in silenzio sulla
+    // voce nuova. Si può fare — è quello che uno vuole quando corregge — ma va detto prima.
+    const esistente = key && S.merchants.find(x => x.merchant_key === key);
+    if (esistente && !confirm(`Esiste già una regola «${key}», che manda a «${catById(esistente.category_id)?.name || '—'}».\n\nLa faccio puntare alla voce nuova?`)) return;
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      const [cat] = await sbIns('sal_categories', {
+        user_id: S.session.user.id,
+        name,
+        icon: (d.icon || '').trim() || null,
+        super_id: d.super_id || null,
+      });
+      S.categories = await sbQ('sal_categories', 'select=*&order=name.asc');
+      const rule = key ? await saveMerchantRule(key, cat.id) : null;
+      await onDone(cat, rule);
+    } catch (err) {
+      submit.disabled = false;
+      alert(/duplicate|uq_sal_categories/i.test(err.message)
+        ? `Esiste già una voce che si chiama «${name}».`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+// Dalla lista movimenti: modale a sé, il movimento è già in archivio.
+function openNuovaVoceModal(tx) {
+  openModal('Nuova voce', nuovaVoceFormHtml(tx.description));
+  wireNuovaVoceForm({
+    onCancel: closeModal,
+    onDone: async (cat, rule) => {
+      closeModal();
+      // learn:false — la regola l'ha appena scritta l'utente qui sopra.
+      await setTxCategory(tx, cat.id, { learn: false });
+      const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
+      showToast(altri
+        ? `✅ Voce «${cat.name}» creata · ✨ categorizzati altri ${altri} movimenti`
+        : `✅ Voce «${cat.name}» creata e assegnata`);
+      render();
+    },
+  });
+}
+
+// Dall'anteprima di import: niente secondo modale, il form prende il posto dell'elenco e poi
+// l'elenco torna. Aprire un modale sopra l'altro qui vorrebbe dire buttare via l'anteprima —
+// #modal-body è uno solo — e con lei le spunte e le categorie già scelte.
+function openNuovaVoceImport(idx) {
+  if (!_import) return;
+  syncImportSelections();
+  const it = _import.items[idx];
+  if (!it) return;
+  const indietro = () => {
+    $('modal-title').textContent = 'Importa dal conto';
+    renderImportList(_import.cardFilter);
+  };
+  $('modal-title').textContent = 'Nuova voce';
+  $('modal-body').innerHTML = nuovaVoceFormHtml(it.descrizione);
+  wireNuovaVoceForm({
+    onCancel: indietro,
+    onDone: async (cat, rule) => {
+      it.categoryId = cat.id;
+      // La regola vale anche per le altre righe dell'anteprima rimaste senza categoria: è lo
+      // stesso negozio, e farsele una per una sarebbe assurdo avendo appena scritto la regola.
+      if (rule) _import.items.forEach(x => { if (!x.categoryId) x.categoryId = merchantCategory(x.descrizione); });
+      indietro();
+      showToast(`✅ Voce «${cat.name}» creata`);
+    },
+  });
+}
+
 /* ── Impostazioni ───────────────────────────────────────────── */
 async function renderImpostazioni() {
   const u = S.session.user;
@@ -1136,6 +1306,20 @@ async function readMovements() {
   }
 }
 
+// L'anteprima si ridisegna (cambio carta, ritorno dalla creazione di una voce) e l'HTML riparte
+// da _import.items: quello che l'utente ha spuntato e scelto va prima riportato lì, o si perde.
+function syncImportSelections() {
+  if (!_import) return;
+  document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => {
+    const it = _import.items[parseInt(cb.dataset.impIdx, 10)];
+    if (it) it.checked = cb.checked;
+  });
+  document.querySelectorAll('#modal-body [data-imp-cat]').forEach(sel => {
+    const it = _import.items[parseInt(sel.dataset.impCat, 10)];
+    if (it && sel.value !== NEW_CAT_OPTION) it.categoryId = sel.value || null;
+  });
+}
+
 function renderImportList(cardFilter) {
   if (!_import) return;
   const { items, carte, account } = _import;
@@ -1172,13 +1356,13 @@ function renderImportList(cardFilter) {
         <thead><tr><th></th><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th></tr></thead>
         <tbody>${visibili.map(({ it, i }) => `
           <tr class="${it.gia ? 'is-dup' : ''}">
-            <td><input type="checkbox" data-imp-idx="${i}" ${it.gia ? '' : 'checked'} /></td>
+            <td><input type="checkbox" data-imp-idx="${i}" ${(it.checked === undefined ? !it.gia : it.checked) ? 'checked' : ''} /></td>
             <td class="mono" style="white-space:nowrap">${fmtDate(it.data)}</td>
             <td title="${esc(it.descrizione)}">${esc(merchantText(it.descrizione))}
               ${it.card ? `<span class="text-muted"> · 💳 ${esc(it.card)}</span>` : ''}
               ${it.gia ? '<span class="text-muted"> · già importato</span>' : ''}</td>
             <td class="mono text-right" style="white-space:nowrap;color:${it.importo < 0 ? 'var(--c-danger)' : 'var(--c-success)'}">${fmtEUR(it.importo)}</td>
-            <td><select class="form-input form-select" data-imp-cat="${i}" style="padding:3px 6px;font-size:.78rem">${catOptions(it.categoryId)}</select></td>
+            <td><select class="form-input form-select" data-imp-cat="${i}" style="padding:3px 6px;font-size:.78rem">${catOptions(it.categoryId, undefined, true)}</select></td>
           </tr>`).join('')}</tbody>
       </table>
     </div>
@@ -1189,6 +1373,7 @@ function renderImportList(cardFilter) {
 
   const sel = $('imp-card');
   if (sel) sel.addEventListener('change', () => {
+    syncImportSelections();
     localStorage.setItem(CARD_FILTER_KEY, sel.value);
     renderImportList(sel.value);
   });
@@ -1358,26 +1543,28 @@ document.addEventListener('change', async e => {
     S.filters[el.dataset.filter] = el.value;
     renderTransazioni();
   } else if (el.matches('[data-set-cat]')) {
-    const id = el.dataset.setCat;
-    const tx = S.transactions.find(t => t.id === id);
-    const categoryId = el.value || null;
+    const tx = S.transactions.find(t => t.id === el.dataset.setCat);
+    if (!tx) return;
+    if (el.value === NEW_CAT_OPTION) {
+      // La tendina torna com'era: la voce non esiste ancora, e se si annulla il movimento non
+      // deve restare con «➕ Nuova voce…» selezionato.
+      el.value = tx.category_id || '';
+      openNuovaVoceModal(tx);
+      return;
+    }
     try {
-      await sbUpd('sal_transactions', `id=eq.${id}`, { category_id: categoryId });
-      if (tx) tx.category_id = categoryId;
-      // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
-      // impara, senza una schermata di regole da compilare.
-      // Si impara solo se una regola non dava già quella categoria: correggere a mano una riga
-      // che era già giusta non deve creare una seconda regola identica nel risultato.
-      if (tx && categoryId && merchantCategory(tx.description) !== categoryId) {
-        const rule = await learnMerchant(tx.description, categoryId);
-        // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
-        // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
-        // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
-        const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
-        if (altri) showToast(`✨ Categorizzati altri ${altri} movimenti dello stesso negozio`);
-      }
+      await setTxCategory(tx, el.value || null);
       render();
     } catch (err) { alert('Errore: ' + err.message); }
+  } else if (el.matches('[data-imp-cat]')) {
+    const it = _import?.items[parseInt(el.dataset.impCat, 10)];
+    if (!it) return;
+    if (el.value === NEW_CAT_OPTION) {
+      el.value = it.categoryId || '';
+      openNuovaVoceImport(parseInt(el.dataset.impCat, 10));
+      return;
+    }
+    it.categoryId = el.value || null;
   }
 });
 
