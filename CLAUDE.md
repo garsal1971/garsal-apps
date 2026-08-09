@@ -139,7 +139,8 @@ Configurazione → 🏦 Banche e Conti):
    `uses '{}'`, e l'utente dà a ciascuno un nome e uno o più usi.
 
 `cm_bank_connections.uses` ammette `'cost_analysis'` (Spese Famiglia), `'contribuzione'`,
-`'spese_ada'`, `'fondo'`, `'conto_risparmio'`, `'casa_rosa'` e `'danaro_rosa'`: **un conto può
+`'spese_ada'`, `'spese_sal'` (Spese Personali), `'fondo'`, `'conto_risparmio'`, `'casa_rosa'` e
+`'danaro_rosa'`: **un conto può
 servire a più moduli** — il conto
 delle spese comuni è insieme `cost_analysis` e `contribuzione` — e `uses` vuoto significa «scoperto
 ma non ancora battezzato» — il conto esiste e si vede, ma nessun modulo lo elenca. Ha sostituito
@@ -241,6 +242,19 @@ Rosa vede le voci in `situazione-rosa.html` (via `cm_guest_access`), **non i mov
 Sono volutamente **separate dalle `ca_*`**: le spese di Ada non devono entrare nei totali di
 Spese Famiglia, e una separazione per campo sarebbe retta solo finché ogni query si ricorda di
 filtrarla.
+
+### Spese Personali (`sal_`)
+| Table | Purpose |
+|---|---|
+| `sal_super_categories` | Super-categorie: **l'unico livello che porta il `color`** |
+| `sal_categories` | Voci di spesa (nome unico per utente, `icon`, `super_id`) |
+| `sal_transactions` | Movimenti del conto personale: `amount` **con segno** (entrate comprese), **una sola** `category_id`, `card_identification`, `external_id` (unico per `bank_connection_id`) |
+| `sal_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria |
+
+Stesso schema delle `ada_*` e stessa ragione per cui è separato dalle `ca_*`: le spese del conto
+personale di Salvatore non devono entrare nei totali di Spese Famiglia. **L'unica differenza è
+cosa ci finisce dentro**: qui si archiviano anche le entrate, perché la pagina tiene il saldo del
+periodo — nessuna colonna in più, `amount` è già con segno.
 
 ### Spuntiamola (`sp_`)
 | Table | Purpose |
@@ -665,6 +679,30 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
 - **Nessuna categorizzazione da MCC**: `enable-banking-transactions` non restituisce il
   `merchant_category_code` (lo estrae solo `enable-banking-sync`, per Spese Famiglia). Qui
   l'automatismo è tutto nei negozi imparati.
+
+### `spese-personali.html` — Spese Personali
+- Il conto personale di Salvatore: import dal conto, categorie a due livelli, negozi imparati e
+  dashboard. Si apre dal collegamento *💳 Spese Personali* nella sidebar di `finanza.html`
+  (sezione **Salvatore**).
+- **Gemello di `spese-ada.html`**, a meno di tre cose — se modifichi una delle due, guarda anche
+  l'altra:
+  1. **tabelle `sal_*`** invece di `ada_*` (`20260809120000_sal_spese_personali_tables.sql`),
+     separate dalle `ca_*` per la stessa ragione: le spese personali non devono entrare nei
+     totali di Spese Famiglia;
+  2. **entrate comprese**, non solo le uscite. `amount` è già con segno, quindi lo schema non
+     cambia: cambia cosa la pagina propone all'import (una casella *Solo le uscite*, spenta di
+     default) e cosa somma — KPI uscite / entrate / **saldo del periodo**, andamento mensile a
+     due serie, e una tabella *Dettaglio entrate* a parte. Le ciambelle restano sulle **sole
+     uscite**: mescolare entrate e uscite in una torta dà percentuali che non vogliono dire
+     niente;
+  3. il filtro per carta lascia comunque passare i **movimenti senza carta** (bonifici,
+     accrediti, addebiti). Su Ada si cerca una carta e basta; qui quei movimenti sono
+     esattamente le entrate che servono per il saldo, e nasconderli col filtro attivo
+     falserebbe il totale.
+- Il conto è quello spuntato come `'spese_sal'` in `cm_bank_connections.uses` — uso a sé e non
+  `'spese_ada'` riusato, altrimenti le due pagine si troverebbero ciascuna il conto dell'altra
+  nella tendina dell'import. Il conto UniCredit personale è già collegato: basta spuntare
+  l'uso da Finanza → Configurazione → 🏦 Banche e Conti.
 
 ### `conto-spese-teresa.html` — Contribuzione
 - Chi ha versato quanto sul conto delle spese comuni, e quanto dovrebbe aver versato: quote 2/5–3/5
