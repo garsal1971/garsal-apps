@@ -499,7 +499,10 @@ collegato (`fnz_funds.linked_portfolio_id`) e non ancora usati per comprare tito
 portafoglio non ha un conto di cassa — esistono solo `BUY` e `SELL` — quindi si ricava per
 differenza: versamenti nominali che fanno quota (`auto`/`confermato`) meno acquisti con
 commissioni, più il netto delle vendite, mai sotto zero. **Anche questa formula vive in tutte
-e tre le copie** (`computePortfolioCash`, `portfolioCash`, `cashOf`). P&L e variazione
+e tre le copie** (`computePortfolioCash`, `portfolioCash`, `cashOf`). Un portafoglio può
+essere **tutta liquidità e nessun titolo** (il Conto Risparmio): chi somma i portafogli deve
+partire dall'elenco dei portafogli, non da quello delle transazioni, o quel valore sparisce
+in silenzio da un totale solo. P&L e variazione
 giornaliera restano invece sui soli titoli: la liquidità non guadagna né perde, e sommarla al
 valore senza sommarla al costo la farebbe comparire come utile il giorno che entra sul conto.
 

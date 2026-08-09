@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.124</title>
+<title>AppSphere v1.5.125</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1948,8 +1948,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.124';
-const BUILD_TIME  = '2026-08-01T09:30:00Z';
+const APP_VERSION = 'v1.5.125';
+const BUILD_TIME  = '2026-08-09T09:20:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2959,7 +2959,7 @@ async function fetchPortfolioLiveValue(headers) {
     q('fnz_funds', 'select=id,linked_portfolio_id'),
     q('fnz_fund_contributions', 'select=fund_id,amount,status')
   ]);
-  if (!portfolios.length || !txs.length) return null;
+  if (!portfolios.length) return null;
 
   // ultimo prezzo per simbolo: la lista è ordinata dal più recente, quindi
   // la prima occorrenza di ogni simbolo è quella buona
@@ -3010,8 +3010,10 @@ async function fetchPortfolioLiveValue(headers) {
 
   let total = 0;
   for (const p of portfolios) {
-    const m = byPortfolio[p.id];
-    if (!m) continue;
+    // Nessun titolo comprato non vuol dire portafoglio vuoto: la liquidità del fondo
+    // collegato conta lo stesso (è il caso del Conto Risparmio, tutto giacenza e zero
+    // transazioni). Saltarlo qui faceva sparire quel valore dal solo avviso di home.
+    const m = byPortfolio[p.id] || new Map();
     const own = (parseFloat(p.ownership_percentage) || 100) / 100;
     let value = 0;
     for (const [productId, h] of m) {
