@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spese Personali v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f6fb;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-primary:   #4f46e5;
+      --c-primary-h: #4338ca;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; padding-top: 56px; }
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .pos    { color: var(--c-success); }
+    .neg    { color: var(--c-danger); }
+    .text-muted { color: var(--c-muted); }
+    .text-sm    { font-size: .82rem; }
+    .fw-600  { font-weight: 600; }
+    .text-right  { text-align: right; }
+    .hstack  { display: flex; align-items: center; }
+    .gap-8   { gap: 8px; }
+    .gap-12  { gap: 12px; }
+    .mt-8    { margin-top: 8px; }
+    .mt-12   { margin-top: 12px; }
+    .mb-16   { margin-bottom: 16px; }
+    .wrap    { flex-wrap: wrap; }
+    #loading-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--c-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #screen-app { display: none; flex-direction: column; min-height: 100dvh; }
+    #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
+    #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+    .topbar-spacer { flex: 1; }
+    .app-layout { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 200px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #e0e7ff; color: var(--c-primary); }
+    .nav-label { font-size: .68rem; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .08em; padding: 14px 11px 6px; }
+    .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .page-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+    .page-sub { color: var(--c-muted); font-size: .84rem; margin-top: 2px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; font-weight: 500; cursor: pointer; border: none; transition: background .15s, color .15s, border-color .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: var(--c-surface); color: var(--c-text); border: 1.5px solid var(--c-border); }
+    .btn-outline:hover { border-color: #aab0bc; background: #f8f9fb; }
+    .btn-danger { background: #fee2e2; color: var(--c-danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 6px 12px; font-size: .82rem; }
+    .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--c-muted); font-size: .9rem; line-height: 1; transition: background .12s, color .12s; }
+    .btn-icon:hover { background: var(--c-bg); color: var(--c-text); }
+    .btn-icon-danger:hover { background: #fee2e2; color: var(--c-danger); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; text-align: right; }
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+    .card-title { font-size: .96rem; font-weight: 600; margin-bottom: 14px; }
+    .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+    .card-header-row .card-title { margin-bottom: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
+    .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); }
+    .table td.nowrap { white-space: nowrap; }
+    .table tbody tr:hover td { background: #fafbfd; }
+    .cat-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-none { background: #fef3c7; color: #92400e; }
+    .chart-wrap { height: 220px; display: flex; align-items: center; justify-content: center; }
+    .chart-wrap canvas { max-height: 220px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: .82rem; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+    .form-input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .9rem; color: var(--c-text); outline: none; transition: border-color .15s; background: var(--c-surface); }
+    .form-input:focus { border-color: var(--c-primary); }
+    .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+    .filters .form-input { width: auto; min-width: 130px; }
+    #modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+    #modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 540px; max-height: 90dvh; overflow-y: auto; }
+    #modal-card.modal-wide { max-width: 860px; }
+    #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--c-border); }
+    #modal-header h3 { font-size: 1.05rem; font-weight: 700; }
+    #modal-close { background: none; border: none; font-size: 1.1rem; color: var(--c-muted); cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
+    #modal-close:hover { background: var(--c-bg); color: var(--c-text); }
+    #modal-body { padding: 18px 22px 22px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--c-muted); }
+    .empty-icon { font-size: 2.4rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .88rem; line-height: 1.6; }
+    .summary-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--c-border); font-size: .9rem; }
+    .summary-row:last-child { border-bottom: none; }
+    .import-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .import-table th { text-align: left; color: var(--c-muted); font-weight: 600; padding: 4px 6px; white-space: nowrap; }
+    .import-table td { padding: 5px 6px; border-top: 1px solid var(--c-border); vertical-align: top; }
+    .import-table tr.is-dup td { opacity: .5; }
+    .import-note { font-size: .78rem; color: var(--c-muted); }
+    .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
+    #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(120%); background: var(--c-text); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: .85rem; box-shadow: var(--shadow); z-index: 4000; transition: transform .22s ease; max-width: 90vw; text-align: center; }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; display: flex; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+      .app-main { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+      .kpi-card { padding: 10px 12px; }
+      .kpi-label { font-size: .62rem; margin-bottom: 3px; }
+      .kpi-value { font-size: 1rem; }
+      .form-row-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="garsal-top-bar">
+  <a href="finanza.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
+    <span style="width:22px;height:22px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💳</span>
+    <div id="garsal-top-bar-text">Spese Personali</div>
+  </a>
+  <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu"><span></span><span></span><span></span></button>
+</div>
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <span class="text-muted text-sm">Caricamento…</span>
+</div>
+
+<div id="screen-app">
+  <div id="mobile-nav-overlay"></div>
+  <div class="app-layout">
+    <nav class="sidebar" id="sidebar">
+      <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-item" data-action="nav" data-view="transazioni">🧾 Movimenti</button>
+      <div class="nav-label">Gestione</div>
+      <button class="nav-item" data-action="nav" data-view="categorie">🏷️ Categorie</button>
+      <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
+      <div class="nav-label">Altro</div>
+      <a class="nav-item" href="finanza.html" style="text-decoration:none">💰 Finanza</a>
+    </nav>
+    <main class="app-main">
+      <div id="view-dashboard" class="view active"></div>
+      <div id="view-transazioni" class="view"></div>
+      <div id="view-categorie" class="view"></div>
+      <div id="view-impostazioni" class="view"></div>
+    </main>
+  </div>
+  <footer class="version-bar">
+    Spese Personali · <span class="mono">v1.0.0</span>
+    <span class="topbar-spacer"></span>
+    <span id="footer-info"></span>
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<div id="modal-overlay" class="hidden">
+  <div id="modal-card">
+    <div id="modal-header">
+      <h3 id="modal-title"></h3>
+      <button id="modal-close" data-action="close-modal">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   SPESE PERSONALI — il conto personale di Salvatore.
+   Contabilità separata da Spese Famiglia e da Spese Ada: tabelle
+   sal_*, non ca_* né ada_*. I movimenti arrivano dal conto spuntato
+   come «💳 Spese Personali» in Finanza → Banche e Conti, letti da
+   enable-banking-transactions (che legge e basta: filtro, doppioni
+   e categorie stanno qui).
+
+   Differenza rispetto a Spese Ada: qui si archiviano anche le
+   ENTRATE, non solo le uscite, e la pagina tiene il saldo del
+   periodo. Lo schema è lo stesso — amount è già con segno — quindi
+   cambia solo cosa si propone all'import e cosa si somma.
+   ═══════════════════════════════════════════════════════════════ */
+
+var APP_VERSION = 'v1.0.0';
+var BUILD_TIME  = '2026-08-09T10:00:00Z';
+console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+// L'uso con cui il conto va spuntato in Finanza → Banche e Conti. Uso a sé e non 'spese_ada'
+// riusato: altrimenti le due pagine si troverebbero ciascuna il conto dell'altra nella tendina.
+const BANK_USE = 'spese_sal';
+const BANK_USE_LABEL = '💳 Spese Personali';
+
+const S = {
+  session: null, view: 'dashboard',
+  transactions: [], categories: [], supers: [], merchants: [],
+  charts: {}, selectedYear: null,
+  filters: { mese: '', categoria: '', tipo: '', testo: '' },
+};
+
+/* ── Supabase REST ──────────────────────────────────────────── */
+const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+function sbH(extra = {}) {
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json', ...extra };
+}
+async function sbQ(table, params = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbIns(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbUpd(table, filter, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbDel(table, filter) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+}
+async function sbFn(name, payload) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST', headers: sbH(), body: JSON.stringify(payload),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data?.error) throw new Error(data?.error?.message || r.statusText);
+  return data;
+}
+
+/* ── Sessione ───────────────────────────────────────────────── */
+const loadSession = () => { try { return JSON.parse(localStorage.getItem('garsal_session')); } catch { return null; } };
+async function initFromSbToken(token) {
+  try {
+    const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+    })).json();
+    if (user?.id) return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+  } catch {}
+  return null;
+}
+async function refreshSession(session) {
+  if (!session?.refresh_token) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    localStorage.setItem('garsal_session', JSON.stringify(ns));
+    return ns;
+  } catch { return null; }
+}
+
+/* ── Formattazione ──────────────────────────────────────────── */
+const fmtEUR = n => (n == null || isNaN(n)) ? '—' : (+n).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+const $ = id => document.getElementById(id);
+const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const PALETTE = ['#4f46e5','#16a34a','#d97706','#dc2626','#0891b2','#db2777','#65a30d','#7c3aed','#0f766e','#b45309'];
+
+/* ── Categorie e super-categorie ─────────────────────────────
+   Due livelli: la super-categoria è l'unica che porta il colore, la voce lo eredita. Una voce
+   può non avere super: sono quelle di partenza, e finché non le si appende da qualche parte
+   compaiono raggruppate sotto «senza super-categoria», non spariscono dai riepiloghi.  */
+const NO_SUPER_COLOR = '#94a3b8';
+const catById = id => S.categories.find(c => c.id === id) || null;
+const superById = id => S.supers.find(s => s.id === id) || null;
+// Il colore di una voce non è suo: è quello della sua super-categoria.
+const colorOfCat = id => superById(catById(id)?.super_id)?.color || NO_SUPER_COLOR;
+
+function catChip(id) {
+  const c = catById(id);
+  if (!c) return '<span class="badge badge-none">senza categoria</span>';
+  const s = superById(c.super_id);
+  return `<span class="text-sm"><span class="cat-dot" style="background:${colorOfCat(id)}"></span>${c.icon || ''} ${esc(c.name)}`
+    + (s ? `<span class="text-muted"> · ${s.icon || ''} ${esc(s.name)}</span>` : '')
+    + '</span>';
+}
+function superChip(id) {
+  const s = superById(id);
+  if (!s) return '<span class="badge badge-none">senza super-categoria</span>';
+  return `<span class="text-sm"><span class="cat-dot" style="background:${s.color || NO_SUPER_COLOR}"></span>${s.icon || ''} ${esc(s.name)}</span>`;
+}
+
+// Le voci nella tendina sono raggruppate per super-categoria: con due livelli un elenco piatto
+// diventa illeggibile appena le voci passano la decina.
+function catOptions(selected, placeholder = '— senza categoria —') {
+  const gruppo = (label, voci) => voci.length
+    ? `<optgroup label="${esc(label)}">${voci.map(c => `<option value="${c.id}" ${selected === c.id ? 'selected' : ''}>${c.icon || ''} ${esc(c.name)}</option>`).join('')}</optgroup>`
+    : '';
+  return `<option value="">${placeholder}</option>`
+    + S.supers.map(s => gruppo(`${s.icon || ''} ${s.name}`.trim(), S.categories.filter(c => c.super_id === s.id))).join('')
+    + gruppo('— senza super-categoria —', S.categories.filter(c => !c.super_id));
+}
+const superOptions = (selected, placeholder = '— senza super-categoria —') =>
+  `<option value="">${placeholder}</option>` +
+  S.supers.map(s => `<option value="${s.id}" ${selected === s.id ? 'selected' : ''}>${s.icon || ''} ${esc(s.name)}</option>`).join('');
+
+/* ── Dati ───────────────────────────────────────────────────── */
+async function loadData() {
+  const [supers, cats, txs, mm] = await Promise.all([
+    sbQ('sal_super_categories', 'select=*&order=name.asc'),
+    sbQ('sal_categories', 'select=*&order=name.asc'),
+    sbQ('sal_transactions', 'select=*&order=date.desc,created_at.desc'),
+    sbQ('sal_merchant_map', 'select=*'),
+  ]);
+  S.supers = supers || [];
+  S.categories = cats || [];
+  S.transactions = txs || [];
+  S.merchants = mm || [];
+}
+
+const annoDi = t => parseInt((t.date || '').slice(0, 4), 10);
+function getAnni() {
+  const anni = [...new Set(S.transactions.map(annoDi).filter(Boolean))].sort((a, b) => b - a);
+  return anni.length ? anni : [new Date().getFullYear()];
+}
+// amount è con segno. Uscite ed entrate si sommano ciascuna in positivo — un totale «speso»
+// che porta il meno davanti si legge male in una tabella dove accanto c'è la percentuale — e il
+// saldo resta la somma con segno, che è l'unica cosa che deve poter essere negativa.
+const uscitaDi  = t => (+t.amount < 0 ? -(+t.amount) : 0);
+const entrataDi = t => (+t.amount > 0 ?  (+t.amount) : 0);
+const isUscita  = t => +t.amount < 0;
+
+/* ── Merchant appresi ───────────────────────────────────────── */
+// UniCredit scrive la causale di un pagamento POS così:
+//   PAGAMENTO POS PAGAMENTO APPLE PAY NFC del 15/07/2026 CARTA 31342819 DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA
+// Tutto quello che sta PRIMA dell'importo è preambolo che cambia a ogni movimento — modalità di
+// pagamento, data, numero di carta, importo — e non dice niente su dove si è speso. L'esercente
+// (con la città) è quello che viene DOPO l'importo, ed è sempre uguale per lo stesso negozio.
+// Se il pezzo non c'è (addebiti, bonifici, accrediti) si tiene la descrizione intera: la regola
+// resta lunga e la si accorcia a mano. Non si inventa niente.
+const POS_MERCHANT_RE = /\bDI\s+[A-Z]{3}\s+[\d.,]+\s+(.+)$/i;
+function merchantText(desc) {
+  const s = (desc || '').replace(/\s+/g, ' ').trim();
+  const m = s.match(POS_MERCHANT_RE);
+  return (m && m[1].trim()) || s;
+}
+// La stessa causale porta anche il numero della carta usata: è il ripiego quando la banca non
+// espone la carta nei campi strutturati dell'API, e senza di esso il filtro per carta — l'unico
+// modo per isolare le spese di una carta su un conto con più carte — resterebbe vuoto.
+const CARD_IN_DESC_RE = /\bCARTA\s+(\d{4,})\b/i;
+const cardFromDescription = desc => ((desc || '').match(CARD_IN_DESC_RE) || [])[1] || null;
+
+// Poi la solita normalizzazione: maiuscolo, spazi compressi e via il codice numerico finale che
+// alcune banche appiccicano allo stesso negozio ("ESSELUNGA *12345").
+const normalizeMerchant = desc => merchantText(desc).toUpperCase().replace(/[*#]?\s*\d{3,}$/, '').trim();
+// Il confronto è per CONTENUTO, non per uguaglianza: la banca infila nella causale il
+// riferimento dell'operazione e la data ("AMAZON.IT *MK7HG2LO3"), quindi due acquisti dallo
+// stesso negozio non hanno mai la stessa descrizione e un confronto esatto non riaggancerebbe
+// niente. La regola nasce lunga (tutta la descrizione) e la si accorcia a mano tenendo solo il
+// nome del negozio.
+//
+// Fra più regole che agganciano vince la PIÙ LUNGA, cioè la più specifica: senza questa
+// precedenza una regola corta imparata prima ("FARMACIA") si prenderebbe anche i movimenti di
+// "FARMACIA S.ANNA" a cui era stata data un'altra categoria.
+const merchantRule = desc => {
+  const hay = normalizeMerchant(desc);
+  if (!hay) return null;
+  return S.merchants
+    .filter(x => x.merchant_key && hay.includes(x.merchant_key))
+    .sort((a, b) => b.merchant_key.length - a.merchant_key.length)[0] || null;
+};
+const merchantCategory = desc => merchantRule(desc)?.category_id || null;
+// Quanti movimenti in archivio aggancerebbe una regola: si vede mentre la si accorcia, così non
+// è un tiro al buio.
+const merchantMatchCount = key => {
+  const k = (key || '').trim().toUpperCase();
+  return k ? S.transactions.filter(t => normalizeMerchant(t.description).includes(k)).length : 0;
+};
+// La regola nasce con TUTTA la descrizione normalizzata: è il default prudente, perché una
+// chiave corta inventata in automatico aggancerebbe cose che non c'entrano. Accorciarla al solo
+// nome del negozio si fa a mano da Categorie → Negozi imparati, vedendo quanti movimenti
+// aggancia mentre la si scrive.
+async function learnMerchant(desc, categoryId) {
+  const key = normalizeMerchant(desc);
+  if (!key) return null;
+  try {
+    if (categoryId) {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/sal_merchant_map?on_conflict=user_id,merchant_key`, {
+        method: 'POST',
+        headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+        body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, updated_at: new Date().toISOString() }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+      S.merchants = await sbQ('sal_merchant_map', 'select=*');
+      return S.merchants.find(x => x.merchant_key === key) || null;
+    } else {
+      // Per id, non per chiave: un merchant_key con virgole o spazi va citato nei filtri
+      // PostgREST, e sbagliare la citazione qui vorrebbe dire cancellare la regola sbagliata.
+      const row = S.merchants.find(x => x.merchant_key === key);
+      if (!row) return null;
+      await sbDel('sal_merchant_map', `id=eq.${row.id}`);
+      S.merchants = await sbQ('sal_merchant_map', 'select=*');
+    }
+    return null;
+  } catch (e) {
+    console.error('Merchant non imparato:', e);
+    return null;
+  }
+}
+
+// Un negozio imparato adesso vale anche per quello che è già in archivio: senza questo,
+// categorizzare la prima "FARMACIA X" lasciava le altre dodici già importate vuote, e la regola
+// si vedeva funzionare solo al prossimo import. Tocca SOLO i movimenti senza categoria: quello
+// che è già stato classificato — a mano o da una regola vecchia — non viene mai sovrascritto.
+// onlyRuleId limita l'applicazione ai movimenti che una singola regola si aggiudica (dopo
+// un'assegnazione manuale): non basta che la descrizione contenga quella chiave, deve essere
+// quella regola a vincere, altrimenti si scavalcherebbe una regola più specifica.
+async function applyLearnedMerchants(onlyRuleId = null) {
+  const perCategoria = new Map();
+  S.transactions.forEach(t => {
+    if (t.category_id) return;
+    const rule = merchantRule(t.description);
+    if (!rule) return;
+    if (onlyRuleId && rule.id !== onlyRuleId) return;
+    if (!perCategoria.has(rule.category_id)) perCategoria.set(rule.category_id, []);
+    perCategoria.get(rule.category_id).push(t);
+  });
+  let n = 0;
+  for (const [categoryId, txs] of perCategoria) {
+    const ids = txs.map(t => t.id);
+    // Un solo UPDATE per categoria invece di uno per riga: PostgREST filtra con in.(...).
+    await sbUpd('sal_transactions', `id=in.(${ids.join(',')})`, { category_id: categoryId });
+    txs.forEach(t => { t.category_id = categoryId; });
+    n += ids.length;
+  }
+  return n;
+}
+
+function showToast(msg) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* ── Grafici ────────────────────────────────────────────────── */
+// Le voci della stessa super-categoria hanno per definizione lo stesso colore, e nella ciambella
+// per voce diventerebbero fette indistinguibili. Si schiariscono progressivamente: restano
+// riconoscibili come famiglia, ma si contano.
+function shade(hex, step) {
+  const h = (hex || NO_SUPER_COLOR).replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  if (isNaN(n)) return NO_SUPER_COLOR;
+  const f = Math.min(0.55, step * 0.17);
+  const mix = c => Math.round(c + (255 - c) * f);
+  const [r, g, b] = [mix((n >> 16) & 255), mix((n >> 8) & 255), mix(n & 255)];
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function drawChart(id, config) {
+  if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
+  const canvas = $(id);
+  if (!canvas) return;
+  S.charts[id] = new Chart(canvas.getContext('2d'), config);
+}
+
+/* ── Dashboard ──────────────────────────────────────────────── */
+function renderDashboard() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
+  const anno = S.selectedYear;
+  const txs = S.transactions.filter(t => annoDi(t) === anno);
+  const spese   = txs.filter(isUscita);
+  const entrate = txs.filter(t => !isUscita(t));
+  const totUscite  = spese.reduce((s, t) => s + uscitaDi(t), 0);
+  const totEntrate = entrate.reduce((s, t) => s + entrataDi(t), 0);
+  const saldo = totEntrate - totUscite;
+  const senzaCat = txs.filter(t => !t.category_id).length;
+  const mesiConDati = new Set(txs.map(t => t.date.slice(0, 7))).size || 1;
+
+  // Le ciambelle sono sulle sole uscite: mescolare entrate e uscite in una torta darebbe
+  // percentuali che non vogliono dire niente. Le entrate hanno la loro tabella più sotto.
+  const perCat = new Map();
+  spese.forEach(t => {
+    const k = t.category_id || '';
+    perCat.set(k, (perCat.get(k) || 0) + uscitaDi(t));
+  });
+  const catRows = [...perCat.entries()].sort((a, b) => b[1] - a[1]);
+
+  // Per super-categoria: le voci senza super finiscono in un gruppo a parte invece di sparire.
+  const perSuper = new Map();
+  spese.forEach(t => {
+    const k = catById(t.category_id)?.super_id || '';
+    perSuper.set(k, (perSuper.get(k) || 0) + uscitaDi(t));
+  });
+  const superRows = [...perSuper.entries()].sort((a, b) => b[1] - a[1]);
+
+  // Entrate per voce: elenco a parte, non una fetta della stessa torta.
+  const perCatEntrate = new Map();
+  entrate.forEach(t => {
+    const k = t.category_id || '';
+    perCatEntrate.set(k, (perCatEntrate.get(k) || 0) + entrataDi(t));
+  });
+  const entrateRows = [...perCatEntrate.entries()].sort((a, b) => b[1] - a[1]);
+
+  // Per mese, due serie affiancate.
+  const usciteMese  = Array.from({ length: 12 }, () => 0);
+  const entrateMese = Array.from({ length: 12 }, () => 0);
+  txs.forEach(t => {
+    const i = parseInt(t.date.slice(5, 7), 10) - 1;
+    usciteMese[i]  += uscitaDi(t);
+    entrateMese[i] += entrataDi(t);
+  });
+
+  setHtml('view-dashboard', `
+    <div class="view-header">
+      <div><h2 class="page-title">Dashboard</h2><p class="page-sub">Conto personale — ${anno}</p></div>
+      <div class="hstack gap-8 wrap">
+        <select class="form-input form-select" data-action="year-filter" style="width:auto">
+          ${anni.map(a => `<option value="${a}" ${a === anno ? 'selected' : ''}>${a}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
+      </div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Uscite</div><div class="kpi-value mono neg">${fmtEUR(totUscite)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Entrate</div><div class="kpi-value mono pos">${fmtEUR(totEntrate)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Saldo del periodo</div><div class="kpi-value mono ${saldo < 0 ? 'neg' : 'pos'}">${fmtEUR(saldo)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Uscita media mensile</div><div class="kpi-value mono">${fmtEUR(totUscite / mesiConDati)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Movimenti</div><div class="kpi-value mono">${txs.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Da categorizzare</div><div class="kpi-value mono ${senzaCat ? 'neg' : ''}">${senzaCat}</div></div>
+    </div>
+    ${txs.length === 0
+      ? `<div class="card"><div class="empty-state"><div class="empty-icon">💳</div>
+          <p>Nessun movimento per il ${anno}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca.</p></div></div>`
+      : `${spese.length ? `<div class="grid-2">
+          <div class="card">
+            <div class="card-title">Uscite per super-categoria</div>
+            <div class="chart-wrap"><canvas id="chart-super"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Uscite per voce</div>
+            <div class="chart-wrap"><canvas id="chart-cat"></canvas></div>
+          </div>
+        </div>` : ''}
+        <div class="card">
+          <div class="card-title">Andamento mensile</div>
+          <div class="chart-wrap"><canvas id="chart-mese"></canvas></div>
+        </div>
+        ${spese.length ? `<div class="card">
+          <div class="card-title">Dettaglio uscite</div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>Super-categoria</th><th>Voce</th><th class="text-right">Uscita</th><th class="text-right">%</th><th class="text-right">Movimenti</th></tr></thead>
+            <tbody>${catRows.map(([id, val]) => `<tr>
+              <td>${superChip(catById(id)?.super_id || null)}</td>
+              <td>${catById(id) ? `${catById(id).icon || ''} ${esc(catById(id).name)}` : '<span class="badge badge-none">senza categoria</span>'}</td>
+              <td class="text-right mono fw-600">${fmtEUR(val)}</td>
+              <td class="text-right mono text-muted">${totUscite ? Math.round(val / totUscite * 100) : 0}%</td>
+              <td class="text-right mono text-muted">${spese.filter(t => (t.category_id || '') === id).length}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>` : ''}
+        ${entrate.length ? `<div class="card">
+          <div class="card-title">Dettaglio entrate</div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>Voce</th><th class="text-right">Entrata</th><th class="text-right">%</th><th class="text-right">Movimenti</th></tr></thead>
+            <tbody>${entrateRows.map(([id, val]) => `<tr>
+              <td>${catById(id) ? `${catById(id).icon || ''} ${esc(catById(id).name)}` : '<span class="badge badge-none">senza categoria</span>'}</td>
+              <td class="text-right mono fw-600 pos">${fmtEUR(val)}</td>
+              <td class="text-right mono text-muted">${totEntrate ? Math.round(val / totEntrate * 100) : 0}%</td>
+              <td class="text-right mono text-muted">${entrate.filter(t => (t.category_id || '') === id).length}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>` : ''}`}
+  `);
+
+  if (!txs.length) return;
+  const doughnut = { cutout: '58%', plugins: { legend: { position: 'right', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 10 } } }, animation: { duration: 400 } };
+  if (spese.length) {
+    drawChart('chart-super', {
+      type: 'doughnut',
+      data: {
+        labels: superRows.map(([id]) => superById(id)?.name || 'Senza super-categoria'),
+        datasets: [{
+          data: superRows.map(([, v]) => Math.round(v * 100) / 100),
+          backgroundColor: superRows.map(([id], i) => superById(id)?.color || (id ? PALETTE[i % PALETTE.length] : NO_SUPER_COLOR)),
+          borderWidth: 2, borderColor: '#fff',
+        }],
+      },
+      options: doughnut,
+    });
+    drawChart('chart-cat', {
+      type: 'doughnut',
+      data: {
+        labels: catRows.map(([id]) => catById(id)?.name || 'Senza categoria'),
+        datasets: [{
+          data: catRows.map(([, v]) => Math.round(v * 100) / 100),
+          // Il colore resta quello della super-categoria — le due ciambelle vanno lette insieme,
+          // e colori scorrelati le farebbero sembrare due cose diverse — schiarito di un gradino
+          // per ogni voce successiva dello stesso gruppo.
+          backgroundColor: (() => {
+            const visti = new Map();
+            return catRows.map(([id]) => {
+              const gruppo = catById(id)?.super_id || '';
+              const step = visti.get(gruppo) || 0;
+              visti.set(gruppo, step + 1);
+              return shade(colorOfCat(id), step);
+            });
+          })(),
+          borderWidth: 2, borderColor: '#fff',
+        }],
+      },
+      options: doughnut,
+    });
+  }
+  drawChart('chart-mese', {
+    type: 'bar',
+    data: {
+      labels: MESI.map(m => m.slice(0, 3)),
+      datasets: [
+        { label: 'Uscite',  data: usciteMese.map(v => Math.round(v * 100) / 100),  backgroundColor: '#dc262680', borderColor: '#dc2626', borderWidth: 2 },
+        { label: 'Entrate', data: entrateMese.map(v => Math.round(v * 100) / 100), backgroundColor: '#16a34a80', borderColor: '#16a34a', borderWidth: 2 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11 } } },
+      scales: { y: { ticks: { callback: v => '€' + v.toLocaleString('it-IT') } } },
+    },
+  });
+}
+
+/* ── Movimenti ──────────────────────────────────────────────── */
+function filteredTransactions() {
+  const anno = S.selectedYear;
+  const { mese, categoria, tipo, testo } = S.filters;
+  const q = (testo || '').trim().toLowerCase();
+  return S.transactions.filter(t => {
+    if (annoDi(t) !== anno) return false;
+    if (mese && t.date.slice(5, 7) !== mese) return false;
+    if (tipo === 'uscite' && !isUscita(t)) return false;
+    if (tipo === 'entrate' && isUscita(t)) return false;
+    if (categoria === '__none__' && t.category_id) return false;
+    // "super:<id>" filtra tutte le voci di una super-categoria in un colpo solo.
+    if (categoria.startsWith('super:')) {
+      if (catById(t.category_id)?.super_id !== categoria.slice(6)) return false;
+    } else if (categoria && categoria !== '__none__' && t.category_id !== categoria) return false;
+    if (q && !(t.description || '').toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function renderTransazioni() {
+  const anni = getAnni();
+  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
+  const txs = filteredTransactions();
+  const uscite  = txs.reduce((s, t) => s + uscitaDi(t), 0);
+  const entrate = txs.reduce((s, t) => s + entrataDi(t), 0);
+
+  setHtml('view-transazioni', `
+    <div class="view-header">
+      <div><h2 class="page-title">Movimenti</h2>
+        <p class="page-sub">${txs.length} movimenti · <span class="neg">${fmtEUR(uscite)}</span> di uscite ·
+        <span class="pos">${fmtEUR(entrate)}</span> di entrate · saldo <strong class="${entrate - uscite < 0 ? 'neg' : 'pos'}">${fmtEUR(entrate - uscite)}</strong></p></div>
+      <div class="hstack gap-8 wrap">
+        ${S.transactions.some(t => !t.category_id) && S.merchants.length
+          ? '<button class="btn btn-outline btn-sm" data-action="apply-rules">✨ Applica i negozi imparati</button>' : ''}
+        <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="filters">
+        <div>
+          <label class="form-label">Anno</label>
+          <select class="form-input form-select" data-action="year-filter">
+            ${anni.map(a => `<option value="${a}" ${a === S.selectedYear ? 'selected' : ''}>${a}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Mese</label>
+          <select class="form-input form-select" data-filter="mese">
+            <option value="">tutti</option>
+            ${MESI.map((m, i) => { const v = String(i + 1).padStart(2, '0'); return `<option value="${v}" ${S.filters.mese === v ? 'selected' : ''}>${m}</option>`; }).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Tipo</label>
+          <select class="form-input form-select" data-filter="tipo">
+            <option value="">tutti</option>
+            <option value="uscite" ${S.filters.tipo === 'uscite' ? 'selected' : ''}>solo uscite</option>
+            <option value="entrate" ${S.filters.tipo === 'entrate' ? 'selected' : ''}>solo entrate</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Categoria</label>
+          <select class="form-input form-select" data-filter="categoria">
+            <option value="">tutte</option>
+            <option value="__none__" ${S.filters.categoria === '__none__' ? 'selected' : ''}>— senza categoria —</option>
+            ${S.supers.map(s => `<option value="super:${s.id}" ${S.filters.categoria === 'super:' + s.id ? 'selected' : ''}>${s.icon || ''} ${esc(s.name)} (tutta la super)</option>`).join('')}
+            ${catOptions(S.filters.categoria, '').replace(/^<option value=""><\/option>/, '')}
+          </select>
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label class="form-label">Cerca</label>
+          <input class="form-input" data-filter="testo" placeholder="descrizione…" value="${esc(S.filters.testo)}" />
+        </div>
+      </div>
+      ${txs.length === 0
+        ? `<div class="empty-state"><div class="empty-icon">🔍</div><p>Nessun movimento con questi filtri.</p></div>`
+        : `<div class="table-wrap"><table class="table">
+            <thead><tr><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th><th></th></tr></thead>
+            <tbody>${txs.map(t => `<tr>
+              <td class="mono text-sm nowrap">${fmtDate(t.date)}</td>
+              <td title="${esc(t.description)}">${esc(merchantText(t.description)) || '—'}${t.card_identification ? `<span class="text-muted text-sm"> · 💳 ${esc(t.card_identification)}</span>` : ''}</td>
+              <td class="text-right mono fw-600 nowrap ${isUscita(t) ? 'neg' : 'pos'}">${fmtEUR(t.amount)}</td>
+              <td class="nowrap">
+                <select class="form-input form-select" data-set-cat="${t.id}" style="padding:5px 8px;font-size:.8rem;width:auto;min-width:150px">
+                  ${catOptions(t.category_id)}
+                </select>
+              </td>
+              <td class="nowrap"><button class="btn-icon btn-icon-danger" data-action="del-tx" data-id="${t.id}" title="Elimina">✕</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>`}
+    </div>
+  `);
+}
+
+/* ── Categorie ──────────────────────────────────────────────── */
+function renderCategorie() {
+  const usoDi = id => S.transactions.filter(t => t.category_id === id);
+  // Le voci raggruppate sotto la loro super-categoria, e in fondo quelle che non ne hanno: così
+  // si vede a colpo d'occhio cosa resta da sistemare.
+  const gruppi = [
+    ...S.supers.map(s => ({ sup: s, voci: S.categories.filter(c => c.super_id === s.id) })),
+    { sup: null, voci: S.categories.filter(c => !c.super_id) },
+  ].filter(g => g.sup || g.voci.length);
+
+  const rigaVoce = c => {
+    const uso = usoDi(c.id);
+    return `<tr>
+      <td style="padding-left:22px">${c.icon || ''} ${esc(c.name)}</td>
+      <td class="text-right mono text-muted">${uso.length}</td>
+      <td class="text-right mono">${fmtEUR(uso.reduce((s, t) => s + uscitaDi(t), 0))}</td>
+      <td class="text-right mono pos">${fmtEUR(uso.reduce((s, t) => s + entrataDi(t), 0))}</td>
+      <td class="nowrap text-right">
+        <button class="btn-icon" data-action="edit-cat" data-id="${c.id}" title="Modifica">✎</button>
+        <button class="btn-icon btn-icon-danger" data-action="del-cat" data-id="${c.id}" title="Elimina">✕</button>
+      </td>
+    </tr>`;
+  };
+
+  setHtml('view-categorie', `
+    <div class="view-header">
+      <div><h2 class="page-title">Categorie</h2><p class="page-sub">Due livelli: la super-categoria porta il colore, le voci lo ereditano</p></div>
+      <div class="hstack gap-8 wrap">
+        <button class="btn btn-outline btn-sm" data-action="new-super">+ Super-categoria</button>
+        <button class="btn btn-primary btn-sm" data-action="new-cat">+ Voce</button>
+      </div>
+    </div>
+    ${S.supers.length === 0 ? `<div class="card" style="border-color:#fde68a;background:#fffbeb">
+      <p class="text-sm">Non hai ancora nessuna super-categoria: le voci qui sotto sono tutte
+      «senza super-categoria» e nei riepiloghi finiscono in un gruppo unico grigio.
+      Creane una con <strong>+ Super-categoria</strong> — il colore si sceglie lì — e poi appendi le voci con ✎.</p>
+    </div>` : ''}
+    <div class="card">
+      ${S.categories.length === 0 && S.supers.length === 0
+        ? `<div class="empty-state"><div class="empty-icon">🏷️</div><p>Nessuna categoria.</p></div>`
+        : `<div class="table-wrap"><table class="table">
+            <thead><tr><th>Voce</th><th class="text-right">Movimenti</th><th class="text-right">Uscite</th><th class="text-right">Entrate</th><th></th></tr></thead>
+            <tbody>${gruppi.map(g => {
+              const nMov      = g.voci.reduce((s, c) => s + usoDi(c.id).length, 0);
+              const totUscite = g.voci.reduce((s, c) => s + usoDi(c.id).reduce((a, t) => a + uscitaDi(t), 0), 0);
+              const totEntr   = g.voci.reduce((s, c) => s + usoDi(c.id).reduce((a, t) => a + entrataDi(t), 0), 0);
+              return `<tr style="background:#fafbfd">
+                  <td class="fw-600">${superChip(g.sup?.id || null)}</td>
+                  <td class="text-right mono text-muted">${nMov}</td>
+                  <td class="text-right mono fw-600">${fmtEUR(totUscite)}</td>
+                  <td class="text-right mono fw-600 pos">${fmtEUR(totEntr)}</td>
+                  <td class="nowrap text-right">${g.sup ? `
+                    <button class="btn-icon" data-action="edit-super" data-id="${g.sup.id}" title="Modifica">✎</button>
+                    <button class="btn-icon btn-icon-danger" data-action="del-super" data-id="${g.sup.id}" title="Elimina">✕</button>` : ''}</td>
+                </tr>`
+                + (g.voci.length ? g.voci.map(rigaVoce).join('')
+                  : '<tr><td colspan="5" class="text-muted text-sm" style="padding-left:22px">nessuna voce — assegnane una con ✎</td></tr>');
+            }).join('')}</tbody>
+          </table></div>`}
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Negozi imparati</div>
+        <span class="text-muted text-sm">${S.merchants.length} regole</span>
+      </div>
+      <p class="text-muted text-sm">Quando dai una categoria a un movimento, la descrizione resta imparata e da lì in poi
+      i movimenti che la <strong>contengono</strong> si categorizzano da soli. La regola nasce con la descrizione intera:
+      <strong>accorciala al solo nome del negozio</strong> perché agganci anche gli acquisti futuri, che la banca
+      scrive con un riferimento diverso ogni volta. Fra più regole che agganciano vince la più lunga.</p>
+      ${S.merchants.length === 0 ? '' : `<div class="table-wrap mt-12"><table class="table">
+        <thead><tr><th>Se la descrizione contiene…</th><th>Categoria</th><th class="text-right">Aggancia</th><th></th></tr></thead>
+        <tbody>${S.merchants.slice().sort((a, b) => a.merchant_key.localeCompare(b.merchant_key)).map(m => `<tr>
+          <td class="mono text-sm">${esc(m.merchant_key)}</td>
+          <td>${catChip(m.category_id)}</td>
+          <td class="text-right mono text-muted">${merchantMatchCount(m.merchant_key)}</td>
+          <td class="text-right nowrap">
+            <button class="btn-icon" data-action="edit-merchant" data-id="${m.id}" title="Modifica">✎</button>
+            <button class="btn-icon btn-icon-danger" data-action="del-merchant" data-id="${m.id}" title="Dimentica">✕</button>
+          </td>
+        </tr>`).join('')}</tbody></table></div>`}
+    </div>
+  `);
+}
+
+// Voce di spesa: niente colore, lo eredita dalla super-categoria a cui la si appende.
+function openCatModal(editId = null) {
+  const cat = editId ? catById(editId) : null;
+  openModal(cat ? 'Modifica voce' : 'Nuova voce', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Ristoranti" value="${esc(cat?.name || '')}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Icona</label>
+          <input name="icon" class="form-input" placeholder="es. 🍝" maxlength="4" value="${esc(cat?.icon || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Super-categoria</label>
+          <select name="super_id" class="form-input form-select">${superOptions(cat?.super_id || '')}</select>
+        </div>
+      </div>
+      <p class="import-note">Il colore della voce è quello della sua super-categoria: si cambia lì, non qui.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${cat ? 'Salva' : 'Aggiungi'}</button>
+      </div>
+    </form>
+  `);
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const payload = { name: (d.name || '').trim(), icon: (d.icon || '').trim() || null, super_id: d.super_id || null };
+    if (!payload.name) return;
+    try {
+      if (cat) await sbUpd('sal_categories', `id=eq.${cat.id}`, payload);
+      else await sbIns('sal_categories', { ...payload, user_id: S.session.user.id });
+      closeModal();
+      await reload();
+    } catch (err) {
+      alert(/duplicate|uq_sal_categories/i.test(err.message)
+        ? `Esiste già una voce che si chiama «${payload.name}».`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+// Super-categoria: è l'unico livello che porta il colore.
+function openSuperModal(editId = null) {
+  const sup = editId ? superById(editId) : null;
+  openModal(sup ? 'Modifica super-categoria' : 'Nuova super-categoria', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Nome *</label>
+        <input name="name" class="form-input" required placeholder="es. Tempo libero" value="${esc(sup?.name || '')}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Icona</label>
+          <input name="icon" class="form-input" placeholder="es. 🎈" maxlength="4" value="${esc(sup?.icon || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Colore *</label>
+          <input name="color" type="color" class="form-input" value="${sup?.color || '#4f46e5'}" />
+        </div>
+      </div>
+      <p class="import-note">Tutte le voci appese a questa super-categoria prendono questo colore nei grafici,
+      con una sfumatura diversa per ciascuna.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">${sup ? 'Salva' : 'Aggiungi'}</button>
+      </div>
+    </form>
+  `);
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const payload = { name: (d.name || '').trim(), icon: (d.icon || '').trim() || null, color: d.color || null };
+    if (!payload.name) return;
+    try {
+      if (sup) await sbUpd('sal_super_categories', `id=eq.${sup.id}`, payload);
+      else await sbIns('sal_super_categories', { ...payload, user_id: S.session.user.id });
+      closeModal();
+      await reload();
+    } catch (err) {
+      alert(/duplicate|uq_sal_super_categories/i.test(err.message)
+        ? `Esiste già una super-categoria che si chiama «${payload.name}».`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+// Modifica di una regola. Il campo mostra in tempo reale quanti movimenti in archivio
+// aggancerebbe: accorciare "AMAZON.IT *MK7HG2LO3" a "AMAZON.IT" è utile solo se si vede subito
+// che passa da 1 a 14, e che non sta agganciando mezzo estratto conto.
+function openMerchantModal(id) {
+  const rule = S.merchants.find(m => m.id === id);
+  if (!rule) return;
+  openModal('Modifica regola', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Se la descrizione contiene… *</label>
+        <input name="key" id="rule-key" class="form-input mono" required value="${esc(rule.merchant_key)}" />
+        <p class="import-note mt-8" id="rule-count"></p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoria *</label>
+        <select name="category_id" class="form-input form-select" required>${catOptions(rule.category_id, '— scegli —')}</select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `);
+  const input = $('rule-key');
+  const info = $('rule-count');
+  const refresh = () => {
+    const k = input.value.trim().toUpperCase();
+    if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
+    const n = merchantMatchCount(k);
+    const senzaCat = S.transactions.filter(t => !t.category_id && normalizeMerchant(t.description).includes(k)).length;
+    info.textContent = `Aggancia ${n} movimenti in archivio${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
+  };
+  input.addEventListener('input', refresh);
+  refresh();
+
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const key = (d.key || '').trim().toUpperCase();
+    if (key.length < 3) { alert('La regola deve avere almeno 3 caratteri.'); return; }
+    if (!d.category_id) { alert('Scegli una categoria.'); return; }
+    try {
+      await sbUpd('sal_merchant_map', `id=eq.${rule.id}`, { merchant_key: key, category_id: d.category_id, updated_at: new Date().toISOString() });
+      closeModal();
+      await loadData();
+      const n = await applyLearnedMerchants(rule.id);
+      if (n) showToast(`✨ Categorizzati ${n} movimenti con la regola aggiornata`);
+      render();
+    } catch (err) {
+      alert(/duplicate|uq_sal_merchant_map/i.test(err.message)
+        ? `Esiste già una regola «${key}». Modifica quella, o cancella questa.`
+        : 'Errore: ' + err.message);
+    }
+  });
+}
+
+/* ── Impostazioni ───────────────────────────────────────────── */
+async function renderImpostazioni() {
+  const u = S.session.user;
+  let conti = [];
+  try {
+    conti = (await sbQ('cm_bank_connections', 'select=*&order=created_at.desc')).filter(c => (c.uses || []).includes(BANK_USE));
+  } catch {}
+  setHtml('view-impostazioni', `
+    <div class="view-header"><h2 class="page-title">Impostazioni</h2></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Account</div>
+        <div class="fw-600">${esc(u.user_metadata?.full_name || u.email?.split('@')[0] || 'Utente')}</div>
+        <div class="text-muted text-sm">${esc(u.email || '—')}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Dati</div>
+        <div class="summary-row"><span>Movimenti</span><strong>${S.transactions.length}</strong></div>
+        <div class="summary-row"><span>Super-categorie</span><strong>${S.supers.length}</strong></div>
+        <div class="summary-row"><span>Voci di spesa</span><strong>${S.categories.length}</strong></div>
+        <div class="summary-row"><span>Negozi imparati</span><strong>${S.merchants.length}</strong></div>
+        <div class="summary-row text-sm text-muted">${APP_VERSION} · build ${BUILD_TIME}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Conto collegato</div>
+      ${conti.length
+        ? conti.map(c => `<div class="summary-row"><span>${esc(c.display_name || c.iban || c.aspsp_name)}</span><span class="text-muted text-sm mono">${esc(c.iban || c.account_id || '')}</span></div>`).join('')
+        : `<p class="text-muted text-sm">Nessun conto spuntato come «${BANK_USE_LABEL}».
+           Aprilo da <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>, scegli il conto UniCredit
+           personale — che è già collegato — e spunta quella casella: gli usi si sommano, quindi il conto
+           continua a servire anche agli altri moduli.</p>`}
+    </div>
+  `);
+}
+
+/* ── Import dal conto ───────────────────────────────────────────
+   enable-banking-transactions legge e basta. Che cosa è "del conto personale" lo decide questa
+   pagina: uscite ed entrate — qui il saldo conta, quindi gli accrediti non si buttano via —
+   filtrate per carta quando la banca la espone, che su un conto con più carte è l'unico modo per
+   non spuntare a mano duecento righe ogni mese. La carta scelta resta nel browser, così il giro
+   dopo è già impostata.  */
+const CARD_FILTER_KEY = 'sal_card_filter';
+let _import = null;
+
+async function openImport() {
+  openModal('Importa dal conto', '<p class="import-note">Cerco i conti collegati…</p>', true);
+  try {
+    const conns = (await sbQ('cm_bank_connections', 'select=*&order=created_at.desc'))
+      .filter(c => c.account_id && (c.uses || []).includes(BANK_USE));
+    if (!conns.length) {
+      $('modal-body').innerHTML = `
+        <p class="text-sm">Nessun conto destinato a Spese Personali.</p>
+        <p class="import-note mt-8">Apri <strong>Finanza → Configurazione → 🏦 Banche e Conti</strong>,
+        scegli il conto UniCredit personale e spunta <strong>«${BANK_USE_LABEL}»</strong>. Gli usi si sommano:
+        il conto può servire anche agli altri moduli. Deve inoltre essere in whitelist nel Control Panel di
+        Enable Banking, altrimenti il consenso riesce ma la banca non restituisce niente.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+      return;
+    }
+    const ultima = S.transactions.map(t => t.date).filter(Boolean).sort().pop();
+    const defaultFrom = ultima
+      ? new Date(new Date(ultima + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10)
+      : new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    $('modal-body').innerHTML = `
+      <p class="import-note">Legge i movimenti del conto e propone uscite ed entrate. Niente viene salvato finché non confermi.</p>
+      <div class="form-row-2 mt-12">
+        <div class="form-group">
+          <label class="form-label">Conto</label>
+          <select id="imp-conn" class="form-input form-select">
+            ${conns.map(c => `<option value="${c.id}">${esc(c.display_name || c.iban || c.aspsp_name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dal giorno</label>
+          <input type="date" id="imp-from" class="form-input" value="${defaultFrom}" />
+        </div>
+      </div>
+      <label class="hstack gap-8 text-sm"><input type="checkbox" id="imp-solo-uscite" /> Solo le uscite (lascia fuori gli accrediti)</label>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button class="btn btn-primary" data-action="imp-read">Leggi i movimenti</button>
+      </div>`;
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+async function readMovements() {
+  const bankConnectionId = $('imp-conn').value;
+  const dateFrom = $('imp-from').value || undefined;
+  const soloUscite = $('imp-solo-uscite').checked;
+  $('modal-body').innerHTML = '<p class="import-note">Leggo i movimenti dalla banca…</p>';
+  try {
+    const res = await sbFn('enable-banking-transactions', { bankConnectionId, dateFrom });
+    const tutti = (res.transactions || []).filter(t => t.amount !== 0 && (t.bookingDate || t.valueDate));
+    const movimenti = soloUscite ? tutti.filter(t => t.amount < 0) : tutti;
+    if (!movimenti.length) {
+      $('modal-body').innerHTML = `<p class="text-sm">Nessun movimento nel periodo scelto.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+      return;
+    }
+    // Già importati: si riconoscono dall'external_id, la chiave con cui la banca identifica la
+    // riga. Rileggere un periodo già letto è la normalità, non l'eccezione.
+    const gia = new Set(S.transactions.map(t => t.external_id).filter(Boolean));
+    // Se la banca non manda un external_id, l'indice unico non protegge (in Postgres due NULL
+    // sono distinti) e il doppione entrerebbe a ogni rilettura: per quelle righe si ripiega su
+    // data + importo + descrizione, che qui identificano il movimento abbastanza bene.
+    const giaSenzaId = new Set(S.transactions.map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
+    const carte = [...new Set(movimenti.map(t => t.card?.identification || cardFromDescription(t.description)).filter(Boolean))].sort();
+    const cardFilter = localStorage.getItem(CARD_FILTER_KEY) || '';
+
+    const items = movimenti.map(t => {
+      const data = (t.bookingDate || t.valueDate).slice(0, 10);
+      const descrizione = [t.description, t.counterpartyName].map(s => (s || '').trim()).filter(Boolean)
+        .filter((p, i, arr) => !arr.slice(0, i).some(q => q.toLowerCase().includes(p.toLowerCase())))
+        .join(' · ') || t.bankTransactionCode || 'Movimento';
+      return {
+        data, descrizione,
+        importo: t.amount,
+        currency: t.currency || null,
+        externalId: t.externalId || null,
+        card: t.card?.identification || cardFromDescription(t.description) || null,
+        type: t.bankTransactionCode || null,
+        categoryId: merchantCategory(descrizione),
+        gia: t.externalId
+          ? gia.has(t.externalId)
+          : giaSenzaId.has(`${data}|${(+t.amount).toFixed(2)}|${descrizione.trim().toLowerCase()}`),
+        raw: t,
+      };
+    }).sort((a, b) => a.data.localeCompare(b.data));
+
+    _import = { items, bankConnectionId, account: res.account, carte, truncated: !!res.truncated };
+    renderImportList(cardFilter && carte.includes(cardFilter) ? cardFilter : '');
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+function renderImportList(cardFilter) {
+  if (!_import) return;
+  const { items, carte, account } = _import;
+  _import.cardFilter = cardFilter;
+  // Il filtro per carta lascia comunque passare i movimenti senza carta (bonifici, accrediti,
+  // addebiti): non sono di un'altra carta, semplicemente non ne hanno una — e sono proprio le
+  // entrate che qui servono per il saldo.
+  const visibili = items.map((it, i) => ({ it, i })).filter(({ it }) => !cardFilter || it.card === cardFilter || !it.card);
+  const nuovi = visibili.filter(({ it }) => !it.gia).length;
+  const senzaCarta = items.filter(it => !it.card).length;
+
+  $('modal-body').innerHTML = `
+    <p class="import-note">
+      ${visibili.length} movimenti da <strong>${esc(account?.aspspName || 'banca')}</strong> —
+      ${nuovi} nuovi, ${visibili.length - nuovi} già importati (deselezionati).
+      ${_import.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo.' : ''}
+    </p>
+    ${carte.length ? `
+      <div class="form-group mt-12">
+        <label class="form-label">Carta</label>
+        <select id="imp-card" class="form-input form-select">
+          <option value="">tutte le carte${senzaCarta ? ` (${senzaCarta} movimenti senza carta)` : ''}</option>
+          ${carte.map(c => `<option value="${esc(c)}" ${cardFilter === c ? 'selected' : ''}>💳 •••• ${esc(c)} (${items.filter(i => i.card === c).length})</option>`).join('')}
+        </select>
+        <p class="import-note mt-8">Se sul conto ci sono più carte, scegliendone una restano solo le sue spese —
+        più i movimenti senza carta, che una carta non ce l'hanno. La scelta viene ricordata.</p>
+      </div>` : ''}
+    <div class="hstack gap-8 mt-8">
+      <button class="btn btn-outline btn-sm" data-action="imp-all">Seleziona tutti</button>
+      <button class="btn btn-outline btn-sm" data-action="imp-none">Nessuno</button>
+    </div>
+    <div style="max-height:44vh;overflow-y:auto;margin:12px 0">
+      <table class="import-table">
+        <thead><tr><th></th><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th></tr></thead>
+        <tbody>${visibili.map(({ it, i }) => `
+          <tr class="${it.gia ? 'is-dup' : ''}">
+            <td><input type="checkbox" data-imp-idx="${i}" ${it.gia ? '' : 'checked'} /></td>
+            <td class="mono" style="white-space:nowrap">${fmtDate(it.data)}</td>
+            <td title="${esc(it.descrizione)}">${esc(merchantText(it.descrizione))}
+              ${it.card ? `<span class="text-muted"> · 💳 ${esc(it.card)}</span>` : ''}
+              ${it.gia ? '<span class="text-muted"> · già importato</span>' : ''}</td>
+            <td class="mono text-right" style="white-space:nowrap;color:${it.importo < 0 ? 'var(--c-danger)' : 'var(--c-success)'}">${fmtEUR(it.importo)}</td>
+            <td><select class="form-input form-select" data-imp-cat="${i}" style="padding:3px 6px;font-size:.78rem">${catOptions(it.categoryId)}</select></td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button class="btn btn-primary" data-action="imp-confirm">Importa selezionati</button>
+    </div>`;
+
+  const sel = $('imp-card');
+  if (sel) sel.addEventListener('change', () => {
+    localStorage.setItem(CARD_FILTER_KEY, sel.value);
+    renderImportList(sel.value);
+  });
+}
+
+async function confirmImport() {
+  if (!_import) return;
+  const scelti = [];
+  document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => {
+    if (!cb.checked) return;
+    const i = parseInt(cb.dataset.impIdx, 10);
+    const catSel = document.querySelector(`#modal-body [data-imp-cat="${i}"]`);
+    scelti.push({ ..._import.items[i], categoryId: catSel ? (catSel.value || null) : _import.items[i].categoryId });
+  });
+  if (!scelti.length) { alert('Nessun movimento selezionato.'); return; }
+  $('modal-body').innerHTML = '<p class="import-note">Importo…</p>';
+
+  const rows = scelti.map(it => ({
+    user_id: S.session.user.id,
+    bank_connection_id: _import.bankConnectionId,
+    external_id: it.externalId,
+    date: it.data,
+    amount: it.importo,
+    currency: it.currency,
+    description: it.descrizione,
+    category_id: it.categoryId,
+    card_identification: it.card,
+    type: it.type,
+    import_source: 'bank',
+    raw: it.raw,
+  }));
+  try {
+    // ON CONFLICT DO NOTHING sull'indice unico (bank_connection_id, external_id): se una riga è
+    // già dentro non entra due volte nemmeno spuntandola per sbaglio.
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/sal_transactions?on_conflict=bank_connection_id,external_id`, {
+      method: 'POST',
+      headers: sbH({ 'Prefer': 'resolution=ignore-duplicates,return=representation' }),
+      body: JSON.stringify(rows),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+    const inserted = await r.json();
+    // Quello che l'utente ha categorizzato a mano in anteprima diventa una regola: la prossima
+    // volta quel negozio si riconosce da solo.
+    for (const it of scelti) {
+      if (it.categoryId && merchantCategory(it.descrizione) !== it.categoryId) await learnMerchant(it.descrizione, it.categoryId);
+    }
+    closeModal();
+    alert(`✅ Importazione completata\n\nMovimenti caricati: ${inserted.length}` +
+      (inserted.length < scelti.length ? `\nGià presenti, saltati: ${scelti.length - inserted.length}` : ''));
+    await loadData();
+    // I negozi imparati durante questo import valgono anche per le righe entrate prima che li
+    // imparassimo, dentro lo stesso giro.
+    const auto = await applyLearnedMerchants();
+    if (auto) showToast(`✨ Categorizzati ${auto} movimenti con i negozi imparati`);
+    render();
+  } catch (e) {
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+/* ── Modale ─────────────────────────────────────────────────── */
+function openModal(title, bodyHtml, wide = false) {
+  $('modal-title').textContent = title;
+  $('modal-body').innerHTML = bodyHtml;
+  $('modal-card').classList.toggle('modal-wide', wide);
+  $('modal-overlay').classList.remove('hidden');
+}
+function closeModal() {
+  $('modal-overlay').classList.add('hidden');
+  $('modal-card').classList.remove('modal-wide');
+  $('modal-body').innerHTML = '';
+  _import = null;
+}
+
+/* ── Nav / render ───────────────────────────────────────────── */
+function navigate(view) {
+  S.view = view;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
+  $(`view-${view}`)?.classList.add('active');
+  document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
+  $('sidebar')?.classList.remove('open');
+  $('mobile-nav-overlay')?.classList.remove('open');
+  history.pushState({ view }, '');
+  render();
+}
+window.addEventListener('popstate', e => {
+  if (!e.state) return;
+  S.view = e.state.view || 'dashboard';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.remove('active'));
+  $(`view-${S.view}`)?.classList.add('active');
+  document.querySelector(`.nav-item[data-view="${S.view}"]`)?.classList.add('active');
+  render();
+});
+
+function render() {
+  switch (S.view) {
+    case 'dashboard': renderDashboard(); break;
+    case 'transazioni': renderTransazioni(); break;
+    case 'categorie': renderCategorie(); break;
+    case 'impostazioni': renderImpostazioni(); break;
+  }
+  $('footer-info').textContent = `${S.transactions.length} movimenti · ${S.supers.length} super · ${S.categories.length} voci`;
+}
+
+async function reload() {
+  await loadData();
+  render();
+}
+
+/* ── Eventi ─────────────────────────────────────────────────── */
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'nav') navigate(btn.dataset.view);
+  else if (action === 'close-modal') closeModal();
+  else if (action === 'import') openImport();
+  else if (action === 'imp-read') readMovements();
+  else if (action === 'imp-confirm') confirmImport();
+  else if (action === 'imp-all' || action === 'imp-none') {
+    document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => { cb.checked = action === 'imp-all'; });
+  } else if (action === 'apply-rules') {
+    try {
+      const n = await applyLearnedMerchants();
+      showToast(n ? `✨ Categorizzati ${n} movimenti` : 'Nessun movimento da categorizzare con i negozi imparati');
+      render();
+    } catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'new-cat') openCatModal();
+  else if (action === 'edit-cat') openCatModal(btn.dataset.id);
+  else if (action === 'new-super') openSuperModal();
+  else if (action === 'edit-super') openSuperModal(btn.dataset.id);
+  else if (action === 'del-super') {
+    const s = superById(btn.dataset.id);
+    const voci = S.categories.filter(c => c.super_id === btn.dataset.id).length;
+    if (!confirm(`Eliminare la super-categoria «${s?.name}»?`
+      + (voci ? `\n\n${voci} voci restano, senza super-categoria: nessun movimento perde la sua voce.` : ''))) return;
+    try { await sbDel('sal_super_categories', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  }
+  else if (action === 'del-cat') {
+    const c = catById(btn.dataset.id);
+    const uso = S.transactions.filter(t => t.category_id === btn.dataset.id).length;
+    if (!confirm(`Eliminare la voce «${c?.name}»?` + (uso ? `\n\n${uso} movimenti resteranno senza categoria.` : ''))) return;
+    try { await sbDel('sal_categories', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'edit-merchant') {
+    openMerchantModal(btn.dataset.id);
+  } else if (action === 'del-merchant') {
+    try { await sbDel('sal_merchant_map', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'del-tx') {
+    if (!confirm('Eliminare questo movimento?')) return;
+    try { await sbDel('sal_transactions', `id=eq.${btn.dataset.id}`); await reload(); }
+    catch (err) { alert('Errore: ' + err.message); }
+  }
+});
+
+document.addEventListener('change', async e => {
+  const el = e.target;
+  if (el.matches('[data-action="year-filter"]')) {
+    S.selectedYear = parseInt(el.value, 10);
+    render();
+  } else if (el.matches('[data-filter]')) {
+    S.filters[el.dataset.filter] = el.value;
+    renderTransazioni();
+  } else if (el.matches('[data-set-cat]')) {
+    const id = el.dataset.setCat;
+    const tx = S.transactions.find(t => t.id === id);
+    const categoryId = el.value || null;
+    try {
+      await sbUpd('sal_transactions', `id=eq.${id}`, { category_id: categoryId });
+      if (tx) tx.category_id = categoryId;
+      // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
+      // impara, senza una schermata di regole da compilare.
+      // Si impara solo se una regola non dava già quella categoria: correggere a mano una riga
+      // che era già giusta non deve creare una seconda regola identica nel risultato.
+      if (tx && categoryId && merchantCategory(tx.description) !== categoryId) {
+        const rule = await learnMerchant(tx.description, categoryId);
+        // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
+        // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
+        // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
+        const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
+        if (altri) showToast(`✨ Categorizzati altri ${altri} movimenti dello stesso negozio`);
+      }
+      render();
+    } catch (err) { alert('Errore: ' + err.message); }
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.matches('[data-filter="testo"]')) {
+    S.filters.testo = e.target.value;
+    clearTimeout(window._searchTimer);
+    window._searchTimer = setTimeout(() => {
+      renderTransazioni();
+      const input = document.querySelector('[data-filter="testo"]');
+      if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    }, 250);
+  }
+});
+
+$('btn-hamburger').addEventListener('click', () => {
+  $('sidebar').classList.toggle('open');
+  $('mobile-nav-overlay').classList.toggle('open');
+});
+$('mobile-nav-overlay').addEventListener('click', () => {
+  $('sidebar').classList.remove('open');
+  $('mobile-nav-overlay').classList.remove('open');
+});
+$('modal-close').addEventListener('click', closeModal);
+$('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+/* ── Avvio ──────────────────────────────────────────────────── */
+async function init() {
+  let session = null;
+  const sbToken = localStorage.getItem('sb_token');
+  if (sbToken) session = await initFromSbToken(sbToken);
+  if (!session) {
+    session = loadSession();
+    if (session && session.expires_at < Date.now()) session = await refreshSession(session);
+  }
+  if (!session) { location.href = 'finanza.html'; return; }
+  S.session = session;
+
+  const _authChannel = new BroadcastChannel('appsphere_auth');
+  _authChannel.onmessage = ev => {
+    if (!ev.data) return;
+    if (ev.data.type === 'LOGOUT') { localStorage.removeItem('sb_token'); location.href = 'finanza.html'; }
+    else if (ev.data.type === 'TOKEN_REFRESH' && ev.data.sbToken) {
+      localStorage.setItem('sb_token', ev.data.sbToken);
+      if (S.session) S.session.access_token = ev.data.sbToken;
+    }
+  };
+
+  try {
+    await loadData();
+  } catch (err) {
+    console.error('Errore caricamento dati:', err);
+    alert('Errore nel caricamento dei dati: ' + err.message);
+  }
+
+  $('screen-app').style.display = 'flex';
+  $('loading-overlay').classList.add('hidden');
+  navigate('dashboard');
+  history.replaceState({ view: 'dashboard' }, '');
+}
+
+init();
+</script>
+</body>
+</html>

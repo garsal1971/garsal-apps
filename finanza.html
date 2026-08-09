@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.3</title>
+  <title>GarsalFinanza v1.3.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -438,6 +438,9 @@
       <div class="nav-sep"></div>
       <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
       
+      <div class="nav-label">Salvatore</div>
+      <a class="nav-item" href="spese-personali.html" style="text-decoration:none">💳 Spese Personali</a>
+
       <div class="nav-label">Teresa</div>
       <a class="nav-item" href="conto-risparmio-teresa.html" style="text-decoration:none">🏡 conto risparmio</a>
       <button class="nav-item"        data-action="nav" data-view="analisi-costi">🧾 Spese Famiglia</button>
@@ -509,8 +512,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.3';
-const APP_BUILD   = '2026-08-08T19:30:00Z';
+const APP_VERSION = 'v1.3.4';
+const APP_BUILD   = '2026-08-09T10:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -2462,11 +2465,12 @@ function renderFundDetail() {
 // 'cost_analysis' (le transazioni diventano spese) e 'contribuzione' (i bonifici in entrata
 // diventano versamenti di Teresa o Salvatore). L'elenco sta qui una volta sola: è anche quello
 // che il battesimo salva in cm_bank_connections.uses, dove un CHECK ammette solo questi valori.
-const BANK_USES = ['cost_analysis', 'contribuzione', 'spese_ada', 'fondo', 'conto_risparmio', 'casa_rosa', 'danaro_rosa'];
+const BANK_USES = ['cost_analysis', 'contribuzione', 'spese_ada', 'spese_sal', 'fondo', 'conto_risparmio', 'casa_rosa', 'danaro_rosa'];
 const BANK_USE_LABEL = {
   cost_analysis:   '🧾 Spese Famiglia',
   contribuzione:   '💰 Contribuzione',
   spese_ada:       '👵 Spese Ada',
+  spese_sal:       '💳 Spese Personali',
   fondo:           '🤝 Fondi',
   conto_risparmio: '🐖 Conto Risparmio',
   casa_rosa:       '🏠 Casa Rosa',
@@ -2476,6 +2480,7 @@ const BANK_USE_HINT = {
   cost_analysis:   'le transazioni diventano spese da categorizzare',
   contribuzione:   'i bonifici in entrata diventano versamenti di Teresa o Salvatore',
   spese_ada:       'le uscite si importano in Spese Ada, contabilità separata',
+  spese_sal:       'uscite ed entrate si importano in Spese Personali, contabilità separata',
   fondo:           'i bonifici diventano versamenti e prelievi del fondo',
   conto_risparmio: 'i movimenti si importano dal Conto Risparmio di Teresa',
   casa_rosa:       'i movimenti si importano nella Cassa Casa Rosa',
