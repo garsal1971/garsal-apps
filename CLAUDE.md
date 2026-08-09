@@ -663,6 +663,16 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
   anteprima, sugli altri movimenti già in archivio (`applyLearnedMerchants`, subito dopo
   l'assegnazione manuale e dopo ogni import) e col pulsante *✨ Applica i negozi imparati*.
   **Tocca solo i movimenti senza categoria**: quello che è già classificato non si sovrascrive.
+- Quando la voce giusta non c'è ancora, la tendina del movimento chiude con **«➕ Nuova voce…»**:
+  si crea la voce e **nella stessa finestra si scrive la regola**, con il conteggio dal vivo di
+  quanti movimenti aggancerebbe. Le due cose nascono insieme perché è lì che si sa qual è il
+  negozio — la chiave proposta è quella che si imparerebbe da sola (`normalizeMerchant`), ma
+  accorciarla è il punto dell'operazione. Togliendo la spunta la voce si crea senza regola.
+  In quel caso `setTxCategory(tx, id, { learn: false })`: la regola l'ha appena scritta l'utente,
+  e impararne una seconda con la descrizione intera ne aggiungerebbe una che nessuno ha chiesto.
+  Vale sia sui movimenti in archivio sia sull'anteprima di import; lì il form **prende il posto
+  dell'elenco** invece di aprire un secondo modale (`#modal-body` è uno solo) e le spunte già
+  fatte vengono prima messe al sicuro in `_import.items` da `syncImportSelections()`.
 - Il confronto è **«la descrizione contiene la chiave»**, non un'uguaglianza, e la chiave si
   ricava da **quello che UniCredit scrive dopo l'importo**, che è l'esercente:
   `PAGAMENTO POS … del 15/07/2026 CARTA 31342819 DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA`
