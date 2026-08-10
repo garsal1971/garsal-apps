@@ -262,6 +262,7 @@ periodo — nessuna colonna in più, `amount` è già con segno.
 | `sp_settings` | Una riga per utente: traguardo, emoji, periodo (`start_date` → `end_date`), `skip_weekend` |
 | `sp_checks` | Una riga per giorno spuntato (`UNIQUE (user_id, day)`); `emoji` è quella pescata a caso alla spunta |
 | `sp_key_days` | Giornate chiave (`UNIQUE (user_id, day)`); `label` è l'etichetta libera mostrata alla spunta |
+| `sp_stecche` | Archivio delle stecche chiuse: traguardo e periodo com'erano, `total_days`/`done_days`, `satisfaction` (1-100), `note`, e la fotografia jsonb di `checks` e `key_days` |
 
 ### Obiettivi (`ob_`)
 | Table | Purpose |
@@ -788,6 +789,22 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
   — sei scoppi scaglionati, ognuno con lampo centrale e raggiera di scintille/stelle con
   gravità — più un toast dorato da 5 s. Le giornate chiave si modificano su una copia
   (`tmpKeyDays`) e si applicano solo con "Salva", così "Annulla" butta via tutto davvero.
+- **Memoria delle stecche** (`sp_stecche`, migration `20260810150000_sp_stecche.sql`): una stecca
+  finita non sparisce più. Quando non c'è più niente da spuntare — tutti i giorni fatti *oppure*
+  l'ultimo giorno passato — il pulsante della hero diventa *🏁 Chiudi la stecca* e parte una
+  cerimonia in tre passi: **l'ultima spunta** (un bersaglio grosso che si preme una volta sola e
+  lascia la sua emoji come sigillo), la **barra della soddisfazione da 1 a 100**, la **nota**.
+  Solo allora la stecca finisce in archivio e il messaggio finale — pescato per fascia da
+  `MSG_CHIUSURA`, dal consolatorio (`.toast.dolce`) al complimento vivo — arriva con i fuochi
+  d'artificio di `fuochiFinali()`, da 8 a 24 scoppi più il gran finale a seconda di quanto si è
+  soddisfatti. Le stecche chiuse si rileggono nella card *🏅 Le stecche chiuse*.
+- **La chiusura scrive prima e cancella dopo**: `dbCloseStecca()` inserisce in `sp_stecche` e solo
+  se l'insert riesce svuota `sp_checks`, `sp_key_days` e `sp_settings`. Non è l'ottimismo con
+  rollback usato per le spunte, di proposito: nell'ordine inverso una rete che cade cancellerebbe
+  il periodo senza averne salvato la memoria, cioè il difetto che la funzione esiste per togliere.
+  Finita la chiusura non c'è più nessun periodo (`S.configured = false`) e `salvaCache()` **svuota
+  le chiavi `sp_*` di localStorage**, altrimenti al riavvio `dbLoad()` scambierebbe la cache per
+  dati locali da ricaricare e resusciterebbe la stecca appena archiviata.
 - **Avviso "oggi non spuntato"** in due punti: banner giallo dentro l'app e sezione dedicata nel
   fumetto avvisi di AppSphere (`loadHomeAlertSpuntiamola` in `index.html`). Se oggi è una
   giornata chiave entrambi gli avvisi lo dicono esplicitamente.

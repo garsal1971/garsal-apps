@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.2.2</title>
+    <title>✅ Spuntiamola v1.2.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -263,6 +263,11 @@
         .toast.big { background: linear-gradient(135deg, #6C5CE7, #FF3366); }
         .toast.big .toast-emoji { font-size: 8rem; }
         .toast.big .toast-text  { font-size: 3rem; }
+
+        /* chiusura andata così così: il messaggio consola, non festeggia */
+        .toast.dolce { background: linear-gradient(135deg, #22364A, #3E5C76); }
+        .toast.dolce .toast-emoji { font-size: 7.5rem; }
+        .toast.dolce .toast-text  { font-size: 2.4rem; font-weight: 700; }
 
         /* giornata chiave: il messaggio più importante di tutti */
         .toast.chiave {
@@ -642,6 +647,210 @@
             padding: 8px 2px;
         }
 
+        /* ── LE STECCHE CHIUSE (archivio) ── */
+        .stecche-list { display: flex; flex-direction: column; gap: 10px; }
+
+        .stecca {
+            border: 1.5px solid var(--border);
+            border-radius: 16px;
+            padding: 13px 15px;
+            background: linear-gradient(135deg, #FBFCFE, #F4F7FA);
+        }
+        .stecca-top {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 3px;
+        }
+        .stecca-emoji { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
+        .stecca-goal {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--dark);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .stecca-seal {
+            font-size: 1.25rem;
+            line-height: 1;
+            flex-shrink: 0;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18));
+        }
+        .stecca-meta {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .stecca-sat-row {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-top: 9px;
+        }
+        .stecca-sat-bar {
+            flex: 1;
+            height: 9px;
+            background: #E7EBF0;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+        .stecca-sat-fill {
+            height: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #E74C3C, #F39C12 45%, #00B894);
+        }
+        .stecca-sat-num {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--dark);
+            flex-shrink: 0;
+        }
+        .stecca-note {
+            margin-top: 9px;
+            padding: 9px 12px;
+            background: white;
+            border-left: 3px solid var(--secondary);
+            border-radius: 0 10px 10px 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--dark);
+            line-height: 1.35;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* ── CHIUSURA DELLA STECCA ── */
+        .close-step { display: none; }
+        .close-step.on { display: block; }
+
+        .close-head {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .close-head-emoji { font-size: 3.2rem; line-height: 1; }
+        .close-head-title {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--dark);
+            margin-top: 4px;
+        }
+        .close-head-sub {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--muted);
+            margin-top: 4px;
+            line-height: 1.3;
+        }
+
+        /* l'ultima spunta: un bersaglio grosso, si preme una volta sola */
+        .final-check {
+            width: 100%;
+            padding: 26px 16px;
+            border: 3px dashed var(--success);
+            border-radius: 20px;
+            background: linear-gradient(135deg, #EAFBF4, #DAF7EA);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            transition: transform .18s cubic-bezier(.34,1.5,.64,1), background .25s, border-color .25s;
+        }
+        .final-check:hover { transform: translateY(-3px); }
+        .final-check:active { transform: scale(0.96); }
+        .final-check-mark { font-size: 4.2rem; line-height: 1; }
+        .final-check-text {
+            font-size: 1.3rem;
+            font-weight: 900;
+            color: #067A5F;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .final-check.fatta {
+            border-style: solid;
+            border-color: var(--success);
+            background: linear-gradient(135deg, var(--success), #38ef7d);
+            animation: pop .5s cubic-bezier(.34,1.56,.64,1);
+        }
+        .final-check.fatta .final-check-text { color: white; }
+
+        /* barra della soddisfazione */
+        .sat-value {
+            text-align: center;
+            font-size: 4.4rem;
+            font-weight: 900;
+            line-height: 1;
+            background: linear-gradient(135deg, var(--secondary), var(--primary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .sat-caption {
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--dark);
+            margin-top: 2px;
+            min-height: 1.6em;
+        }
+        .sat-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 14px;
+            margin: 18px 0 6px;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #E74C3C, #F39C12 45%, #00B894);
+            outline: none;
+            cursor: pointer;
+        }
+        .sat-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            background: white;
+            border: 4px solid var(--secondary);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+            cursor: grab;
+        }
+        .sat-slider::-moz-range-thumb {
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            background: white;
+            border: 4px solid var(--secondary);
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+            cursor: grab;
+        }
+        .sat-ends {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+        }
+
+        .field textarea {
+            width: 100%;
+            min-height: 110px;
+            resize: vertical;
+            padding: 12px 14px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-family: 'Darker Grotesque', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--dark);
+            background: #F9FAFB;
+            transition: border-color .2s;
+        }
+        .field textarea:focus { outline: none; border-color: var(--secondary); background: white; }
+
         .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
 
         .btn {
@@ -759,7 +968,7 @@
     <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.2.2</span>
+        <span class="app-version" id="versionBadge">v1.2.3</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </div>
@@ -822,10 +1031,19 @@
         <div id="calendar"></div>
     </div>
 
+    <!-- LE STECCHE CHIUSE -->
+    <div class="card">
+        <div class="cal-head">
+            <div class="card-title">🏅 Le stecche chiuse</div>
+            <div class="legend"><span id="steccheCount"></span></div>
+        </div>
+        <div id="steccheList"></div>
+    </div>
+
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.2.2</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.2.3</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -902,11 +1120,72 @@
     </div>
 </div>
 
+<!-- MODALE CHIUSURA DELLA STECCA — tre passi: l'ultima spunta,
+     la soddisfazione, la nota. Solo dopo si archivia. -->
+<div class="overlay" id="closeOverlay">
+    <div class="modal">
+
+        <!-- 1. L'ULTIMA SPUNTA -->
+        <div class="close-step on" id="closeStep1">
+            <div class="close-head">
+                <div class="close-head-emoji" id="closeEmoji">🏁</div>
+                <div class="close-head-title">Ci siamo!</div>
+                <div class="close-head-sub" id="closeSub">Il periodo è finito.</div>
+            </div>
+            <div class="final-check" id="finalCheck">
+                <div class="final-check-mark" id="finalCheckMark">☑️</div>
+                <div class="final-check-text">L'ultima spunta</div>
+            </div>
+            <div class="field-hint" style="text-align:center;margin-top:12px">
+                Premila: è quella che chiude la stecca.
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="btnCloseLater">Più tardi</button>
+            </div>
+        </div>
+
+        <!-- 2. SODDISFAZIONE -->
+        <div class="close-step" id="closeStep2">
+            <div class="close-head">
+                <div class="close-head-emoji">📊</div>
+                <div class="close-head-title">Quanto sei soddisfatto?</div>
+                <div class="close-head-sub">Da 1 a 100, senza pensarci troppo.</div>
+            </div>
+            <div class="sat-value" id="satValue">70</div>
+            <div class="sat-caption" id="satCaption"></div>
+            <input type="range" class="sat-slider" id="satSlider" min="1" max="100" value="70">
+            <div class="sat-ends"><span>1 · per niente</span><span>100 · moltissimo</span></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="btnSatNext">Avanti →</button>
+            </div>
+        </div>
+
+        <!-- 3. LA NOTA -->
+        <div class="close-step" id="closeStep3">
+            <div class="close-head">
+                <div class="close-head-emoji">✍️</div>
+                <div class="close-head-title">Due parole</div>
+                <div class="close-head-sub">Com'è andata? Resta scritta nell'archivio.</div>
+            </div>
+            <div class="field">
+                <label for="inNota">La nota (facoltativa)</label>
+                <textarea id="inNota" maxlength="600"
+                          placeholder="Cosa ti porti dietro da questa stecca?"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="btnNotaBack">← Indietro</button>
+                <button class="btn btn-primary" id="btnChiudiStecca">Chiudi la stecca 🏁</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.2.2';
-var BUILD_TIME  = '2026-08-02T10:20:00Z';
+var APP_VERSION = 'v1.2.3';
+var BUILD_TIME  = '2026-08-10T15:10:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -945,7 +1224,11 @@ var LS = {
     end:     'sp_endDate',
     weekend: 'sp_skipWeekend',
     checks:  'sp_checks',
-    keyDays: 'sp_keyDays'
+    keyDays: 'sp_keyDays',
+    stecche: 'sp_stecche',
+    // periodo per cui la chiusura è già stata proposta da sola: si chiede
+    // una volta, poi il pulsante resta lì per chi ci ripensa
+    asked:   'sp_closeAsked'
 };
 
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -969,6 +1252,17 @@ function defaultEnd() {
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 }
 
+function loadArrCache(chiave, nome) {
+    try {
+        var raw = localStorage.getItem(chiave);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+        console.warn(nome + ' in cache illeggibili, riparto da zero', e);
+        return [];
+    }
+}
+
 function loadObjCache(chiave, nome) {
     try {
         var raw = localStorage.getItem(chiave);
@@ -990,11 +1284,27 @@ var S = {
     checks:      loadObjCache(LS.checks, 'Spunte'),
     // keyDays: { 'YYYY-MM-DD': 'Partenza!' } — le giornate che contano
     keyDays:     loadObjCache(LS.keyDays, 'Giornate chiave'),
+    // stecche: l'archivio delle stecche già chiuse, dalla più recente
+    stecche:     loadArrCache(LS.stecche, 'Stecche chiuse'),
     // true quando il periodo esiste davvero (in DB o in cache locale)
     configured:  !!localStorage.getItem(LS.start)
 };
 
+function salvaCacheStecche() {
+    try { localStorage.setItem(LS.stecche, JSON.stringify(S.stecche)); }
+    catch (e) { console.warn('Archivio stecche non messo in cache:', e); }
+}
+
 function salvaCache() {
+    // Stecca chiusa e nessun periodo nuovo: la cache va svuotata, o al
+    // prossimo avvio dbLoad ricaricherebbe sul DB il periodo appena archiviato
+    // scambiandolo per dati locali da salvare.
+    if (!S.configured) {
+        [LS.goal, LS.emoji, LS.start, LS.end, LS.weekend, LS.checks, LS.keyDays]
+            .forEach(function(k) { localStorage.removeItem(k); });
+        salvaCacheStecche();
+        return;
+    }
     localStorage.setItem(LS.goal,    S.goal);
     localStorage.setItem(LS.emoji,   S.emoji);
     localStorage.setItem(LS.start,   S.startDate);
@@ -1002,6 +1312,7 @@ function salvaCache() {
     localStorage.setItem(LS.weekend, S.skipWeekend ? '1' : '0');
     localStorage.setItem(LS.checks,  JSON.stringify(S.checks));
     localStorage.setItem(LS.keyDays, JSON.stringify(S.keyDays));
+    salvaCacheStecche();
 }
 
 // ============================================================
@@ -1109,16 +1420,33 @@ function scoppio(cx, cy) {
     }
 }
 
-function fuochiArtificio() {
+// quanti = numero di scoppi (6 come sempre), passo = ritmo in millisecondi
+function fuochiArtificio(quanti, passo) {
     var W = window.innerWidth, H = window.innerHeight;
+    var n = quanti || 6;
     // primo scoppio al centro, poi altri sparsi nella metà alta dello schermo
     var punti = [[W / 2, H * 0.34]];
-    for (var i = 0; i < 5; i++) {
-        punti.push([W * (0.15 + Math.random() * 0.7), H * (0.15 + Math.random() * 0.42)]);
+    for (var i = 1; i < n; i++) {
+        punti.push([W * (0.12 + Math.random() * 0.76), H * (0.13 + Math.random() * 0.46)]);
     }
     punti.forEach(function(p, i) {
-        setTimeout(function() { scoppio(p[0], p[1]); }, i * 320);
+        setTimeout(function() { scoppio(p[0], p[1]); }, i * (passo || 320));
     });
+}
+
+// Lo spettacolo di chiusura: tanto più lungo quanto più si è soddisfatti,
+// ma qualche fuoco parte comunque — una stecca chiusa è una stecca chiusa.
+function fuochiFinali(sodd) {
+    var scoppi = 8 + Math.round(sodd / 100 * 16);   // da 8 a 24
+    fuochiArtificio(scoppi, 240);
+    // gran finale: tre scoppi ravvicinati quando i primi sono esauriti
+    var W = window.innerWidth, H = window.innerHeight;
+    setTimeout(function() {
+        [[W * 0.28, H * 0.3], [W * 0.5, H * 0.22], [W * 0.72, H * 0.3]]
+            .forEach(function(p, i) {
+                setTimeout(function() { scoppio(p[0], p[1]); }, i * 130);
+            });
+    }, scoppi * 240 + 200);
 }
 
 // ============================================================
@@ -1133,6 +1461,7 @@ function toast(emoji, testo, opts) {
     document.getElementById('toastText').textContent  = testo;
     el.classList.toggle('big', !!opts.big);
     el.classList.toggle('chiave', !!opts.chiave);
+    el.classList.toggle('dolce', !!opts.dolce);
     el.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function() { el.classList.remove('show'); },
@@ -1309,6 +1638,15 @@ async function dbLoad() {
             S.configured = false;
         }
 
+        // l'archivio si carica sempre: esiste anche quando non c'è
+        // nessun periodo in corso — anzi, è proprio il caso normale
+        // subito dopo aver chiuso una stecca
+        var stk = await sb.from('sp_stecche')
+                          .select('*')
+                          .order('closed_at', { ascending: false });
+        if (stk.error) throw stk.error;
+        S.stecche = stk.data || [];
+
         salvaCache();
         setSync('ok', '☁ ok');
     } catch (e) {
@@ -1372,6 +1710,30 @@ async function dbSyncKeyDays(nuove, vecchie) {
     }
 }
 
+// Archivia la stecca e libera il campo per la prossima.
+// Qui non si fa l'ottimismo con rollback usato per le spunte: prima si
+// scrive l'archivio e solo dopo si cancellano spunte, giornate chiave e
+// periodo. Nell'ordine inverso una rete che cade cancellerebbe il periodo
+// senza averne salvato la memoria — cioè esattamente il difetto che questa
+// funzione esiste per togliere.
+async function dbCloseStecca(riga) {
+    if (!sb) throw new Error('Non sei connesso: la stecca non si può archiviare.');
+
+    var ins = await sb.from('sp_stecche').insert(riga).select().single();
+    if (ins.error) throw ins.error;
+
+    var delChecks = await sb.from('sp_checks').delete().eq('user_id', currentUserId);
+    if (delChecks.error) throw delChecks.error;
+
+    var delKeys = await sb.from('sp_key_days').delete().eq('user_id', currentUserId);
+    if (delKeys.error) throw delKeys.error;
+
+    var delSet = await sb.from('sp_settings').delete().eq('user_id', currentUserId);
+    if (delSet.error) throw delSet.error;
+
+    return ins.data;
+}
+
 // ============================================================
 // RENDER
 // ============================================================
@@ -1412,6 +1774,11 @@ function render() {
         btn.textContent = 'Imposta il periodo ⚙️';
         btn.disabled = false;
         btn.onclick = apriImpostazioni;
+    } else if (steccaDaChiudere(giorni)) {
+        // finita: da qui non si spunta più, si chiude
+        btn.textContent = '🏁 Chiudi la stecca';
+        btn.disabled = false;
+        btn.onclick = apriChiusura;
     } else if (!oggiNelPeriodo) {
         btn.textContent = parseISO(oggi) > parseISO(S.endDate)
             ? 'Periodo concluso 🏁'
@@ -1440,6 +1807,61 @@ function render() {
     }
 
     renderCalendario(giorni, oggi);
+    renderStecche();
+}
+
+// Una stecca è da chiudere quando non c'è più niente da spuntare: o sono
+// stati spuntati tutti i giorni, o l'ultimo giorno del periodo è passato.
+function steccaDaChiudere(giorni) {
+    if (!giorni.length) return false;
+    var tuttiFatti = giorni.every(function(g) { return S.checks[g]; });
+    return tuttiFatti || parseISO(todayISO()) > parseISO(S.endDate);
+}
+
+function renderStecche() {
+    var box   = document.getElementById('steccheList');
+    var conta = document.getElementById('steccheCount');
+
+    if (!S.stecche.length) {
+        conta.textContent = '';
+        box.innerHTML = '<div class="empty"><span class="empty-emoji">📭</span>'
+            + 'Ancora nessuna stecca chiusa.<br>'
+            + 'Quando arrivi in fondo a un periodo, resta archiviata qui.</div>';
+        return;
+    }
+
+    conta.textContent = S.stecche.length + (S.stecche.length === 1 ? ' stecca' : ' stecche');
+
+    box.innerHTML = '<div class="stecche-list">' + S.stecche.map(function(s) {
+        var tot  = s.total_days || 0;
+        var fatt = s.done_days  || 0;
+        var perc = tot ? Math.round(fatt / tot * 100) : 0;
+        var sodd = s.satisfaction || 0;
+        var chiusa = (s.closed_at || '').slice(0, 10);
+
+        return '<div class="stecca">'
+             + '<div class="stecca-top">'
+             +   '<span class="stecca-emoji">' + escapeAttr(s.emoji || '🎯') + '</span>'
+             +   '<span class="stecca-goal">' + escapeAttr(s.goal || 'Senza nome') + '</span>'
+             +   '<span class="stecca-seal" title="l\'ultima spunta">'
+             +     escapeAttr(s.final_emoji || '🏁') + '</span>'
+             + '</div>'
+             + '<div class="stecca-meta">'
+             +   'dal ' + fmtIT(s.start_date) + ' al ' + fmtIT(s.end_date)
+             +   (s.skip_weekend ? ' · solo feriali' : '')
+             +   '<br>' + fatt + ' di ' + tot + ' spuntati · ' + perc + '%'
+             +   (chiusa ? ' · chiusa il ' + fmtIT(chiusa) : '')
+             + '</div>'
+             + '<div class="stecca-sat-row">'
+             +   '<div class="stecca-sat-bar">'
+             +     '<div class="stecca-sat-fill" style="width:' + sodd + '%"></div></div>'
+             +   '<span class="stecca-sat-num">' + sodd + '/100</span>'
+             + '</div>'
+             + (s.note
+                  ? '<div class="stecca-note">' + escapeAttr(s.note) + '</div>'
+                  : '')
+             + '</div>';
+    }).join('') + '</div>';
 }
 
 // Serie = giorni consecutivi spuntati che finiscono oggi (o all'ultimo giorno passato)
@@ -1604,7 +2026,13 @@ function controllaTraguardi(spuntati, totali, ritardo) {
             setTimeout(function() {
                 toast(t.emoji, t.testo, { durata: 4500, big: true });
                 festeggia(t.perc === 100 ? 160 : 110);
-                if (t.perc === 100) fuochiArtificio();
+                if (t.perc === 100) {
+                    fuochiArtificio();
+                    // spuntati tutti: la chiusura si propone da sola,
+                    // appena il messaggio del traguardo ha finito
+                    segnaChiusuraProposta();
+                    setTimeout(apriChiusura, 5000);
+                }
             }, ritardo || 2600);
         }
     });
@@ -1805,18 +2233,239 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ============================================================
+// CHIUSURA DELLA STECCA
+// Tre passi in fila: l'ultima spunta (il gesto che chiude), la barra
+// della soddisfazione da 1 a 100, la nota. Poi la stecca finisce
+// nell'archivio e il campo resta libero per la prossima.
+// ============================================================
+var closeOverlay = document.getElementById('closeOverlay');
+
+// quel che si raccoglie strada facendo, azzerato ad ogni apertura
+var chiusura = { sodd: 70, emojiFinale: null, quando: null };
+
+var SODD_ETICHETTE = [
+    { max: 15,  testo: 'Per niente. 😔' },
+    { max: 30,  testo: 'Poco.' },
+    { max: 45,  testo: 'Insomma…' },
+    { max: 60,  testo: 'Nella media.' },
+    { max: 75,  testo: 'Bene! 🙂' },
+    { max: 90,  testo: 'Molto bene! 😄' },
+    { max: 100, testo: 'Alla grande! 🤩' }
+];
+
+// Il messaggio finale: si va dal consolatorio al complimento vivo,
+// e i fuochi crescono insieme alla soddisfazione.
+var MSG_CHIUSURA = [
+    { max: 20,  emoji: '🫂', classe: 'dolce',
+      testo: 'Non è andata come volevi. Però ci sei arrivato in fondo, e quello non te lo toglie nessuno.' },
+    { max: 40,  emoji: '💪', classe: 'dolce',
+      testo: 'Poteva andare meglio, è vero. Ma l\'hai chiusa lo stesso: chiuderla era la parte difficile.' },
+    { max: 60,  emoji: '👍', classe: 'big',
+      testo: 'Nel complesso ci sta! Una stecca chiusa è una stecca chiusa.' },
+    { max: 80,  emoji: '🎉', classe: 'big',
+      testo: 'Bella soddisfazione! Te la sei guadagnata un giorno alla volta.' },
+    { max: 95,  emoji: '🏆', classe: 'chiave',
+      testo: 'Grandissimo! Questa è di quelle da ricordare.' },
+    { max: 100, emoji: '🎆', classe: 'chiave',
+      testo: 'PERFETTA! Meglio di così non si poteva chiudere. Che spettacolo!' }
+];
+
+function perFascia(elenco, valore) {
+    for (var i = 0; i < elenco.length; i++) {
+        if (valore <= elenco[i].max) return elenco[i];
+    }
+    return elenco[elenco.length - 1];
+}
+
+function vaiAlPasso(n) {
+    [1, 2, 3].forEach(function(i) {
+        document.getElementById('closeStep' + i).classList.toggle('on', i === n);
+    });
+}
+
+function apriChiusura() {
+    var giorni = giorniDelPeriodo();
+    if (!steccaDaChiudere(giorni)) return;
+
+    var fatti = giorni.filter(function(g) { return S.checks[g]; }).length;
+
+    chiusura = { sodd: 70, emojiFinale: null, quando: null };
+
+    document.getElementById('closeEmoji').textContent = S.emoji || '🏁';
+    document.getElementById('closeSub').innerHTML =
+        escapeAttr(S.goal) + '<br>'
+        + fatti + ' giorni spuntati su ' + giorni.length
+        + ' · dal ' + fmtIT(S.startDate) + ' al ' + fmtIT(S.endDate);
+
+    var fc = document.getElementById('finalCheck');
+    fc.classList.remove('fatta');
+    fc.style.pointerEvents = '';
+    document.getElementById('finalCheckMark').textContent = '☑️';
+
+    document.getElementById('satSlider').value  = 70;
+    document.getElementById('satValue').textContent = '70';
+    document.getElementById('satCaption').textContent = perFascia(SODD_ETICHETTE, 70).testo;
+    document.getElementById('inNota').value = '';
+
+    vaiAlPasso(1);
+    closeOverlay.classList.add('show');
+}
+
+function chiudiChiusura() { closeOverlay.classList.remove('show'); }
+
+// 1 — l'ultima spunta
+document.getElementById('finalCheck').addEventListener('click', function() {
+    if (this.classList.contains('fatta')) return;
+    chiusura.emojiFinale = emojiRandom();
+    chiusura.quando = new Date().toISOString();
+
+    this.classList.add('fatta');
+    this.style.pointerEvents = 'none';
+    document.getElementById('finalCheckMark').textContent = chiusura.emojiFinale;
+    festeggia(50);
+
+    setTimeout(function() { vaiAlPasso(2); }, 800);
+});
+
+document.getElementById('btnCloseLater').addEventListener('click', chiudiChiusura);
+
+// 2 — la soddisfazione
+document.getElementById('satSlider').addEventListener('input', function() {
+    chiusura.sodd = parseInt(this.value, 10) || 1;
+    document.getElementById('satValue').textContent = chiusura.sodd;
+    document.getElementById('satCaption').textContent =
+        perFascia(SODD_ETICHETTE, chiusura.sodd).testo;
+});
+
+document.getElementById('btnSatNext').addEventListener('click', function() {
+    vaiAlPasso(3);
+    setTimeout(function() { document.getElementById('inNota').focus(); }, 120);
+});
+
+document.getElementById('btnNotaBack').addEventListener('click', function() { vaiAlPasso(2); });
+
+// 3 — la nota, e poi l'archivio
+document.getElementById('btnChiudiStecca').addEventListener('click', async function() {
+    var btn    = this;
+    var giorni = giorniDelPeriodo();
+    var fatti  = giorni.filter(function(g) { return S.checks[g]; }).length;
+    var sodd   = chiusura.sodd;
+
+    var riga = {
+        user_id:        currentUserId,
+        goal:           S.goal,
+        emoji:          S.emoji,
+        start_date:     S.startDate,
+        end_date:       S.endDate,
+        skip_weekend:   S.skipWeekend,
+        total_days:     giorni.length,
+        done_days:      fatti,
+        final_emoji:    chiusura.emojiFinale || '🏁',
+        final_check_at: chiusura.quando,
+        satisfaction:   sodd,
+        note:           document.getElementById('inNota').value.trim(),
+        checks:         S.checks,
+        key_days:       S.keyDays
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Archivio…';
+
+    var salvata;
+    try {
+        salvata = await dbCloseStecca(riga);
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Chiudi la stecca 🏁';
+        if (handleAuthError(e)) return;
+        console.warn('Stecca non archiviata:', e);
+        alert('Errore: la stecca non è stata archiviata ('
+              + (e.message || 'connessione assente') + '). Riprova.');
+        return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Chiudi la stecca 🏁';
+
+    S.stecche.unshift(salvata || riga);
+    S.checks     = {};
+    S.keyDays    = {};
+    S.configured = false;          // campo libero: si riparte quando si vuole
+    localStorage.removeItem(LS.asked);
+    salvaCache();
+    chiudiChiusura();
+    render();
+
+    festeggiaChiusura(sodd);
+});
+
+function festeggiaChiusura(sodd) {
+    var m = perFascia(MSG_CHIUSURA, sodd);
+    toast(m.emoji, m.testo, {
+        durata: 7000,
+        big:    m.classe === 'big',
+        chiave: m.classe === 'chiave',
+        dolce:  m.classe === 'dolce'
+    });
+    festeggia(70 + sodd);
+    fuochiFinali(sodd);
+    // finito lo spettacolo, la domanda ovvia: e adesso cosa aspettiamo?
+    setTimeout(function() {
+        toast('🎯', 'Stecca archiviata! Che cosa aspettiamo adesso?', { durata: 3500 });
+        setTimeout(apriImpostazioni, 3600);
+    }, 9000);
+}
+
+closeOverlay.addEventListener('click', function(e) {
+    // solo prima dell'ultima spunta: dopo c'è una nota da non buttare via
+    if (e.target === closeOverlay
+        && document.getElementById('closeStep1').classList.contains('on')) {
+        chiudiChiusura();
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape'
+        && closeOverlay.classList.contains('show')
+        && document.getElementById('closeStep1').classList.contains('on')) {
+        chiudiChiusura();
+    }
+});
+
+// ============================================================
 // AVVIO
 // ============================================================
 console.log('%c✅ Spuntiamola ' + APP_VERSION, 'color:#00B894;font-size:16px;font-weight:bold;');
 console.log('%cbuild: ' + BUILD_TIME, 'color:#888;font-size:11px;');
 console.log('%cambiente: ' + (_IS_DEV ? '🧪 Development' : '🚀 Production'), 'color:#888;font-size:11px;');
 
+// La chiusura si propone da sola una volta per periodo: chi dice "più tardi"
+// non se la ritrova addosso ad ogni apertura, il pulsante 🏁 resta lì.
+function chiaveChiusura() { return S.startDate + '→' + S.endDate; }
+
+function chiusuraGiaProposta() {
+    return localStorage.getItem(LS.asked) === chiaveChiusura();
+}
+
+function segnaChiusuraProposta() {
+    localStorage.setItem(LS.asked, chiaveChiusura());
+}
+
 async function startApp() {
     render();          // subito, con la cache locale
     await dbLoad();    // poi il DB corregge il tiro
 
     // prima apertura in assoluto: nessun periodo, apro le impostazioni
-    if (!S.configured) setTimeout(apriImpostazioni, 400);
+    if (!S.configured) {
+        setTimeout(apriImpostazioni, 400);
+        return;
+    }
+
+    // periodo finito mentre l'app era chiusa: la stecca chiede di essere chiusa
+    if (steccaDaChiudere(giorniDelPeriodo()) && !chiusuraGiaProposta()) {
+        segnaChiusuraProposta();
+        setTimeout(apriChiusura, 900);
+    }
 }
 
 window.addEventListener('load', function() {
