@@ -1,6 +1,5 @@
 package com.garsal.appsphere.core
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -68,7 +67,7 @@ private val schema = lightColorScheme(
 
 @Composable
 fun AppSphereTheme(content: @Composable () -> Unit) {
-    @Suppress("UNUSED_EXPRESSION") isSystemInDarkTheme() // vedi commento sopra
+    // Nessuna variante scura, di proposito: vedi il commento in cima.
     MaterialTheme(colorScheme = schema, content = content)
 }
 

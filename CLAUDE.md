@@ -579,6 +579,70 @@ Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock
 
 ---
 
+## AppSphere nativa — l'unico modulo Android che non è un WebView
+
+`android-app/appsphere-native/` è un progetto Gradle standalone (come `situazione-rosa/` e
+`pressure-tracker/`) e **l'unica app Android della repo scritta davvero in nativo**: schermate in
+Kotlin/Compose, dati da PostgREST via `supabase-kt`. Tutti gli altri moduli caricano una pagina
+Netlify dentro una `WebView`.
+
+**Non sostituisce l'APK WebView, gli si affianca.** `applicationId` è `com.garsal.appsphere`
+(contro `com.garsalapps`), quindi i due si installano insieme sullo stesso telefono e leggono lo
+stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire quello WebView.
+
+| Cosa | Dove |
+|---|---|
+| Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
+| App portate | `spuntiamola/`, `obiettivi/`, `eventslog/` |
+| Build APK | `.github/workflows/build-appsphere-native.yml` → `releases/AppSphereNative-latest.apk` |
+
+### Cosa compare in home: il registro `PortedApps`
+
+Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
+nativo**, decise da `home/PortedApps.kt`. Titolo, descrizione, colore e punteggio continuano ad
+arrivare dal database (`cm_apps` + RPC `run_score_query`): il registro decide soltanto *se* la
+bolla si disegna e *dove* porta il tap. **Portare una quarta app = una riga lì più le sue
+schermate.** I valori di ripiego servono perché non tutte le righe di `cm_apps` nascono da una
+migration — `events-log.html` non compare in nessun file SQL — e senza quelli la bolla sparirebbe
+in silenzio.
+
+Gli avvisi in home sono per ora la **sola fonte Spuntiamola**: le altre cinque del web (decisioni,
+task urgenti, totale portafogli, Ta Firi, abitudini) porterebbero a schermate che qui non esistono,
+e un avviso che non apre niente è peggio di nessun avviso.
+
+### ⚠️ Deep link: schema proprio, e va messo in whitelist
+
+Il login usa **`garsalnative://oauth`**, non `garsalapps://oauth`: con lo stesso schema Android
+chiederebbe a ogni login quale delle due app aprire. Va aggiunto una volta sola in
+Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, altrimenti il login
+fallisce con `redirect_to not allowed`.
+
+### ⚠️ Kotlin 2.1.20, diverso dagli altri moduli
+
+`supabase-kt 3.1.4` è compilata con stdlib 2.1.20 e i suoi metadata non si leggono con il 2.0.21
+usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
+guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
+
+### ⚠️ Tre app ora esistono in due implementazioni
+
+`spuntiamola.html`, `obiettivi.html` ed `events-log.html` hanno un gemello Kotlin che lavora sulle
+**stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
+sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
+divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
+I punti dove la regola *è* la funzionalità, e non un dettaglio:
+
+- **Spuntiamola** — la chiusura della stecca scrive **prima** in `sp_stecche` e cancella **dopo**
+  (`SpuntiamolaRepository.chiudiStecca`, come `dbCloseStecca()`); le spunte sono ottimistiche con
+  rollback; frasi, emoji e messaggi dei traguardi sono copiati parola per parola.
+- **Obiettivi** — progresso e media pesata della rubrica restano nelle RPC
+  (`ob_objective_progress`, `ob_record_measurement`); per `kind='rubric'` il client **non calcola e
+  non invia mai il valore**. Le due barre non si fondono mai in una media.
+- **Events Log** — le tabelle `el_*` non sono in nessuna migration: le colonne dei `data class`
+  sono ricavate da come `events-log.html` le scrive. Gli eventi `DA_SELECT` registrano **solo se il
+  conteggio è cresciuto** rispetto all'ultimo `count:N`.
+
+---
+
 ## App Details
 
 ### `index.html` — AppSphere
@@ -1015,6 +1079,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
+10. **Tre app esistono anche in Kotlin**: Spuntiamola, Obiettivi ed Events Log hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle. Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 
