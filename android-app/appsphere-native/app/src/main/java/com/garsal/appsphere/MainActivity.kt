@@ -33,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import com.garsal.appsphere.core.AppSphereTheme
 import com.garsal.appsphere.core.AuthRepo
 import com.garsal.appsphere.core.BiometricGate
+import com.garsal.appsphere.core.CerchiOlimpici
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.Supabase
 import com.garsal.appsphere.eventslog.EventsLogScreen
