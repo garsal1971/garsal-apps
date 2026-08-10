@@ -43,6 +43,7 @@ import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
 import io.github.jan.supabase.auth.handleDeeplinks
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -63,7 +64,7 @@ class MainActivity : FragmentActivity() {
         // Il deep link di ritorno dall'OAuth può arrivare sia come intent
         // iniziale (app chiusa) sia in onNewIntent (app già aperta): vanno
         // gestiti tutti e due, o il login riesce solo in uno dei due casi.
-        Supabase.client().handleDeeplinks(intent)
+        gestisciDeepLink(intent)
 
         setContent {
             AppSphereTheme {
@@ -75,6 +76,34 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        gestisciDeepLink(intent)
+    }
+
+    /**
+     * Passa il deep link a supabase-kt, ma prima annota cosa è arrivato.
+     *
+     * `handleDeeplinks` non lancia e non restituisce niente: se schema, host o
+     * il parametro `code` non sono quelli attesi, esce e basta. Senza questa
+     * traccia un rientro andato male è indistinguibile da un rientro mai
+     * avvenuto, ed è esattamente il caso in cui serve saperlo.
+     */
+    private fun gestisciDeepLink(intent: Intent?) {
+        val dati = intent?.data
+        if (dati == null || dati.scheme != Supabase.DEEPLINK_SCHEME) return
+
+        val codice = dati.getQueryParameter("code")
+        val errore = dati.getQueryParameter("error_description")
+            ?: dati.getQueryParameter("error")
+
+        AuthRepo.annotaRientro(
+            when {
+                errore != null -> "Supabase ha risposto con un errore: $errore"
+                codice != null -> "codice ricevuto, scambio in corso"
+                dati.fragment != null -> "arrivato un fragment invece del codice — flusso sbagliato"
+                else -> "rientro senza codice né errore (host=${dati.host})"
+            }
+        )
+
         Supabase.client().handleDeeplinks(intent)
     }
 }
@@ -90,6 +119,24 @@ private fun AppRoot(activity: FragmentActivity) {
     // solo all'avvio.
     var sbloccato by remember { mutableStateOf(false) }
     var biometriaRifiutata by remember { mutableStateOf(false) }
+
+    // ── La rotella non deve poter girare per sempre ──────────────────────
+    // `Initializing` non è solo lo stato di partenza: supabase-kt ci torna a
+    // ogni passaggio in background (`resetLoadingState()` in onStop), e aprire
+    // la Custom Tab del login *è* andare in background. Se il rientro non
+    // porta una sessione — deep link mancato, rete assente, scambio del
+    // codice fallito — lo stato resta lì, e mappandolo su una schermata di
+    // attesa senza uscita si ottiene un'app che gira a vuoto senza dire
+    // perché. Passati alcuni secondi si mostra il login, che almeno si può
+    // ripremere.
+    var attesaScaduta by remember { mutableStateOf(false) }
+    LaunchedEffect(stato) {
+        attesaScaduta = false
+        if (stato == AuthRepo.State.CARICAMENTO) {
+            delay(6000)
+            attesaScaduta = true
+        }
+    }
 
     fun chiediSblocco() {
         biometriaRifiutata = false
@@ -107,8 +154,8 @@ private fun AppRoot(activity: FragmentActivity) {
     }
 
     when {
-        stato == AuthRepo.State.CARICAMENTO -> SchermataAttesa()
-        stato == AuthRepo.State.FUORI -> SchermataLogin()
+        stato == AuthRepo.State.CARICAMENTO && !attesaScaduta -> SchermataAttesa()
+        stato == AuthRepo.State.CARICAMENTO || stato == AuthRepo.State.FUORI -> SchermataLogin()
         !sbloccato -> SchermataBloccata(
             rifiutata = biometriaRifiutata,
             onRiprova = { chiediSblocco() },
@@ -150,6 +197,7 @@ private fun SchermataLogin() {
     val scope = rememberCoroutineScope()
     var errore by remember { mutableStateOf<String?>(null) }
     var inCorso by remember { mutableStateOf(false) }
+    val rientro by AuthRepo.ultimoRientro.collectAsStateWithLifecycle()
 
     Scaffold { p ->
         Column(
@@ -194,6 +242,19 @@ private fun SchermataLogin() {
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+
+            // Se si è già tornati dal browser una volta senza entrare, dirlo:
+            // è l'unico modo per capire dove si è rotto senza collegare il
+            // telefono al computer e leggere i log.
+            rientro?.let {
+                Text(
+                    text = "Ultimo rientro dal login: $it",
+                    color = Palette.muted,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 24.dp),
                 )
             }
         }
