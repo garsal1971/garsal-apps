@@ -42,7 +42,6 @@ import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
-import io.github.jan.supabase.auth.handleDeeplinks
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -80,31 +79,34 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Passa il deep link a supabase-kt, ma prima annota cosa è arrivato.
+     * Accoglie il rientro dal login, in **qualunque** forma arrivi.
      *
-     * `handleDeeplinks` non lancia e non restituisce niente: se schema, host o
-     * il parametro `code` non sono quelli attesi, esce e basta. Senza questa
-     * traccia un rientro andato male è indistinguibile da un rientro mai
-     * avvenuto, ed è esattamente il caso in cui serve saperlo.
+     * Non si delega più a `handleDeeplinks`: quella guarda solo il formato
+     * corrispondente al `flowType` configurato e, se trova l'altro, esce in
+     * silenzio — ed è precisamente così che la 1.0.2 buttava via i token che
+     * il server le stava mandando. Qui si guarda cosa c'è davvero:
+     * un `?code=` da scambiare, un `#access_token=` da importare, o un errore
+     * da mostrare. Nessuno dei tre può più passare inosservato.
      */
     private fun gestisciDeepLink(intent: Intent?) {
         val dati = intent?.data
         if (dati == null || dati.scheme != Supabase.DEEPLINK_SCHEME) return
 
-        val codice = dati.getQueryParameter("code")
         val errore = dati.getQueryParameter("error_description")
             ?: dati.getQueryParameter("error")
+        val codice = dati.getQueryParameter("code")
+        val fragment = dati.fragment
 
-        AuthRepo.annotaRientro(
-            when {
-                errore != null -> "Supabase ha risposto con un errore: $errore"
-                codice != null -> "codice ricevuto, scambio in corso"
-                dati.fragment != null -> "arrivato un fragment invece del codice — flusso sbagliato"
-                else -> "rientro senza codice né errore (host=${dati.host})"
-            }
-        )
-
-        Supabase.client().handleDeeplinks(intent)
+        when {
+            errore != null ->
+                AuthRepo.annotaRientro("Supabase ha risposto con un errore: $errore")
+            codice != null ->
+                AuthRepo.completaConCodice(codice)
+            !fragment.isNullOrBlank() ->
+                AuthRepo.completaConFragment(fragment)
+            else ->
+                AuthRepo.annotaRientro("rientro senza token né errore (host=${dati.host})")
+        }
     }
 }
 

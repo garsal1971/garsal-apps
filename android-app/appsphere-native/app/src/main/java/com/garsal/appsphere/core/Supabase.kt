@@ -43,16 +43,20 @@ object Supabase {
         install(Auth) {
             scheme = DEEPLINK_SCHEME
             host = DEEPLINK_HOST
-            // PKCE e non il flusso implicito (che è il default della libreria).
-            // Con l'implicito i token tornano nel **fragment** del deep link
-            // (`garsalnative://oauth#access_token=…`): se per qualsiasi ragione
-            // il fragment non arriva, `handleDeeplinks` non trova niente ed
-            // esce in silenzio — l'app rientra dal browser e non succede
-            // niente, senza un errore da nessuna parte. Con PKCE il codice
-            // viaggia come parametro di query (`?code=…`), che Android
-            // consegna in modo molto più affidabile, e lo scambio col server
-            // fallisce rumorosamente se qualcosa non va.
-            flowType = FlowType.PKCE
+            // Flusso implicito, che è anche il default della libreria.
+            //
+            // Provato PKCE nella 1.0.2 e tornati indietro su **prova diretta**:
+            // il consenso restava appeso nel browser, e quando il deep link
+            // arrivava portava un `#access_token=…` — cioè un fragment, non il
+            // `?code=…` che PKCE si aspetta. Questo progetto Supabase risponde
+            // in implicito, e configurare PKCE significava solo scartare in
+            // silenzio quello che il server manda davvero.
+            //
+            // Il difetto vero della 1.0.2 non era il flusso ma il fatto che
+            // scartasse senza dirlo: ora il deep link è gestito a mano in
+            // MainActivity e **tutti e due i formati** vengono accolti, quindi
+            // questa riga non è più un punto di rottura.
+            flowType = FlowType.IMPLICIT
             // Custom Tabs e non il browser esterno: è quello che fa già
             // MainActivity dell'APK WebView, ed è l'unico modo per cui Google
             // non rifiuti il login come "user agent non sicuro".
