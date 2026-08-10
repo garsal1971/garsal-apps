@@ -115,6 +115,27 @@ body {
 }
 .apk-btn-blocker:hover { background: #5A4BD1; }
 
+/* ── PANNELLO APK APPSPHERE NATIVA ───────────────────────────────────────── */
+/* Blu dei cerchi olimpici (#0081C8): è l'identità di AppSphere, e distingue
+   a colpo d'occhio l'APK nativo dal verde di GarsalApps (WebView) — i due si
+   installano insieme e vanno saputi tenere separati. */
+.apk-panel-native {
+  background: linear-gradient(135deg, #0C4A6E 0%, #082F49 100%);
+  border: 1px solid #0081C8; border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.apk-panel-native .apk-panel-label { color: #7DD3FC; }
+.apk-panel-native .apk-title       { color: #E0F2FE; }
+.apk-panel-native .apk-sub         { color: #BAE6FD; }
+.apk-btn-native {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #0081C8; color: #fff; font-size: 13px; font-weight: 700;
+  padding: 9px 16px; border-radius: 7px; text-decoration: none;
+  transition: background .15s; white-space: nowrap;
+}
+.apk-btn-native:hover { background: #026DA8; }
+
 /* ── AREA ISTRUZIONI ─────────────────────────────────────────────────────── */
 .instructions {
   max-width: 860px; margin: 0 auto; padding: 20px 14px 40px;
@@ -213,6 +234,17 @@ body {
       </a>
     </div>
 
+    <div class="apk-panel-native">
+      <div>
+        <div class="apk-panel-label">⚛️ Android APK</div>
+        <div class="apk-title">AppSphere nativa</div>
+        <div class="apk-sub">Kotlin/Compose · si affianca a GarsalApps</div>
+      </div>
+      <a class="apk-btn-native" href="/releases/AppSphereNative-latest.apk" download="AppSphereNative.apk">
+        ⬇ Scarica APK
+      </a>
+    </div>
+
     <div class="apk-panel-blocker">
       <div>
         <div class="apk-panel-label">🔐 Android APK</div>
@@ -244,6 +276,50 @@ body {
      AREA ISTRUZIONI — sostituire il contenuto ad ogni modifica
 ════════════════════════════════════════════════════════ -->
 <div class="instructions">
+
+  <div class="section-title">⚛️ AppSphere nativa — prima installazione</div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="badge setup">SETUP</div>
+      <div class="card-body">
+        <div class="card-title">Redirect URL su Supabase — senza questo il login non torna nell'app</div>
+        <div class="card-desc">
+          Supabase Dashboard → <b>Authentication → URL Configuration → Redirect URLs</b> →
+          aggiungere <code>garsalnative://oauth</code>.<br>
+          Lo schema è <strong>diverso</strong> da <code>garsalapps://oauth</code> di proposito: con lo
+          stesso, Android chiederebbe a ogni login quale delle due app aprire. Se manca dalla
+          whitelist il login fallisce con <code>redirect_to not allowed</code>.
+        </div>
+        <div class="tags">
+          <span class="tag once">una tantum</span>
+          <span class="tag web">supabase prod</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="badge setup">APK</div>
+      <div class="card-body">
+        <div class="card-title">Si installa <em>accanto</em> a GarsalApps, non al posto suo</div>
+        <div class="card-desc">
+          <code>applicationId</code> diverso (<code>com.garsal.appsphere</code> contro
+          <code>com.garsalapps</code>): i due APK convivono sullo stesso telefono e leggono lo
+          stesso database.<br>
+          La home nativa mostra <strong>solo le app già portate in Kotlin</strong> — oggi
+          Spuntiamola, Obiettivi ed Events Log. Per tutto il resto (Tasks, Finanza, Spese Famiglia…)
+          si continua ad aprire GarsalApps.<br>
+          <b>La prova che conta</b>: spunta un giorno su Spuntiamola dal nativo, poi apri
+          <code>spuntiamola.html</code> nel browser — deve esserci, <em>con la stessa emoji</em>.
+        </div>
+        <div class="tags">
+          <span class="tag once">prima installazione</span>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="section-title">🔐 Smart Block — Setup completo (una-tantum)</div>
 
