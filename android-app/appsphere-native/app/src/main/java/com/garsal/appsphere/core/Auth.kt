@@ -1,12 +1,18 @@
 package com.garsal.appsphere.core
 
 import android.util.Log
+import io.github.jan.supabase.annotations.SupabaseInternal
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.parseFragmentAndImportSession
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * Login Google e stato della sessione.
@@ -33,9 +39,50 @@ object AuthRepo {
      */
     val ultimoRientro = MutableStateFlow<String?>(null)
 
-    fun annotaRientro(descrizione: String) {
-        Log.i(TAG, "rientro dal browser: $descrizione")
+    fun annotaRientro(descrizione: String?) {
+        Log.i(TAG, "rientro dal browser: ${descrizione ?: "entrato"}")
         ultimoRientro.value = descrizione
+    }
+
+    /** Scope proprio: il rientro può arrivare quando nessuna schermata è viva. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /**
+     * Rientro col flusso implicito: i token sono nel fragment del deep link.
+     * È la forma in cui risponde questo progetto Supabase.
+     */
+    @OptIn(SupabaseInternal::class)
+    fun completaConFragment(fragment: String) {
+        if (fragment.contains("error")) {
+            annotaRientro("il fragment contiene un errore: $fragment")
+            return
+        }
+        try {
+            Supabase.client().auth.parseFragmentAndImportSession(fragment) {
+                annotaRientro(null)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "fragment non utilizzabile", e)
+            annotaRientro("token ricevuti ma non utilizzabili: ${e.message}")
+        }
+    }
+
+    /**
+     * Rientro col flusso PKCE: c'è un codice da scambiare col server.
+     * Oggi non è la strada che il progetto usa, ma accoglierla costa poche
+     * righe e toglie di mezzo la dipendenza da come il server decide di
+     * rispondere — che è esattamente ciò che ha rotto la 1.0.2.
+     */
+    fun completaConCodice(codice: String) {
+        scope.launch {
+            try {
+                Supabase.client().auth.exchangeCodeForSession(codice)
+                annotaRientro(null)
+            } catch (e: Exception) {
+                Log.w(TAG, "scambio del codice fallito", e)
+                annotaRientro("scambio del codice fallito: ${e.message}")
+            }
+        }
     }
 
     val state: Flow<State> = Supabase.client().auth.sessionStatus.map { status ->
