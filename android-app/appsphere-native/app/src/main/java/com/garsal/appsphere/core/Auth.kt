@@ -5,6 +5,7 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
 /**
@@ -20,6 +21,22 @@ object AuthRepo {
     private const val TAG = "AppSphereAuth"
 
     enum class State { CARICAMENTO, DENTRO, FUORI }
+
+    /**
+     * Cosa è arrivato dall'ultimo rientro dal browser.
+     *
+     * `handleDeeplinks` esce in silenzio quando l'URL non è quello che si
+     * aspetta: senza questa traccia un login che non va a buon fine è
+     * indistinguibile da un login mai tentato — l'app torna in primo piano e
+     * non succede niente. Qui si annota cosa si è visto, e la schermata di
+     * login lo mostra invece di lasciare l'utente a guardare una rotella.
+     */
+    val ultimoRientro = MutableStateFlow<String?>(null)
+
+    fun annotaRientro(descrizione: String) {
+        Log.i(TAG, "rientro dal browser: $descrizione")
+        ultimoRientro.value = descrizione
+    }
 
     val state: Flow<State> = Supabase.client().auth.sessionStatus.map { status ->
         when (status) {
