@@ -1,0 +1,284 @@
+package com.garsal.appsphere.eventslog
+
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.garsal.appsphere.core.AuthRepo
+import com.garsal.appsphere.core.Supabase
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
+import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+
+// ── Righe ────────────────────────────────────────────────────────────────
+//
+// ⚠️ Le tabelle el_* non compaiono in nessuna migration della repo: furono
+// create a mano su Supabase prima che esistesse la cartella `migrations/`, e
+// events-log.html le legge con `select('*')`. Le colonne qui sotto sono
+// ricavate da come la pagina le scrive (i literal passati a insert/update),
+// non indovinate. `ignoreUnknownKeys` è attivo nel serializer di supabase-kt,
+// quindi una colonna in più sul database non rompe niente; una in meno sì, e
+// si vedrebbe subito come errore di decodifica al primo caricamento.
+
+@Serializable
+data class ElGruppo(
+    val id: String,
+    val name: String = "",
+    val icon: String? = null,
+    val color: String? = null,
+    val description: String? = null,
+    @SerialName("sort_order") val sortOrder: Int = 0,
+    val riservato: Boolean? = null,
+)
+
+@Serializable
+data class ElEvento(
+    val id: String,
+    val name: String = "",
+    val icon: String? = null,
+    val description: String? = null,
+    @SerialName("group_id") val groupId: String? = null,
+    @SerialName("sort_order") val sortOrder: Int = 0,
+    /** `MANUALE` (si tocca per registrare) o `DA_SELECT` (conta da solo). */
+    @SerialName("event_type") val eventType: String = "MANUALE",
+    val points: Int = 1,
+    val color: String? = null,
+    @SerialName("score_query") val scoreQuery: String? = null,
+)
+
+@Serializable
+data class ElLog(
+    val id: String,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("event_id") val eventId: String = "",
+    val note: String? = null,
+    @SerialName("logged_at") val loggedAt: String = "",
+    @SerialName("points_at_log") val pointsAtLog: Int = 0,
+)
+
+object EventsLogRepository {
+
+    private val db get() = Supabase.client().postgrest
+
+    /** Lo stesso formato che scrive la pagina web (`localDateTimeStr`). */
+    private val FORMATO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+
+    fun adesso(): String = LocalDateTime.now().format(FORMATO)
+
+    suspend fun gruppi(): List<ElGruppo> = withContext(Dispatchers.IO) {
+        db.from("el_groups")
+            .select(Columns.ALL) {
+                order("sort_order", Order.ASCENDING)
+                order("name", Order.ASCENDING)
+            }
+            .decodeList<ElGruppo>()
+    }
+
+    suspend fun eventi(): List<ElEvento> = withContext(Dispatchers.IO) {
+        db.from("el_events")
+            .select(Columns.ALL) {
+                order("sort_order", Order.ASCENDING)
+                order("name", Order.ASCENDING)
+            }
+            .decodeList<ElEvento>()
+    }
+
+    suspend fun log(limite: Long = 200): List<ElLog> = withContext(Dispatchers.IO) {
+        db.from("el_logs")
+            .select(Columns.ALL) {
+                order("logged_at", Order.DESCENDING)
+                limit(limite)
+            }
+            .decodeList<ElLog>()
+    }
+
+    /**
+     * L'id lo genera il client, come fa la pagina web con `crypto.randomUUID()`:
+     * così la riga appena scritta si riconosce senza rileggerla.
+     */
+    suspend fun registra(evento: ElEvento, nota: String?, punti: Int, quando: String): ElLog =
+        withContext(Dispatchers.IO) {
+            val riga = ElLog(
+                id = UUID.randomUUID().toString(),
+                userId = AuthRepo.userId(),
+                eventId = evento.id,
+                note = nota?.takeIf { it.isNotBlank() },
+                loggedAt = quando,
+                pointsAtLog = punti,
+            )
+            db.from("el_logs").insert(riga)
+            riga
+        }
+
+    suspend fun cancellaLog(id: String) = withContext(Dispatchers.IO) {
+        db.from("el_logs").delete { filter { eq("id", id) } }
+        Unit
+    }
+
+    /** Il valore corrente di un evento DA_SELECT, dalla sua `score_query`. */
+    suspend fun valoreDaSelect(sql: String): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            db.rpc("run_score_query", buildJsonObject { put("query", sql) }).decodeAs<Int>()
+        }.getOrNull()
+    }
+}
+
+data class EventsLogState(
+    val gruppi: List<ElGruppo> = emptyList(),
+    val eventi: List<ElEvento> = emptyList(),
+    val log: List<ElLog> = emptyList(),
+    val gruppoAttivo: String? = null,
+    val valoriDaSelect: Map<String, Int> = emptyMap(),
+    val caricamento: Boolean = true,
+    val errore: String? = null,
+    val messaggio: String? = null,
+) {
+    val eventiDelGruppo: List<ElEvento>
+        get() = eventi.filter { it.groupId == gruppoAttivo }
+
+    fun evento(id: String): ElEvento? = eventi.firstOrNull { it.id == id }
+
+    val puntiTotali: Int get() = log.sumOf { it.pointsAtLog }
+}
+
+class EventsLogViewModel : ViewModel() {
+
+    private val _state = MutableStateFlow(EventsLogState())
+    val state: StateFlow<EventsLogState> = _state.asStateFlow()
+
+    init { carica() }
+
+    fun carica() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(caricamento = true, errore = null)
+            try {
+                val gruppi = EventsLogRepository.gruppi()
+                val eventi = EventsLogRepository.eventi()
+                val log = EventsLogRepository.log()
+                _state.value = _state.value.copy(
+                    gruppi = gruppi,
+                    eventi = eventi,
+                    log = log,
+                    gruppoAttivo = _state.value.gruppoAttivo ?: gruppi.firstOrNull()?.id,
+                    caricamento = false,
+                )
+                controllaDaSelect()
+            } catch (e: Exception) {
+                Log.w(TAG, "caricamento fallito", e)
+                _state.value = _state.value.copy(
+                    caricamento = false,
+                    errore = e.message ?: "Caricamento non riuscito",
+                )
+            }
+        }
+    }
+
+    /**
+     * Gli eventi che si contano da soli.
+     *
+     * Si registra un log **solo se il conteggio è cresciuto** rispetto
+     * all'ultimo `count:N` annotato: senza quel confronto ogni apertura
+     * dell'app aggiungerebbe una riga identica alla precedente.
+     */
+    private fun controllaDaSelect() {
+        viewModelScope.launch {
+            val daSelect = _state.value.eventi.filter {
+                it.eventType == "DA_SELECT" && !it.scoreQuery.isNullOrBlank()
+            }
+            if (daSelect.isEmpty()) return@launch
+
+            var valori = _state.value.valoriDaSelect
+            var qualcosaScritto = false
+
+            daSelect.forEach { evento ->
+                val corrente = EventsLogRepository.valoreDaSelect(evento.scoreQuery!!) ?: return@forEach
+                val totale = corrente * evento.points
+                valori = valori + (evento.id to corrente)
+
+                val ultimo = _state.value.log.firstOrNull { it.eventId == evento.id }
+                val ultimoConteggio = ultimo?.note
+                    ?.let { Regex("count:(\\d+)").find(it)?.groupValues?.get(1)?.toIntOrNull() }
+
+                if (ultimoConteggio == null || corrente > ultimoConteggio) {
+                    runCatching {
+                        EventsLogRepository.registra(
+                            evento = evento,
+                            nota = "count:$corrente",
+                            punti = totale,
+                            quando = EventsLogRepository.adesso(),
+                        )
+                    }.onSuccess { qualcosaScritto = true }
+                        .onFailure { Log.w(TAG, "DA_SELECT non registrato: ${it.message}") }
+                }
+            }
+
+            _state.value = _state.value.copy(valoriDaSelect = valori)
+            if (qualcosaScritto) {
+                runCatching { EventsLogRepository.log() }
+                    .onSuccess { _state.value = _state.value.copy(log = it) }
+            }
+        }
+    }
+
+    fun scegliGruppo(id: String) {
+        _state.value = _state.value.copy(gruppoAttivo = id)
+    }
+
+    fun registra(evento: ElEvento, nota: String?) {
+        viewModelScope.launch {
+            try {
+                val riga = EventsLogRepository.registra(
+                    evento = evento,
+                    nota = nota,
+                    punti = evento.points,
+                    quando = EventsLogRepository.adesso(),
+                )
+                _state.value = _state.value.copy(
+                    log = listOf(riga) + _state.value.log,
+                    messaggio = "${evento.icon.orEmpty()} ${evento.name} registrato (+${evento.points})".trim(),
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "log non registrato", e)
+                _state.value = _state.value.copy(
+                    messaggio = "Non registrato: ${e.message ?: "connessione assente"}"
+                )
+            }
+        }
+    }
+
+    fun cancella(log: ElLog) {
+        viewModelScope.launch {
+            val prima = _state.value.log
+            _state.value = _state.value.copy(log = prima.filterNot { it.id == log.id })
+            try {
+                EventsLogRepository.cancellaLog(log.id)
+            } catch (e: Exception) {
+                Log.w(TAG, "cancellazione non riuscita", e)
+                _state.value = _state.value.copy(
+                    log = prima,
+                    messaggio = "Non cancellato: ${e.message ?: "connessione assente"}",
+                )
+            }
+        }
+    }
+
+    fun messaggioMostrato() {
+        _state.value = _state.value.copy(messaggio = null)
+    }
+
+    private companion object {
+        const val TAG = "EventsLog"
+    }
+}

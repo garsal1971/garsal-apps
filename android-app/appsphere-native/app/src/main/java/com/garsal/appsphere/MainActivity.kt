@@ -2,6 +2,7 @@ package com.garsal.appsphere
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import com.garsal.appsphere.core.AppSphereTheme
 import com.garsal.appsphere.core.AuthRepo
 import com.garsal.appsphere.core.BiometricGate
+import com.garsal.appsphere.core.CerchiOlimpici
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.Supabase
 import com.garsal.appsphere.eventslog.EventsLogScreen
@@ -53,6 +55,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // L'equivalente del console.log stilizzato che ogni pagina web stampa
+        // all'avvio: serve a sapere quale versione sta girando davvero.
+        Log.i("AppSphere", "AppSphere nativa v${BuildConfig.VERSION_NAME} · ${BuildConfig.SUPABASE_URL}")
 
         // Il deep link di ritorno dall'OAuth può arrivare sia come intent
         // iniziale (app chiusa) sia in onNewIntent (app già aperta): vanno
@@ -158,7 +164,7 @@ private fun SchermataLogin() {
                 modifier = Modifier.padding(top = 24.dp),
             )
             Text(
-                text = "Versione nativa",
+                text = "Versione nativa · v${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Palette.muted,
                 modifier = Modifier.padding(top = 4.dp, bottom = 40.dp),
