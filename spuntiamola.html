@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.2.3</title>
+    <title>✅ Spuntiamola v1.2.4</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -968,7 +968,7 @@
     <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.2.3</span>
+        <span class="app-version" id="versionBadge">v1.2.4</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </div>
@@ -1043,7 +1043,7 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.2.3</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.2.4</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -1184,8 +1184,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.2.3';
-var BUILD_TIME  = '2026-08-10T15:10:00Z';
+var APP_VERSION = 'v1.2.4';
+var BUILD_TIME  = '2026-08-10T16:00:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1290,9 +1290,22 @@ var S = {
     configured:  !!localStorage.getItem(LS.start)
 };
 
+// In cache va solo quello che serve a disegnare la card: la fotografia
+// del periodo (checks e key_days) sta nel DB e nessuno la rilegge da qui,
+// mentre a furia di stecche riempirebbe da sola il localStorage.
 function salvaCacheStecche() {
-    try { localStorage.setItem(LS.stecche, JSON.stringify(S.stecche)); }
-    catch (e) { console.warn('Archivio stecche non messo in cache:', e); }
+    try {
+        var leggere = S.stecche.map(function(s) {
+            var c = {};
+            ['id','goal','emoji','start_date','end_date','skip_weekend','total_days',
+             'done_days','final_emoji','satisfaction','note','closed_at']
+                .forEach(function(k) { c[k] = s[k]; });
+            return c;
+        });
+        localStorage.setItem(LS.stecche, JSON.stringify(leggere));
+    } catch (e) {
+        console.warn('Archivio stecche non messo in cache:', e);
+    }
 }
 
 function salvaCache() {
