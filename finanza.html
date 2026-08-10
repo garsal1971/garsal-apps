@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.4</title>
+  <title>GarsalFinanza v1.3.5</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -512,8 +512,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.4';
-const APP_BUILD   = '2026-08-09T10:00:00Z';
+const APP_VERSION = 'v1.3.5';
+const APP_BUILD   = '2026-08-10T13:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -1231,6 +1231,13 @@ const fmtEUR0 = fmtEUR;
 const fmtNum = n => n == null ? '—' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: 6 }).format(n);
 const fmtPct = n => n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+// Sola ora (HH:MM) di un timestamptz, null se manca o non è leggibile.
+const fmtOra = ts => {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (isNaN(d)) return null;
+  return d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+};
 // Testo che arriva dalla banca (descrizioni, nomi di controparte) prima di finire in un
 // template HTML: non è scritto da noi e non deve poter chiudere un tag.
 const esc = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3424,10 +3431,13 @@ function renderPrezzi() {
           const missingToday = !r.haPrezzoOggi && r.latest;
           const noPrice = !r.latest;
           const rowClass = missingToday ? ' style="background:#fff7ed;cursor:pointer"' : noPrice ? ' style="background:#fef2f2;cursor:pointer"' : ' style="cursor:pointer"';
+          // created_at della riga di storico è riscritto a ogni aggiornamento del prezzo
+          // (trigger on_price_cache_update): per la riga di oggi è l'ora dell'ultimo giro.
+          const oraAgg = r.haPrezzoOggi ? fmtOra(r.latest?.created_at) : null;
           const statoBadge = !r.latest
             ? '<span class="badge badge-neg">Mancante</span>'
             : r.haPrezzoOggi
-              ? '<span class="badge badge-pos">OK oggi</span>'
+              ? `<span class="badge badge-pos">OK ${oraAgg ? 'ore ' + oraAgg : 'oggi'}</span>`
               : '<span class="badge badge-r-medio">Non oggi</span>';
           return `<tr${rowClass} data-action="price-detail" data-symbol="${r.symbol}">
             <td class="mono fw-600">${r.symbol}</td>
