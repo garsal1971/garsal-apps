@@ -33,6 +33,16 @@
     Content-Type = "application/vnd.android.package-archive"
     Content-Disposition = "attachment"
 
+# La scheda della build (versione, data, peso, impronta dell'APK lì accanto)
+# non va mai in cache: se resta indietro la pagina annuncia una versione e ne
+# fa scaricare un'altra, che è esattamente il modo di sbagliare che questa
+# scheda esiste per togliere di mezzo.
+[[headers]]
+  for = "/releases/*.json"
+  [headers.values]
+    Content-Type = "application/json"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
 # ── Branch deploy per dev/** ──────────────────────────────────────────────────
 # I branch dev/** ottengono un URL preview: dev--<branch>--<sitename>.netlify.app
 # NON vengono auto-mergiati su master (workflow separato deploy-dev.yml).
