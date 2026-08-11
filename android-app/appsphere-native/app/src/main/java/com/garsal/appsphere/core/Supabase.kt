@@ -29,6 +29,28 @@ object Supabase {
     const val DEEPLINK_SCHEME = "garsalnative"
     const val DEEPLINK_HOST = "oauth"
 
+    /**
+     * Dove Supabase rimanda dopo il login — **una pagina https, non lo schema
+     * custom**.
+     *
+     * Chrome blocca il salto automatico da una pagina di login a uno schema
+     * custom: passandogli `garsalnative://oauth` come `redirect_to` il login
+     * finisce e resta lì, nel browser, senza tornare nell'app e senza dire
+     * niente. La pagina-ponte riceve i token nel fragment e li passa all'app
+     * solo quando l'utente tocca il pulsante — un gesto utente, che Chrome
+     * lascia sempre passare.
+     *
+     * È lo stesso giro dell'APK WebView (`oauth-callback.html` →
+     * `garsalapps://oauth`), con la sua pagina perché lo schema è diverso.
+     * **Va aggiunta fra i Redirect URLs di Supabase** esattamente così.
+     */
+    const val OAUTH_REDIRECT = "https://garsal.netlify.app/oauth-callback-native.html"
+
+    /** URL del login Google, quello che si apre nel browser. */
+    fun oauthUrl(): String =
+        BuildConfig.SUPABASE_URL + "/auth/v1/authorize?provider=google&redirect_to=" +
+            java.net.URLEncoder.encode(OAUTH_REDIRECT, "UTF-8")
+
     @Volatile
     private var instance: SupabaseClient? = null
 
@@ -57,9 +79,22 @@ object Supabase {
             // MainActivity e **tutti e due i formati** vengono accolti, quindi
             // questa riga non è più un punto di rottura.
             flowType = FlowType.IMPLICIT
-            // Custom Tabs e non il browser esterno: è quello che fa già
-            // MainActivity dell'APK WebView, ed è l'unico modo per cui Google
-            // non rifiuti il login come "user agent non sicuro".
+            // ⚠️ Il login **non passa da qui**: `AuthRepo.loginConGoogle` apre
+            // l'URL da sé nel browser completo. Questa riga resta per le
+            // eventuali altre strade della libreria, ma la Custom Tab è
+            // esattamente ciò che non funziona su questo giro:
+            //
+            //  • Chrome non lascia saltare da una pagina di login a uno schema
+            //    custom, quindi il `redirect_to` deve essere una pagina https
+            //    (`Supabase.OAUTH_REDIRECT`) che rilancia col tap dell'utente;
+            //  • e da una Custom Tab **aperta dall'app** quel tap non rilancia
+            //    l'app — dal browser completo sì. È la stessa scoperta che sta
+            //    scritta in `MainActivity` dell'APK WebView.
+            //
+            // La nota di prima («l'unica per cui Google non rifiuti il login»)
+            // leggeva male quel file: l'APK WebView usa il browser completo e
+            // tiene la Custom Tab solo come ripiego. Quello che Google rifiuta
+            // è il WebView incorporato, non il browser di sistema.
             defaultExternalAuthAction = ExternalAuthAction.CustomTabs()
             // ⚠️ Spente di proposito. Sono l'osservatore di ProcessLifecycle che
             // supabase-kt installa da sé, e fa due cose che qui fanno danno:
