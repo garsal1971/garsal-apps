@@ -617,6 +617,35 @@ chiederebbe a ogni login quale delle due app aprire. Va aggiunto una volta sola 
 Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, altrimenti il login
 fallisce con `redirect_to not allowed`.
 
+### ⚠️ Il rientro dal login non passa da `parseFragmentAndImportSession`
+
+Quella funzione di supabase-kt fa il lavoro dentro `authScope`, lo scope interno della libreria,
+che è un `CoroutineScope(dispatcher)` — quindi con un `Job()` normale, **non** un `SupervisorJob`.
+La prima cosa che fa lì dentro è una chiamata di rete (`retrieveUser`), nell'istante esatto in cui
+l'app sta rientrando in primo piano dal browser: se quella tira un'eccezione, l'eccezione risale al
+Job e **cancella `authScope` per tutta la vita del processo**. Da lì in poi nessun import di
+sessione, nessun rinnovo del JWT e nessuna rilettura dall'archivio vanno più a segno, senza che
+venga stampato niente — l'app resta sul pulsante di login e ripremerlo non cambia nulla, perché il
+token torna e non lo raccoglie più nessuno.
+
+`AuthRepo.completaConFragment` legge quindi il fragment con `parseSessionFromFragment` (pubblica e
+senza rete) e chiama `importSession` **dallo scope di `AuthRepo`**, dentro un try/catch.
+`retrieveUserForCurrentSession` si chiama dopo e il suo esito non conta: id ed email si leggono dal
+JWT (`Jwt.claim`, claim `sub`), che è lo stesso valore che le RLS vedono come `auth.uid()`.
+
+Due corollari, entrambi già in codice e da non disfare:
+
+- **`enableLifecycleCallbacks = false`** in `Supabase.kt`. L'osservatore che supabase-kt installa da
+  sé riporta `sessionStatus` a `Initializing` a ogni `onStop` — e aprire la Custom Tab del login *è*
+  andare in background, come lo è il PIN chiesto dalla biometria — e al rientro rilegge la sessione
+  dall'archivio **in parallelo** all'import del token appena ricevuto. Il rinnovo del JWT non ne ha
+  bisogno: il job parte da `importSession` e dorme fino all'80 % della scadenza, come
+  `startTokenRefresh()` sul web.
+- **Il deep link si consuma una volta sola.** `getIntent()` continua a restituire quello di partenza
+  per tutta la vita dell'Activity: a ogni ricreazione `onCreate` si ritroverebbe lo stesso
+  `access_token`, ormai scaduto o già speso, e lo rimetterebbe al posto di una sessione buona.
+  `gestisciDeepLink` azzera `intent.data` appena l'ha letto.
+
 ### ⚠️ `material-icons-extended` non va reintrodotto
 
 Quel pacchetto contiene **migliaia di icone compilate come codice Kotlin**: senza
