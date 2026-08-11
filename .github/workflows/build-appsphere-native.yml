@@ -77,9 +77,12 @@ jobs:
         run: |
           VERSION=$(grep versionName android-app/appsphere-native/app/build.gradle \
             | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          VERSION_CODE=$(grep versionCode android-app/appsphere-native/app/build.gradle \
+            | grep -o '[0-9]\+' | head -1)
           cp android-app/appsphere-native/app/build/outputs/apk/release/app-release.apk \
             /tmp/AppSphereNative-latest.apk
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
       # Il peso è una cosa da guardare, non da scoprire dopo. Un APK gonfio si
       # installa male: la verifica della firma e l'ottimizzazione costano un
@@ -90,13 +93,37 @@ jobs:
         run: |
           BYTES=$(stat -c%s /tmp/AppSphereNative-latest.apk)
           MB=$(awk "BEGIN {printf \"%.1f\", $BYTES/1048576}")
+          SHA=$(sha256sum /tmp/AppSphereNative-latest.apk | cut -d' ' -f1)
           echo "📦 AppSphereNative v$VERSION — ${MB} MB (${BYTES} byte)"
-          echo "🔑 SHA-256: $(sha256sum /tmp/AppSphereNative-latest.apk | cut -d' ' -f1)"
+          echo "🔑 SHA-256: $SHA"
           echo "--- le voci più pesanti dentro l'APK ---"
           unzip -l /tmp/AppSphereNative-latest.apk | sort -rn -k1 | head -8
           if [ "$BYTES" -gt 26214400 ]; then
             echo "::warning::APK oltre i 25 MB (${MB} MB): quasi sempre è una dipendenza che si porta dietro mezzo mondo — la prima da guardare è material-icons-extended."
           fi
+          echo "BYTES=$BYTES" >> $GITHUB_ENV
+          echo "SHA=$SHA"     >> $GITHUB_ENV
+
+      # Il nome del file è fisso (`-latest.apk`), quindi da fuori un APK vale
+      # l'altro: chi lo scarica non ha modo di sapere se sta prendendo la build
+      # di prima o quella appena pubblicata. È già costato un giro — la 1.0.4
+      # scaricata al posto della 1.0.5 si comportava esattamente come il difetto
+      # che la 1.0.5 aveva appena chiuso. Questo file dice cosa c'è dentro
+      # quello lì accanto, e `comandi.html` lo mostra sul pulsante.
+      - name: Scheda della build
+        run: |
+          cat > /tmp/AppSphereNative-latest.json <<EOF
+          {
+            "app": "AppSphere nativa",
+            "version": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "$GITHUB_SHA",
+            "bytes": $BYTES,
+            "sha256": "$SHA"
+          }
+          EOF
+          cat /tmp/AppSphereNative-latest.json
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -117,10 +144,17 @@ jobs:
           mkdir -p releases
           cp /tmp/AppSphereNative-latest.apk releases/AppSphereNative-latest.apk
 
+          # La scheda si aggiorna solo se si aggiorna l'APK: `builtAt` cambia a
+          # ogni run, e commetterla da sola vorrebbe dire annunciare una build
+          # nuova per un pacchetto identico a quello di prima.
           git add releases/AppSphereNative-latest.apk
-          git diff --staged --quiet \
-            && echo "APK non cambiato, skip commit" \
-            && exit 0
+          if git diff --staged --quiet && [ -f releases/AppSphereNative-latest.json ]; then
+            echo "APK non cambiato, skip commit"
+            exit 0
+          fi
+
+          cp /tmp/AppSphereNative-latest.json releases/AppSphereNative-latest.json
+          git add releases/AppSphereNative-latest.json
 
           git commit -m "build: aggiorna AppSphereNative APK v${{ env.VERSION }} [skip actions]"
           git push origin master

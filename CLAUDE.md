@@ -596,6 +596,24 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | App portate | `spuntiamola/`, `obiettivi/`, `eventslog/` |
 | Build APK | `.github/workflows/build-appsphere-native.yml` → `releases/AppSphereNative-latest.apk` |
 
+### ⚠️ Il pulsante di download deve dire quale versione scarica
+
+Il nome del file è fisso (`-latest.apk`), quindi da fuori una build vale l'altra. L'11 agosto 2026
+la 1.0.4 è stata scaricata e installata **al posto della 1.0.5 pubblicata pochi minuti dopo**, e il
+sintomo — login fermo dopo la scelta dell'account Google — era identico al difetto che la 1.0.5
+aveva appena chiuso: dal solo comportamento non c'era modo di distinguere «la correzione non
+funziona» da «la correzione non è a bordo».
+
+Il workflow scrive quindi accanto all'APK una `releases/AppSphereNative-latest.json` (versione,
+`versionCode`, data di build, commit, peso, SHA-256) e il pannello di `comandi.html` la mostra sul
+pulsante, aggiungendo `?v=<versione>` al link perché il browser non riproponga il pacchetto già
+scaricato. La scheda si aggiorna **solo insieme all'APK** — `builtAt` cambia a ogni run, e
+pubblicarla da sola annuncerebbe una build nuova per un pacchetto identico — e `netlify.toml` la
+tiene fuori dalla cache, altrimenti la pagina annuncerebbe una versione e ne farebbe scaricare
+un'altra.
+
+Dal telefono la controprova è la schermata di login, che stampa `Versione nativa · v…`.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in

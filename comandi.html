@@ -238,9 +238,9 @@ body {
       <div>
         <div class="apk-panel-label">⚛️ Android APK</div>
         <div class="apk-title">AppSphere nativa</div>
-        <div class="apk-sub">Kotlin/Compose · si affianca a GarsalApps</div>
+        <div class="apk-sub" id="anSub">Kotlin/Compose · si affianca a GarsalApps</div>
       </div>
-      <a class="apk-btn-native" href="/releases/AppSphereNative-latest.apk" download="AppSphereNative.apk">
+      <a class="apk-btn-native" id="anBtn" href="/releases/AppSphereNative-latest.apk" download="AppSphereNative.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -422,6 +422,37 @@ AND    routine_schema = 'public';</pre>
 
 
 <script>
+// ── Quale versione sto scaricando ─────────────────────────────────────────────
+// Il file si chiama sempre `AppSphereNative-latest.apk`: senza questo blocco il
+// pulsante non dice niente su cosa c'è dentro, e scaricare la build di ieri al
+// posto di quella appena pubblicata è indistinguibile da un aggiornamento
+// riuscito — finché l'app non rifà lo stesso difetto che era appena stato
+// chiuso. La scheda la scrive il workflow accanto all'APK.
+// Il `?v=` non serve al server: serve a impedire che il browser riproponga il
+// pacchetto già scaricato quando l'indirizzo è identico.
+(async function mostraVersioneNativa() {
+  var sub = document.getElementById('anSub');
+  var btn = document.getElementById('anBtn');
+  if (!sub || !btn) return;
+  try {
+    var res = await fetch('/releases/AppSphereNative-latest.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var b = await res.json();
+    var mb = (b.bytes / 1048576).toFixed(1).replace('.', ',');
+    var d  = new Date(b.builtAt);
+    var data = isNaN(d) ? '' : ' · ' + d.toLocaleDateString('it-IT') + ' ' +
+               d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    sub.innerHTML = '<b>v' + b.version + '</b> (build ' + b.versionCode + ')' + data +
+                    ' · ' + mb + ' MB<br>Kotlin/Compose · si affianca a GarsalApps';
+    btn.href = '/releases/AppSphereNative-latest.apk?v=' + encodeURIComponent(b.version);
+    btn.title = 'SHA-256: ' + b.sha256;
+  } catch (e) {
+    // Meglio dirlo che lasciar credere che la versione mostrata sia quella
+    // vera: qui sotto non c'è nessun numero, e il pulsante resta com'era.
+    sub.textContent = 'Versione non leggibile (' + e.message + ') · Kotlin/Compose';
+  }
+})();
+
 function copyCode(blockId, btn) {
   var pre = document.getElementById(blockId).querySelector('pre');
   navigator.clipboard.writeText(pre ? pre.innerText : '').then(function() {
