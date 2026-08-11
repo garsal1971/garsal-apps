@@ -18,6 +18,17 @@ object BiometricGate {
 
     private const val CONSENTITI = BIOMETRIC_STRONG or DEVICE_CREDENTIAL
 
+    /**
+     * Un prompt per volta.
+     *
+     * Chiedere di nuovo mentre uno è già a schermo non ne apre un secondo:
+     * annulla il primo, che risponde `ERROR_CANCELED` — cioè "l'utente ha
+     * rinunciato" — e chi ascolta si vede tornare una rinuncia che nessuno ha
+     * fatto. Col PIN del telefono, che è una schermata a parte e quindi manda
+     * l'app in background, il giro si richiude su sé stesso e non ne esce più.
+     */
+    private var inCorso = false
+
     fun disponibile(activity: FragmentActivity): Boolean =
         BiometricManager.from(activity).canAuthenticate(CONSENTITI) ==
             BiometricManager.BIOMETRIC_SUCCESS
@@ -31,12 +42,15 @@ object BiometricGate {
             onSbloccato()
             return
         }
+        if (inCorso) return
+        inCorso = true
 
         val prompt = BiometricPrompt(
             activity,
             ContextCompat.getMainExecutor(activity),
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    inCorso = false
                     onSbloccato()
                 }
 
@@ -44,6 +58,7 @@ object BiometricGate {
                 // e il "troppi tentativi". In entrambi i casi l'app resta chiusa
                 // e si riprova dal pulsante, senza sbloccare niente.
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    inCorso = false
                     onRinuncia()
                 }
             }

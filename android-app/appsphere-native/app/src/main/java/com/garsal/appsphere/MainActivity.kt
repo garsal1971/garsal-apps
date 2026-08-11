@@ -81,16 +81,29 @@ class MainActivity : FragmentActivity() {
     /**
      * Accoglie il rientro dal login, in **qualunque** forma arrivi.
      *
-     * Non si delega più a `handleDeeplinks`: quella guarda solo il formato
+     * Non si delega a `handleDeeplinks`: quella guarda solo il formato
      * corrispondente al `flowType` configurato e, se trova l'altro, esce in
      * silenzio — ed è precisamente così che la 1.0.2 buttava via i token che
      * il server le stava mandando. Qui si guarda cosa c'è davvero:
      * un `?code=` da scambiare, un `#access_token=` da importare, o un errore
      * da mostrare. Nessuno dei tre può più passare inosservato.
+     *
+     * ⚠️ **Un deep link si consuma una volta sola.** `getIntent()` continua a
+     * restituire quello di partenza per tutta la vita dell'Activity: a ogni
+     * ricreazione — cambio di tema, di lingua, ritorno dopo che il sistema ha
+     * ucciso il processo — `onCreate` si ritroverebbe fra le mani lo stesso
+     * `access_token`, che nel frattempo è scaduto o già speso. Reimportarlo non
+     * è innocuo: rimpiazza una sessione buona con una che il server rifiuterà.
+     * Quindi appena è stato letto lo si toglie dall'intent.
      */
     private fun gestisciDeepLink(intent: Intent?) {
-        val dati = intent?.data
+        if (intent == null) return
+        val dati = intent.data
         if (dati == null || dati.scheme != Supabase.DEEPLINK_SCHEME) return
+
+        // Consumato: né questa chiamata né una futura ricreazione lo rivedranno.
+        intent.data = null
+        setIntent(intent)
 
         val errore = dati.getQueryParameter("error_description")
             ?: dati.getQueryParameter("error")
@@ -112,36 +125,39 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun AppRoot(activity: FragmentActivity) {
-    val stato by AuthRepo.state.collectAsStateWithLifecycle(
-        initialValue = AuthRepo.State.CARICAMENTO
-    )
+    val stato by AuthRepo.state.collectAsStateWithLifecycle()
 
     // Lo sblocco vale per la vita del processo: chiedere l'impronta a ogni
     // ritorno in foreground sarebbe più severo dell'APK attuale, che la chiede
     // solo all'avvio.
     var sbloccato by remember { mutableStateOf(false) }
     var biometriaRifiutata by remember { mutableStateOf(false) }
+    // Il prompt si chiede da solo una volta sola. Dopo una rinuncia riparte dal
+    // pulsante: rilanciarlo a ogni sussulto dello stato annullerebbe quello già
+    // a schermo, e la rinuncia finta che ne esce riaprirebbe il giro da capo.
+    var sbloccoChiesto by remember { mutableStateOf(false) }
 
     // ── La rotella non deve poter girare per sempre ──────────────────────
-    // `Initializing` non è solo lo stato di partenza: supabase-kt ci torna a
-    // ogni passaggio in background (`resetLoadingState()` in onStop), e aprire
-    // la Custom Tab del login *è* andare in background. Se il rientro non
-    // porta una sessione — deep link mancato, rete assente, scambio del
-    // codice fallito — lo stato resta lì, e mappandolo su una schermata di
-    // attesa senza uscita si ottiene un'app che gira a vuoto senza dire
-    // perché. Passati alcuni secondi si mostra il login, che almeno si può
-    // ripremere.
+    // Se il rientro non porta una sessione — deep link mancato, rete assente,
+    // token non importato — lo stato resta su CARICAMENTO, e mapparlo su una
+    // schermata di attesa senza uscita dà un'app che gira a vuoto senza dire
+    // perché. Prima si prova a rileggere la sessione dall'archivio (è il caso
+    // normale di chi ha già fatto il login una volta), e solo se nemmeno quella
+    // risponde si mostra il login, che almeno si può ripremere.
     var attesaScaduta by remember { mutableStateOf(false) }
     LaunchedEffect(stato) {
         attesaScaduta = false
         if (stato == AuthRepo.State.CARICAMENTO) {
-            delay(6000)
+            delay(3000)
+            AuthRepo.ricaricaDaArchivio()
+            delay(3000)
             attesaScaduta = true
         }
     }
 
     fun chiediSblocco() {
         biometriaRifiutata = false
+        sbloccoChiesto = true
         BiometricGate.chiedi(
             activity = activity,
             onSbloccato = { sbloccato = true },
@@ -152,7 +168,16 @@ private fun AppRoot(activity: FragmentActivity) {
     // La biometria ha senso solo a sessione presente: prima del primo login
     // non c'è ancora niente da proteggere.
     LaunchedEffect(stato) {
-        if (stato == AuthRepo.State.DENTRO && !sbloccato) chiediSblocco()
+        if (stato == AuthRepo.State.DENTRO && !sbloccato && !sbloccoChiesto) {
+            // Mezzo secondo di respiro. Subito dopo il login questo effetto
+            // parte mentre l'Activity sta ancora tornando in primo piano dalla
+            // Custom Tab, e un prompt biometrico chiesto in quel momento
+            // risponde ERROR_CANCELED all'istante — cioè una rinuncia che
+            // nessuno ha fatto, e una schermata "App bloccata" da sbloccare a
+            // mano al primo accesso.
+            delay(500)
+            chiediSblocco()
+        }
     }
 
     when {

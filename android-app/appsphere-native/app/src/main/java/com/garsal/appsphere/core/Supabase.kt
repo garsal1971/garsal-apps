@@ -61,6 +61,25 @@ object Supabase {
             // MainActivity dell'APK WebView, ed è l'unico modo per cui Google
             // non rifiuti il login come "user agent non sicuro".
             defaultExternalAuthAction = ExternalAuthAction.CustomTabs()
+            // ⚠️ Spente di proposito. Sono l'osservatore di ProcessLifecycle che
+            // supabase-kt installa da sé, e fa due cose che qui fanno danno:
+            //
+            //  • in `onStop` chiama `resetLoadingState()`, cioè riporta
+            //    `sessionStatus` a `Initializing`. Andare in background non è
+            //    un'eccezione qui: aprire la Custom Tab del login *è* andare in
+            //    background, e lo è anche il PIN del telefono chiesto dalla
+            //    biometria. Ne usciva un'app che dopo il login mostrava la
+            //    rotella e poi ricadeva sul pulsante "Entra con Google".
+            //  • in `onStart` rilegge la sessione dall'archivio — e al rientro
+            //    dal browser lo fa **in parallelo** all'import del token appena
+            //    ricevuto: due scritture su `sessionStatus`, e quale delle due
+            //    arriva ultima dipende da chi finisce prima.
+            //
+            // Il refresh del JWT non ha bisogno di quell'osservatore: il job di
+            // rinnovo parte da `importSession` e dorme fino all'80 % della
+            // scadenza, esattamente come `startTokenRefresh()` nelle pagine web,
+            // che nessuno sospende quando la scheda passa in secondo piano.
+            enableLifecycleCallbacks = false
         }
         install(Postgrest)
         // L'engine va scelto: supabase-kt non ne porta uno di serie.
