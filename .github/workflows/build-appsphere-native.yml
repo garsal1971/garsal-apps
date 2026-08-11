@@ -81,6 +81,23 @@ jobs:
             /tmp/AppSphereNative-latest.apk
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
+      # Il peso è una cosa da guardare, non da scoprire dopo. Un APK gonfio si
+      # installa male: la verifica della firma e l'ottimizzazione costano un
+      # multiplo del pacchetto, e su un telefono pieno o in risparmio
+      # energetico l'installazione fallisce senza spiegare perché. L'impronta
+      # serve invece a riconoscere un download incompleto.
+      - name: Peso e impronta dell'APK
+        run: |
+          BYTES=$(stat -c%s /tmp/AppSphereNative-latest.apk)
+          MB=$(awk "BEGIN {printf \"%.1f\", $BYTES/1048576}")
+          echo "📦 AppSphereNative v$VERSION — ${MB} MB (${BYTES} byte)"
+          echo "🔑 SHA-256: $(sha256sum /tmp/AppSphereNative-latest.apk | cut -d' ' -f1)"
+          echo "--- le voci più pesanti dentro l'APK ---"
+          unzip -l /tmp/AppSphereNative-latest.apk | sort -rn -k1 | head -8
+          if [ "$BYTES" -gt 26214400 ]; then
+            echo "::warning::APK oltre i 25 MB (${MB} MB): quasi sempre è una dipendenza che si porta dietro mezzo mondo — la prima da guardare è material-icons-extended."
+          fi
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

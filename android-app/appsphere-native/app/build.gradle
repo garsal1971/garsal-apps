@@ -16,8 +16,8 @@ android {
         applicationId "com.garsal.appsphere"
         minSdk 28
         targetSdk 36
-        versionCode 4
-        versionName "1.0.3"
+        versionCode 5
+        versionName "1.0.4"
     }
 
     // Le pagine HTML scelgono fra dev e produzione dall'hostname (_IS_DEV).
@@ -62,7 +62,13 @@ dependencies {
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.compose.material:material-icons-extended'
+    // ⚠️ NON aggiungere `material-icons-extended`: contiene migliaia di icone
+    // compilate come codice Kotlin e, senza minificazione, finiscono tutte nel
+    // DEX — da sola portava l'APK a 51 MB (~50 dei quali di bytecode) contro i
+    // ~10 di adesso. Le icone in uso sono quattro (ArrowBack, Close, Refresh,
+    // Settings) e stanno tutte in material-icons-core, che arriva già con
+    // material3. Se ne serve una che qui non c'è, si disegna come i
+    // CerchiOlimpici invece di reimbarcare il pacchetto intero.
     implementation 'androidx.activity:activity-compose:1.10.1'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
     implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
@@ -83,6 +89,8 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
 
+    // Anteprime dell'IDE: servono solo mentre si sviluppa, non nell'APK
+    // pubblicato. Erano `implementation`, quindi finivano anche nel release.
     debugImplementation 'androidx.compose.ui:ui-tooling'
-    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling-preview'
 }
