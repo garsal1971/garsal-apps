@@ -617,6 +617,19 @@ chiederebbe a ogni login quale delle due app aprire. Va aggiunto una volta sola 
 Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, altrimenti il login
 fallisce con `redirect_to not allowed`.
 
+### ⚠️ `material-icons-extended` non va reintrodotto
+
+Quel pacchetto contiene **migliaia di icone compilate come codice Kotlin**: senza
+minificazione finiscono tutte nel DEX, e da solo portava l'APK a **51 MB** (~50 dei quali di
+bytecode) contro i ~10 di adesso. Un APK così si installa male — la verifica della firma e
+l'ottimizzazione costano un multiplo del pacchetto, e su un telefono pieno o in risparmio
+energetico l'installazione fallisce senza dire perché.
+
+Le icone in uso sono quattro (`ArrowBack`, `Close`, `Refresh`, `Settings`) e stanno tutte in
+`material-icons-core`, che arriva già con `material3`. Se ne serve una che lì non c'è, si
+disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'APK supera i
+25 MB, così la cosa non può ripresentarsi in silenzio.
+
 ### ⚠️ Kotlin 2.1.20, diverso dagli altri moduli
 
 `supabase-kt 3.1.4` è compilata con stdlib 2.1.20 e i suoi metadata non si leggono con il 2.0.21
