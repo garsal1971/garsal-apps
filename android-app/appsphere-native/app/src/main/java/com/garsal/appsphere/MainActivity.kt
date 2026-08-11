@@ -20,10 +20,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
@@ -43,7 +43,6 @@ import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * Unica Activity dell'app: tutto il resto è Compose.
@@ -108,7 +107,12 @@ class MainActivity : FragmentActivity() {
         val errore = dati.getQueryParameter("error_description")
             ?: dati.getQueryParameter("error")
         val codice = dati.getQueryParameter("code")
-        val fragment = dati.fragment
+        // `Uri.fragment` normalmente basta, ma su alcune forme di Uri torna
+        // vuoto: stesso ripiego di `oauthFragment()` nell'APK WebView, dove è
+        // lì per lo stesso motivo. Costa una riga e toglie un modo di perdere
+        // i token senza accorgersene.
+        val fragment = dati.fragment?.takeIf { it.isNotBlank() }
+            ?: dati.toString().substringAfter('#', "")
 
         when {
             errore != null ->
@@ -221,9 +225,7 @@ private fun SchermataAttesa() {
 
 @Composable
 private fun SchermataLogin() {
-    val scope = rememberCoroutineScope()
-    var errore by remember { mutableStateOf<String?>(null) }
-    var inCorso by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val rientro by AuthRepo.ultimoRientro.collectAsStateWithLifecycle()
 
     Scaffold { p ->
@@ -244,33 +246,23 @@ private fun SchermataLogin() {
                 color = Palette.muted,
                 modifier = Modifier.padding(top = 4.dp, bottom = 40.dp),
             )
-            Button(
-                enabled = !inCorso,
-                onClick = {
-                    inCorso = true
-                    errore = null
-                    scope.launch {
-                        try {
-                            AuthRepo.loginConGoogle()
-                        } catch (e: Exception) {
-                            errore = e.message ?: "Login non riuscito"
-                        } finally {
-                            inCorso = false
-                        }
-                    }
-                },
-            ) {
-                Text(if (inCorso) "Apertura…" else "Entra con Google")
+            // Niente stato "in corso": il login se ne va nel browser di
+            // sistema e questa Activity passa in secondo piano subito dopo.
+            // Un pulsante disabilitato in attesa di un ritorno che avviene
+            // altrove resterebbe disabilitato anche quando si torna indietro
+            // senza aver fatto il login.
+            Button(onClick = { AuthRepo.loginConGoogle(context) }) {
+                Text("Entra con Google")
             }
-            errore?.let {
-                Text(
-                    text = it,
-                    color = Palette.danger,
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
-            }
+
+            Text(
+                text = "Il login si apre nel browser. Alla fine tocca " +
+                    "«Apri AppSphere nativa» per tornare qui.",
+                color = Palette.muted,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 16.dp),
+            )
 
             // Se si è già tornati dal browser una volta senza entrare, dirlo:
             // è l'unico modo per capire dove si è rotto senza collegare il

@@ -1,9 +1,11 @@
 package com.garsal.appsphere.core
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.parseSessionFromFragment
-import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -206,8 +208,36 @@ object AuthRepo {
     /** Id dell'utente: è lo stesso `auth.uid()` con cui filtrano tutte le RLS. */
     fun userId(): String? = Supabase.client().auth.currentUserOrNull()?.id ?: idUtente
 
-    suspend fun loginConGoogle() {
-        Supabase.client().auth.signInWith(Google)
+    /**
+     * Apre il login Google nel **browser completo**, non in una Custom Tab.
+     *
+     * `signInWith(Google)` apriva una Custom Tab, ed è la metà del giro che
+     * qui non funziona: la pagina-ponte di ritorno rilancia l'app con un tap
+     * su `garsalnative://oauth`, e quel tap **da dentro una Custom Tab aperta
+     * dall'app non rilancia niente** — il login resta nel browser. Dal browser
+     * di sistema sì. È la stessa cosa che fa `MainActivity` dell'APK WebView,
+     * dove sta scritta da quando è costata lo stesso pomeriggio.
+     *
+     * L'altra metà è il `redirect_to`, che dev'essere una pagina https e non
+     * lo schema custom: vedi `Supabase.OAUTH_REDIRECT`.
+     */
+    fun loginConGoogle(context: Context) {
+        val url = Supabase.oauthUrl()
+        Log.i(TAG, "apro il login nel browser: $url")
+        try {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        } catch (e: Exception) {
+            // Nessun browser che risponda a un http:// — su un telefono non
+            // succede, ma se succede va detto invece di lasciare il pulsante
+            // premuto senza effetto.
+            Log.e(TAG, "nessun browser per aprire il login", e)
+            annotaRientro("nessun browser disponibile per il login: ${e.message}")
+        }
     }
 
     suspend fun logout() {

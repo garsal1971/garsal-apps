@@ -628,12 +628,38 @@ Gli avvisi in home sono per ora la **sola fonte Spuntiamola**: le altre cinque d
 task urgenti, totale portafogli, Ta Firi, abitudini) porterebbero a schermate che qui non esistono,
 e un avviso che non apre niente è peggio di nessun avviso.
 
-### ⚠️ Deep link: schema proprio, e va messo in whitelist
+### ⚠️ Deep link: schema proprio, pagina-ponte https, browser completo
 
 Il login usa **`garsalnative://oauth`**, non `garsalapps://oauth`: con lo stesso schema Android
-chiederebbe a ogni login quale delle due app aprire. Va aggiunto una volta sola in
-Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, altrimenti il login
-fallisce con `redirect_to not allowed`.
+chiederebbe a ogni login quale delle due app aprire.
+
+Ma **quello schema non è il `redirect_to`**, e non va messo in whitelist: Supabase non lo vede
+mai. Il giro che funziona ha tre pezzi, tutti e tre già pagati una volta nell'APK WebView e
+reimparati dal nativo l'11 agosto 2026 (v1.0.6):
+
+1. **`redirect_to` è una pagina https**, `oauth-callback-native.html` — è lei che va fra i
+   Redirect URLs. Chrome **blocca il salto automatico** da una pagina di login a uno schema
+   custom: dando `garsalnative://oauth` come `redirect_to`, il login finisce e resta lì nel
+   browser, senza tornare nell'app e senza un errore da nessuna parte.
+2. **La pagina-ponte non fa auto-redirect**: rilancia l'app solo col **tap sull'ultimo pulsante**.
+   L'auto-navigazione verso lo schema custom viene rimbalzata da Chrome e produce lo stesso
+   sintomo; un gesto dell'utente passa sempre. Sta scritto anche in `oauth-callback.html`, che
+   ci era già arrivata.
+3. **Il login si apre nel browser completo** (`Intent.ACTION_VIEW` + `CATEGORY_BROWSABLE` +
+   `FLAG_ACTIVITY_NEW_TASK`), **non in una Custom Tab**: da una Custom Tab aperta dall'app quel
+   tap non rilancia l'app. Per questo `AuthRepo.loginConGoogle` costruisce l'URL da sé invece di
+   chiamare `signInWith(Google)`, che aprirebbe una Custom Tab.
+
+`oauth-callback-native.html` e `oauth-callback.html` sono **gemelle a meno dello schema**
+(`garsalnative://` contro `garsalapps://`). Due pagine e non una con un parametro perché ciascuna
+va in whitelist esattamente com'è, e una query string nella whitelist di Supabase è un modo in più
+di sbagliare. Se modifichi una delle due, guarda anche l'altra.
+
+⚠️ Nota storica: fino alla 1.0.5 un commento in `Supabase.kt` diceva che la Custom Tab era
+«l'unico modo per cui Google non rifiuti il login come user agent non sicuro», attribuendola
+all'APK WebView. Leggeva male quel file: l'APK WebView usa il **browser completo** e tiene la
+Custom Tab solo come ripiego. Quello che Google rifiuta è il WebView incorporato, non il browser
+di sistema.
 
 ### ⚠️ Il rientro dal login non passa da `parseFragmentAndImportSession`
 
