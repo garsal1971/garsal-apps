@@ -745,7 +745,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   non invia mai il valore**. Le due barre non si fondono mai in una media.
 - **Events Log** — le tabelle `el_*` non sono in nessuna migration: le colonne dei `data class`
   sono ricavate da come `events-log.html` le scrive. Gli eventi `DA_SELECT` registrano **solo se il
-  conteggio è cresciuto** rispetto all'ultimo `count:N`.
+  conteggio è cresciuto** rispetto all'ultimo `count:N`. Il **registro mostra solo il gruppo
+  scelto** in tutt'e due: `el_logs` non porta il gruppo, quindi il filtro passa per gli id degli
+  eventi di quel gruppo (`logDelGruppo` nel nativo, le stesse due righe in `renderLogPage()`).
+  Conseguenza in entrambe: la riga di un evento cancellato non sta in nessun gruppo e non si vede
+  più da nessuna parte, pur restando sul database e nel totale dei punti. Differenza voluta: il
+  web si ferma agli 8 più recenti, il nativo li elenca tutti perché lì la lista scorre.
 
 ---
 

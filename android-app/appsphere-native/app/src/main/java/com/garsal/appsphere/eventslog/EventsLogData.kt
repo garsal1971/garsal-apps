@@ -148,6 +148,26 @@ data class EventsLogState(
     val eventiDelGruppo: List<ElEvento>
         get() = eventi.filter { it.groupId == gruppoAttivo }
 
+    /**
+     * Il registro del gruppo scelto.
+     *
+     * Il filtro passa dagli eventi e non dal log, perché `el_logs` non porta il
+     * gruppo: tiene solo `event_id`. Conseguenza da conoscere — una riga il cui
+     * evento è stato cancellato (quella che l'elenco mostra come «Evento
+     * rimosso») non appartiene più a nessun gruppo, quindi qui non compare da
+     * nessuna parte. Continua a esistere sul database e a contare nei punti in
+     * alto, che restano il totale di tutto.
+     */
+    val logDelGruppo: List<ElLog>
+        get() {
+            val delGruppo = eventi.filter { it.groupId == gruppoAttivo }
+                .mapTo(mutableSetOf()) { it.id }
+            return log.filter { it.eventId in delGruppo }
+        }
+
+    val nomeGruppoAttivo: String?
+        get() = gruppi.firstOrNull { it.id == gruppoAttivo }?.name
+
     fun evento(id: String): ElEvento? = eventi.firstOrNull { it.id == id }
 
     val puntiTotali: Int get() = log.sumOf { it.pointsAtLog }
