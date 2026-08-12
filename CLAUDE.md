@@ -635,7 +635,7 @@ non sparito), `cm_categories.show_in_dashboard` (decide quali gruppi di `free_re
 due categorie compare in tutt'e due i gruppi, come là, ma il conteggio della sezione resta quello
 dei task.
 
-Le tre file della scheda — segno e data con le etichette, titolo, pulsanti — stanno **ognuna su una
+Le file della scheda — segno e data, etichette, titolo, pulsanti — stanno **ognuna su una
 riga sola che scorre col dito** (`RigaScorrevole`), e non vanno a capo. È l'eccezione voluta alla
 regola sui caratteri di sistema grandi: andando a capo, con l'ingrandimento alto tre pulsanti
 diventano tre righe e il titolo altre tre, e in uno schermo ci sta un task e mezzo. Niente è
