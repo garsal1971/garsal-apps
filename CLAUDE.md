@@ -618,9 +618,30 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
 `tasks/` porta in nativo **il planner** — tre schede, come i tre pulsanti in cima alla pagina
-Planner del web: *Panoramica* (elenco in ritardo / oggi / prossimi), *Mese*, *Settimana*. Si apre
-sul Mese. **Non si creano né si modificano task da qui**: per quello si usa `tasks.html`, e così
-restano di là anche reminder, storico e impostazioni.
+Planner del web: *Panoramica*, *Mese*, *Settimana*. Si apre sul Mese. **Non si creano né si
+modificano task da qui**: per quello si usa `tasks.html`, e così restano di là anche reminder,
+storico e impostazioni.
+
+La **Panoramica** è invece la copia di `renderDashboard()`, sezione per sezione
+(`tasks/Panoramica.kt`): ⚠️ SCADUTI, 🎯 OGGI, 📅 PROSSIMI, 🔄 A LIBERA RIPETIZIONE e
+👁️ NON IN PANORAMICA, ciascuna nel suo riquadro con la striscia colorata a sinistra, e la scheda
+con segno del tipo, data e ora, etichette delle categorie (le prime due, poi «+N»), titolo e i
+pulsanti che agiscono subito. **Quali pulsanti compaiono è la regola del web**: *Completa* sempre,
+*Fallisci* su tutto tranne i `free_repeat`, *Salta* solo su `recurring`, `simple_recurring` e
+`multiple`, che sono gli unici con una prossima occorrenza. Tre cose vanno lette dallo stesso posto
+del web, o le due panoramiche divergono in silenzio: `show_in_panoramica` (falso = ultima sezione,
+non sparito), `cm_categories.show_in_dashboard` (decide quali gruppi di `free_repeat` si vedono) e
+`ts_settings.dashboard_upcoming_days` (quanti giorni guarda *PROSSIMI*, 10 se manca). Un task con
+due categorie compare in tutt'e due i gruppi, come là, ma il conteggio della sezione resta quello
+dei task.
+
+Due differenze volute. Il **titolo sta su tre righe** invece di una sola con l'ellissi: coi
+caratteri di sistema grandi «CONDOMINIO Rata n. 4 722,66» tagliato a una riga perde proprio il
+numero che dice quale rata è (per lo stesso motivo le tre file della scheda sono `FlowRow` e vanno
+a capo). E un **ricorrente senza `next_occurrence_date`** ripiega su `start_date`, quindi finisce
+fra gli scaduti: nel web quel ripiego sta solo in `isTaskDueToday`, e un task così non compare in
+nessuna sezione. Toccare la scheda apre il dialogo col dettaglio, i punti di ogni azione e
+l'eliminazione.
 
 Le due viste calendario non sono la copia pixel per pixel di `renderMonthView` e `renderWeekView`,
 e non possono esserlo: quelle scrivono i titoli dentro le celle di una griglia 7×6 e in sette

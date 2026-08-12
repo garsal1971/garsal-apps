@@ -5,15 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -65,7 +60,7 @@ fun TasksScreen(
                 onIndietro = onIndietro,
                 azioni = {
                     Text(
-                        text = "${stato.diOggi.size + stato.inRitardo.size}",
+                        text = "${stato.scaduti.size + stato.diOggi.size}",
                         color = Palette.light,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -99,15 +94,16 @@ fun TasksScreen(
                     }
 
                     when (vista) {
-                        Vista.PANORAMICA -> LazyColumn(
-                            contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 88.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            sezione("In ritardo", stato.inRitardo, Palette.danger, stato) { azioniSu = it }
-                            sezione("Oggi", stato.diOggi, Palette.success, stato) { azioniSu = it }
-                            sezione("Prossimi", stato.prossimi, Palette.accent, stato) { azioniSu = it }
-                            sezione("Quando capita", stato.liberi, Palette.muted, stato) { azioniSu = it }
-                        }
+                        Vista.PANORAMICA -> VistaPanoramica(
+                            stato = stato,
+                            // Il tocco sulla scheda apre il dettaglio: là ci
+                            // sono la descrizione, i punti di ogni azione e
+                            // l'eliminazione, che sulla scheda non stanno.
+                            onApri = { azioniSu = it },
+                            onCompleta = { vm.completa(it.id) },
+                            onFallisci = { vm.fallisci(it.id) },
+                            onSalta = { daSaltare = it },
+                        )
 
                         Vista.MESE -> {
                             BarraPeriodo(
@@ -266,105 +262,6 @@ private fun SelettoreVista(scelta: Vista, onScegli: (Vista) -> Unit) {
 private fun coloreVoce(voce: VoceGiorno, stato: TasksState) =
     voce.task?.categorie?.firstNotNullOfOrNull { stato.categoriaDi(it) }
         ?.let { coloreDaHex(it.colore) } ?: Palette.primary
-
-/** Una sezione dell'elenco: intestazione più le sue schede, se ce ne sono. */
-private fun androidx.compose.foundation.lazy.LazyListScope.sezione(
-    titolo: String,
-    task: List<TsTask>,
-    colore: androidx.compose.ui.graphics.Color,
-    stato: TasksState,
-    onTocca: (TsTask) -> Unit,
-) {
-    if (task.isEmpty()) return
-    item(key = "intestazione-$titolo") {
-        Text(
-            text = "$titolo · ${task.size}",
-            fontWeight = FontWeight.Bold,
-            color = colore,
-            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
-        )
-    }
-    items(task, key = { it.id }) { t -> SchedaTask(t, colore, stato, onTocca) }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SchedaTask(
-    task: TsTask,
-    colore: androidx.compose.ui.graphics.Color,
-    stato: TasksState,
-    onTocca: (TsTask) -> Unit,
-) {
-    val priorita = stato.prioritaDi(task.prioritaId)
-
-    // Niente striscia di colore verticale come in tasks.html: lì è un `<div>`
-    // che si stira da solo, qui vorrebbe un'altezza — e un'altezza fissa
-    // attorno a del testo che cresce coi caratteri di sistema è il difetto
-    // della top bar rifatto uguale. Il colore della sezione sta
-    // nell'intestazione e nel pallino qui davanti al titolo.
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(Palette.inputBg)
-            .clickable { onTocca(task) }
-            .padding(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("●", color = colore, modifier = Modifier.padding(end = 8.dp))
-            Text(
-                text = task.titolo,
-                fontWeight = FontWeight.SemiBold,
-                color = Palette.dark,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        Text(
-            text = buildString {
-                append(TsTask.etichettaTipo(task.tipo))
-                task.dataDiRiferimento?.let {
-                    append(" · ")
-                    append(dataItaliana(it))
-                    oraDa(it)?.let { ora -> append(" $ora") }
-                }
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = Palette.muted,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-
-        if (priorita != null || task.categorie.isNotEmpty()) {
-            FlowRow(
-                Modifier.padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                priorita?.let {
-                    Etichetta("🎯 ${it.nome}", coloreDaHex(it.colore) ?: Palette.secondary)
-                }
-                task.categorie.mapNotNull { stato.categoriaDi(it) }.forEach { c ->
-                    Etichetta(
-                        "${c.icona.orEmpty()} ${c.nome}".trim(),
-                        coloreDaHex(c.colore) ?: Palette.accent,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Etichetta(testo: String, colore: androidx.compose.ui.graphics.Color) {
-    Text(
-        text = testo,
-        color = Palette.light,
-        style = MaterialTheme.typography.labelSmall,
-        modifier = Modifier
-            .padding(bottom = 4.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(colore)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    )
-}
 
 /**
  * Le azioni su un task, una per riga.
