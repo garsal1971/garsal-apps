@@ -9,8 +9,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+/**
+ * Una riga del calendario: o un task vivo, o una cosa già fatta che vive solo
+ * nello storico. Il calendario le tratta uguali, ma solo la prima si può
+ * completare o saltare — sulla seconda non c'è più niente da fare.
+ */
+data class VoceGiorno(
+    val chiave: String,
+    val titolo: String,
+    val completato: Boolean,
+    val ora: Int,
+    val task: TsTask?,
+)
+
 data class TasksState(
     val task: List<TsTask> = emptyList(),
+    val storico: List<TsStorico> = emptyList(),
     val categorie: List<CmCategoria> = emptyList(),
     val priorita: List<CmPriorita> = emptyList(),
     val caricamento: Boolean = true,
@@ -44,6 +58,41 @@ data class TasksState(
             compareBy({ it.giornoDiRiferimento ?: LocalDate.MAX }, { it.titolo.lowercase() })
         )
 
+    /**
+     * Cosa mostrare in un giorno del calendario: i task che ci cadono, più le
+     * righe di storico completate quel giorno.
+     *
+     * Il web concatena le due liste senza guardarle (`[...activeTasks,
+     * ...historicalTasks]`), quindi un task completato oggi la cui prossima
+     * occorrenza è ancora oggi compare due volte. In una cella grande quanto
+     * un dito quel doppione sembra un difetto, quindi qui lo storico salta i
+     * task già presenti fra i vivi dello stesso giorno.
+     */
+    fun vociDel(giorno: LocalDate): List<VoceGiorno> {
+        val vivi = task.filter { it.cadeIl(giorno) }
+        val idVivi = vivi.mapTo(mutableSetOf()) { it.id }
+        val fatti = storico
+            .filter { giornoDa(it.completatoIl) == giorno && it.taskId !in idVivi }
+            .map { riga ->
+                VoceGiorno(
+                    chiave = "storico-${riga.id}",
+                    titolo = riga.titolo,
+                    completato = true,
+                    ora = oraDa(riga.completatoIl)?.take(2)?.toIntOrNull() ?: 0,
+                    task = task.firstOrNull { it.id == riga.taskId },
+                )
+            }
+        return vivi.map {
+            VoceGiorno(
+                chiave = "task-${it.id}",
+                titolo = it.titolo,
+                completato = it.completato,
+                ora = it.oraDelGiorno,
+                task = it,
+            )
+        } + fatti
+    }
+
     fun categoriaDi(id: String): CmCategoria? = categorie.firstOrNull { it.id == id }
 
     fun prioritaDi(id: String?): CmPriorita? =
@@ -65,6 +114,9 @@ class TasksViewModel : ViewModel() {
                     task = TasksRepository.task(),
                     categorie = TasksRepository.categorie(),
                     priorita = TasksRepository.priorita(),
+                    // Lo storico serve al calendario per i giorni passati: se
+                    // non arriva, il resto della schermata funziona lo stesso.
+                    storico = runCatching { TasksRepository.storico() }.getOrDefault(emptyList()),
                     caricamento = false,
                 )
             } catch (e: Exception) {

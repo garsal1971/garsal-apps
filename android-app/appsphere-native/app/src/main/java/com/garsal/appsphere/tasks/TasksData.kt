@@ -5,6 +5,7 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -58,7 +59,50 @@ data class TsTask(
     val ripetiDopoGiorni: Int?,
     val dateMultiple: List<String>,
     val ultimoCompletamento: String?,
+    val prossimaScadenza: String?,
 ) {
+    /**
+     * Se il task cade in un certo giorno del calendario.
+     *
+     * Ricalca `getTasksForDate()` di `tasks.html`, colonna per colonna: i
+     * `single` guardano `start_date`, i ricorrenti `next_occurrence_date`, i
+     * `multiple` cercano il giorno dentro `multiple_dates`, e `next_due` fa da
+     * ripiego per i task nati prima che le altre colonne esistessero. Gli
+     * stati ammessi sono gli stessi quattro.
+     *
+     * Differenza voluta rispetto al web: là i `multiple` passano da
+     * `JSON.parse(task.multiple_dates)` dentro un try/catch, e quando la
+     * colonna è già una lista quella chiamata solleva — il catch la scarta e il
+     * task **non compare mai** in calendario. Qui la lista si legge com'è, in
+     * qualunque delle due forme sia salvata, quindi quei task si vedono.
+     */
+    fun cadeIl(giorno: LocalDate): Boolean {
+        if (stato !in STATI_IN_CALENDARIO) return false
+        val atteso = giorno.toString()
+        return when {
+            tipo == "single" && dataInizio != null -> giornoDa(dataInizio) == giorno
+            (tipo == "recurring" || tipo == "simple_recurring") && prossimaOccorrenza != null ->
+                giornoDa(prossimaOccorrenza) == giorno
+            tipo == "multiple" && dateMultiple.isNotEmpty() -> atteso in dateMultiple
+            prossimaScadenza != null -> giornoDa(prossimaScadenza) == giorno
+            else -> false
+        }
+    }
+
+    /**
+     * L'ora del giorno in cui mostrarlo, per le fasce della vista settimana.
+     * Senza orario, o a mezzanotte, va nella prima fascia: stessa regola di
+     * `getTasksForTimeSlot()`.
+     */
+    val oraDelGiorno: Int
+        get() = when (tipo) {
+            "single" -> oraDa(dataInizio)
+            "recurring", "simple_recurring" -> oraDa(prossimaOccorrenza)
+            else -> oraDa(prossimaScadenza)
+        }?.take(2)?.toIntOrNull() ?: 0
+
+    val completato: Boolean get() = stato == "completed" || stato == "terminated"
+
     /** La data che conta per «quando tocca»: la stessa che guarda `isTaskDueToday`. */
     val dataDiRiferimento: String?
         get() = when (tipo) {
@@ -73,6 +117,9 @@ data class TsTask(
     val modificabile: Boolean get() = tipo != "workflow"
 
     companion object {
+        /** Gli stessi quattro che `getTasksForDate()` lascia passare. */
+        val STATI_IN_CALENDARIO = setOf("started", "completed", "failed", "skipped")
+
         val TIPI = listOf(
             "single" to "Singolo",
             "simple_recurring" to "Ricorrenza semplice",
@@ -110,6 +157,34 @@ data class TsTask(
             ripetiDopoGiorni = numero(o, "repeat_after_days"),
             dateMultiple = listaTesti(o, "multiple_dates"),
             ultimoCompletamento = testo(o, "last_completed_date"),
+            prossimaScadenza = testo(o, "next_due"),
+        )
+    }
+}
+
+/**
+ * Una riga di `ts_history`: serve al calendario per i giorni passati.
+ *
+ * Senza, un mese indietro sarebbe quasi vuoto: la prossima occorrenza di un
+ * task ricorrente si sposta in avanti a ogni completamento, quindi le volte
+ * già fatte non stanno più da nessuna parte in `ts_tasks`.
+ */
+data class TsStorico(
+    val id: String,
+    val taskId: String,
+    val titolo: String,
+    val completatoIl: String?,
+    val azione: String?,
+    val punti: Int,
+) {
+    companion object {
+        fun da(o: JsonObject) = TsStorico(
+            id = testo(o, "id") ?: "",
+            taskId = testo(o, "task_id") ?: "",
+            titolo = testo(o, "task_title") ?: "Task senza titolo",
+            completatoIl = testo(o, "completed_at"),
+            azione = testo(o, "action"),
+            punti = numero(o, "points") ?: 0,
         )
     }
 }
@@ -149,11 +224,27 @@ internal fun numero(o: JsonObject, chiave: String): Int? =
 internal fun booleano(o: JsonObject, chiave: String): Boolean? =
     (campo(o, chiave) as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
 
-/** Accetta sia una lista sia un valore solo, che diventa lista di uno. */
+/**
+ * Accetta una lista, un valore solo (che diventa lista di uno) **e una lista
+ * salvata come stringa JSON**.
+ *
+ * L'ultimo caso non è teorico: `multiple_dates` è scritta come array dalla
+ * pagina, ma `getTasksForDate()` la rilegge con `JSON.parse`, il che vuol dire
+ * che da qualche parte è passata anche come testo. Non sapendo quale delle due
+ * forme si troverà, si accettano tutt'e due invece di indovinare.
+ */
 internal fun listaTesti(o: JsonObject, chiave: String): List<String> =
     when (val v = campo(o, chiave)) {
         is JsonArray -> v.mapNotNull { (it as? JsonPrimitive)?.content }
-        is JsonPrimitive -> listOf(v.content)
+        is JsonPrimitive -> {
+            val testo = v.content.trim()
+            if (testo.startsWith("[")) {
+                runCatching {
+                    (Json.parseToJsonElement(testo) as JsonArray)
+                        .mapNotNull { (it as? JsonPrimitive)?.content }
+                }.getOrElse { emptyList() }
+            } else if (testo.isBlank()) emptyList() else listOf(testo)
+        }
         else -> emptyList()
     }
 
@@ -215,6 +306,21 @@ object TasksRepository {
             .decodeList<JsonObject>()
             .map { TsTask.da(it) }
             .filter { !it.riservato && it.stato != "archived" && it.stato != "cancelled" }
+    }
+
+    /**
+     * Lo storico recente. Il limite è generoso ma c'è: il calendario guarda
+     * un mese alla volta, e scaricare anni di righe per disegnarne trenta
+     * giorni sarebbe tempo speso a ogni apertura.
+     */
+    suspend fun storico(limite: Long = 800): List<TsStorico> = withContext(Dispatchers.IO) {
+        db.from("ts_history")
+            .select(Columns.ALL) {
+                order("timestamp", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                limit(limite)
+            }
+            .decodeList<JsonObject>()
+            .map { TsStorico.da(it) }
     }
 
     suspend fun categorie(): List<CmCategoria> = withContext(Dispatchers.IO) {
