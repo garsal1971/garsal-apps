@@ -47,7 +47,7 @@ import com.garsal.appsphere.core.coloreDaHex
  * che hanno una prossima occorrenza a cui saltare, e su un `single`
  * `task_skip` chiederebbe di quanti giorni spostarlo.
  *
- * Le tre file della scheda — segno e data con le etichette, titolo, pulsanti —
+ * Le file della scheda — segno e data, etichette, titolo, pulsanti —
  * stanno **ognuna su una riga sola** e non vanno a capo: coi caratteri di
  * sistema grandi quel che non entra si raggiunge scorrendo col dito
  * (`RigaScorrevole`). La scheda non ha comunque nessuna altezza fissa: cresce
@@ -219,7 +219,11 @@ private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
             .clickable { azioni.apri(task) }
             .padding(10.dp),
     ) {
-        RigaScorrevole(Arrangement.spacedBy(6.dp)) {
+        // Data ed etichette su due righe distinte, non una riga sola scorrevole:
+        // insieme, la prima categoria comincia dove la data finisce e con
+        // l'ingrandimento alto è già fuori dallo schermo — cioè si dovrebbe
+        // trascinare ogni scheda per sapere di che categoria è.
+        RigaScorrevole(Arrangement.Start) {
             Text(
                 text = "${TsTask.segnoTipo(task.tipo)}  ${data.ifEmpty { TsTask.etichettaTipo(task.tipo) }}",
                 fontWeight = FontWeight.SemiBold,
@@ -228,10 +232,15 @@ private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
                 maxLines = 1,
                 softWrap = false,
             )
-            categorie.take(2).forEach { c ->
-                Etichetta(c.etichetta, coloreDaHex(c.colore) ?: Palette.accent)
+        }
+
+        if (categorie.isNotEmpty()) {
+            RigaScorrevole(Arrangement.spacedBy(6.dp), Modifier.padding(top = 6.dp)) {
+                categorie.take(2).forEach { c ->
+                    Etichetta(c.etichetta, coloreDaHex(c.colore) ?: Palette.accent)
+                }
+                if (categorie.size > 2) Etichetta("+${categorie.size - 2}", Palette.muted)
             }
-            if (categorie.size > 2) Etichetta("+${categorie.size - 2}", Palette.muted)
         }
 
         RigaScorrevole(Arrangement.Start, Modifier.padding(top = 6.dp, bottom = 8.dp)) {
