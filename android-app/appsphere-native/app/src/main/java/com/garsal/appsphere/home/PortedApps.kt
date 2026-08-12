@@ -6,6 +6,7 @@ object Route {
     const val SPUNTIAMOLA = "spuntiamola"
     const val OBIETTIVI = "obiettivi"
     const val EVENTS_LOG = "eventslog"
+    const val TASKS = "tasks"
 }
 
 /**
@@ -55,6 +56,12 @@ object PortedApps {
         //      descrizioneDiRipiego = "Obiettivi annuali e trimestrali",
         //      coloreDiRipiego = "#0891B2",
         //  ),
+        "tasks.html" to AppPortata(
+            route = Route.TASKS,
+            titoloDiRipiego = "Tasks",
+            descrizioneDiRipiego = "Task e ricorrenze",
+            coloreDiRipiego = "#FF3366",
+        ),
         "events-log.html" to AppPortata(
             route = Route.EVENTS_LOG,
             titoloDiRipiego = "Events Log",

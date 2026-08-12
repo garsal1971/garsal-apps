@@ -613,7 +613,32 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
-| App portate | `spuntiamola/`, `eventslog/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+
+### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
+
+`tasks/` porta in nativo **l'elenco e il form**, non tutta `tasks.html` (niente planner,
+reminder, storico, impostazioni: quelli restano di là).
+
+- **Il ciclo di vita passa solo dalle RPC**, come sul web: `TasksViewModel` chiama
+  `task_complete` / `task_skip` / `task_fail` e poi rilegge. Nessun calcolo di prossima
+  occorrenza in Kotlin — sarebbe una seconda regola per lo stesso task, diversa a seconda
+  dell'app da cui lo tocchi.
+- **I `workflow` si vedono e si completano, ma non si modificano.** I loro step hanno
+  dipendenze (`depends_on`) e uno stato che si ricalcola da quel grafo a ogni salvataggio: un
+  form che lo appiattisse in un elenco riscriverebbe `workflow_steps` in una forma che
+  `tasks.html` non sa più leggere. Il dialogo delle azioni lo dice invece di tacere.
+- **`ts_tasks` si legge come `JsonObject`, non come `data class` serializzata.** La tabella non
+  sta in nessuna migration e alcune colonne sono ambigue di natura — `recurring_days_of_week` è
+  `text[]` *o* `integer[]`, `recurring_day_of_month` può essere una lista o un numero solo. Con
+  una data class, una colonna del tipo sbagliato non darebbe un task storto: farebbe fallire la
+  decodifica dell'intera lista, cioè la schermata vuota.
+- **I giorni della settimana sono numerati come `extract(dow)` di Postgres** (0 = domenica), che
+  è quello che `task_next_recurring_date` confronta. Il form li mostra da lunedì e li salva con
+  quella numerazione: se si toccasse una delle due parti senza l'altra, le ricorrenze
+  settimanali scatterebbero il giorno sbagliato senza nessun errore.
+- I task **riservati non compaiono**: la modalità nascosta del web qui non c'è, e una schermata
+  che si apre senza chiedere niente è il posto sbagliato per mostrarli.
 | Build APK | `.github/workflows/build-appsphere-native.yml` → `releases/AppSphereNative-latest.apk` |
 
 ### ⚠️ Il pulsante di download deve dire quale versione scarica
