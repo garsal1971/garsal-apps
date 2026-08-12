@@ -618,9 +618,14 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
 `tasks/` porta in nativo **il planner** — tre schede, come i tre pulsanti in cima alla pagina
-Planner del web: *Panoramica*, *Mese*, *Settimana*. Si apre sul Mese. **Non si creano né si
-modificano task da qui**: per quello si usa `tasks.html`, e così restano di là anche reminder,
-storico e impostazioni.
+Planner del web: *Panoramica*, *Mese*, *Settimana*. Si apre sul Mese. Il **+ galleggiante** apre
+`TaskForm`, che crea un task nuovo (tutti i tipi tranne i `workflow`, i cui step hanno dipendenze
+fra loro e non si riducono a un elenco). **Modificare un task che esiste già resta su
+`tasks.html`**, insieme a reminder, storico e impostazioni: il tipo decide quali colonne un task
+ha, e cambiarlo dopo lascerebbe dietro quelle del tipo di prima — `multiple_dates` su un
+ricorrente — che nessuno ripulisce. La creazione è un `insert` diretto e non una RPC, e non è
+un'eccezione alla regola: le RPC governano il ciclo di vita, cioè dove va la prossima occorrenza,
+non la nascita — `saveTask()` nel web fa lo stesso.
 
 La **Panoramica** è invece la copia di `renderDashboard()`, sezione per sezione
 (`tasks/Panoramica.kt`): ⚠️ SCADUTI, 🎯 OGGI, 📅 PROSSIMI, 🔄 A LIBERA RIPETIZIONE e
@@ -643,6 +648,9 @@ nascosto — il testo tagliato dal bordo si trascina — **a patto che quel che 
 sinistra**: la data prima delle etichette, *Completa* prima di *Salta*. Lo scorrimento è
 orizzontale e quello della lista verticale, quindi i due gesti non si contendono niente e il tocco
 sulla scheda apre comunque il dialogo col dettaglio, i punti di ogni azione e l'eliminazione.
+I tre pulsanti sono **larghi uguali**, e quella larghezza si **misura** (`larghezzaPulsanti()`,
+`rememberTextMeasurer`) invece di essere una costante in `dp`: coi caratteri di sistema grandi una
+costante o taglia «Completa», o lascia «Salta» in un pulsante largo il doppio del necessario.
 
 Una differenza di sostanza col web: un **ricorrente senza `next_occurrence_date`** ripiega su
 `start_date`, quindi finisce fra gli scaduti; là quel ripiego sta solo in `isTaskDueToday`, e un

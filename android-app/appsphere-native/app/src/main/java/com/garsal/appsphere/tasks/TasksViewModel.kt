@@ -273,6 +273,29 @@ class TasksViewModel : ViewModel() {
     }
 
     /**
+     * Crea il task e chiude il form solo se il database l'ha accettato.
+     *
+     * Niente ottimismo qui, al contrario dell'eliminazione: se il form si
+     * chiudesse subito e l'insert fallisse, quello che si è appena scritto
+     * sarebbe perso — e a differenza di una spunta, non si rifà in un secondo.
+     */
+    fun crea(bozza: BozzaTask, poi: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                TasksRepository.crea(bozza)
+                _state.value = _state.value.copy(messaggio = "Task creato")
+                ricaricaTask()
+                poi()
+            } catch (e: Exception) {
+                Log.w(TAG, "creazione non riuscita", e)
+                _state.value = _state.value.copy(
+                    messaggio = "Non salvato: ${e.message ?: "connessione assente"}"
+                )
+            }
+        }
+    }
+
+    /**
      * Cancellazione ottimistica: il task sparisce subito e torna se il
      * database dice di no. Come le spunte di Spuntiamola, e per la stessa
      * ragione — una riga che resta lì mezzo secondo dopo che l'hai eliminata
