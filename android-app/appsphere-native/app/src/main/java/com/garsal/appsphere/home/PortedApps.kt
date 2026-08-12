@@ -42,12 +42,19 @@ object PortedApps {
             descrizioneDiRipiego = "Conto alla rovescia a spunte",
             coloreDiRipiego = "#7C3AED",
         ),
-        "obiettivi.html" to AppPortata(
-            route = Route.OBIETTIVI,
-            titoloDiRipiego = "Obiettivi",
-            descrizioneDiRipiego = "Obiettivi annuali e trimestrali",
-            coloreDiRipiego = "#0891B2",
-        ),
+        // ⚠️ Obiettivi è **sospesa in home, non rimossa dal progetto**: le sue
+        // schermate (`obiettivi/`) e la rotta `Route.OBIETTIVI` restano dove
+        // sono, compilate e funzionanti, e per rimetterla in home basta
+        // riattivare questa riga. Sul web e nell'APK WebView non cambia niente:
+        // `cm_apps` non è stata toccata, quindi la bolla di Obiettivi è ancora
+        // lì e apre `obiettivi.html` come sempre.
+        //
+        //  "obiettivi.html" to AppPortata(
+        //      route = Route.OBIETTIVI,
+        //      titoloDiRipiego = "Obiettivi",
+        //      descrizioneDiRipiego = "Obiettivi annuali e trimestrali",
+        //      coloreDiRipiego = "#0891B2",
+        //  ),
         "events-log.html" to AppPortata(
             route = Route.EVENTS_LOG,
             titoloDiRipiego = "Events Log",

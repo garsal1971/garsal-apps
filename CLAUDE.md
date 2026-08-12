@@ -613,7 +613,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
-| App portate | `spuntiamola/`, `obiettivi/`, `eventslog/` |
+| App portate | `spuntiamola/`, `eventslog/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 | Build APK | `.github/workflows/build-appsphere-native.yml` → `releases/AppSphereNative-latest.apk` |
 
 ### ⚠️ Il pulsante di download deve dire quale versione scarica
