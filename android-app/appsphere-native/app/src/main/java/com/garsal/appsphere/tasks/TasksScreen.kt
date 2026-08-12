@@ -19,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -34,8 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
@@ -50,24 +49,14 @@ fun TasksScreen(
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
 
-    // `null` = form chiuso. `BozzaTask?` dentro l'apertura distingue il nuovo
-    // (bozza vuota, id nullo) dalla modifica (bozza riempita, id del task).
-    var inModifica by remember { mutableStateOf<Pair<BozzaTask, String?>?>(null) }
     var azioniSu by remember { mutableStateOf<TsTask?>(null) }
+    // Il planner si apre sul mese: è la vista che si guarda per sapere come sta
+    // messo il periodo, ed è quella che serviva.
+    var vista by remember { mutableStateOf(Vista.MESE) }
+    var periodo by remember { mutableStateOf(LocalDate.now()) }
+    var giornoAperto by remember { mutableStateOf<LocalDate?>(null) }
     var daEliminare by remember { mutableStateOf<TsTask?>(null) }
     var daSaltare by remember { mutableStateOf<TsTask?>(null) }
-
-    inModifica?.let { (bozza, id) ->
-        TaskForm(
-            bozzaIniziale = bozza,
-            id = id,
-            categorie = stato.categorie,
-            priorita = stato.priorita,
-            onAnnulla = { inModifica = null },
-            onSalva = { nuova -> vm.salva(nuova, id) { inModifica = null } },
-        )
-        return
-    }
 
     Scaffold(
         topBar = {
@@ -82,13 +71,6 @@ fun TasksScreen(
                     )
                 },
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { inModifica = BozzaTask() to null },
-                containerColor = Palette.topBar,
-                contentColor = Palette.light,
-            ) { Text("+", fontSize = 26.sp) }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -106,14 +88,45 @@ fun TasksScreen(
                         modifier = Modifier.align(Alignment.Center),
                     )
 
-                else -> LazyColumn(
-                    contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    sezione("In ritardo", stato.inRitardo, Palette.danger, stato) { azioniSu = it }
-                    sezione("Oggi", stato.diOggi, Palette.success, stato) { azioniSu = it }
-                    sezione("Prossimi", stato.prossimi, Palette.accent, stato) { azioniSu = it }
-                    sezione("Quando capita", stato.liberi, Palette.muted, stato) { azioniSu = it }
+                else -> Column(Modifier.fillMaxSize()) {
+                    SelettoreVista(vista) { scelta ->
+                        vista = scelta
+                        // Cambiando vista si torna a oggi: tornare al mese
+                        // dopo aver sfogliato tre settimane avanti, e
+                        // ritrovarsi in un mese che non si stava guardando,
+                        // sembra che il pulsante abbia sbagliato.
+                        periodo = LocalDate.now()
+                    }
+
+                    when (vista) {
+                        Vista.PANORAMICA -> LazyColumn(
+                            contentPadding = PaddingValues(12.dp, 4.dp, 12.dp, 88.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            sezione("In ritardo", stato.inRitardo, Palette.danger, stato) { azioniSu = it }
+                            sezione("Oggi", stato.diOggi, Palette.success, stato) { azioniSu = it }
+                            sezione("Prossimi", stato.prossimi, Palette.accent, stato) { azioniSu = it }
+                            sezione("Quando capita", stato.liberi, Palette.muted, stato) { azioniSu = it }
+                        }
+
+                        Vista.MESE -> {
+                            BarraPeriodo(
+                                etichetta = etichettaMese(periodo),
+                                onIndietro = { periodo = periodo.minusMonths(1) },
+                                onAvanti = { periodo = periodo.plusMonths(1) },
+                            )
+                            VistaMese(periodo, stato) { giornoAperto = it }
+                        }
+
+                        Vista.SETTIMANA -> {
+                            BarraPeriodo(
+                                etichetta = etichettaSettimana(periodo),
+                                onIndietro = { periodo = periodo.minusWeeks(1) },
+                                onAvanti = { periodo = periodo.plusWeeks(1) },
+                            )
+                            VistaSettimana(periodo, stato) { azioniSu = it }
+                        }
+                    }
                 }
             }
 
@@ -150,6 +163,31 @@ fun TasksScreen(
         }
     }
 
+    giornoAperto?.let { giorno ->
+        val voci = stato.vociDel(giorno)
+        AlertDialog(
+            onDismissRequest = { giornoAperto = null },
+            title = { Text(dataItaliana(giorno.toString())) },
+            text = {
+                if (voci.isEmpty()) {
+                    Text("Niente in programma.", color = Palette.muted)
+                } else {
+                    Column {
+                        voci.forEach { voce ->
+                            RigaVoce(voce, coloreVoce(voce, stato)) { task ->
+                                giornoAperto = null
+                                azioniSu = task
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { giornoAperto = null }) { Text("Chiudi") }
+            },
+        )
+    }
+
     azioniSu?.let { task ->
         DialogoAzioni(
             task = task,
@@ -157,10 +195,6 @@ fun TasksScreen(
             onCompleta = { vm.completa(task.id); azioniSu = null },
             onSalta = { azioniSu = null; daSaltare = task },
             onFallisci = { vm.fallisci(task.id); azioniSu = null },
-            onModifica = {
-                azioniSu = null
-                inModifica = BozzaTask.da(task) to task.id
-            },
             onElimina = { azioniSu = null; daEliminare = task },
         )
     }
@@ -194,6 +228,44 @@ fun TasksScreen(
         )
     }
 }
+
+/** Le tre viste del planner, come i tre pulsanti in cima a `tasks.html`. */
+enum class Vista(val etichetta: String) {
+    PANORAMICA("Panoramica"),
+    MESE("Mese"),
+    SETTIMANA("Settimana"),
+}
+
+@Composable
+private fun SelettoreVista(scelta: Vista, onScegli: (Vista) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Vista.entries.forEach { vista ->
+            val attiva = vista == scelta
+            Text(
+                text = vista.etichetta,
+                color = if (attiva) Palette.light else Palette.dark,
+                fontWeight = if (attiva) FontWeight.Bold else FontWeight.Normal,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (attiva) Palette.topBar else Palette.inputBg)
+                    .clickable { onScegli(vista) }
+                    .padding(vertical = 12.dp),
+            )
+        }
+    }
+}
+
+/** Il colore con cui il planner disegna una voce: quello della sua categoria. */
+private fun coloreVoce(voce: VoceGiorno, stato: TasksState) =
+    voce.task?.categorie?.firstNotNullOfOrNull { stato.categoriaDi(it) }
+        ?.let { coloreDaHex(it.colore) } ?: Palette.primary
 
 /** Una sezione dell'elenco: intestazione più le sue schede, se ce ne sono. */
 private fun androidx.compose.foundation.lazy.LazyListScope.sezione(
@@ -308,7 +380,6 @@ private fun DialogoAzioni(
     onCompleta: () -> Unit,
     onSalta: () -> Unit,
     onFallisci: () -> Unit,
-    onModifica: () -> Unit,
     onElimina: () -> Unit,
 ) {
     AlertDialog(
@@ -327,18 +398,16 @@ private fun DialogoAzioni(
                     Voce("⏭ Salta", "${task.puntiSalto} punti", Palette.warning, onSalta)
                 }
                 Voce("✗ Fallito", "${task.puntiFallimento} punti", Palette.danger, onFallisci)
-                if (task.modificabile) {
-                    Voce("✏️ Modifica", null, Palette.accent, onModifica)
-                } else {
-                    Text(
-                        text = "I workflow si modificano da tasks.html: i loro step hanno " +
-                            "dipendenze fra loro, e un form che le semplifica li romperebbe.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Palette.muted,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
                 Voce("🗑 Elimina", null, Palette.danger, onElimina)
+                // Creare e modificare restano su tasks.html: qui il planner
+                // serve a vedere come sta messo il periodo e a chiudere quello
+                // che è in scadenza, non a mettere in piedi un task nuovo.
+                Text(
+                    text = "Per creare o modificare un task si usa tasks.html.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Palette.muted,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
         },
         confirmButton = { TextButton(onClick = onChiudi) { Text("Chiudi") } },
