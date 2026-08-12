@@ -14,6 +14,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -30,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
@@ -44,6 +46,11 @@ fun TasksScreen(
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
 
+    // `null` = form chiuso. La bozza sta qui e non nel ViewModel perché è
+    // roba della schermata: se si gira il telefono a metà compilazione si
+    // riparte da capo, ma un task a metà scritto che sopravvive alla chiusura
+    // dell'app sarebbe peggio — non si saprebbe più da dove viene.
+    var nuovoTask by remember { mutableStateOf<BozzaTask?>(null) }
     var azioniSu by remember { mutableStateOf<TsTask?>(null) }
     // Il planner si apre sul mese: è la vista che si guarda per sapere come sta
     // messo il periodo, ed è quella che serviva.
@@ -52,6 +59,17 @@ fun TasksScreen(
     var giornoAperto by remember { mutableStateOf<LocalDate?>(null) }
     var daEliminare by remember { mutableStateOf<TsTask?>(null) }
     var daSaltare by remember { mutableStateOf<TsTask?>(null) }
+
+    nuovoTask?.let { bozza ->
+        TaskForm(
+            bozzaIniziale = bozza,
+            categorie = stato.categorie,
+            priorita = stato.priorita,
+            onAnnulla = { nuovoTask = null },
+            onSalva = { compilata -> vm.crea(compilata) { nuovoTask = null } },
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -66,6 +84,16 @@ fun TasksScreen(
                     )
                 },
             )
+        },
+        // Il + galleggiante è quello del web, stesso posto e stesso gesto.
+        // Sta sullo Scaffold e non dentro la panoramica: da qualunque delle tre
+        // schede può venire in mente di segnarsi una cosa da fare.
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { nuovoTask = BozzaTask() },
+                containerColor = Palette.topBar,
+                contentColor = Palette.light,
+            ) { Text("+", fontSize = 26.sp) }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -296,11 +324,11 @@ private fun DialogoAzioni(
                 }
                 Voce("✗ Fallito", "${task.puntiFallimento} punti", Palette.danger, onFallisci)
                 Voce("🗑 Elimina", null, Palette.danger, onElimina)
-                // Creare e modificare restano su tasks.html: qui il planner
-                // serve a vedere come sta messo il periodo e a chiudere quello
-                // che è in scadenza, non a mettere in piedi un task nuovo.
+                // Un task nuovo si fa col + in basso; cambiare uno che
+                // esiste già no, e il dialogo lo dice invece di lasciarlo
+                // scoprire cercando il pulsante che non c'è.
                 Text(
-                    text = "Per creare o modificare un task si usa tasks.html.",
+                    text = "Per modificare un task si usa tasks.html.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Palette.muted,
                     modifier = Modifier.padding(top = 12.dp),

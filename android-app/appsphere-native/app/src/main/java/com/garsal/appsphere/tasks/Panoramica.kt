@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
@@ -26,8 +27,11 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.coloreDaHex
@@ -69,20 +73,22 @@ fun VistaPanoramica(
     }
 
     val azioni = AzioniScheda(onApri, onCompleta, onFallisci, onSalta)
+    val larghezzaPulsanti = larghezzaPulsanti()
 
     LazyColumn(
         contentPadding = PaddingValues(10.dp, 6.dp, 10.dp, 88.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        sezione("⚠️ SCADUTI", stato.scaduti, Palette.danger, stato, azioni)
-        sezione("🎯 OGGI", stato.diOggi, Palette.primary, stato, azioni)
-        sezione("📅 PROSSIMI", stato.prossimi, Palette.warning, stato, azioni)
+        sezione("⚠️ SCADUTI", stato.scaduti, Palette.danger, stato, azioni, larghezzaPulsanti)
+        sezione("🎯 OGGI", stato.diOggi, Palette.primary, stato, azioni, larghezzaPulsanti)
+        sezione("📅 PROSSIMI", stato.prossimi, Palette.warning, stato, azioni, larghezzaPulsanti)
         sezioneRaggruppata(
             titolo = "🔄 A LIBERA RIPETIZIONE",
             gruppi = stato.liberiPerCategoria,
             colore = Palette.accent,
             stato = stato,
             azioni = azioni,
+            larghezzaPulsanti = larghezzaPulsanti,
             quanti = stato.liberi.size,
             // Nessuna categoria configurata per la dashboard: la sezione resta
             // e lo dice, come nel web. Se sparisse, quei task non si
@@ -98,6 +104,7 @@ fun VistaPanoramica(
             colore = Palette.muted,
             stato = stato,
             azioni = azioni,
+            larghezzaPulsanti = larghezzaPulsanti,
             // Il conteggio del web è quello dei task, non quello dei gruppi:
             // un task in due categorie compare due volte ma resta uno solo.
             quanti = stato.nascosti.size,
@@ -126,11 +133,12 @@ private fun LazyListScope.sezione(
     colore: Color,
     stato: TasksState,
     azioni: AzioniScheda,
+    larghezzaPulsanti: Dp,
 ) {
     if (task.isEmpty()) return
     item(key = "sezione-$titolo") {
         Sezione(titolo, task.size, colore) {
-            task.forEach { SchedaTask(it, stato, azioni) }
+            task.forEach { SchedaTask(it, stato, azioni, larghezzaPulsanti) }
         }
     }
 }
@@ -141,6 +149,7 @@ private fun LazyListScope.sezioneRaggruppata(
     colore: Color,
     stato: TasksState,
     azioni: AzioniScheda,
+    larghezzaPulsanti: Dp,
     quanti: Int = gruppi.sumOf { it.task.size },
     mostraSeVuota: Boolean = false,
     seVuota: String = "",
@@ -159,7 +168,7 @@ private fun LazyListScope.sezioneRaggruppata(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(top = 10.dp, bottom = 6.dp),
                 )
-                gruppo.task.forEach { SchedaTask(it, stato, azioni) }
+                gruppo.task.forEach { SchedaTask(it, stato, azioni, larghezzaPulsanti) }
             }
         }
     }
@@ -203,7 +212,12 @@ private fun Sezione(
 }
 
 @Composable
-private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
+private fun SchedaTask(
+    task: TsTask,
+    stato: TasksState,
+    azioni: AzioniScheda,
+    larghezzaPulsanti: Dp,
+) {
     // Le prime due categorie e poi «+N», come nel web: tre etichette lunghe
     // riempirebbero da sole tutta la riga.
     val categorie = task.categorie.mapNotNull { stato.categoriaDi(it) }
@@ -255,12 +269,12 @@ private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
         }
 
         RigaScorrevole(Arrangement.spacedBy(8.dp)) {
-            Pulsante("Completa", Palette.success) { azioni.completa(task) }
+            Pulsante(COMPLETA, Palette.success, larghezzaPulsanti) { azioni.completa(task) }
             if (task.tipo != "free_repeat") {
-                Pulsante("Fallisci", Palette.danger) { azioni.fallisci(task) }
+                Pulsante(FALLISCI, Palette.danger, larghezzaPulsanti) { azioni.fallisci(task) }
             }
             if (task.tipo in TIPI_CON_SALTA) {
-                Pulsante("Salta", Palette.accent) { azioni.salta(task) }
+                Pulsante(SALTA, Palette.accent, larghezzaPulsanti) { azioni.salta(task) }
             }
         }
     }
@@ -301,19 +315,43 @@ private fun RigaScorrevole(
 /** Gli unici tipi su cui il web offre **Salta**: hanno una prossima occorrenza. */
 private val TIPI_CON_SALTA = setOf("recurring", "simple_recurring", "multiple")
 
+private const val COMPLETA = "Completa"
+private const val FALLISCI = "Fallisci"
+private const val SALTA = "Salta"
+
+/**
+ * La larghezza comune dei tre pulsanti: quella che serve alla parola più
+ * lunga, misurata **con lo stile e l'ingrandimento di adesso**.
+ *
+ * Non una misura in `dp` scelta a occhio: coi caratteri di sistema grandi una
+ * costante o taglia «Completa», o lascia «Salta» in un pulsante il doppio di
+ * quanto gli serve. Si misura una volta per schermata e la si passa alle
+ * schede, invece di rifare il conto per ognuna delle trenta che ci sono.
+ */
 @Composable
-private fun Pulsante(testo: String, sfondo: Color, onClick: () -> Unit) {
+private fun larghezzaPulsanti(): Dp {
+    val misuratore = rememberTextMeasurer()
+    val stile = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+    val piuLarga = listOf(COMPLETA, FALLISCI, SALTA)
+        .maxOf { misuratore.measure(it, stile).size.width }
+    return with(LocalDensity.current) { piuLarga.toDp() } + 28.dp
+}
+
+@Composable
+private fun Pulsante(testo: String, sfondo: Color, larghezza: Dp, onClick: () -> Unit) {
     Text(
         text = testo,
         color = Palette.light,
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.bodyMedium,
+        textAlign = TextAlign.Center,
         maxLines = 1,
         modifier = Modifier
+            .width(larghezza)
             .clip(RoundedCornerShape(4.dp))
             .background(sfondo)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(vertical = 10.dp),
     )
 }
 

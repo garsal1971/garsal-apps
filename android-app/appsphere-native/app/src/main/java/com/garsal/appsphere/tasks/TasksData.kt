@@ -429,7 +429,134 @@ object TasksRepository {
         Unit
     }
 
+    /**
+     * Scrive un task nuovo. Non passa da una RPC — e non è un'eccezione alla
+     * regola: le RPC governano il **ciclo di vita** (dove sta la prossima
+     * occorrenza), non la nascita. `saveTask()` nel web fa lo stesso insert.
+     */
+    suspend fun crea(bozza: BozzaTask) = withContext(Dispatchers.IO) {
+        db.from("ts_tasks").insert(bozza.aJson())
+        Unit
+    }
+
     data class Esito(val ok: Boolean, val azione: String?, val punti: Int?, val errore: String?)
 }
 
 private typealias JsonObjectBuilderScope = kotlinx.serialization.json.JsonObjectBuilder.() -> Unit
+
+/**
+ * Quello che il form compila. Separata da [TsTask] perché il form lavora su
+ * campi in corso di modifica — testo ancora da convertire, date non scelte —
+ * mentre `TsTask` è quello che il database ha già accettato.
+ */
+data class BozzaTask(
+    val titolo: String = "",
+    val descrizione: String = "",
+    val tipo: String = "single",
+    val categorie: List<String> = emptyList(),
+    val prioritaId: String? = null,
+    val giorno: LocalDate = LocalDate.now(),
+    val ora: String = "09:00",
+    val scadenza: LocalDate? = null,
+    val puntiSuccesso: Int = 10,
+    val puntiFallimento: Int = -5,
+    val puntiSalto: Int = -2,
+    val puntiRitardo: Int = 0,
+    val inPanoramica: Boolean = true,
+    // ricorrente
+    val frequenza: String = "daily",
+    val intervallo: Int = 1,
+    val giorniSettimana: List<Int> = emptyList(),
+    val giorniMese: List<Int> = emptyList(),
+    val dateAnnuali: List<String> = emptyList(),
+    // ricorrenza semplice
+    val ripetiDopoGiorni: Int = 7,
+    // date multiple
+    val dateMultiple: List<String> = emptyList(),
+) {
+    val valida: Boolean
+        get() = titolo.isNotBlank() && when (tipo) {
+            "multiple" -> dateMultiple.isNotEmpty()
+            "recurring" -> when (frequenza) {
+                "weekly" -> giorniSettimana.isNotEmpty()
+                "monthly" -> giorniMese.isNotEmpty()
+                "yearly" -> dateAnnuali.isNotEmpty()
+                else -> true
+            }
+            else -> true
+        }
+
+    /**
+     * Il corpo da scrivere, campo per campo come lo scrive `saveTask()` nella
+     * pagina web — compresa la regola che alla creazione
+     * `next_occurrence_date` parte uguale a `start_date`, tranne per i task a
+     * date multiple, dove è la **prima data** dell'elenco.
+     */
+    fun aJson(): JsonObject {
+        val inizio = isoDa(giorno, ora)
+        return buildJsonObject {
+            put("title", titolo.trim())
+            put("description", descrizione.trim().ifBlank { null })
+            put("type", tipo)
+            put("categories", buildJsonArray { categorie.forEach { add(it) } })
+            put("priority_id", prioritaId)
+            put("start_date", inizio)
+            put("success_points", puntiSuccesso)
+            put("failure_points", puntiFallimento)
+            put("skip_points", puntiSalto)
+            put("late_points", puntiRitardo)
+            put("show_in_panoramica", inPanoramica)
+            put("riservato", false)
+            put("status", "started")
+
+            when (tipo) {
+                "single" -> {
+                    put("deadline", scadenza?.let { isoDa(it, ora) })
+                    put("next_occurrence_date", inizio)
+                }
+
+                "simple_recurring" -> {
+                    put("repeat_after_days", ripetiDopoGiorni)
+                    put("next_occurrence_date", inizio)
+                }
+
+                "recurring" -> {
+                    put("recurring_frequency", frequenza)
+                    put("recurring_interval", intervallo)
+                    put("next_occurrence_date", inizio)
+                    when (frequenza) {
+                        "weekly" ->
+                            put("recurring_days_of_week", buildJsonArray { giorniSettimana.sorted().forEach { add(it) } })
+                        "monthly" ->
+                            put("recurring_day_of_month", buildJsonArray { giorniMese.sorted().forEach { add(it) } })
+                        "yearly" -> {
+                            val ordinate = dateAnnuali.sorted()
+                            put("recurring_dates", buildJsonArray { ordinate.forEach { add(it) } })
+                            // Le colonne vecchie restano allineate alla prima
+                            // data: `task_next_recurring_date` le guarda ancora
+                            // per i task nati prima di `recurring_dates`.
+                            // Letta per indice e non destrutturata: una voce
+                            // malformata darebbe un errore invece di un campo
+                            // in meno.
+                            val pezzi = ordinate.firstOrNull()?.split("-").orEmpty()
+                            put("recurring_day_of_year", pezzi.getOrNull(0)?.toIntOrNull())
+                            put("recurring_month", pezzi.getOrNull(1)?.toIntOrNull())
+                        }
+                    }
+                }
+
+                "multiple" -> {
+                    val ordinate = dateMultiple.sorted()
+                    put("multiple_dates", buildJsonArray { ordinate.forEach { add(it) } })
+                    put("next_occurrence_date", ordinate.firstOrNull()?.let { "${it}T$ora:00" })
+                }
+
+                // `free_repeat` non ha una prossima occorrenza: si ripete
+                // quando si vuole, e la pagina web lo tiene fuori da «oggi».
+                // `JsonNull` e non `null`: un null nudo qui non saprebbe
+                // quale `put` scegliere fra stringa, numero e booleano.
+                "free_repeat" -> put("next_occurrence_date", JsonNull)
+            }
+        }
+    }
+}
