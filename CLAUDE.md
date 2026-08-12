@@ -613,7 +613,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
-| App portate | `spuntiamola/`, `obiettivi/`, `eventslog/` |
+| App portate | `spuntiamola/`, `eventslog/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 | Build APK | `.github/workflows/build-appsphere-native.yml` → `releases/AppSphereNative-latest.apk` |
 
 ### ⚠️ Il pulsante di download deve dire quale versione scarica
@@ -632,7 +632,11 @@ pubblicarla da sola annuncerebbe una build nuova per un pacchetto identico — e
 tiene fuori dalla cache, altrimenti la pagina annuncerebbe una versione e ne farebbe scaricare
 un'altra.
 
-Dal telefono la controprova è la schermata di login, che stampa `Versione nativa · v…`.
+Dal telefono la controprova è la schermata di login, che stampa `Versione nativa · v…`, e da
+dentro l'app il ⚙️ in home: `DialogoAggiornamento` legge la stessa scheda, confronta il suo
+`versionCode` con `BuildConfig.VERSION_CODE` e apre il download nel browser. È l'unico modo per
+sapere **prima** di scaricare se c'è davvero qualcosa di nuovo — la domanda che l'11 agosto non
+aveva risposta da nessuna parte.
 
 ### Cosa compare in home: il registro `PortedApps`
 

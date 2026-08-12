@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.garsal.appsphere.core.DialogoAggiornamento
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.coloreDaHex
@@ -58,6 +60,12 @@ fun HomeScreen(
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
     val totale = stato.bolle.sumOf { it.punteggio }
+    var mostraVersione by remember { mutableStateOf(false) }
+
+    // Le icone in `dp` non seguono l'ingrandimento dei caratteri: accanto a un
+    // punteggio scritto grande resterebbero minuscole, e soprattutto piccole da
+    // centrare col dito. Stesso tetto della top bar.
+    val scala = LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
 
     Scaffold(
         topBar = {
@@ -75,7 +83,7 @@ fun HomeScreen(
                         contentDescription = "Ricarica",
                         tint = Palette.light,
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(26.dp * scala)
                             // Tocco = ricarica; pressione lunga = modalità
                             // nascosta, come sul web dove è un gesto discreto
                             // e non un pulsante etichettato.
@@ -85,6 +93,15 @@ fun HomeScreen(
                                     onLongPress = { vm.cambiaModalitaNascosta() },
                                 )
                             },
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Versione e aggiornamento",
+                        tint = Palette.light,
+                        modifier = Modifier
+                            .padding(start = 10.dp)
+                            .size(26.dp * scala)
+                            .clickable { mostraVersione = true },
                     )
                 },
             )
@@ -126,6 +143,10 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (mostraVersione) {
+        DialogoAggiornamento(onChiudi = { mostraVersione = false })
     }
 }
 

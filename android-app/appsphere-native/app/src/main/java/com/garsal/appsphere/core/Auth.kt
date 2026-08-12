@@ -1,8 +1,6 @@
 package com.garsal.appsphere.core
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.parseSessionFromFragment
@@ -19,10 +17,13 @@ import kotlinx.coroutines.launch
 /**
  * Login Google e stato della sessione.
  *
- * Il giro è lo stesso dell'APK WebView (`MainActivity.kt`): Chrome Custom Tabs
- * verso Supabase, che rimanda a un deep link dell'app. L'unica differenza è lo
- * schema — `garsalnative://oauth` invece di `garsalapps://oauth`, perché con lo
- * stesso schema Android chiederebbe ogni volta quale delle due app aprire.
+ * Il giro è lo stesso dell'APK WebView (`MainActivity.kt`): **browser di
+ * sistema** verso Supabase, che rimanda alla pagina-ponte https, e da lì un tap
+ * riporta nell'app con un deep link. L'unica differenza è lo schema —
+ * `garsalnative://oauth` invece di `garsalapps://oauth`, perché con lo stesso
+ * schema Android chiederebbe ogni volta quale delle due app aprire. Perché
+ * browser e non Custom Tab, e perché una pagina di mezzo: vedi
+ * `loginConGoogle` e `Supabase.OAUTH_REDIRECT`.
  *
  * ⚠️ **Il rientro dal browser non passa più da `parseFragmentAndImportSession`.**
  * Quella funzione fa il lavoro dentro `authScope`, lo scope interno della
@@ -224,19 +225,11 @@ object AuthRepo {
     fun loginConGoogle(context: Context) {
         val url = Supabase.oauthUrl()
         Log.i(TAG, "apro il login nel browser: $url")
-        try {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    addCategory(Intent.CATEGORY_BROWSABLE)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            )
-        } catch (e: Exception) {
-            // Nessun browser che risponda a un http:// — su un telefono non
-            // succede, ma se succede va detto invece di lasciare il pulsante
-            // premuto senza effetto.
-            Log.e(TAG, "nessun browser per aprire il login", e)
-            annotaRientro("nessun browser disponibile per il login: ${e.message}")
+        // Nessun browser che risponda a un http:// — su un telefono non
+        // succede, ma se succede va detto invece di lasciare il pulsante
+        // premuto senza effetto.
+        if (!apriNelBrowser(context, url)) {
+            annotaRientro("nessun browser disponibile per aprire il login")
         }
     }
 
