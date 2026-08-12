@@ -22,36 +22,134 @@ data class VoceGiorno(
     val task: TsTask?,
 )
 
+/** Un gruppo per categoria dentro una sezione, con la sua intestazione colorata. */
+data class GruppoCategoria(
+    val chiave: String,
+    val etichetta: String,
+    val colore: String?,
+    val task: List<TsTask>,
+)
+
 data class TasksState(
     val task: List<TsTask> = emptyList(),
     val storico: List<TsStorico> = emptyList(),
     val categorie: List<CmCategoria> = emptyList(),
     val priorita: List<CmPriorita> = emptyList(),
+    val impostazioni: Map<String, String> = emptyMap(),
     val caricamento: Boolean = true,
     val errore: String? = null,
     val messaggio: String? = null,
 ) {
     private val oggi: LocalDate get() = LocalDate.now()
 
+    // ── Le sezioni della panoramica ──────────────────────────────────────
+    //
+    // Sono le stesse cinque di `renderDashboard()` in `tasks.html`, con gli
+    // stessi filtri: quello che si vede qui e quello che si vede là devono
+    // essere la stessa lista, o l'app diventa un secondo parere invece di una
+    // seconda finestra sugli stessi task.
+    //
+    // Una differenza voluta: la data di un ricorrente qui ripiega su
+    // `start_date` quando `next_occurrence_date` è vuota (`dataDiRiferimento`).
+    // Nel web quel ripiego c'è solo in `isTaskDueToday`, quindi un ricorrente
+    // senza prossima occorrenza e con partenza nel passato non compare in
+    // nessuna sezione. Compare qui, fra gli scaduti: è un task che aspetta, e
+    // il posto giusto per accorgersene è la panoramica.
+
+    /** Quanti giorni in avanti guarda **PROSSIMI**: `dashboard_upcoming_days`. */
+    val giorniProssimi: Int
+        get() = impostazioni["dashboard_upcoming_days"]?.trim()?.toIntOrNull()?.coerceIn(1, 90) ?: 10
+
+    /** I task che la panoramica mostra: gli stessi quattro stati, e in panoramica. */
+    private val attivi: List<TsTask>
+        get() = ordinati.filter { it.stato in TsTask.STATI_IN_CALENDARIO && it.inPanoramica }
+
+    private val programmati: List<TsTask> get() = attivi.filter { it.tipo != "free_repeat" }
+
+    val scaduti: List<TsTask>
+        get() = programmati.filter { it.giornoDiRiferimento?.isBefore(oggi) == true }
+
     /**
-     * Le quattro sezioni dell'elenco.
-     *
      * «Oggi» è il giorno esatto, non «da oggi in giù»: è la stessa regola di
      * `isTaskDueToday()` nella pagina web, che confronta con `==` e non con
-     * `<=` proprio per tenere separato quello che è in ritardo. I
-     * `free_repeat` non hanno una data e stanno per conto loro, come lì.
+     * `<=` proprio per tenere separato quello che è scaduto.
      */
-    val inRitardo: List<TsTask>
-        get() = ordinati.filter { it.giornoDiRiferimento?.isBefore(oggi) == true }
-
     val diOggi: List<TsTask>
-        get() = ordinati.filter { it.giornoDiRiferimento == oggi }
+        get() = programmati.filter { it.giornoDiRiferimento == oggi }
 
     val prossimi: List<TsTask>
-        get() = ordinati.filter { it.giornoDiRiferimento?.isAfter(oggi) == true }
+        get() {
+            val ultimo = oggi.plusDays(giorniProssimi.toLong())
+            return programmati.filter { t ->
+                val giorno = t.giornoDiRiferimento ?: return@filter false
+                giorno.isAfter(oggi) && !giorno.isAfter(ultimo)
+            }
+        }
 
-    val liberi: List<TsTask>
-        get() = ordinati.filter { it.tipo == "free_repeat" }
+    val liberi: List<TsTask> get() = attivi.filter { it.tipo == "free_repeat" }
+
+    /**
+     * I `free_repeat`, raggruppati per categoria e **solo** per le categorie
+     * con `show_in_dashboard`: sono task senza data, e senza un gruppo che li
+     * chiami sarebbero un elenco alla rinfusa in fondo alla pagina.
+     *
+     * Può essere vuoto pur essendoci dei `free_repeat`: è il caso in cui
+     * nessuna categoria è configurata per la dashboard, e la sezione lo dice
+     * invece di sparire — sparendo, quei task non si vedrebbero da nessuna
+     * parte e sembrerebbero cancellati.
+     */
+    val liberiPerCategoria: List<GruppoCategoria>
+        get() = perCategoria(liberi, soloInDashboard = true)
+
+    /**
+     * `show_in_panoramica = false`: i task che l'utente ha tolto dalle sezioni
+     * di sopra ma che restano leggibili in fondo, raggruppati per categoria.
+     */
+    val nascostiPerCategoria: List<GruppoCategoria>
+        get() = perCategoria(
+            ordinati.filter { it.stato in TsTask.STATI_IN_CALENDARIO && !it.inPanoramica },
+            soloInDashboard = false,
+        )
+
+    val nascosti: List<TsTask>
+        get() = task.filter { it.stato in TsTask.STATI_IN_CALENDARIO && !it.inPanoramica }
+
+    val panoramicaVuota: Boolean
+        get() = scaduti.isEmpty() && diOggi.isEmpty() && prossimi.isEmpty() &&
+            liberi.isEmpty() && nascosti.isEmpty()
+
+    /**
+     * Raggruppa per categoria come fa il web: un task con due categorie
+     * **compare in tutt'e due i gruppi**, e dentro il gruppo si ordina per
+     * titolo. Chi non ha categorie finisce in «Senza categoria», tranne fra i
+     * `free_repeat`, dove il web lo lascia proprio fuori.
+     */
+    private fun perCategoria(
+        task: List<TsTask>,
+        soloInDashboard: Boolean,
+    ): List<GruppoCategoria> {
+        val gruppi = linkedMapOf<String, MutableList<TsTask>>()
+        task.forEach { t ->
+            val sue = t.categorie.filter { id ->
+                val categoria = categoriaDi(id)
+                categoria != null && (!soloInDashboard || categoria.inDashboard)
+            }
+            if (sue.isEmpty()) {
+                if (!soloInDashboard) gruppi.getOrPut(SENZA_CATEGORIA) { mutableListOf() }.add(t)
+            } else {
+                sue.forEach { gruppi.getOrPut(it) { mutableListOf() }.add(t) }
+            }
+        }
+        return gruppi.map { (chiave, suoi) ->
+            val categoria = categoriaDi(chiave)
+            GruppoCategoria(
+                chiave = chiave,
+                etichetta = categoria?.etichetta ?: "Senza categoria",
+                colore = categoria?.colore,
+                task = suoi.sortedBy { it.titolo.lowercase() },
+            )
+        }
+    }
 
     private val ordinati: List<TsTask>
         get() = task.sortedWith(
@@ -97,6 +195,10 @@ data class TasksState(
 
     fun prioritaDi(id: String?): CmPriorita? =
         id?.let { cercata -> priorita.firstOrNull { it.id == cercata } }
+
+    private companion object {
+        const val SENZA_CATEGORIA = "__senza_categoria__"
+    }
 }
 
 class TasksViewModel : ViewModel() {
@@ -117,6 +219,10 @@ class TasksViewModel : ViewModel() {
                     // Lo storico serve al calendario per i giorni passati: se
                     // non arriva, il resto della schermata funziona lo stesso.
                     storico = runCatching { TasksRepository.storico() }.getOrDefault(emptyList()),
+                    // Idem le impostazioni: senza, «Prossimi» guarda i dieci
+                    // giorni di default invece di quelli configurati.
+                    impostazioni = runCatching { TasksRepository.impostazioni() }
+                        .getOrDefault(emptyMap()),
                     caricamento = false,
                 )
             } catch (e: Exception) {

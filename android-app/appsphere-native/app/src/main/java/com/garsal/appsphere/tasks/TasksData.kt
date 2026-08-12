@@ -129,6 +129,24 @@ data class TsTask(
         fun etichettaTipo(tipo: String): String =
             TIPI.firstOrNull { it.first == tipo }?.second ?: tipo
 
+        /**
+         * Il segno davanti alla data nella scheda della panoramica: sta al
+         * posto di `TASK_TYPE_SVG`, che nel web è un disegno per tipo.
+         *
+         * Sono glifi di sistema e non icone: `material-icons-extended` è
+         * fuori discussione (vedi CLAUDE.md, portava l'APK a 51 MB) e
+         * disegnare sei icone a mano per distinguere sei tipi che si leggono
+         * comunque dalla scheda non vale il codice che costa.
+         */
+        fun segnoTipo(tipo: String): String = when (tipo) {
+            "single" -> "☑"
+            "recurring", "simple_recurring" -> "↻"
+            "multiple" -> "▤"
+            "free_repeat" -> "↺"
+            "workflow" -> "⇊"
+            else -> "•"
+        }
+
         fun da(o: JsonObject): TsTask = TsTask(
             id = testo(o, "id") ?: "",
             titolo = testo(o, "title") ?: "(senza titolo)",
@@ -186,13 +204,28 @@ data class TsStorico(
     }
 }
 
-data class CmCategoria(val id: String, val nome: String, val icona: String?, val colore: String?) {
+data class CmCategoria(
+    val id: String,
+    val nome: String,
+    val icona: String?,
+    val colore: String?,
+    /**
+     * `show_in_dashboard`: decide se la categoria compare fra i gruppi dei
+     * task a libera ripetizione. Assente vale **falso**, come nel web
+     * (`if (cat && cat.show_in_dashboard)`): una categoria mai configurata
+     * non deve portarsi dietro i suoi task senza che nessuno l'abbia chiesto.
+     */
+    val inDashboard: Boolean,
+) {
+    val etichetta: String get() = "${icona.orEmpty()} $nome".trim()
+
     companion object {
         fun da(o: JsonObject) = CmCategoria(
             id = testo(o, "id") ?: "",
             nome = testo(o, "name") ?: "",
             icona = testo(o, "icon"),
             colore = testo(o, "color"),
+            inDashboard = booleano(o, "show_in_dashboard") ?: false,
         )
     }
 }
@@ -276,6 +309,17 @@ fun dataItaliana(iso: String?): String {
     return "%02d/%02d/%d".format(g.dayOfMonth, g.monthValue, g.year)
 }
 
+/**
+ * `2026-08-12T22:30:00` → `12-08-2026 22:30`, esattamente come `formatDateTime()`
+ * scrive la data in cima a ogni scheda della panoramica. Senza orario resta il
+ * solo giorno: una mezzanotte finta è peggio di niente.
+ */
+fun dataOraItaliana(iso: String?): String {
+    val g = giornoDa(iso) ?: return ""
+    val giorno = "%02d-%02d-%d".format(g.dayOfMonth, g.monthValue, g.year)
+    return oraDa(iso)?.let { "$giorno $it" } ?: giorno
+}
+
 fun isoDa(giorno: LocalDate, ora: String): String =
     "%04d-%02d-%02dT%s:00".format(giorno.year, giorno.monthValue, giorno.dayOfMonth, ora)
 
@@ -324,6 +368,21 @@ object TasksRepository {
         db.from("cm_categories").select(Columns.ALL).decodeList<JsonObject>()
             .map { CmCategoria.da(it) }
             .sortedBy { it.nome.lowercase() }
+    }
+
+    /**
+     * `ts_settings` come mappa chiave → valore, come `loadSettings()` nel web.
+     * Serve per ora a una sola voce, `dashboard_upcoming_days`: quanti giorni
+     * in avanti guarda la sezione **PROSSIMI**. Il valore si cambia dalle
+     * impostazioni di `tasks.html` e le due app devono leggere lo stesso.
+     */
+    suspend fun impostazioni(): Map<String, String> = withContext(Dispatchers.IO) {
+        db.from("ts_settings").select(Columns.ALL).decodeList<JsonObject>()
+            .mapNotNull { riga ->
+                val chiave = testo(riga, "key") ?: return@mapNotNull null
+                chiave to (testo(riga, "value") ?: "")
+            }
+            .toMap()
     }
 
     suspend fun priorita(): List<CmPriorita> = withContext(Dispatchers.IO) {
