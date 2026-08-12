@@ -36,6 +36,26 @@ Le app sono progettate per funzionare su:
 
 **Non supportato**: browser mobile (Chrome/Safari su smartphone/tablet). Tesseract.js causa problemi di rete su WebView mobile e browser mobile in generale. Su mobile usare esclusivamente l'app Android.
 
+### ⚠️ Sul telefono i caratteri di sistema sono molto grandi
+
+Non è un caso limite da verificare alla fine: **è la condizione normale in cui queste app vengono
+usate**. Salvatore tiene l'ingrandimento dei caratteri di Android su un valore alto, quindi ogni
+scritta arriva a schermo parecchio più grande di come si vede in anteprima o sul desktop. Va
+messo in conto **mentre** si scrive l'interfaccia, non dopo:
+
+- **niente altezze fisse attorno al testo.** `height(56.dp)` su una barra che contiene una scritta
+  è un ritaglio che aspetta il momento giusto per succedere — al primo ingrandimento il testo è più
+  alto del contenitore e quel che avanza sparisce. Si usa `heightIn(min = …)` (Compose) o
+  `min-height` (CSS), mai `height`;
+- **una riga sola è un'ipotesi, non un dato.** Titoli, etichette dei pulsanti e voci di menù vanno
+  a capo: o si lascia spazio per due righe, o si mette `maxLines` + ellissi decidendo *cosa* è più
+  importante che resti leggibile;
+- **le icone in `dp` non crescono col testo.** Accanto a una scritta ingrandita sembrano rimpicciolite:
+  dove stanno in fila con del testo conviene scalarle con `fontScale` (con un tetto, vedi
+  `GarsalTopBar`);
+- **le griglie si sfilacciano**: celle affiancate con testi di lunghezza diversa vanno a capo un
+  numero diverso di volte e perdono l'allineamento. Serve un'altezza minima comune, non una fissa.
+
 ---
 
 ## Repository Structure
