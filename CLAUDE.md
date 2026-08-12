@@ -635,13 +635,18 @@ non sparito), `cm_categories.show_in_dashboard` (decide quali gruppi di `free_re
 due categorie compare in tutt'e due i gruppi, come là, ma il conteggio della sezione resta quello
 dei task.
 
-Due differenze volute. Il **titolo sta su tre righe** invece di una sola con l'ellissi: coi
-caratteri di sistema grandi «CONDOMINIO Rata n. 4 722,66» tagliato a una riga perde proprio il
-numero che dice quale rata è (per lo stesso motivo le tre file della scheda sono `FlowRow` e vanno
-a capo). E un **ricorrente senza `next_occurrence_date`** ripiega su `start_date`, quindi finisce
-fra gli scaduti: nel web quel ripiego sta solo in `isTaskDueToday`, e un task così non compare in
-nessuna sezione. Toccare la scheda apre il dialogo col dettaglio, i punti di ogni azione e
-l'eliminazione.
+Le tre file della scheda — segno e data con le etichette, titolo, pulsanti — stanno **ognuna su una
+riga sola che scorre col dito** (`RigaScorrevole`), e non vanno a capo. È l'eccezione voluta alla
+regola sui caratteri di sistema grandi: andando a capo, con l'ingrandimento alto tre pulsanti
+diventano tre righe e il titolo altre tre, e in uno schermo ci sta un task e mezzo. Niente è
+nascosto — il testo tagliato dal bordo si trascina — **a patto che quel che conta di più stia a
+sinistra**: la data prima delle etichette, *Completa* prima di *Salta*. Lo scorrimento è
+orizzontale e quello della lista verticale, quindi i due gesti non si contendono niente e il tocco
+sulla scheda apre comunque il dialogo col dettaglio, i punti di ogni azione e l'eliminazione.
+
+Una differenza di sostanza col web: un **ricorrente senza `next_occurrence_date`** ripiega su
+`start_date`, quindi finisce fra gli scaduti; là quel ripiego sta solo in `isTaskDueToday`, e un
+task così non compare in nessuna sezione.
 
 Le due viste calendario non sono la copia pixel per pixel di `renderMonthView` e `renderWeekView`,
 e non possono esserlo: quelle scrivono i titoli dentro le celle di una griglia 7×6 e in sette
