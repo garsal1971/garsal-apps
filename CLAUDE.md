@@ -617,17 +617,37 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
-`tasks/` porta in nativo **l'elenco e il form**, non tutta `tasks.html` (niente planner,
-reminder, storico, impostazioni: quelli restano di là).
+`tasks/` porta in nativo **il planner** — tre schede, come i tre pulsanti in cima alla pagina
+Planner del web: *Panoramica* (elenco in ritardo / oggi / prossimi), *Mese*, *Settimana*. Si apre
+sul Mese. **Non si creano né si modificano task da qui**: per quello si usa `tasks.html`, e così
+restano di là anche reminder, storico e impostazioni.
+
+Le due viste calendario non sono la copia pixel per pixel di `renderMonthView` e `renderWeekView`,
+e non possono esserlo: quelle scrivono i titoli dentro le celle di una griglia 7×6 e in sette
+colonne da 150 px con scorrimento orizzontale, che coi caratteri di sistema grandi sono illeggibili
+prima ancora di essere tagliati. Nel **mese** la cella porta il numero del giorno e dei pallini
+colorati, uno per task, e il titolo si legge toccando il giorno; la **settimana** è un elenco
+verticale di sette giorni invece di sette colonne. **Quello che resta identico è la regola**:
+`TsTask.cadeIl()` ricalca `getTasksForDate()` colonna per colonna, la settimana parte di lunedì,
+il mese ha sempre sei righe e le fasce orarie sono le stesse quattro.
+
+Due differenze di sostanza, volute:
+
+- i task **`multiple` compaiono**. Nel web passano da `JSON.parse(task.multiple_dates)` dentro un
+  try/catch: quando la colonna è già una lista quella chiamata solleva, il catch la scarta, e quei
+  task non si vedono mai in calendario;
+- **niente doppioni**: il web concatena task vivi e storico senza guardarli, quindi un task
+  completato oggi che ha ancora oggi come prossima occorrenza compare due volte.
+
+Il calendario legge anche `ts_history`: senza, un mese indietro sarebbe vuoto, perché la prossima
+occorrenza di un ricorrente si sposta in avanti e le volte già fatte non stanno più in `ts_tasks`.
 
 - **Il ciclo di vita passa solo dalle RPC**, come sul web: `TasksViewModel` chiama
   `task_complete` / `task_skip` / `task_fail` e poi rilegge. Nessun calcolo di prossima
   occorrenza in Kotlin — sarebbe una seconda regola per lo stesso task, diversa a seconda
   dell'app da cui lo tocchi.
-- **I `workflow` si vedono e si completano, ma non si modificano.** I loro step hanno
-  dipendenze (`depends_on`) e uno stato che si ricalcola da quel grafo a ogni salvataggio: un
-  form che lo appiattisse in un elenco riscriverebbe `workflow_steps` in una forma che
-  `tasks.html` non sa più leggere. Il dialogo delle azioni lo dice invece di tacere.
+- **I `workflow` si vedono e si completano**, come tutti gli altri: quella parte la fa la RPC,
+  che sa già come trattare i loro step.
 - **`ts_tasks` si legge come `JsonObject`, non come `data class` serializzata.** La tabella non
   sta in nessuna migration e alcune colonne sono ambigue di natura — `recurring_days_of_week` è
   `text[]` *o* `integer[]`, `recurring_day_of_month` può essere una lista o un numero solo. Con

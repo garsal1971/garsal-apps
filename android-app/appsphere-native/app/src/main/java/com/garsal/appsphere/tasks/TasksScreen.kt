@@ -19,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -36,7 +35,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
@@ -51,9 +49,6 @@ fun TasksScreen(
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
 
-    // `null` = form chiuso. `BozzaTask?` dentro l'apertura distingue il nuovo
-    // (bozza vuota, id nullo) dalla modifica (bozza riempita, id del task).
-    var inModifica by remember { mutableStateOf<Pair<BozzaTask, String?>?>(null) }
     var azioniSu by remember { mutableStateOf<TsTask?>(null) }
     // Il planner si apre sul mese: è la vista che si guarda per sapere come sta
     // messo il periodo, ed è quella che serviva.
@@ -62,18 +57,6 @@ fun TasksScreen(
     var giornoAperto by remember { mutableStateOf<LocalDate?>(null) }
     var daEliminare by remember { mutableStateOf<TsTask?>(null) }
     var daSaltare by remember { mutableStateOf<TsTask?>(null) }
-
-    inModifica?.let { (bozza, id) ->
-        TaskForm(
-            bozzaIniziale = bozza,
-            id = id,
-            categorie = stato.categorie,
-            priorita = stato.priorita,
-            onAnnulla = { inModifica = null },
-            onSalva = { nuova -> vm.salva(nuova, id) { inModifica = null } },
-        )
-        return
-    }
 
     Scaffold(
         topBar = {
@@ -88,13 +71,6 @@ fun TasksScreen(
                     )
                 },
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { inModifica = BozzaTask() to null },
-                containerColor = Palette.topBar,
-                contentColor = Palette.light,
-            ) { Text("+", fontSize = 26.sp) }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -219,10 +195,6 @@ fun TasksScreen(
             onCompleta = { vm.completa(task.id); azioniSu = null },
             onSalta = { azioniSu = null; daSaltare = task },
             onFallisci = { vm.fallisci(task.id); azioniSu = null },
-            onModifica = {
-                azioniSu = null
-                inModifica = BozzaTask.da(task) to task.id
-            },
             onElimina = { azioniSu = null; daEliminare = task },
         )
     }
@@ -408,7 +380,6 @@ private fun DialogoAzioni(
     onCompleta: () -> Unit,
     onSalta: () -> Unit,
     onFallisci: () -> Unit,
-    onModifica: () -> Unit,
     onElimina: () -> Unit,
 ) {
     AlertDialog(
@@ -427,18 +398,16 @@ private fun DialogoAzioni(
                     Voce("⏭ Salta", "${task.puntiSalto} punti", Palette.warning, onSalta)
                 }
                 Voce("✗ Fallito", "${task.puntiFallimento} punti", Palette.danger, onFallisci)
-                if (task.modificabile) {
-                    Voce("✏️ Modifica", null, Palette.accent, onModifica)
-                } else {
-                    Text(
-                        text = "I workflow si modificano da tasks.html: i loro step hanno " +
-                            "dipendenze fra loro, e un form che le semplifica li romperebbe.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Palette.muted,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
                 Voce("🗑 Elimina", null, Palette.danger, onElimina)
+                // Creare e modificare restano su tasks.html: qui il planner
+                // serve a vedere come sta messo il periodo e a chiudere quello
+                // che è in scadenza, non a mettere in piedi un task nuovo.
+                Text(
+                    text = "Per creare o modificare un task si usa tasks.html.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Palette.muted,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
         },
         confirmButton = { TextButton(onClick = onChiudi) { Text("Chiudi") } },

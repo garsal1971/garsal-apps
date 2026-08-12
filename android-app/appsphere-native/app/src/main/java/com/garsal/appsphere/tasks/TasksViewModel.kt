@@ -166,24 +166,6 @@ class TasksViewModel : ViewModel() {
         }
     }
 
-    fun salva(bozza: BozzaTask, id: String?, poi: () -> Unit) {
-        viewModelScope.launch {
-            try {
-                TasksRepository.salva(bozza, id)
-                _state.value = _state.value.copy(
-                    messaggio = if (id == null) "Task creato" else "Task aggiornato"
-                )
-                ricaricaTask()
-                poi()
-            } catch (e: Exception) {
-                Log.w(TAG, "salvataggio non riuscito", e)
-                _state.value = _state.value.copy(
-                    messaggio = "Non salvato: ${e.message ?: "connessione assente"}"
-                )
-            }
-        }
-    }
-
     /**
      * Cancellazione ottimistica: il task sparisce subito e torna se il
      * database dice di no. Come le spunte di Spuntiamola, e per la stessa
