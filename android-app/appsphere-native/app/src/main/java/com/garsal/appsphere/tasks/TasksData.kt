@@ -1,0 +1,425 @@
+package com.garsal.appsphere.tasks
+
+import com.garsal.appsphere.core.Supabase
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+// ── Perché qui non ci sono @Serializable data class ──────────────────────────
+//
+// `ts_tasks` non sta in nessuna migration: è una delle tabelle create a mano
+// prima che esistesse `supabase/migrations/`, e `tasks.html` la legge con
+// `select('*')`. Le colonne si conoscono solo da come la pagina le scrive, e
+// alcune sono ambigue di natura: `recurring_day_of_month` la pagina la scrive
+// come lista di numeri, ma i task creati con le versioni vecchie possono avere
+// lì un numero singolo.
+//
+// Con una data class serializzata, una sola colonna del tipo sbagliato fa
+// fallire la decodifica **dell'intera lista**: non si vedrebbe un task storto,
+// si vedrebbe la schermata vuota. Qui si legge un JsonObject e si converte
+// campo per campo con letture tolleranti: un valore inatteso costa quel campo,
+// non tutti i task.
+
+/** Un task. I nomi sono quelli delle colonne, tradotti. */
+data class TsTask(
+    val id: String,
+    val titolo: String,
+    val descrizione: String?,
+    val tipo: String,
+    val categorie: List<String>,
+    val prioritaId: String?,
+    val stato: String,
+    val dataInizio: String?,
+    val scadenza: String?,
+    val prossimaOccorrenza: String?,
+    val puntiSuccesso: Int,
+    val puntiFallimento: Int,
+    val puntiSalto: Int,
+    val puntiRitardo: Int,
+    val riservato: Boolean,
+    val inPanoramica: Boolean,
+    val frequenza: String?,
+    val intervallo: Int?,
+    val giorniSettimana: List<Int>,
+    val giorniMese: List<Int>,
+    val dateAnnuali: List<String>,
+    val ripetiDopoGiorni: Int?,
+    val dateMultiple: List<String>,
+    val ultimoCompletamento: String?,
+) {
+    /** La data che conta per «quando tocca»: la stessa che guarda `isTaskDueToday`. */
+    val dataDiRiferimento: String?
+        get() = when (tipo) {
+            "single" -> dataInizio
+            "free_repeat" -> null
+            else -> prossimaOccorrenza ?: dataInizio
+        }
+
+    val giornoDiRiferimento: LocalDate? get() = giornoDa(dataDiRiferimento)
+
+    /** I `workflow` non si modificano da qui: vedi `TaskForm`. */
+    val modificabile: Boolean get() = tipo != "workflow"
+
+    companion object {
+        val TIPI = listOf(
+            "single" to "Singolo",
+            "simple_recurring" to "Ricorrenza semplice",
+            "recurring" to "Ricorrente",
+            "multiple" to "Date multiple",
+            "free_repeat" to "Libera ripetizione",
+            "workflow" to "Workflow",
+        )
+
+        fun etichettaTipo(tipo: String): String =
+            TIPI.firstOrNull { it.first == tipo }?.second ?: tipo
+
+        fun da(o: JsonObject): TsTask = TsTask(
+            id = testo(o, "id") ?: "",
+            titolo = testo(o, "title") ?: "(senza titolo)",
+            descrizione = testo(o, "description"),
+            tipo = testo(o, "type") ?: "single",
+            categorie = listaTesti(o, "categories"),
+            prioritaId = testo(o, "priority_id"),
+            stato = testo(o, "status") ?: "started",
+            dataInizio = testo(o, "start_date"),
+            scadenza = testo(o, "deadline"),
+            prossimaOccorrenza = testo(o, "next_occurrence_date"),
+            puntiSuccesso = numero(o, "success_points") ?: 0,
+            puntiFallimento = numero(o, "failure_points") ?: 0,
+            puntiSalto = numero(o, "skip_points") ?: 0,
+            puntiRitardo = numero(o, "late_points") ?: 0,
+            riservato = booleano(o, "riservato") ?: false,
+            inPanoramica = booleano(o, "show_in_panoramica") ?: true,
+            frequenza = testo(o, "recurring_frequency"),
+            intervallo = numero(o, "recurring_interval"),
+            giorniSettimana = listaNumeri(o, "recurring_days_of_week"),
+            giorniMese = listaNumeri(o, "recurring_day_of_month"),
+            dateAnnuali = listaTesti(o, "recurring_dates"),
+            ripetiDopoGiorni = numero(o, "repeat_after_days"),
+            dateMultiple = listaTesti(o, "multiple_dates"),
+            ultimoCompletamento = testo(o, "last_completed_date"),
+        )
+    }
+}
+
+data class CmCategoria(val id: String, val nome: String, val icona: String?, val colore: String?) {
+    companion object {
+        fun da(o: JsonObject) = CmCategoria(
+            id = testo(o, "id") ?: "",
+            nome = testo(o, "name") ?: "",
+            icona = testo(o, "icon"),
+            colore = testo(o, "color"),
+        )
+    }
+}
+
+data class CmPriorita(val id: String, val nome: String, val colore: String?, val valore: Int) {
+    companion object {
+        fun da(o: JsonObject) = CmPriorita(
+            id = testo(o, "id") ?: "",
+            nome = testo(o, "name") ?: "",
+            colore = testo(o, "color"),
+            valore = numero(o, "value") ?: 0,
+        )
+    }
+}
+
+// ── Letture tolleranti ───────────────────────────────────────────────────────
+
+private fun campo(o: JsonObject, chiave: String) = o[chiave]?.takeIf { it !is JsonNull }
+
+internal fun testo(o: JsonObject, chiave: String): String? =
+    (campo(o, chiave) as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+
+internal fun numero(o: JsonObject, chiave: String): Int? =
+    (campo(o, chiave) as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt()
+
+internal fun booleano(o: JsonObject, chiave: String): Boolean? =
+    (campo(o, chiave) as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+
+/** Accetta sia una lista sia un valore solo, che diventa lista di uno. */
+internal fun listaTesti(o: JsonObject, chiave: String): List<String> =
+    when (val v = campo(o, chiave)) {
+        is JsonArray -> v.mapNotNull { (it as? JsonPrimitive)?.content }
+        is JsonPrimitive -> listOf(v.content)
+        else -> emptyList()
+    }
+
+internal fun listaNumeri(o: JsonObject, chiave: String): List<Int> =
+    when (val v = campo(o, chiave)) {
+        is JsonArray -> v.mapNotNull { (it as? JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() }
+        is JsonPrimitive -> listOfNotNull(v.content.toDoubleOrNull()?.toInt())
+        else -> emptyList()
+    }
+
+// ── Date ─────────────────────────────────────────────────────────────────────
+//
+// Sul database convivono due forme: `2026-08-12T08:00:00` (quella che scrive
+// `localDateTimeStr()` nella pagina) e `2026-08-12 08:00:00+00` (come Postgres
+// rende un timestamptz). Nessuna delle due va data in pasto a un parser
+// severo: si prendono i primi dieci caratteri per il giorno e i cinque
+// dell'orario, che è quello che serve a mostrarli e a confrontarli.
+
+private val FORMATO_SCRITTURA = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+
+fun adessoIso(): String = LocalDateTime.now().format(FORMATO_SCRITTURA)
+
+fun giornoDa(iso: String?): LocalDate? =
+    iso?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+fun oraDa(iso: String?): String? =
+    iso?.takeIf { it.length >= 16 }?.substring(11, 16)
+
+/** `2026-08-12` → `12/08/2026`, il formato che si legge in tutte le pagine. */
+fun dataItaliana(iso: String?): String {
+    val g = giornoDa(iso) ?: return "—"
+    return "%02d/%02d/%d".format(g.dayOfMonth, g.monthValue, g.year)
+}
+
+fun isoDa(giorno: LocalDate, ora: String): String =
+    "%04d-%02d-%02dT%s:00".format(giorno.year, giorno.monthValue, giorno.dayOfMonth, ora)
+
+// ── Repository ───────────────────────────────────────────────────────────────
+
+object TasksRepository {
+
+    private val db get() = Supabase.client().postgrest
+
+    /**
+     * I task non archiviati e non riservati.
+     *
+     * Il filtro è in Kotlin e non in una `filter { }` di PostgREST: le righe
+     * sono poche (le RLS ne lasciano passare solo le proprie) e così la query
+     * resta una `select(*)` come quella della pagina, senza dipendere da come
+     * la libreria scrive «riservato è falso **oppure** è nullo».
+     *
+     * Sui riservati si tiene la modalità normale del web: non compaiono. La
+     * modalità nascosta qui non c'è, ed è la scelta prudente per una schermata
+     * che si apre senza chiedere niente.
+     */
+    suspend fun task(): List<TsTask> = withContext(Dispatchers.IO) {
+        db.from("ts_tasks")
+            .select(Columns.ALL)
+            .decodeList<JsonObject>()
+            .map { TsTask.da(it) }
+            .filter { !it.riservato && it.stato != "archived" && it.stato != "cancelled" }
+    }
+
+    suspend fun categorie(): List<CmCategoria> = withContext(Dispatchers.IO) {
+        db.from("cm_categories").select(Columns.ALL).decodeList<JsonObject>()
+            .map { CmCategoria.da(it) }
+            .sortedBy { it.nome.lowercase() }
+    }
+
+    suspend fun priorita(): List<CmPriorita> = withContext(Dispatchers.IO) {
+        db.from("cm_priorities").select(Columns.ALL).decodeList<JsonObject>()
+            .map { CmPriorita.da(it) }
+            .sortedByDescending { it.valore }
+    }
+
+    // ── Ciclo di vita: sempre e solo le RPC ──────────────────────────────
+    //
+    // ⚠️ Regola della repo, non una preferenza: il calcolo della prossima
+    // occorrenza, l'aggiornamento di `ts_tasks`, la riga in `ts_history` e le
+    // notifiche vivono **solo** nelle funzioni SQL. Il client chiama e
+    // ricarica. Rifare quei conti qui vorrebbe dire avere due regole diverse
+    // per lo stesso task a seconda dell'app da cui lo si tocca.
+
+    suspend fun completa(id: String): Esito = rpc("task_complete") {
+        put("p_task_id", id)
+        put("p_today", LocalDate.now().toString())
+    }
+
+    suspend fun salta(id: String, giorni: Int): Esito = rpc("task_skip") {
+        put("p_task_id", id)
+        put("p_days", giorni)
+    }
+
+    suspend fun fallisci(id: String): Esito = rpc("task_fail") {
+        put("p_task_id", id)
+    }
+
+    private suspend fun rpc(nome: String, parametri: JsonObjectBuilderScope): Esito =
+        withContext(Dispatchers.IO) {
+            val risposta = db.rpc(nome, buildJsonObject(parametri)).decodeAs<JsonObject>()
+            Esito(
+                ok = booleano(risposta, "ok") ?: false,
+                azione = testo(risposta, "action"),
+                punti = numero(risposta, "points"),
+                errore = testo(risposta, "error"),
+            )
+        }
+
+    suspend fun elimina(id: String) = withContext(Dispatchers.IO) {
+        db.from("ts_tasks").delete { filter { eq("id", id) } }
+        Unit
+    }
+
+    suspend fun salva(bozza: BozzaTask, id: String?) = withContext(Dispatchers.IO) {
+        val corpo = bozza.aJson()
+        if (id == null) db.from("ts_tasks").insert(corpo)
+        else db.from("ts_tasks").update(corpo) { filter { eq("id", id) } }
+        Unit
+    }
+
+    data class Esito(val ok: Boolean, val azione: String?, val punti: Int?, val errore: String?)
+}
+
+private typealias JsonObjectBuilderScope = kotlinx.serialization.json.JsonObjectBuilder.() -> Unit
+
+/**
+ * Quello che il form compila. Separata da [TsTask] perché il form lavora su
+ * campi in corso di modifica — testo ancora da convertire, date non scelte —
+ * mentre `TsTask` è quello che il database ha già accettato.
+ */
+data class BozzaTask(
+    val titolo: String = "",
+    val descrizione: String = "",
+    val tipo: String = "single",
+    val categorie: List<String> = emptyList(),
+    val prioritaId: String? = null,
+    val giorno: LocalDate = LocalDate.now(),
+    val ora: String = "09:00",
+    val scadenza: LocalDate? = null,
+    val puntiSuccesso: Int = 10,
+    val puntiFallimento: Int = -5,
+    val puntiSalto: Int = -2,
+    val puntiRitardo: Int = 0,
+    val inPanoramica: Boolean = true,
+    // ricorrente
+    val frequenza: String = "daily",
+    val intervallo: Int = 1,
+    val giorniSettimana: List<Int> = emptyList(),
+    val giorniMese: List<Int> = emptyList(),
+    val dateAnnuali: List<String> = emptyList(),
+    // ricorrenza semplice
+    val ripetiDopoGiorni: Int = 7,
+    // date multiple
+    val dateMultiple: List<String> = emptyList(),
+) {
+    val valida: Boolean
+        get() = titolo.isNotBlank() && when (tipo) {
+            "multiple" -> dateMultiple.isNotEmpty()
+            "recurring" -> when (frequenza) {
+                "weekly" -> giorniSettimana.isNotEmpty()
+                "monthly" -> giorniMese.isNotEmpty()
+                "yearly" -> dateAnnuali.isNotEmpty()
+                else -> true
+            }
+            else -> true
+        }
+
+    /**
+     * Il corpo da scrivere, campo per campo come lo scrive `saveTask()` nella
+     * pagina web — compresa la regola che alla creazione
+     * `next_occurrence_date` parte uguale a `start_date`, tranne per i task a
+     * date multiple, dove è la **prima data** dell'elenco.
+     */
+    fun aJson(): JsonObject {
+        val inizio = isoDa(giorno, ora)
+        return buildJsonObject {
+            put("title", titolo.trim())
+            put("description", descrizione.trim().ifBlank { null })
+            put("type", tipo)
+            put("categories", buildJsonArray { categorie.forEach { add(it) } })
+            put("priority_id", prioritaId)
+            put("start_date", inizio)
+            put("success_points", puntiSuccesso)
+            put("failure_points", puntiFallimento)
+            put("skip_points", puntiSalto)
+            put("late_points", puntiRitardo)
+            put("show_in_panoramica", inPanoramica)
+            put("riservato", false)
+            put("status", "started")
+
+            when (tipo) {
+                "single" -> {
+                    put("deadline", scadenza?.let { isoDa(it, ora) })
+                    put("next_occurrence_date", inizio)
+                }
+
+                "simple_recurring" -> {
+                    put("repeat_after_days", ripetiDopoGiorni)
+                    put("next_occurrence_date", inizio)
+                }
+
+                "recurring" -> {
+                    put("recurring_frequency", frequenza)
+                    put("recurring_interval", intervallo)
+                    put("next_occurrence_date", inizio)
+                    when (frequenza) {
+                        "weekly" ->
+                            put("recurring_days_of_week", buildJsonArray { giorniSettimana.sorted().forEach { add(it) } })
+                        "monthly" ->
+                            put("recurring_day_of_month", buildJsonArray { giorniMese.sorted().forEach { add(it) } })
+                        "yearly" -> {
+                            val ordinate = dateAnnuali.sorted()
+                            put("recurring_dates", buildJsonArray { ordinate.forEach { add(it) } })
+                            // Le colonne vecchie restano allineate alla prima
+                            // data: `task_next_recurring_date` le guarda ancora
+                            // per i task nati prima di `recurring_dates`.
+                            // Letta per indice e non destrutturata: una voce
+                            // malformata darebbe un errore invece di un campo
+                            // in meno.
+                            val pezzi = ordinate.firstOrNull()?.split("-").orEmpty()
+                            put("recurring_day_of_year", pezzi.getOrNull(0)?.toIntOrNull())
+                            put("recurring_month", pezzi.getOrNull(1)?.toIntOrNull())
+                        }
+                    }
+                }
+
+                "multiple" -> {
+                    val ordinate = dateMultiple.sorted()
+                    put("multiple_dates", buildJsonArray { ordinate.forEach { add(it) } })
+                    put("next_occurrence_date", ordinate.firstOrNull()?.let { "${it}T$ora:00" })
+                }
+
+                // `free_repeat` non ha una prossima occorrenza: si ripete
+                // quando si vuole, e la pagina web lo tiene fuori da «oggi».
+                // `JsonNull` e non `null`: un null nudo qui non saprebbe
+                // quale `put` scegliere fra stringa, numero e booleano.
+                "free_repeat" -> put("next_occurrence_date", JsonNull)
+            }
+        }
+    }
+
+    companion object {
+        fun da(t: TsTask): BozzaTask {
+            val riferimento = t.dataDiRiferimento ?: t.dataInizio
+            return BozzaTask(
+                titolo = t.titolo,
+                descrizione = t.descrizione.orEmpty(),
+                tipo = t.tipo,
+                categorie = t.categorie,
+                prioritaId = t.prioritaId,
+                giorno = giornoDa(riferimento) ?: LocalDate.now(),
+                ora = oraDa(riferimento) ?: "09:00",
+                scadenza = giornoDa(t.scadenza),
+                puntiSuccesso = t.puntiSuccesso,
+                puntiFallimento = t.puntiFallimento,
+                puntiSalto = t.puntiSalto,
+                puntiRitardo = t.puntiRitardo,
+                inPanoramica = t.inPanoramica,
+                frequenza = t.frequenza ?: "daily",
+                intervallo = t.intervallo ?: 1,
+                giorniSettimana = t.giorniSettimana,
+                giorniMese = t.giorniMese,
+                dateAnnuali = t.dateAnnuali,
+                ripetiDopoGiorni = t.ripetiDopoGiorni ?: 7,
+                dateMultiple = t.dateMultiple,
+            )
+        }
+    }
+}
