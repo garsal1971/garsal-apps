@@ -3,16 +3,18 @@ package com.garsal.appsphere.tasks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,9 +47,11 @@ import com.garsal.appsphere.core.coloreDaHex
  * che hanno una prossima occorrenza a cui saltare, e su un `single`
  * `task_skip` chiederebbe di quanti giorni spostarlo.
  *
- * Coi caratteri di sistema grandi le tre file (segno + data, etichette,
- * pulsanti) vanno a capo invece di essere tagliate: sono tutte `FlowRow`, e la
- * scheda non ha nessuna altezza fissa.
+ * Le tre file della scheda — segno e data con le etichette, titolo, pulsanti —
+ * stanno **ognuna su una riga sola** e non vanno a capo: coi caratteri di
+ * sistema grandi quel che non entra si raggiunge scorrendo col dito
+ * (`RigaScorrevole`). La scheda non ha comunque nessuna altezza fissa: cresce
+ * col testo, semplicemente non si moltiplica in righe.
  */
 @Composable
 fun VistaPanoramica(
@@ -198,7 +202,6 @@ private fun Sezione(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
     // Le prime due categorie e poi «+N», come nel web: tre etichette lunghe
@@ -216,16 +219,14 @@ private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
             .clickable { azioni.apri(task) }
             .padding(10.dp),
     ) {
-        FlowRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+        RigaScorrevole(Arrangement.spacedBy(6.dp)) {
             Text(
                 text = "${TsTask.segnoTipo(task.tipo)}  ${data.ifEmpty { TsTask.etichettaTipo(task.tipo) }}",
                 fontWeight = FontWeight.SemiBold,
                 color = Palette.dark,
                 style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                softWrap = false,
             )
             categorie.take(2).forEach { c ->
                 Etichetta(c.etichetta, coloreDaHex(c.colore) ?: Palette.accent)
@@ -233,23 +234,18 @@ private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
             if (categorie.size > 2) Etichetta("+${categorie.size - 2}", Palette.muted)
         }
 
-        Text(
-            text = task.titolo,
-            color = Palette.dark,
-            style = MaterialTheme.typography.titleMedium,
-            // Il web taglia il titolo su una riga sola; qui ne stanno tre,
-            // perché un titolo ingrandito arriva a capo per forza e «CONDOMINIO
-            // Rata n. 4 722,66» senza il numero non dice più quale rata è.
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
-        )
+        RigaScorrevole(Arrangement.Start, Modifier.padding(top = 6.dp, bottom = 8.dp)) {
+            Text(
+                text = task.titolo,
+                color = Palette.dark,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Visible,
+            )
+        }
 
-        FlowRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        RigaScorrevole(Arrangement.spacedBy(8.dp)) {
             Pulsante("Completa", Palette.success) { azioni.completa(task) }
             if (task.tipo != "free_repeat") {
                 Pulsante("Fallisci", Palette.danger) { azioni.fallisci(task) }
@@ -259,6 +255,38 @@ private fun SchedaTask(task: TsTask, stato: TasksState, azioni: AzioniScheda) {
             }
         }
     }
+}
+
+/**
+ * Una riga che **non va mai a capo**: quello che non entra si raggiunge
+ * scorrendo col dito verso sinistra.
+ *
+ * È la scelta opposta al solito consiglio sui caratteri di sistema grandi, ed
+ * è voluta. Andare a capo tiene tutto leggibile ma allunga la scheda: con
+ * l'ingrandimento alto tre pulsanti diventano tre righe, il titolo altre tre,
+ * e in uno schermo ci sta un task e mezzo. Una riga sola tiene la scheda
+ * compatta e non nasconde niente — il testo tagliato dal bordo non è perso,
+ * basta trascinarlo — a patto che quello che conta di più stia **a sinistra**:
+ * la data prima delle etichette, *Completa* prima di *Salta*.
+ *
+ * Lo scorrimento è orizzontale e quello della lista verticale: i due gesti non
+ * si contendono niente, e il tocco sulla scheda continua ad aprire il dettaglio
+ * perché un trascinamento non è un tocco.
+ */
+@Composable
+private fun RigaScorrevole(
+    disposizione: Arrangement.Horizontal,
+    modifier: Modifier = Modifier,
+    contenuto: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = disposizione,
+        verticalAlignment = Alignment.CenterVertically,
+        content = contenuto,
+    )
 }
 
 /** Gli unici tipi su cui il web offre **Salta**: hanno una prossima occorrenza. */
@@ -288,7 +316,8 @@ private fun Etichetta(testo: String, colore: Color) {
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.labelMedium,
         maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        softWrap = false,
+        overflow = TextOverflow.Visible,
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(colore)
