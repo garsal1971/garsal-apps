@@ -418,12 +418,43 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 
 | Funzione | Job | Cosa fa |
 |---|---|---|
-| `get-prices` | orario | Aggiorna `fnz_price_cache` (un trigger propaga su `fnz_price_history`). Una fonte diversa per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko in batch + Coinbase come ripiego, azioni→TwelveData/GoogleFinance |
+| `get-prices` | orario | Aggiorna `fnz_price_cache` (un trigger propaga su `fnz_price_history`). Una fonte diversa per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF (scheda HTML)/Yahoo/Investing, crypto→CoinGecko in batch + Coinbase come ripiego, azioni→TwelveData/GoogleFinance |
 | `enable-banking-connect` / `-callback` / `-aspsps` / `-refresh-accounts` | — | Collegamento di un conto: catalogo banche, avvio del consenso (`connect` riceve solo `institutionId` e legge banca e paese da `cm_institutions`), redirect di ritorno e rilettura dei conti di una sessione già ottenuta. Il callback crea i conti anonimi e riporta sempre su `finanza.html`, con il `session_id` del consenso perché la pagina apra subito il battesimo |
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html`, `casarosa.html` e da `finanza.html` → 🌹 Danaro di Rosa) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
+
+### ⚠️ Un prezzo può essere insieme plausibile e sbagliato
+
+Il modo peggiore in cui `get-prices` si rompe non è restare senza prezzo — quello si vede, la
+riga in Finanza → Prezzi diventa arancione «Non oggi». È **scrivere in cache un numero che
+sembra un prezzo e non lo è**: la riga resta verde «OK» e il patrimonio è falso senza che da
+nessuna parte compaia un errore.
+
+È successo il 13 agosto 2026 con **BTP10** (Amundi Ita BTP 10y, quota ≈157 €), finito in cache a
+poche unità di euro. La causa: `/api/etfs/{ISIN}/performance` di JustETF veniva letto come un
+listino, ma il suo `latestValue` — come i `positions[].value` — è una **performance in
+percentuale**, e `valuation=NAV` non cambia la natura di quei numeri. Era la stessa trappola già
+annotata nel codice per il `latestValue` della pagina HTML: **lo stesso nome di campo, sulla
+stessa fonte, vuol dire due cose diverse dal prezzo.** L'endpoint è stato tolto (v5.18.0): per
+gli ETF resta lo scraping della scheda HTML, poi Yahoo, Investing.com ed Euronext.
+
+Due regole che ne discendono, entrambe già in codice:
+
+- **ogni prezzo entra da un varco solo**, `pushPrice()`, che arrotonda, confronta con l'ultimo
+  prezzo noto e scarta chi se ne discosta di oltre il 50 % (`MAX_PRICE_DEVIATION`; le crypto sono
+  escluse, quel movimento lo fanno davvero). Una fonte scartata non ferma il giro: si passa alla
+  successiva, e se non risponde nessuna resta il prezzo di ieri — un buco è visibile, un numero
+  sbagliato no;
+- **il confronto si disarma da sé** dopo tre giorni senza scritture (`PREV_PRICE_MAX_AGE_MS`),
+  altrimenti si morde la coda: un valore sbagliato in cache (o uno split vero) farebbe scartare
+  per sempre i prezzi giusti che arrivano dopo. Finché una fonte risponde `updated_at` si
+  riscrive ogni ora anche a mercati chiusi, quindi tre giorni non sono un fine settimana.
+
+Aggiungendo una fonte nuova: il prezzo va restituito e passato a `pushPrice()`, mai messo in
+`rows` a mano — e prima di fidarsi di un campo JSON conviene guardare **cosa misura**, non come
+si chiama.
 
 ### ⚠️ Header PSU obbligatori per alcune banche
 
