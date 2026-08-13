@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.18.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
+const VERSION = "5.18.1"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -194,6 +194,15 @@ const GOOGLE_FINANCE_SYMBOL_MAP: Record<string, { exchange: string; currency: st
 // Known ISIN → direct Investing.com ETF page URL.
 // Add entries here when a new ETF is not reachable via JustETF/Yahoo.
 const INVESTING_COM_URLS: Record<string, string> = {
+  // ⚠️ DA VERIFICARE: LU1900066033 è CHIP, Amundi MSCI Semiconductors (ex Lyxor),
+  // ma lo slug dice «msci-taiwan» — un altro indice, non un altro nome dello stesso.
+  // Gli altri quattro URL qui sotto descrivono tutti lo strumento giusto, questo no.
+  // Se la pagina è davvero quella dell'ETF Taiwan, questa riga scrive per CHIP il
+  // prezzo di un fondo diverso: i due possono stare entro il 50 %, quindi
+  // `pushPrice()` non se ne accorgerebbe. Si arriva qui solo se JustETF e Yahoo
+  // falliscono entrambi (per CHIP di norma risponde Yahoo, CHIP.SW convertito da
+  // CHF), quindi finora non è mai stata la fonte in uso. Aprire l'URL e, se porta
+  // al fondo sbagliato, togliere la riga: restano JustETF, Yahoo ed Euronext.
   "LU1900066033": "https://it.investing.com/etfs/lyxor-msci-taiwan",
   "LU1390062831": "https://www.investing.com/etfs/infu",
   "FR0011758085": "https://it.investing.com/etfs/lyxor-ftse-italia-mid-cap",
