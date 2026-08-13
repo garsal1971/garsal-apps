@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.67</title>
+    <title>Analisi Costi v1.0.68</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -353,7 +353,7 @@
         <div class="page" id="transactionsPage">
             <div class="page-header">
                 <h1 class="page-title">Transazioni</h1>
-                <button class="btn btn-accent btn-small" onclick="suggestCategoriesWithAI()">🤖 Suggerisci con AI</button>
+                <button class="btn btn-accent btn-small" onclick="suggestRulesWithAI()">🤖 Suggerisci regole con AI</button>
             </div>
             <div class="card">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
@@ -669,18 +669,18 @@
     </div>
 </div>
 
-<!-- ====== MODAL: SUGGERIMENTI AI ====== -->
+<!-- ====== MODAL: REGOLE SUGGERITE DALL'AI ====== -->
 <div class="modal" id="aiSuggestionsModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2 class="modal-title" id="aiSuggestionsTitle">Suggerimenti AI</h2>
+            <h2 class="modal-title" id="aiSuggestionsTitle">Regole suggerite</h2>
             <span class="modal-close" onclick="closeAiSuggestionsModal()">✕</span>
         </div>
-        <p class="form-hint" style="margin-bottom:1rem;">Verifica i suggerimenti prima di applicarli: verranno assegnati a tutte le transazioni con lo stesso titolo e memorizzati per i prossimi import.</p>
+        <p class="form-hint" style="margin-bottom:1rem;">Ogni riga è una <strong>regola</strong> proposta dall'AI a partire da una transazione ancora senza categoria: correggi il testo da cercare (accorciandolo aggancia più transazioni) e la categoria, poi salvala. La regola finisce fra le Regole, vale per gli import futuri e viene applicata subito alle transazioni senza categoria che la soddisfano.</p>
         <div id="aiSuggestionsList" style="max-height:55vh;overflow-y:auto;"></div>
         <button type="button" class="btn btn-ghost btn-small" style="width:100%;margin-top:.75rem;" onclick="openCategoryModalFromAiSuggestions()">+ Nuova categoria/sotto-categoria</button>
         <div style="display:flex;gap:.75rem;margin-top:1.25rem;">
-            <button class="btn btn-primary" style="flex:1;" onclick="applyAllAiSuggestions()">Applica tutte</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="saveAllAiRules()">Salva tutte le regole</button>
             <button class="btn btn-secondary" onclick="closeAiSuggestionsModal()">Chiudi</button>
         </div>
     </div>
@@ -843,8 +843,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.67';
-    var BUILD_TIME  = '2026-08-08T20:10:00Z';
+    var APP_VERSION = 'v1.0.68';
+    var BUILD_TIME  = '2026-08-13T10:30:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3106,9 +3106,15 @@
     }
 
     // ==========================================
-    // SUGGERIMENTI CATEGORIA CON AI (Groq, edge function categorize-transactions)
+    // REGOLE SUGGERITE DALL'AI (Groq, edge function geo-lookup-transactions)
     // ==========================================
-    let _aiSuggestions = []; // [{ description, categoryId, count }]
+    // Lo scopo non è categorizzare la singola transazione — per quello bastano la tendina sulla
+    // riga e i merchant appresi — ma proporre una REGOLA riutilizzabile: testo da cercare +
+    // categoria. L'utente la corregge (di norma accorciando il testo, che l'AI ricava da una
+    // descrizione sola e tende a tenere troppo specifico) e la salva in ca_rules, dove vale
+    // anche per gli import futuri e per descrizioni che l'AI non ha mai visto — cosa che un
+    // merchant appreso, legato a una singola descrizione normalizzata, non fa.
+    let _aiSuggestions = []; // [{ description, pattern, categoryId, count, source }]
     let _aiSuggestionsReturnPending = false; // torna al modale AI dopo aver creato una categoria al volo
 
     // La ricerca geografica (Nominatim) parte per prima su ogni merchant, poi il risultato
@@ -3142,7 +3148,7 @@
         return parent ? `${parent.name} > ${c.name}` : c.name;
     }
 
-    async function suggestCategoriesWithAI() {
+    async function suggestRulesWithAI() {
         const leaves = leafCategories();
         if (!leaves.length) { alert('Crea prima almeno una categoria (o sotto-categoria) selezionabile.'); return; }
 
@@ -3152,23 +3158,32 @@
             .filter(r => r.categoryName)
             .slice(0, 150);
 
-        // Un rappresentante per ogni merchant normalizzato ancora senza categoria
+        // Un rappresentante per ogni merchant normalizzato ancora senza categoria. Le descrizioni
+        // già agganciate da una regola esistente restano fuori: la regola c'è, manca solo la
+        // rianalisi — proporne una seconda per lo stesso esercente sarebbe un doppione.
         const seen = new Map();
+        let alreadyRuled = 0;
         transactions.forEach(t => {
             if (getTxCategoryIds(t.id).length) return; // già categorizzata
             const key = normalizeMerchant(t.description);
             if (!key) return;
+            if (rules.some(r => matchesPattern(t.description, r.pattern))) { alreadyRuled++; return; }
             if (!seen.has(key)) seen.set(key, { description: t.description, count: 0 });
             seen.get(key).count++;
         });
         const uncategorized = [...seen.values()];
-        if (!uncategorized.length) { showToast('Nessuna transazione da categorizzare'); return; }
+        if (!uncategorized.length) {
+            showToast(alreadyRuled
+                ? `Nessun esercente nuovo: ${alreadyRuled} transazioni sono già coperte da una regola, riapplicala dalla pagina Regole`
+                : 'Nessuna transazione da categorizzare');
+            return;
+        }
 
         // Ricerca geografica (Nominatim + città) per ogni merchant, poi un'unica classificazione
         // con Groq per batch che usa anche l'indizio geografico trovato. Si elabora SOLO il
-        // primo blocco (GEO_BATCH_SIZE merchant): applicando quei suggerimenti i merchant
-        // escono dalla lista "da categorizzare", quindi ripetere "Suggerisci con AI" fa avanzare
-        // al blocco successivo senza dover incatenare più chiamate lente in sequenza qui.
+        // primo blocco (GEO_BATCH_SIZE merchant): salvando quelle regole i merchant escono dalla
+        // lista "da categorizzare", quindi ripetere "Suggerisci regole con AI" fa avanzare al
+        // blocco successivo senza dover incatenare più chiamate lente in sequenza qui.
         const batches = chunk(uncategorized, GEO_BATCH_SIZE);
         const batch = batches[0];
         const remaining = uncategorized.length - batch.length;
@@ -3195,7 +3210,16 @@
                 console.error('Batch geo fallito:', data?.error?.message || res.status);
                 failedBatches++;
             } else {
-                (data.results || []).forEach((r, i) => allResults.push({ ...r, count: batch[i]?.count || 1 }));
+                // Il pattern proposto dall'AI è già stato verificato lato edge function come
+                // sottostringa della descrizione; quando manca si ripiega sul merchant
+                // normalizzato, che è il testo che l'app userebbe comunque per riconoscerlo.
+                (data.results || []).forEach((r, i) => allResults.push({
+                    description: batch[i]?.description || r.description,
+                    categoryId: r.categoryId || null,
+                    pattern: (r.pattern || '').trim() || normalizeMerchant(batch[i]?.description || r.description),
+                    count: batch[i]?.count || 1,
+                    source: r.source
+                }));
             }
         } catch (e) {
             console.error('Errore batch geo:', e);
@@ -3210,13 +3234,13 @@
 
         if (failedBatches) {
             const msg = `⚠️ Richiesta fallita`
-                + (_aiSuggestions.length ? ` — ${_aiSuggestions.length} suggerimenti comunque disponibili` : '. Verifica che GROQ_API_KEY sia configurata correttamente nei Supabase Secrets.');
+                + (_aiSuggestions.length ? ` — ${_aiSuggestions.length} regole comunque disponibili` : '. Verifica che GROQ_API_KEY sia configurata correttamente nei Supabase Secrets.');
             showToast(msg, true);
         } else if (remaining > 0) {
-            showToast(`ℹ️ Elaborati ${batch.length} merchant, altri ${remaining} in attesa: applica questi e ripeti "Suggerisci con AI" per continuare`);
+            showToast(`ℹ️ Elaborati ${batch.length} merchant, altri ${remaining} in attesa: salva queste regole e ripeti "Suggerisci regole con AI" per continuare`);
         }
         if (!_aiSuggestions.length) {
-            if (!failedBatches) showToast('Nessun suggerimento');
+            if (!failedBatches) showToast('Nessuna regola suggerita');
             return;
         }
         openAiSuggestionsModal();
@@ -3228,16 +3252,22 @@
     }
 
     function renderAiSuggestionsList() {
-        document.getElementById('aiSuggestionsTitle').textContent = `${_aiSuggestions.length} suggeriment${_aiSuggestions.length === 1 ? 'o' : 'i'} AI`;
+        const n = _aiSuggestions.length;
+        document.getElementById('aiSuggestionsTitle').textContent = `${n} regol${n === 1 ? 'a suggerita' : 'e suggerite'}`;
         const list = document.getElementById('aiSuggestionsList');
-        if (!_aiSuggestions.length) {
-            list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nessun suggerimento residuo.</p></div>';
+        if (!n) {
+            list.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>Nessuna regola residua.</p></div>';
             return;
         }
         list.innerHTML = _aiSuggestions.map((s, i) => {
             const cat = s.categoryId ? categories.find(c => c.id === s.categoryId) : null;
             return `<div class="card">
-                <div style="font-weight:700;margin-bottom:.4rem;">${s.description} <span style="font-weight:400;color:var(--muted);font-size:.8rem;">× ${s.count}</span>${s.source === 'geo' ? ' <span title="Trovato con ricerca geografica" style="font-size:.8rem;">🌍</span>' : ''}</div>
+                <div style="font-size:.8rem;color:var(--muted);margin-bottom:.15rem;">Da una transazione senza categoria<span style="opacity:.8;"> · × ${s.count}</span>${s.source === 'geo' ? ' <span title="Trovato con ricerca geografica">🌍</span>' : ''}</div>
+                <div style="font-weight:700;margin-bottom:.6rem;">${escAttr(s.description)}</div>
+                <label class="form-label" style="margin-bottom:.2rem;">Testo da cercare nella descrizione</label>
+                <input type="text" class="form-input mono" id="ai-pattern-${i}" value="${escAttr(s.pattern)}"
+                    placeholder="Es: ESSELUNGA" oninput="onAiPatternInput(${i})" autocomplete="off">
+                <div class="form-hint" id="ai-match-${i}" style="margin:.3rem 0 .6rem;"></div>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                     <div class="tx-cat-picker" style="position:relative;flex:1;min-width:160px;">
                         <input type="text" class="form-input" id="ai-cat-search-${i}"
@@ -3246,11 +3276,55 @@
                             onblur="hideAiCategorySuggestions(${i})" autocomplete="off">
                         <div id="ai-cat-suggest-${i}" class="tx-cat-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;margin-top:2px;"></div>
                     </div>
-                    <button class="btn btn-small btn-primary" onclick="applyAiSuggestion(${i})">Applica</button>
+                    <button class="btn btn-small btn-primary" onclick="saveAiRule(${i})">Salva regola</button>
                     <button class="btn btn-small btn-secondary" onclick="dismissAiSuggestion(${i})">Ignora</button>
                 </div>
             </div>`;
         }).join('');
+        _aiSuggestions.forEach((s, i) => updateAiMatchInfo(i));
+    }
+
+    // Quante transazioni aggancerebbe davvero la regola così com'è scritta. È il numero che
+    // decide se il testo va accorciato, e va ricalcolato a ogni tasto: l'AI vede una sola
+    // descrizione e non sa quali altre esistono in archivio.
+    function aiRuleStats(pattern, categoryId) {
+        const p = (pattern || '').trim();
+        if (!p) return null;
+        let total = 0, uncategorized = 0, otherCategory = 0;
+        transactions.forEach(t => {
+            if (!matchesPattern(t.description, p)) return;
+            total++;
+            const ids = getTxCategoryIds(t.id);
+            if (!ids.length) uncategorized++;
+            else if (categoryId && !ids.includes(categoryId)) otherCategory++;
+        });
+        return { total, uncategorized, otherCategory };
+    }
+
+    function updateAiMatchInfo(i) {
+        const el = document.getElementById(`ai-match-${i}`);
+        const s = _aiSuggestions[i];
+        if (!el || !s) return;
+        const pattern = (s.pattern || '').trim();
+        const st = aiRuleStats(pattern, s.categoryId);
+        if (!st) { el.innerHTML = '⚠️ Serve un testo da cercare.'; return; }
+        const parts = [`Aggancia <strong>${st.total}</strong> transazion${st.total === 1 ? 'e' : 'i'}, di cui ${st.uncategorized} senza categoria.`];
+        // Una regola non sovrascrive mai una categoria già assegnata: quelle transazioni restano
+        // come sono, ma vedere il numero qui evita di scrivere una regola troppo larga.
+        if (st.otherCategory) parts.push(`${st.otherCategory} hanno già un'altra categoria e non verranno toccate.`);
+        const dup = rules.find(r => (r.pattern || '').trim().toUpperCase() === pattern.toUpperCase());
+        if (dup) {
+            const dupCat = categories.find(c => c.id === dup.category_id);
+            parts.push(`⚠️ Esiste già una regola con questo testo → ${dupCat ? categoryLabel(dupCat) : '—'}.`);
+        }
+        el.innerHTML = parts.join(' ');
+    }
+
+    function onAiPatternInput(i) {
+        const input = document.getElementById(`ai-pattern-${i}`);
+        if (!input || !_aiSuggestions[i]) return;
+        _aiSuggestions[i].pattern = input.value;
+        updateAiMatchInfo(i);
     }
 
     // Stesso pattern di autocomplete della riga transazione (renderTxCategorySuggestions):
@@ -3294,36 +3368,58 @@
         if (input) input.value = c ? categoryLabel(c) : '';
         if (box) box.style.display = 'none';
         if (_aiSuggestions[i]) _aiSuggestions[i].categoryId = categoryId || null;
+        updateAiMatchInfo(i);
     }
 
-    async function applyAiSuggestion(i) {
+    // Salva la regola in ca_rules e la applica subito alle transazioni senza categoria che la
+    // soddisfano: la regola da sola varrebbe solo per gli import futuri, ma il motivo per cui la
+    // si sta scrivendo è proprio l'arretrato che si ha davanti in elenco.
+    async function saveAiRule(i) {
         const s = _aiSuggestions[i];
         if (!s) return;
-        const chosenCategoryId = s.categoryId || null;
-        if (!chosenCategoryId) { showToast('Seleziona una categoria oppure usa "Ignora"', true); return; }
-        const key = normalizeMerchant(s.description);
-        const matchingTx = transactions.filter(t => !getTxCategoryIds(t.id).length && normalizeMerchant(t.description) === key);
-        const rows = matchingTx.map(t => ({ transaction_id: t.id, category_id: chosenCategoryId, source: s.source === 'geo' ? 'geo' : 'ai' }));
+        const pattern = (s.pattern || '').trim();
+        if (!pattern) { showToast('Scrivi il testo da cercare', true); return; }
+        if (!s.categoryId) { showToast('Scegli una categoria oppure usa "Ignora"', true); return; }
+
+        const existing = rules.find(r => (r.pattern || '').trim().toUpperCase() === pattern.toUpperCase()
+            && r.category_id === s.categoryId);
+        if (!existing) {
+            const { error } = await sb.from('ca_rules').insert({
+                pattern, category_id: s.categoryId, priority: 0, user_id: currentUserId()
+            });
+            if (handleAuthError(error)) return;
+            if (error) { alert('Errore: ' + error.message); return; }
+            await loadRules();
+            renderRules();
+        }
+
+        const matchingTx = transactions.filter(t => !getTxCategoryIds(t.id).length && matchesPattern(t.description, pattern));
+        const rows = matchingTx.map(t => ({ transaction_id: t.id, category_id: s.categoryId, source: 'rule' }));
         if (rows.length) {
             const { error } = await sb.from('ca_transaction_categories').insert(rows);
             if (handleAuthError(error)) return;
-            if (!error) txCategories.push(...rows);
+            if (error) { alert('Errore: ' + error.message); return; }
+            txCategories.push(...rows);
         }
-        await learnMerchantCategories(s.description, chosenCategoryId);
-        _aiSuggestions.splice(i, 1);
+
+        // Un testo accorciato può coprire anche altri suggerimenti ancora in lista: salvarli
+        // darebbe due regole per lo stesso esercente, quindi escono insieme a questo.
+        const covered = _aiSuggestions.filter((x, idx) => idx !== i && matchesPattern(x.description, pattern)).length;
+        _aiSuggestions = _aiSuggestions.filter((x, idx) => idx !== i && !matchesPattern(x.description, pattern));
         renderAiSuggestionsList();
-        renderTransactionsList();
+        renderTransactionsActiveView();
         renderDashboard();
-        showToast(`✅ ${matchingTx.length} transazioni categorizzate`);
+        showToast(`✅ Regola salvata — ${rows.length} transazioni categorizzate`
+            + (covered ? `, altri ${covered} suggerimenti già coperti` : ''));
         if (!_aiSuggestions.length) closeAiSuggestionsModal();
     }
 
-    async function applyAllAiSuggestions() {
-        // Se una riga è stata lasciata su "— Nessuna categoria —" applyAiSuggestion(0) non la
-        // rimuove (per non applicare per sbaglio): in quel caso la saltiamo per evitare un loop.
+    async function saveAllAiRules() {
+        // Se una riga è rimasta senza categoria (o senza testo) saveAiRule(0) non la rimuove
+        // (per non salvare una regola a caso): in quel caso la saltiamo per evitare un loop.
         while (_aiSuggestions.length) {
             const before = _aiSuggestions.length;
-            await applyAiSuggestion(0);
+            await saveAiRule(0);
             if (_aiSuggestions.length === before) dismissAiSuggestion(0);
         }
     }

@@ -13,6 +13,12 @@
 // supporto alle regole già definite dall'utente (come in categorize-transactions), e il campo
 // "source" per risultato distingue se è stato usato un indizio geografico ('geo') o solo il
 // testo della descrizione ('text').
+// v3 — 2026-08-13: non suggerisce più solo la categoria della singola descrizione, ma una
+// REGOLA — testo da cercare (`pattern`) + categoria — che l'utente rivede, corregge e salva in
+// ca_rules. Il pattern deve essere una sottostringa esatta della descrizione (confronto
+// case-insensitive): quello che non lo è viene scartato qui e il chiamante ripiega sul merchant
+// normalizzato, perché una regola che non aggancia nemmeno la transazione da cui nasce è peggio
+// di nessun suggerimento.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -124,18 +130,21 @@ Deno.serve(async (req) => {
         .join('\n')}\n`
     : '';
 
-  const prompt = `Sei un assistente che categorizza transazioni bancarie personali (spese/entrate) in base alla descrizione del merchant. Per alcune descrizioni è disponibile anche un indizio da una ricerca geografica (tipo di locale trovato su OpenStreetMap, in inglese: es. amenity/pharmacy, shop/supermarket).
+  const prompt = `Sei un assistente che scrive REGOLE di categorizzazione per transazioni bancarie personali (spese/entrate). Una regola è una coppia "testo da cercare nella descrizione" → categoria: quando la descrizione di una transazione contiene quel testo (confronto case-insensitive, sottostringa), la transazione prende quella categoria. Per alcune descrizioni è disponibile anche un indizio da una ricerca geografica (tipo di locale trovato su OpenStreetMap, in inglese: es. amenity/pharmacy, shop/supermarket).
 
 Categorie disponibili (indice: nome):
 ${categoryList}
 ${rulesSection}
-Descrizioni da classificare (indice: descrizione, con eventuale indizio geografico):
+Descrizioni di esempio, una per esercente (indice: descrizione, con eventuale indizio geografico):
 ${descList}
 
-Per ciascuna descrizione scegli l'INDICE della categoria più adatta, usando anche l'indizio geografico quando presente. Se resta incerto, usa null.
+Per ciascuna descrizione proponi una regola:
+- "c": l'INDICE della categoria più adatta, usando anche l'indizio geografico quando presente. Se resta incerto, usa null.
+- "p": il testo da cercare. DEVE essere una sottostringa ESATTA della descrizione (stessi identici caratteri e spazi, si possono cambiare solo maiuscole e minuscole): non inventare parole, non abbreviare, non correggere errori di battitura. Scegli la parte più corta che identifica l'esercente, lasciando fuori tutto ciò che cambia da una transazione all'altra: date, orari, importi, numeri di carta, codici operazione, numero del punto vendita, sigle come "PAGAMENTO POS" o "ADDEBITO". Se non c'è un pezzo stabile, usa l'intera descrizione.
+
 Rispondi SOLO con un oggetto JSON compatto, senza markdown né spiegazioni, con questa forma esatta:
-{"0": 2, "1": null}
-dove ogni chiave è l'indice della descrizione e il valore è l'indice della categoria scelta (o null).`;
+{"0": {"c": 2, "p": "ESSELUNGA"}, "1": {"c": null, "p": "FARMACIA COMUNALE"}}
+dove ogni chiave è l'indice della descrizione.`;
 
   try {
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -148,7 +157,7 @@ dove ogni chiave è l'indice della descrizione e il valore è l'indice della cat
         model: 'llama-3.3-70b-versatile',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 512,
+        max_tokens: 1024,
       }),
     });
 
@@ -161,13 +170,25 @@ dove ogni chiave è l'indice della descrizione e il valore è l'indice della cat
     }
 
     const content: string = data?.choices?.[0]?.message?.content || '{}';
-    const parsed = (extractJson(content) as Record<string, number | string | null> | null) || {};
+    const parsed = (extractJson(content) as Record<string, unknown> | null) || {};
 
     const results = descriptions.map((description, i) => {
+      // Il formato v3 è {"c": indice, "p": "testo"}; un numero secco è la risposta del v2 (o di
+      // un modello che si dimentica il pattern) e resta accettata: la categoria è comunque utile.
       const raw = parsed[String(i)];
-      const catIdx = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseInt(raw, 10) : NaN;
+      const obj = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+      const rawCat = obj ? obj.c : raw;
+      const catIdx = typeof rawCat === 'number' ? rawCat : typeof rawCat === 'string' ? parseInt(rawCat, 10) : NaN;
       const cat = Number.isInteger(catIdx) && catIdx >= 0 && catIdx < categories.length ? categories[catIdx] : null;
-      return { description, categoryId: cat ? cat.id : null, source: hints[i] ? 'geo' : 'text' };
+
+      // Un pattern che non è contenuto nella descrizione non aggancerebbe nemmeno la transazione
+      // da cui nasce: si scarta e il chiamante ripiega sul merchant normalizzato.
+      const rawPattern = obj && typeof obj.p === 'string' ? obj.p.trim() : '';
+      const pattern = rawPattern.length >= 3 && description.toUpperCase().includes(rawPattern.toUpperCase())
+        ? rawPattern
+        : null;
+
+      return { description, categoryId: cat ? cat.id : null, pattern, source: hints[i] ? 'geo' : 'text' };
     });
 
     return new Response(JSON.stringify({ results }), {
