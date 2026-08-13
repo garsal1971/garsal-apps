@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.17.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
+const VERSION = "5.18.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -12,6 +12,29 @@ const CORS = {
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const TWELVE_DATA_API_KEY = Deno.env.get("TWELVE_DATA_API_KEY");
 const TARGET_CURRENCY = "EUR";
+
+// Scarto massimo ammesso rispetto all'ultimo prezzo noto, prima di considerare la
+// risposta di una fonte un abbaglio invece di un movimento di mercato.
+// Un prezzo può essere insieme plausibile e sbagliato: uno scraper che legge il
+// numero accanto a quello giusto risponde 200 e riempie la cache in silenzio, e in
+// Finanza → Prezzi la riga resta verde «OK» con dentro un valore falso. Mezzo prezzo
+// in un giro non lo fa un'obbligazione, un ETF o un'azione (le crypto sì, e infatti
+// sono escluse): quando succede si scarta la risposta e si passa alla fonte dopo.
+// Se non ne risponde nessuna resta il prezzo di ieri, e il simbolo si vede come
+// «Non oggi» — un buco è visibile, un numero sbagliato no.
+const MAX_PRICE_DEVIATION = 0.5;
+
+// Dopo quanto il prezzo in cache smette di essere un metro attendibile e il
+// controllo qui sopra si disarma. Senza questa via d'uscita il confronto si
+// morde la coda: se in cache finisce un valore sbagliato (o il titolo fa
+// davvero un movimento enorme — uno split, un raggruppamento), ogni prezzo
+// giusto che arriva dopo diventa «implausibile» rispetto a quello, e il simbolo
+// resta congelato per sempre sul numero da correggere.
+// Tre giorni non sono un fine settimana: finché una fonte qualsiasi risponde,
+// `updated_at` si riscrive ogni ora anche a mercati chiusi, quindi una riga
+// vecchia di tre giorni vuol dire che da tre giorni non si scrive niente — cioè
+// che siamo esattamente nel caso da sbloccare.
+const PREV_PRICE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 
 // ── Logging ────────────────────────────────────────────────────────────────
 
@@ -175,6 +198,7 @@ const INVESTING_COM_URLS: Record<string, string> = {
   "LU1390062831": "https://www.investing.com/etfs/infu",
   "FR0011758085": "https://it.investing.com/etfs/lyxor-ftse-italia-mid-cap",
   "IE00B3F81R35": "https://it.investing.com/etfs/ishares-barclays-euro-corp.-bd-eur",
+  "LU1598691217": "https://it.investing.com/etfs/lyxor-euromts-10it-btp-govt-dr-ceur", // BTP10 — Amundi Ita BTP 10y
 };
 
 async function fetchInvestingComPrice(
@@ -311,8 +335,16 @@ async function fetchGoogleFinancePrice(
 
 // ── JustETF scraper ───────────────────────────────────────────────────────
 
-// Uses the undocumented JustETF performance API (no auth required in practice).
-// URL: https://www.justetf.com/api/etfs/{ISIN}/performance?locale=en&currency=EUR&valuation=NAV
+// ⚠️ L'endpoint /api/etfs/{ISIN}/performance NON è una fonte di prezzi, e non va
+// rimesso davanti a questa funzione. Restituisce la *performance* della quota, non
+// la quota: il suo `latestValue` (come i `positions[].value`) è una percentuale, e
+// `valuation=NAV` non cambia la natura di quei numeri. Passava indenne il controllo
+// `price > 0 && price < 100000` ed è finito in `fnz_price_cache` come se fosse un
+// prezzo — il 13 agosto 2026 BTP10 (Amundi Ita BTP 10y, quota ≈157 €) risultava
+// quotato poche unità di euro, senza nessun errore da nessuna parte. È la stessa
+// trappola già annotata qui sotto per il `latestValue` della pagina HTML: lo stesso
+// nome di campo, sulla stessa fonte, vuol dire due cose diverse dal prezzo.
+
 // Scrapes the JustETF HTML profile page (IT locale) for the current price.
 // URL: https://www.justetf.com/it/etf-profile.html?isin={ISIN}
 // The price "EUR 106,29" is in the "Quotazione" section.
@@ -417,57 +449,6 @@ async function fetchJustEtfHtmlPrice(
     dbLog(dbEntries, "WARN", `JustETF HTML fetch error for ${isin}`, { isin, error: msg }, requestId);
     return null;
   }
-}
-
-// Expected JSON: { positions: [{date, value, currency}], latestValue, latestDate }
-// Falls back to HTML profile page scraping when the API returns 404.
-async function fetchJustEtfPrice(
-  isin: string, requestId: string, dbEntries: DbEntry[],
-): Promise<number | null> {
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.justetf.com/",
-    "Origin": "https://www.justetf.com",
-  };
-
-  // Try performance API with and without valuation=NAV
-  const apiUrls = [
-    `https://www.justetf.com/api/etfs/${isin}/performance?locale=en&currency=EUR&valuation=NAV`,
-    `https://www.justetf.com/api/etfs/${isin}/performance?locale=en&currency=EUR`,
-  ];
-
-  for (const apiUrl of apiUrls) {
-    try {
-      const res = await fetch(apiUrl, { headers });
-      if (!res.ok) {
-        dbLog(dbEntries, "WARN", `JustETF API HTTP ${res.status} for ${isin}`, { isin, status: res.status }, requestId);
-        continue;
-      }
-      const data = await res.json();
-
-      let price: number | null = null;
-      if (typeof data?.latestValue === "number") {
-        price = data.latestValue;
-      } else if (Array.isArray(data?.positions) && data.positions.length > 0) {
-        const last = data.positions[data.positions.length - 1];
-        price = typeof last?.value === "number" ? last.value : parseFloat(String(last?.value));
-      }
-
-      if (price !== null && price > 0 && price < 100000) {
-        dbLog(dbEntries, "INFO", `Fetched from JustETF API`, { isin, price }, requestId);
-        return price;
-      }
-      dbLog(dbEntries, "WARN", `JustETF API: price not found for ${isin}`, { isin, snippet: JSON.stringify(data).substring(0, 300) }, requestId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      dbLog(dbEntries, "WARN", `JustETF API fetch error for ${isin}`, { isin, error: msg }, requestId);
-    }
-  }
-
-  // API failed — scrape the HTML profile page directly
-  return fetchJustEtfHtmlPrice(isin, requestId, dbEntries);
 }
 
 // ── Yahoo Finance scraper ─────────────────────────────────────────────────
@@ -939,6 +920,54 @@ serve(async (req) => {
       const cryptoSymbols = toFetch.filter((s) => typeMap[s] === "crypto");
       const cryptoBatch = await fetchCryptoPricesBatch(cryptoSymbols, requestId, dbEntries);
 
+      // Ultimo prezzo noto, a prescindere dal TTL: è il metro del controllo di
+      // plausibilità. `cached` qui non basta — contiene solo le righe ancora fresche,
+      // cioè per definizione i simboli che *non* stiamo aggiornando.
+      const { data: lastKnown } = await supabase
+          .from("fnz_price_cache")
+          .select("symbol, price, updated_at")
+          .in("symbol", toFetch)
+          .eq("currency", TARGET_CURRENCY);
+      const prevPrice = new Map<string, number>();
+      const tooOld = Date.now() - PREV_PRICE_MAX_AGE_MS;
+      for (const r of lastKnown ?? []) {
+        const p = parseNumber(r.price);
+        if (p === null || p <= 0) continue;
+        if (new Date(r.updated_at as string).getTime() < tooOld) continue;
+        prevPrice.set(r.symbol as string, p);
+      }
+
+      // Unico varco da cui un prezzo entra in `rows`: arrotondamento, controllo di
+      // plausibilità e log stanno qui invece di essere ricopiati in ognuno dei rami
+      // della catena delle fonti. Restituisce false se il prezzo è stato scartato,
+      // così il chiamante non lo dà per buono e prova la fonte successiva.
+      const pushPrice = (
+        symbol: string, price: number, extra: Record<string, unknown> = {},
+      ): boolean => {
+        const rounded = roundMoney(price);
+        const prev = prevPrice.get(symbol);
+        const assetType = typeMap[symbol] ?? "";
+        if (prev !== undefined && assetType !== "crypto") {
+          const deviation = Math.abs(rounded - prev) / prev;
+          if (deviation > MAX_PRICE_DEVIATION) {
+            log("ERROR", `Prezzo implausibile per ${symbol}: ${rounded} (ultimo noto ${prev})`, { requestId });
+            dbLog(dbEntries, "ERROR", `Prezzo implausibile scartato per ${symbol}`, {
+              symbol, price: rounded, prev, assetType,
+              deviationPct: Math.round(deviation * 100),
+            }, requestId);
+            return false;
+          }
+        }
+        rows.push({
+          symbol, price: rounded,
+          prev_close: null, change_amt: null, change_pct: null,
+          currency: TARGET_CURRENCY, market_state: null,
+          updated_at: new Date().toISOString(),
+          ...extra,
+        });
+        return true;
+      };
+
       // Scrive su fnz_price_cache quello che è stato raccolto finora. Serve
       // chiamarla durante il ciclo e non solo alla fine: il giro dura minuti fra
       // scraping e pause, e con un unico upsert finale un timeout della Edge
@@ -1001,12 +1030,7 @@ serve(async (req) => {
               source = "Coinbase";
             }
             if (cryptoPrice !== null) {
-              rows.push({
-                symbol, price: roundMoney(cryptoPrice),
-                prev_close: null, change_amt: null, change_pct: null,
-                currency: TARGET_CURRENCY, market_state: "REGULAR",
-                updated_at: new Date().toISOString(),
-              });
+              pushPrice(symbol, cryptoPrice, { market_state: "REGULAR" });
               dbLog(dbEntries, "INFO", `Fetched ${symbol} from ${source}`, { price: cryptoPrice }, requestId);
             } else {
               dbLog(dbEntries, "WARN", `Nessun prezzo per ${symbol}: CoinGecko e Coinbase falliti`, { symbol }, requestId);
@@ -1019,13 +1043,7 @@ serve(async (req) => {
             // 2a. BTPi → SoldiOnline come prima fonte
             if (isBTPi) {
               const soPrice = await fetchSoldiOnlinePrice(isin, requestId, dbEntries);
-              if (soPrice !== null) {
-                rows.push({
-                  symbol, price: roundMoney(soPrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              if (soPrice !== null && pushPrice(symbol, soPrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from SoldiOnline`, { isin, price: soPrice }, requestId);
                 continue;
               }
@@ -1034,40 +1052,24 @@ serve(async (req) => {
             // 2b. BTP standard → rendimentibtp.it
             if (!isBTPi && isBond && isin.startsWith("IT") && btpPrices !== null) {
               const btpPrice = btpPrices.get(isin);
-              if (btpPrice !== undefined) {
-                rows.push({
-                  symbol, price: roundMoney(btpPrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              if (btpPrice !== undefined && pushPrice(symbol, btpPrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from rendimentibtp.it`, { isin, price: btpPrice }, requestId);
                 continue;
               }
-              dbLog(dbEntries, "WARN", `${symbol} not in rendimentibtp.it`, { isin, btpCount: btpPrices.size }, requestId);
+              if (btpPrice === undefined) {
+                dbLog(dbEntries, "WARN", `${symbol} not in rendimentibtp.it`, { isin, btpCount: btpPrices.size }, requestId);
+              }
             }
 
-            // 2c. ETF → JustETF (API + HTML scraping), poi Yahoo Finance come backup
+            // 2c. ETF → JustETF (scraping della scheda HTML), poi Yahoo Finance come backup
             if (isEtf) {
-              const jePrice = await fetchJustEtfPrice(isin, requestId, dbEntries);
-              if (jePrice !== null) {
-                rows.push({
-                  symbol, price: roundMoney(jePrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              const jePrice = await fetchJustEtfHtmlPrice(isin, requestId, dbEntries);
+              if (jePrice !== null && pushPrice(symbol, jePrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from JustETF`, { isin, price: jePrice }, requestId);
                 continue;
               }
               const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries, TWELVE_DATA_API_KEY, rateCache);
-              if (yfPrice !== null) {
-                rows.push({
-                  symbol, price: roundMoney(yfPrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              if (yfPrice !== null && pushPrice(symbol, yfPrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance`, { isin, price: yfPrice }, requestId);
                 continue;
               }
@@ -1076,13 +1078,7 @@ serve(async (req) => {
             // 2d. Investing.com — per qualsiasi tipo strumento con URL noto nella mappa
             if (INVESTING_COM_URLS[isin]) {
               const icPrice = await fetchInvestingComPrice(isin, requestId, dbEntries);
-              if (icPrice !== null) {
-                rows.push({
-                  symbol, price: roundMoney(icPrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              if (icPrice !== null && pushPrice(symbol, icPrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from Investing.com`, { isin, price: icPrice }, requestId);
                 continue;
               }
@@ -1091,13 +1087,7 @@ serve(async (req) => {
             // 2e. Yahoo Finance by ISIN — per azioni quando TD richiede piano a pagamento
             if (isStock) {
               const yfPrice = await fetchYahooFinanceByIsin(isin, requestId, dbEntries, TWELVE_DATA_API_KEY, rateCache);
-              if (yfPrice !== null) {
-                rows.push({
-                  symbol, price: roundMoney(yfPrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              if (yfPrice !== null && pushPrice(symbol, yfPrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance (stock)`, { isin, price: yfPrice }, requestId);
                 continue;
               }
@@ -1106,13 +1096,7 @@ serve(async (req) => {
             // 2f. Euronext AJAX — bond su MOTX, ETF su ETFP (non per azioni)
             if (!isStock) {
               const biPrice = await fetchBorsaItalianaPrice(isin, requestId, dbEntries);
-              if (biPrice !== null) {
-                rows.push({
-                  symbol, price: roundMoney(biPrice),
-                  prev_close: null, change_amt: null, change_pct: null,
-                  currency: TARGET_CURRENCY, market_state: null,
-                  updated_at: new Date().toISOString(),
-                });
+              if (biPrice !== null && pushPrice(symbol, biPrice)) {
                 dbLog(dbEntries, "INFO", `Fetched ${symbol} from Borsa Italiana`, { isin, price: biPrice }, requestId);
                 continue;
               }
@@ -1136,13 +1120,7 @@ serve(async (req) => {
           // 2i. Yahoo Finance diretto — ticker noto nella mappa, non richiede ISIN
           if (!outcome.ok && YAHOO_FINANCE_TICKER_MAP[symbol]) {
             const yfDirectPrice = await fetchYahooFinanceByTicker(YAHOO_FINANCE_TICKER_MAP[symbol], requestId, dbEntries);
-            if (yfDirectPrice !== null) {
-              rows.push({
-                symbol, price: roundMoney(yfDirectPrice),
-                prev_close: null, change_amt: null, change_pct: null,
-                currency: TARGET_CURRENCY, market_state: null,
-                updated_at: new Date().toISOString(),
-              });
+            if (yfDirectPrice !== null && pushPrice(symbol, yfDirectPrice)) {
               dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance (direct ticker)`, { yTicker: YAHOO_FINANCE_TICKER_MAP[symbol], price: yfDirectPrice }, requestId);
               continue;
             }
@@ -1163,14 +1141,10 @@ serve(async (req) => {
                   continue;
                 }
               }
-              rows.push({
-                symbol, price: roundMoney(gfPrice),
-                prev_close: null, change_amt: null, change_pct: null,
-                currency: TARGET_CURRENCY, market_state: "REGULAR",
-                updated_at: new Date().toISOString(),
-              });
-              dbLog(dbEntries, "INFO", `Fetched ${symbol} from Google Finance`, { price: gfPrice, exchange: GOOGLE_FINANCE_SYMBOL_MAP[symbol].exchange }, requestId);
-              continue;
+              if (pushPrice(symbol, gfPrice, { market_state: "REGULAR" })) {
+                dbLog(dbEntries, "INFO", `Fetched ${symbol} from Google Finance`, { price: gfPrice, exchange: GOOGLE_FINANCE_SYMBOL_MAP[symbol].exchange }, requestId);
+                continue;
+              }
             }
           }
 
@@ -1205,20 +1179,18 @@ serve(async (req) => {
               if (i < toFetch.length - 1 && madeApiCall) await delay(8000);
               continue;
             }
-            rows.push({
-              symbol,
-              price: roundMoney(price * conversionRate),
+            const pushed = pushPrice(symbol, price * conversionRate, {
               prev_close: previousClose === null ? null : roundMoney(previousClose * conversionRate),
               change_amt: changeAmount === null ? null : roundMoney(changeAmount * conversionRate),
               change_pct: changePct,
-              currency: TARGET_CURRENCY,
               market_state: result.exchange_timezone ? "REGULAR" : null,
-              updated_at: new Date().toISOString(),
             });
-            log("INFO", `${symbol} → ${roundMoney(price * conversionRate)} EUR (${resolvedAs})`, { requestId });
-            dbLog(dbEntries, "INFO", `Fetched ${symbol}`, {
-              price: roundMoney(price * conversionRate), resolvedAs, changePct,
-            }, requestId);
+            if (pushed) {
+              log("INFO", `${symbol} → ${roundMoney(price * conversionRate)} EUR (${resolvedAs})`, { requestId });
+              dbLog(dbEntries, "INFO", `Fetched ${symbol}`, {
+                price: roundMoney(price * conversionRate), resolvedAs, changePct,
+              }, requestId);
+            }
           } else {
             log("WARN", `Invalid price for ${symbol}`, { requestId, price });
             dbLog(dbEntries, "WARN", `Invalid price for ${symbol}`, { price }, requestId);
