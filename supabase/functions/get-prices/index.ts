@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.18.1"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
+const VERSION = "5.19.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -181,8 +181,16 @@ const TWELVE_DATA_SYMBOL_OVERRIDES: Record<string, string> = {
 
 // Symbol → ticker diretto Yahoo Finance (non richiede ISIN nel DB).
 // Usato quando TD richiede piano a pagamento.
+// Un ticker scritto qui è una scelta esplicita e vince sulla catena delle fonti,
+// che invece indovina lo strumento partendo dall'ISIN. Ci si mette un simbolo
+// quando quell'indovinare ha già sbagliato.
 const YAHOO_FINANCE_TICKER_MAP: Record<string, string> = {
   "RY4C": "RYA.IR", // Ryanair su Euronext Dublin, quotato in EUR
+  // BTP10 su Borsa Italiana, in EUR. Fissato qui dopo due numeri falsi di fila
+  // presi raschiando pagine: ≈3 € (la performance dell'API JustETF) e poi 18,70 €
+  // quando la quota ne vale ≈157. È lo stesso strumento di `LU1598691217`, ma
+  // chiesto per nome invece che cercato per ISIN.
+  "BTP10": "BTP10.MI",
 };
 
 // Known symbol → Google Finance exchange + currency.
@@ -946,6 +954,42 @@ serve(async (req) => {
         prevPrice.set(r.symbol as string, p);
       }
 
+      // Secondo metro, per i simboli che in cache non ce l'hanno: l'ultima chiusura
+      // in archivio, **esclusa quella di oggi**. Serve a chiudere il buco che si apre
+      // ogni volta che una riga di cache viene cancellata a mano per rimediare a un
+      // prezzo falso: senza precedente il controllo non ha metro, la prima risposta
+      // che arriva passa comunque, e se la fonte sbaglia ancora il valore falso si
+      // riscrive da solo — è successo il 13 agosto 2026, BTP10 ripulito la mattina e
+      // tornato a 18,70 € nel pomeriggio. La riga di oggi va esclusa perché il trigger
+      // su `fnz_price_cache` l'ha appena riscritta con lo stesso valore da giudicare.
+      // Si interroga solo per i simboli rimasti senza metro — di norma nessuno, e
+      // allora la query non parte proprio. La finestra è larga (90 giorni) di
+      // proposito: quando si arriva qui è perché le righe recenti sono state
+      // cancellate, e cercarne una negli ultimi giorni troverebbe il vuoto che si
+      // sta cercando di riempire. Un prezzo di tre mesi fa è un metro grossolano,
+      // ma serve solo a distinguere 157 da 18,70, non a validare il centesimo.
+      const senzaMetro = toFetch.filter((s) => !prevPrice.has(s));
+      if (senzaMetro.length > 0) {
+        const oggi = new Date().toISOString().slice(0, 10);
+        const daQuando = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const { data: histRows } = await supabase
+            .from("fnz_price_history")
+            .select("symbol, price, price_date")
+            .in("symbol", senzaMetro)
+            .gte("price_date", daQuando)
+            .lt("price_date", oggi)
+            .order("price_date", { ascending: false });
+        for (const r of histRows ?? []) {
+          const sym = r.symbol as string;
+          if (prevPrice.has(sym)) continue; // ordinate al contrario: la prima è la più recente
+          const p = parseNumber(r.price);
+          if (p !== null && p > 0) prevPrice.set(sym, p);
+        }
+        dbLog(dbEntries, "INFO", "Metro dallo storico per i simboli senza cache", {
+          senzaMetro, trovati: senzaMetro.filter((s) => prevPrice.has(s)),
+        }, requestId);
+      }
+
       // Unico varco da cui un prezzo entra in `rows`: arrotondamento, controllo di
       // plausibilità e log stanno qui invece di essere ricopiati in ognuno dei rami
       // della catena delle fonti. Restituisce false se il prezzo è stato scartato,
@@ -1029,6 +1073,21 @@ serve(async (req) => {
           }
 
           // Step 2: catena fallback basata su ISIN e tipo strumento
+
+          // 2-pin. Yahoo Finance con ticker fissato a mano: **prima** di tutto il
+          // resto. Un ticker in `YAHOO_FINANCE_TICKER_MAP` è una scelta esplicita su
+          // quale strumento chiedere, mentre tutta la catena qui sotto lo cerca per
+          // ISIN e raschia pagine — cioè indovina. Quando l'indovinare ha già
+          // sbagliato per un simbolo non ha senso lasciargli la precedenza: fu così
+          // che BTP10, ripulito la mattina del 13 agosto 2026, si riscrisse a 18,70 €
+          // nel pomeriggio.
+          if (!outcome.ok && YAHOO_FINANCE_TICKER_MAP[symbol]) {
+            const yfDirectPrice = await fetchYahooFinanceByTicker(YAHOO_FINANCE_TICKER_MAP[symbol], requestId, dbEntries);
+            if (yfDirectPrice !== null && pushPrice(symbol, yfDirectPrice)) {
+              dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance (ticker fissato)`, { yTicker: YAHOO_FINANCE_TICKER_MAP[symbol], price: yfDirectPrice }, requestId);
+              continue;
+            }
+          }
 
           // 2-crypto. Crypto → CoinGecko (batch già scaricato), poi Coinbase
           if (isCrypto) {
@@ -1123,15 +1182,6 @@ serve(async (req) => {
               } else {
                 dbLog(dbEntries, "WARN", `TD quote failed for resolved symbol`, { symbol, resolved, error: outcome2.message }, requestId);
               }
-            }
-          }
-
-          // 2i. Yahoo Finance diretto — ticker noto nella mappa, non richiede ISIN
-          if (!outcome.ok && YAHOO_FINANCE_TICKER_MAP[symbol]) {
-            const yfDirectPrice = await fetchYahooFinanceByTicker(YAHOO_FINANCE_TICKER_MAP[symbol], requestId, dbEntries);
-            if (yfDirectPrice !== null && pushPrice(symbol, yfDirectPrice)) {
-              dbLog(dbEntries, "INFO", `Fetched ${symbol} from Yahoo Finance (direct ticker)`, { yTicker: YAHOO_FINANCE_TICKER_MAP[symbol], price: yfDirectPrice }, requestId);
-              continue;
             }
           }
 
