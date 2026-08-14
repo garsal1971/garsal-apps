@@ -923,16 +923,18 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Google Fit integration via OAuth token
 - Minimal inline Supabase client (no CDN); milestone and objective tracking
 - **Premio cibo alle soglie di peso**: ogni stellina accesa (`.ms-th.reached`) dà, oltre ai punti,
-  un premio da estrarre alla ruota — 🍰 Torta Savoia, 🥐 Cannolo, 🍕 Pizza, 🍫 Tavoletta di
-  cioccolata, 🍪 Tazza di biscotti. Gli spicchi della ruota sono le **fotografie** in
-  `risorse/premi/*.jpg` (quadrate, 460 px), ritagliate a triangolo dal `clip-path` di
-  `.prize-slice` mentre l'arco lo dà il `border-radius` della ruota. Su ogni spicchio resta
-  un'emoji in un cerchietto scuro: la foto tagliata a spicchio da sola si riconosce a fatica.
-  Le immagini si caricano solo alla prima apertura della ruota (`buildPrizeWheel`), non a ogni
-  apertura della pagina. Finché non la si tocca la stellina resta **evidenziata in
+  un premio da scoprire **grattando un gratta e vinci** — 🍰 Torta Savoia, 🥐 Cannolo, 🍕 Pizza,
+  🍫 Tavoletta di cioccolata, 🍪 Tazza di biscotti, fotografie in `risorse/premi/*.jpg`
+  (quadrate, 460 px). Sotto la patina d'argento (un `<canvas>` disegnato da `buildScratchFoil()`
+  e consumato in `destination-out`) c'è **già** la foto del premio: il sorteggio avviene
+  all'apertura del biglietto, grattare scopre e basta. Il canvas si ridimensiona **ad ogni
+  apertura e solo a overlay visibile** — prima il biglietto è 0×0 e la patina verrebbe stesa su
+  niente. Si scopre da sé oltre il 55 % grattato (42 % se si alza il dito), e il pulsante
+  *👆 Scopri tutto* fa la stessa cosa: serve da scorciatoia e da ripiego se il tocco non passa.
+  Finché non la si tocca la stellina resta **evidenziata in
   rosso col 🎁 che pulsa**; dopo l'estrazione mostra l'emoji del premio vinto e ritoccandola lo
-  rimostra senza poter rigirare. Un pulsante *🎲 Prova l'estrazione del premio* (sotto ⭐ Punti
-  Totali Traguardi Intermedi) apre la ruota in prova, senza salvare.
+  rimostra già scoperto. Un pulsante *🎲 Prova l'estrazione del premio* (sotto ⭐ Punti
+  Totali Traguardi Intermedi) apre un biglietto di prova, senza salvare.
   I premi stanno in **localStorage** (`wq_prizes_<objective id>`), come i punti dei traguardi
   (`wq_mpts_<id>`): nessuna tabella nuova, quindi il premio è **per dispositivo** — chi apre
   l'app da un altro telefono si ritrova la stellina di nuovo da estrarre. Spostarlo sul DB
