@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.8</title>
+  <title>GarsalFinanza v1.3.9</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -101,6 +101,8 @@
     .nav-sublabel { font-size: .66rem; font-weight: 600; color: var(--c-muted); letter-spacing: .04em; padding: 8px 11px 3px; }
     .nav-group { display: flex; flex-direction: column; gap: 2px; margin-left: 6px; padding-left: 6px; border-left: 2px solid var(--c-border); }
     .nav-sep { height: 1px; background: var(--c-border); margin: 6px 4px; }
+    /* Serve a battere il display:flex di .sidebar, qui e nella media query */
+    .sidebar[hidden] { display: none; }
     /* ── Main ─────────────────────────────────────────────────── */
     .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
     .view { display: none; }
@@ -422,7 +424,7 @@
   </div>
   <div id="mobile-nav-overlay"></div>
   <div class="app-layout">
-    <nav class="sidebar">
+    <nav class="sidebar" id="sidebar-main">
       <div class="nav-label">Patrimonio</div>
 
       <div class="nav-sublabel">Overview</div>
@@ -483,12 +485,21 @@
         <a class="nav-item" href="casarosa.html" style="text-decoration:none">🏠 Casa</a>
       </div>
 
+      <div class="nav-sep"></div>
+      <button class="nav-item"        data-action="nav" data-view="configurazione">⚙️ Configurazione</button>
+    </nav>
+    <!-- Configurazione: un menù a sé, che prende il posto di quello principale.
+         Le tre pagine si usano di rado e stavano in fondo a un elenco lungo;
+         qui restano da sole, col rientro in fondo. -->
+    <nav class="sidebar" id="sidebar-config" hidden>
       <div class="nav-label">Configurazione</div>
       <div class="nav-group">
         <button class="nav-item"        data-action="nav" data-view="tag-config">🏷️ Tag</button>
         <button class="nav-item"        data-action="nav" data-view="conti-collegati">🏦 Banche e Conti</button>
         <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
       </div>
+      <div class="nav-sep"></div>
+      <button class="nav-item"        data-action="nav" data-view="dashboard">← Torna a 💰 Finanza</button>
     </nav>
     <main class="app-main">
       <div id="view-dashboard"          class="view active"></div>
@@ -508,6 +519,7 @@
       <div id="view-prodotti"           class="view"></div>
       <div id="view-prezzi"             class="view"></div>
       <div id="view-analisi-costi"      class="view"></div>
+      <div id="view-configurazione"     class="view"></div>
       <div id="view-tag-config"         class="view"></div>
       <div id="view-conti-collegati"    class="view"></div>
       <div id="view-impostazioni"       class="view"></div>
@@ -547,8 +559,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.8';
-const APP_BUILD   = '2026-08-14T11:45:00Z';
+const APP_VERSION = 'v1.3.9';
+const APP_BUILD   = '2026-08-14T12:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3086,6 +3098,27 @@ function renderOtherAssets() {
    come «🌹 Danaro di Rosa». Qui i movimenti si leggono e si archiviano in
    fnz_rosa_transactions senza categorie: questa pagina tiene il registro del conto e il saldo,
    non analizza la spesa. */
+/* ══════════════ CONFIGURAZIONE (pagina di ingresso) ══════════════
+   Le tre voci sono anche nel menù di sinistra, ma su telefono quello è chiuso
+   dietro l'hamburger: senza queste schede la pagina si aprirebbe vuota. */
+function renderConfigurazione() {
+  const voci = [
+    { view: 'tag-config',      icon: '🏷️', title: 'Tag',             sub: 'Categorie e opzioni dei tag assegnabili ai prodotti' },
+    { view: 'conti-collegati', icon: '🏦', title: 'Banche e Conti',   sub: 'Censimento istituti, consensi e battesimo dei conti' },
+    { view: 'impostazioni',    icon: '⚙️', title: 'Impostazioni',     sub: 'Preferenze dell\'app e dati dell\'account' },
+  ];
+  setHtml('view-configurazione', `
+    <div class="view-header">
+      <div><h2 class="page-title">Configurazione</h2><p class="page-sub">Le impostazioni di Finanza, tutte qui dentro</p></div>
+    </div>
+    <div class="grid-auto">${voci.map(v => `
+      <div class="card" style="cursor:pointer" data-action="nav" data-view="${v.view}">
+        <div class="card-title">${v.icon} ${v.title}</div>
+        <p class="page-sub" style="margin-top:6px">${v.sub}</p>
+      </div>`).join('')}
+    </div>`);
+}
+
 /* ══════════════ CONTO RISPARMIO (pagina incastonata) ══════════════
    La pagina vive in conto-risparmio-teresa.html e ci resta: qui si apre dentro
    l'area di lavoro con un iframe invece di ricopiarne import, categorie e saldi.
@@ -5723,9 +5756,17 @@ function navigate(view, param = null) {
   history.pushState({ view, portfolioId: S.portfolioId, dossierId: S.dossierId, fundId: S.fundId, loanId: S.loanId }, '');
   render(); window.scrollTo(0, 0);
 }
+/* Le pagine che stanno dentro il menù Configurazione: quando si è in una di
+   queste il menù principale lascia il posto a quello di configurazione. Il
+   controllo sta in render() e non in navigate(), o tornando indietro col
+   pulsante del browser resterebbe il menù sbagliato. */
+const CONFIG_VIEWS = new Set(['configurazione', 'tag-config', 'conti-collegati', 'impostazioni']);
 function render() {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   $(`view-${S.view}`)?.classList.add('active');
+  const inConfig = CONFIG_VIEWS.has(S.view);
+  $('sidebar-main').hidden   = inConfig;
+  $('sidebar-config').hidden = !inConfig;
   document.querySelectorAll('.nav-item').forEach(b => {
     const match = b.dataset.view === S.view ||
       (S.view === 'portafoglio-detail' && b.dataset.view === 'portafogli') ||
@@ -5749,6 +5790,7 @@ function render() {
     case 'other-assets':       renderOtherAssets();        break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
     case 'conto-risparmio':    renderContoRisparmio();     break;
+    case 'configurazione':     renderConfigurazione();     break;
     case 'prezzi':             renderPrezzi();             break;
     case 'prodotti':           renderProdotti();           break;
     case 'analisi-costi':      caOpen($('view-analisi-costi')); break;
@@ -6055,12 +6097,14 @@ document.addEventListener('click', async e => {
   }
 });
 document.getElementById('btn-hamburger').addEventListener('click', () => {
-  document.querySelector('.sidebar').classList.toggle('open');
+  // Le sidebar sono due (principale e configurazione): il cassetto si apre su
+  // quella in vista, non sulla prima del documento.
+  document.querySelector('.sidebar:not([hidden])')?.classList.toggle('open');
   document.getElementById('mobile-nav-overlay').classList.toggle('open');
 });
 document.getElementById('mobile-nav-overlay').addEventListener('click', closeMobileNav);
 function closeMobileNav() {
-  document.querySelector('.sidebar').classList.remove('open');
+  document.querySelectorAll('.sidebar').forEach(s => s.classList.remove('open'));
   document.getElementById('mobile-nav-overlay').classList.remove('open');
 }
 document.addEventListener('click', e => { if (e.target === $('modal-overlay')) closeModal(); });
