@@ -617,15 +617,26 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
-`tasks/` porta in nativo **il planner** — tre schede, come i tre pulsanti in cima alla pagina
-Planner del web: *Panoramica*, *Mese*, *Settimana*. Si apre sul Mese. Il **+ galleggiante** apre
-`TaskForm`, che crea un task nuovo (tutti i tipi tranne i `workflow`, i cui step hanno dipendenze
-fra loro e non si riducono a un elenco). **Modificare un task che esiste già resta su
-`tasks.html`**, insieme a reminder, storico e impostazioni: il tipo decide quali colonne un task
-ha, e cambiarlo dopo lascerebbe dietro quelle del tipo di prima — `multiple_dates` su un
-ricorrente — che nessuno ripulisce. La creazione è un `insert` diretto e non una RPC, e non è
-un'eccezione alla regola: le RPC governano il ciclo di vita, cioè dove va la prossima occorrenza,
-non la nascita — `saveTask()` nel web fa lo stesso.
+`tasks/` porta in nativo **quattro schede**: *Panoramica*, *Gestione*, *Mese*, *Settimana* — le tre
+del planner del web più la pagina ✏️ Gestione. Si apre sul Mese. Il **+ galleggiante** apre
+`TaskForm`, che crea un task (tutti i tipi tranne i `workflow`, i cui step hanno dipendenze fra
+loro e non si riducono a un elenco); da Gestione lo stesso form **modifica** un task che esiste
+già, e ne fa una **copia**. Il tipo di un task esistente non si cambia: decide quali colonne quel
+task ha, e cambiarlo lascerebbe dietro quelle del tipo di prima — `multiple_dates` su un
+ricorrente — che nessuno ripulisce. Scrivere un task è un `insert`/`update` diretto e non una RPC,
+e non è un'eccezione alla regola: le RPC governano il ciclo di vita, cioè dove va la prossima
+occorrenza, non com'è fatto il task — `saveTask()` nel web fa lo stesso. Restano su `tasks.html`
+reminder, storico, impostazioni e l'import di un backup JSON.
+
+La **Gestione** (`tasks/Gestione.kt`) è l'elenco completo con i due riquadri richiudibili del web —
+📊 Vista (*espandi tutti*, *raggruppa per* categoria/priorità/tipo) e 🔎 Cerca e filtra (testo,
+stato, priorità, categoria, tipo) — il conteggio *Trovati N task* e, su ogni scheda, *Vedi*,
+*Modifica*, *Clona*, *Cancella*, e *Riattiva* su terminati e archiviati. ⚠️ Filtri e ordinamento
+sono quelli di `applyTaskFilters()` ricalcati in `TasksState.gestione()`: stessi quattro stati vivi
+sotto «Attivi», ricerca su titolo **e** descrizione, ordine per prossima occorrenza con chi non ce
+l'ha in fondo. Per via di questa scheda `TasksRepository.task()` carica **anche archiviati e
+terminati** (prima li scartava): le due voci della tendina che li chiedono sarebbero altrimenti
+vuote per sempre.
 
 La **Panoramica** è invece la copia di `renderDashboard()`, sezione per sezione
 (`tasks/Panoramica.kt`): ⚠️ SCADUTI, 🎯 OGGI, 📅 PROSSIMI, 🔄 A LIBERA RIPETIZIONE e

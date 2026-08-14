@@ -113,6 +113,24 @@ data class TsTask(
 
     val giornoDiRiferimento: LocalDate? get() = giornoDa(dataDiRiferimento)
 
+    /** I `workflow` non si modificano da qui: vedi `TaskForm`. */
+    val modificabile: Boolean get() = tipo != "workflow"
+
+    /** Vivo: i quattro stati su cui il web offre modifica ed eliminazione. */
+    val vivo: Boolean get() = stato in STATI_IN_CALENDARIO
+
+    /** Come `statusMap` in `renderManagement()`: nome e colore dello stato. */
+    val etichettaStato: String
+        get() = when (stato) {
+            "completed" -> "Completato"
+            "failed" -> "Fallito"
+            "skipped" -> "Saltato"
+            "terminated" -> "Terminato"
+            "archived" -> "Archiviato"
+            "cancelled" -> "Annullato"
+            else -> "Attivo"
+        }
+
     companion object {
         /** Gli stessi quattro che `getTasksForDate()` lascia passare. */
         val STATI_IN_CALENDARIO = setOf("started", "completed", "failed", "skipped")
@@ -330,7 +348,12 @@ object TasksRepository {
     private val db get() = Supabase.client().postgrest
 
     /**
-     * I task non archiviati e non riservati.
+     * Tutti i task non riservati, **compresi archiviati e terminati**.
+     *
+     * Il filtro per stato non sta qui ma nelle schermate: Gestione ha una
+     * tendina che li chiede espressamente («Terminati», «Archiviati»), e
+     * scartarli al caricamento renderebbe quelle due voci vuote per sempre.
+     * Panoramica e calendario continuano a guardare solo i quattro stati vivi.
      *
      * Il filtro è in Kotlin e non in una `filter { }` di PostgREST: le righe
      * sono poche (le RLS ne lasciano passare solo le proprie) e così la query
@@ -346,7 +369,7 @@ object TasksRepository {
             .select(Columns.ALL)
             .decodeList<JsonObject>()
             .map { TsTask.da(it) }
-            .filter { !it.riservato && it.stato != "archived" && it.stato != "cancelled" }
+            .filter { !it.riservato }
     }
 
     /**
@@ -430,12 +453,38 @@ object TasksRepository {
     }
 
     /**
-     * Scrive un task nuovo. Non passa da una RPC — e non è un'eccezione alla
-     * regola: le RPC governano il **ciclo di vita** (dove sta la prossima
-     * occorrenza), non la nascita. `saveTask()` nel web fa lo stesso insert.
+     * Scrive un task, nuovo (`id` nullo) o esistente. Non passa da una RPC — e
+     * non è un'eccezione alla regola: le RPC governano il **ciclo di vita**
+     * (dove va la prossima occorrenza), non com'è fatto il task.
+     * `saveTask()` nel web fa lo stesso insert/update.
      */
-    suspend fun crea(bozza: BozzaTask) = withContext(Dispatchers.IO) {
-        db.from("ts_tasks").insert(bozza.aJson())
+    suspend fun salva(bozza: BozzaTask, id: String?) = withContext(Dispatchers.IO) {
+        val corpo = bozza.aJson()
+        if (id == null) db.from("ts_tasks").insert(corpo)
+        else db.from("ts_tasks").update(corpo) { filter { eq("id", id) } }
+        Unit
+    }
+
+    /**
+     * Riporta un task terminato o archiviato fra i vivi, come
+     * `reactivateTask()`: stato a `started` e una riga in `ts_history`, che è
+     * quello che rende la riattivazione leggibile nello storico invece di
+     * essere un task che ricompare senza spiegazione.
+     */
+    suspend fun riattiva(id: String, statoPrecedente: String) = withContext(Dispatchers.IO) {
+        db.from("ts_tasks").update(buildJsonObject { put("status", "started") }) {
+            filter { eq("id", id) }
+        }
+        db.from("ts_history").insert(
+            buildJsonObject {
+                put("task_id", id)
+                put("from_status", statoPrecedente)
+                put("to_status", "started")
+                put("action", "reactivated")
+                put("points", 0)
+                put("timestamp", adessoIso())
+            }
+        )
         Unit
     }
 
@@ -557,6 +606,35 @@ data class BozzaTask(
                 // quale `put` scegliere fra stringa, numero e booleano.
                 "free_repeat" -> put("next_occurrence_date", JsonNull)
             }
+        }
+    }
+
+    companion object {
+        /** Riempie il form da un task che esiste già: modifica e clonazione. */
+        fun da(t: TsTask): BozzaTask {
+            val riferimento = t.dataDiRiferimento ?: t.dataInizio
+            return BozzaTask(
+                titolo = t.titolo,
+                descrizione = t.descrizione.orEmpty(),
+                tipo = t.tipo,
+                categorie = t.categorie,
+                prioritaId = t.prioritaId,
+                giorno = giornoDa(riferimento) ?: LocalDate.now(),
+                ora = oraDa(riferimento) ?: "09:00",
+                scadenza = giornoDa(t.scadenza),
+                puntiSuccesso = t.puntiSuccesso,
+                puntiFallimento = t.puntiFallimento,
+                puntiSalto = t.puntiSalto,
+                puntiRitardo = t.puntiRitardo,
+                inPanoramica = t.inPanoramica,
+                frequenza = t.frequenza ?: "daily",
+                intervallo = t.intervallo ?: 1,
+                giorniSettimana = t.giorniSettimana,
+                giorniMese = t.giorniMese,
+                dateAnnuali = t.dateAnnuali,
+                ripetiDopoGiorni = t.ripetiDopoGiorni ?: 7,
+                dateMultiple = t.dateMultiple,
+            )
         }
     }
 }
