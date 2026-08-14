@@ -7,6 +7,7 @@ object Route {
     const val OBIETTIVI = "obiettivi"
     const val EVENTS_LOG = "eventslog"
     const val TASKS = "tasks"
+    const val TA_FIRI = "tafiri"
 }
 
 /**
@@ -67,6 +68,12 @@ object PortedApps {
             titoloDiRipiego = "Events Log",
             descrizioneDiRipiego = "Registro di eventi e attività",
             coloreDiRipiego = "#00A651",
+        ),
+        "ta-firi.html" to AppPortata(
+            route = Route.TA_FIRI,
+            titoloDiRipiego = "Ta Firi?",
+            descrizioneDiRipiego = "Sfide a tempo — Ta Firi?",
+            coloreDiRipiego = "#8E44AD",
         ),
     )
 }

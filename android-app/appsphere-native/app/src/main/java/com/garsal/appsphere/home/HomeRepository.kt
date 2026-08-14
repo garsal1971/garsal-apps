@@ -51,6 +51,12 @@ private data class SpSettingsAvviso(
 @Serializable
 private data class SpGiorno(val day: String = "", val label: String? = null)
 
+@Serializable
+private data class SfSfidaAvviso(
+    val title: String = "",
+    @SerialName("checkin_time") val checkinTime: String = "",
+)
+
 object HomeRepository {
 
     private const val TAG = "AppSphereHome"
@@ -127,13 +133,41 @@ object HomeRepository {
      * Gli avvisi della home.
      *
      * Sul web ne convergono sei (decisioni, task urgenti, totale portafogli,
-     * Ta Firi, Spuntiamola, abitudini). Qui c'è solo Spuntiamola perché è
-     * l'unica delle sei che porta a una schermata che esiste: un avviso che
-     * non apre niente è peggio di nessun avviso. Le altre si aggiungono quando
-     * le rispettive app diventano native.
+     * Ta Firi, Spuntiamola, abitudini). Qui ce ne sono due, Spuntiamola e Ta
+     * Firi?, che sono quelle che portano a una schermata che esiste: un avviso
+     * che non apre niente è peggio di nessun avviso. Le altre si aggiungono
+     * quando le rispettive app diventano native.
      */
     suspend fun avvisi(): List<Avviso> = withContext(Dispatchers.IO) {
-        avvisoSpuntiamola()?.let { listOf(it) } ?: emptyList()
+        listOfNotNull(avvisoSpuntiamola()) + avvisiTaFiri()
+    }
+
+    /**
+     * Le sfide di Ta Firi? in corso oggi, una riga per sfida col suo orario di
+     * check-in — le stesse righe e lo stesso testo di `loadHomeAlertChallenges`
+     * in `index.html`.
+     *
+     * Come nel web l'avviso compare **anche se la sfida di oggi è già
+     * spuntata**: qui è un promemoria di cosa c'è in ballo, e la domanda vera
+     * («l'hai fatta?») la fa il banner dentro l'app.
+     */
+    private suspend fun avvisiTaFiri(): List<Avviso> = try {
+        val oggi = LocalDate.now().toString()
+        Supabase.client().postgrest
+            .from("sf_challenges")
+            .select(Columns.raw("title,checkin_time")) {
+                filter {
+                    eq("status", "active")
+                    lte("start_date", oggi)
+                    gte("end_date", oggi)
+                }
+                order("checkin_time", Order.ASCENDING)
+            }
+            .decodeList<SfSfidaAvviso>()
+            .map { Avviso("${it.title} · ${it.checkinTime.take(5)}", Route.TA_FIRI) }
+    } catch (e: Exception) {
+        Log.w(TAG, "avvisi Ta Firi? non disponibili: ${e.message}")
+        emptyList()
     }
 
     private suspend fun avvisoSpuntiamola(): Avviso? = try {
