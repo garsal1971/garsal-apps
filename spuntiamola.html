@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.2.4</title>
+    <title>✅ Spuntiamola v1.2.5</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -679,6 +679,19 @@
             flex-shrink: 0;
             filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18));
         }
+        .stecca-del {
+            background: none;
+            border: none;
+            color: var(--danger);
+            font-size: 1.05rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 4px 7px;
+            border-radius: 8px;
+            flex-shrink: 0;
+            opacity: 0.55;
+        }
+        .stecca-del:hover { background: rgba(231,76,60,0.12); opacity: 1; }
         .stecca-meta {
             font-family: 'Space Mono', monospace;
             font-size: 0.68rem;
@@ -968,7 +981,7 @@
     <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.2.4</span>
+        <span class="app-version" id="versionBadge">v1.2.5</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </div>
@@ -1043,7 +1056,7 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.2.4</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.2.5</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -1116,6 +1129,15 @@
 
         <div class="danger-zone">
             <button class="btn btn-danger" id="btnReset" style="width:100%">🧹 Cancella tutte le spunte</button>
+            <!-- Cancellare il traguardo è un'altra cosa dal chiuderlo: qui non
+                 resta niente in archivio. Compare solo se un traguardo c'è. -->
+            <div id="deleteGoalRow" style="margin-top:10px;display:none">
+                <button class="btn btn-danger" id="btnDeleteGoal" style="width:100%">🗑️ Cancella il traguardo</button>
+                <div class="field-hint" style="margin-top:6px">
+                    Butta via traguardo, periodo, spunte e giornate chiave. Non finisce
+                    fra le stecche chiuse: per conservarne la memoria usa 🏁 Chiudi la stecca.
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -1184,8 +1206,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.2.4';
-var BUILD_TIME  = '2026-08-10T16:00:00Z';
+var APP_VERSION = 'v1.2.5';
+var BUILD_TIME  = '2026-08-14T10:30:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1747,6 +1769,34 @@ async function dbCloseStecca(riga) {
     return ins.data;
 }
 
+// Butta via il traguardo in corso senza archiviarlo: periodo, spunte e
+// giornate chiave. È l'uscita per un traguardo sbagliato o abbandonato —
+// chi vuole conservarne la memoria passa da dbCloseStecca().
+// Si cancella prima sul DB e solo dopo in locale: al contrario, una rete
+// che cade lascerebbe l'app senza periodo e il DB con il suo, che dbLoad()
+// rimetterebbe a posto alla prossima apertura.
+async function dbDeleteGoal() {
+    if (!sb) throw new Error('Non sei connesso: il traguardo non si può cancellare.');
+
+    var delChecks = await sb.from('sp_checks').delete().eq('user_id', currentUserId);
+    if (delChecks.error) throw delChecks.error;
+
+    var delKeys = await sb.from('sp_key_days').delete().eq('user_id', currentUserId);
+    if (delKeys.error) throw delKeys.error;
+
+    var delSet = await sb.from('sp_settings').delete().eq('user_id', currentUserId);
+    if (delSet.error) throw delSet.error;
+}
+
+// Toglie dall'archivio una stecca già chiusa. Anche qui prima il DB:
+// sparita dall'elenco senza essere sparita dal database, tornerebbe da sé
+// alla prossima apertura e sembrerebbe che la cancellazione non funzioni.
+async function dbDeleteStecca(id) {
+    if (!sb) throw new Error('Non sei connesso: la stecca non si può cancellare.');
+    var del = await sb.from('sp_stecche').delete().eq('id', id);
+    if (del.error) throw del.error;
+}
+
 // ============================================================
 // RENDER
 // ============================================================
@@ -1858,6 +1908,8 @@ function renderStecche() {
              +   '<span class="stecca-goal">' + escapeAttr(s.goal || 'Senza nome') + '</span>'
              +   '<span class="stecca-seal" title="l\'ultima spunta">'
              +     escapeAttr(s.final_emoji || '🏁') + '</span>'
+             +   '<button type="button" class="stecca-del" data-id="'
+             +     escapeAttr(s.id || '') + '" title="Cancella questa stecca">🗑️</button>'
              + '</div>'
              + '<div class="stecca-meta">'
              +   'dal ' + fmtIT(s.start_date) + ' al ' + fmtIT(s.end_date)
@@ -1875,6 +1927,45 @@ function renderStecche() {
                   : '')
              + '</div>';
     }).join('') + '</div>';
+
+    Array.prototype.forEach.call(box.querySelectorAll('.stecca-del'), function(b) {
+        b.addEventListener('click', function() { cancellaStecca(b.dataset.id, b); });
+    });
+}
+
+// Cancella una stecca dall'archivio. La riga appena chiusa può essere in
+// elenco senza id (l'insert non ha restituito la riga): senza id non si sa
+// quale cancellare, e cancellarla solo di qui la farebbe tornare al reload.
+async function cancellaStecca(id, btn) {
+    if (!id) {
+        toast('⚠️', 'Questa stecca non è ancora sincronizzata: ricarica la pagina e riprova.',
+              { durata: 3500 });
+        return;
+    }
+
+    var i = -1;
+    S.stecche.forEach(function(s, k) { if (s.id === id) i = k; });
+    if (i === -1) return;
+
+    var stecca = S.stecche[i];
+    if (!confirm('Cancellare la stecca «' + (stecca.goal || 'senza nome') + '»?\n\n'
+                 + 'Spunte, soddisfazione e nota spariscono per sempre.')) return;
+
+    btn.disabled = true;
+    try {
+        await dbDeleteStecca(id);
+    } catch (e) {
+        btn.disabled = false;
+        if (handleAuthError(e)) return;
+        console.warn('Stecca non cancellata:', e);
+        toast('⚠️', 'Non sono riuscito a cancellare la stecca. Riprova.', { durata: 3500 });
+        return;
+    }
+
+    S.stecche.splice(i, 1);
+    salvaCache();
+    render();
+    toast('🗑️', 'Stecca cancellata.');
 }
 
 // Serie = giorni consecutivi spuntati che finiscono oggi (o all'ultimo giorno passato)
@@ -2099,6 +2190,11 @@ function apriImpostazioni() {
     document.getElementById('inKeyLabel').value = '';
     renderKeyList();
 
+    // niente traguardo, niente da cancellare: alla prima apertura queste
+    // impostazioni sono un foglio bianco
+    document.getElementById('deleteGoalRow').style.display =
+        S.configured ? 'block' : 'none';
+
     overlay.classList.add('show');
 }
 
@@ -2239,6 +2335,57 @@ document.getElementById('btnReset').addEventListener('click', async function() {
             toast('⚠️', 'Non sono riuscito a cancellare le spunte. Riprova.', { durata: 3500 });
         }
     }
+});
+
+// Cancella il traguardo in corso: sparisce tutto, senza passare
+// dall'archivio. Chi vuole tenerne memoria usa 🏁 Chiudi la stecca.
+document.getElementById('btnDeleteGoal').addEventListener('click', async function() {
+    if (!S.configured) return;
+
+    var btn    = this;
+    var giorni = giorniDelPeriodo();
+    var fatti  = giorni.filter(function(g) { return S.checks[g]; }).length;
+    var chiavi = Object.keys(S.keyDays).length;
+
+    if (!confirm('Cancellare il traguardo «' + S.goal + '»?\n\n'
+                 + 'Spariscono il periodo, ' + fatti + (fatti === 1 ? ' spunta' : ' spunte')
+                 + ' e ' + chiavi + (chiavi === 1 ? ' giornata chiave' : ' giornate chiave') + '.\n'
+                 + 'Non finisce fra le stecche chiuse: è come se non ci fosse mai stato.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Cancello…';
+    try {
+        await dbDeleteGoal();
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = '🗑️ Cancella il traguardo';
+        if (handleAuthError(e)) return;
+        console.warn('Traguardo non cancellato:', e);
+        alert('Errore: il traguardo non è stato cancellato ('
+              + (e.message || 'connessione assente') + '). Riprova.');
+        return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🗑️ Cancella il traguardo';
+
+    // campo libero, come dopo una stecca chiusa: si riparte da zero e
+    // le impostazioni non devono riproporre il traguardo appena buttato
+    S.goal        = 'Il traguardo';
+    S.emoji       = '🎯';
+    S.startDate   = todayISO();
+    S.endDate     = defaultEnd();
+    S.skipWeekend = false;
+    S.checks      = {};
+    S.keyDays     = {};
+    S.configured  = false;
+    localStorage.removeItem(LS.asked);
+    salvaCache();
+    chiudiImpostazioni();
+    render();
+
+    toast('🗑️', 'Traguardo cancellato. Quando vuoi se ne imposta un altro.',
+          { durata: 3500 });
 });
 
 document.addEventListener('keydown', function(e) {
