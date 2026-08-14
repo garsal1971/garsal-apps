@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.126</title>
+    <title>Weight Quest v3.5.127</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -810,23 +810,58 @@
             inset: 0;
             border-radius: 50%;
             border: 6px solid #FFD700;
+            overflow: hidden;
+            background: #16213e;
             box-shadow: 0 0 24px rgba(255,215,0,0.45), inset 0 0 18px rgba(0,0,0,0.35);
             transition: transform 4.4s cubic-bezier(0.17, 0.67, 0.16, 1);
             transform: rotate(0deg);
         }
-        .prize-slice-label {
+        /* Uno spicchio = una foto ritagliata a triangolo (l'arco lo dà il
+           border-radius del contenitore, che ritaglia quel che esce dal cerchio) */
+        .prize-slice {
             position: absolute;
             inset: 0;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            padding-top: 11%;
-            font-size: 26px;
-            pointer-events: none;
+            clip-path: polygon(50% 50%, 13.7% -1%, 86.3% -1%);
         }
-        .prize-slice-label span {
+        .prize-slice img {
+            position: absolute;
+            left: 13.7%;
+            top: -1%;
+            width: 72.6%;
+            height: 51%;
+            object-fit: cover;
             display: block;
-            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+        }
+        /* Contrassegno del premio, verso il bordo dello spicchio: la foto
+           ritagliata a triangolo si riconosce a fatica, l'emoji no */
+        .prize-slice-tag {
+            position: absolute;
+            left: 50%;
+            top: 12%;
+            transform: translate(-50%, -50%);
+            width: 13%;
+            height: 13%;
+            border-radius: 50%;
+            background: rgba(10,14,30,0.72);
+            border: 1.5px solid rgba(255,215,0,0.9);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            line-height: 1;
+        }
+        /* Raggi dorati fra uno spicchio e l'altro + ombra verso il centro */
+        #prizeSpokes {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            pointer-events: none;
+            background:
+                repeating-conic-gradient(from -0.7deg at 50% 50%,
+                    rgba(255,215,0,0.95) 0deg 1.4deg, rgba(255,215,0,0) 1.4deg 72deg),
+                radial-gradient(circle at 50% 50%,
+                    rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.45) 14%, rgba(0,0,0,0) 34%);
         }
         #prizePointer {
             position: absolute;
@@ -855,11 +890,19 @@
             z-index: 2;
         }
         #prizeResult {
-            min-height: 68px;
-            margin-top: 12px;
+            margin-top: 14px;
             color: #fff;
         }
-        #prizeResultEmoji { font-size: 46px; line-height: 1.1; }
+        #prizeResultPhoto {
+            width: 104px;
+            height: 104px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #FFD700;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+            display: block;
+            margin: 0 auto;
+        }
         #prizeResultName {
             font-size: 22px;
             font-weight: 900;
@@ -1446,8 +1489,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.126';
-        var BUILD_TIME  = '2026-08-14T16:40:09Z';
+        var APP_VERSION = 'v3.5.127';
+        var BUILD_TIME  = '2026-08-14T17:17:21Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2463,11 +2506,12 @@
         // Il premio estratto è definitivo e resta salvato in localStorage,
         // come i punti dei traguardi (vedi getMilestonePtsKey).
         var PRIZES = [
-            { id: 'torta_savoia', emoji: '🍰', name: 'Torta Savoia',            color: '#7b4a2d', msg: 'Sette strati di gloria, e te li sei sudati tutti.' },
-            { id: 'cannolo',      emoji: '🥐', name: 'Cannolo',                 color: '#c9960c', msg: 'Ricotta e scorza croccante. Uno, però — non tre.' },
-            { id: 'pizza',        emoji: '🍕', name: 'Pizza',                   color: '#c0392b', msg: 'Stasera si esce: la pizza è già pagata dalla bilancia.' },
-            { id: 'cioccolata',   emoji: '🍫', name: 'Tavoletta di cioccolata', color: '#4e342e', msg: 'Una tavoletta intera, quadretto dopo quadretto.' },
-            { id: 'biscotti',     emoji: '🍪', name: 'Tazza di biscotti',       color: '#1f6fb2', msg: 'Tazza piena e biscotti a volontà: inzuppa senza fretta.' }
+            // pos = che pezzo della foto finisce dentro lo spicchio (object-position)
+            { id: 'torta_savoia', emoji: '🍰', name: 'Torta Savoia',            img: 'risorse/premi/torta.jpg',      pos: '50% 46%', msg: 'Sette strati di gloria, e te li sei sudati tutti.' },
+            { id: 'cannolo',      emoji: '🥐', name: 'Cannolo',                 img: 'risorse/premi/cannolo.jpg',    pos: '46% 52%', msg: 'Ricotta e scorza croccante. Uno, però — non tre.' },
+            { id: 'pizza',        emoji: '🍕', name: 'Pizza',                   img: 'risorse/premi/pizza.jpg',      pos: '50% 45%', msg: 'Stasera si esce: la pizza è già pagata dalla bilancia.' },
+            { id: 'cioccolata',   emoji: '🍫', name: 'Tavoletta di cioccolata', img: 'risorse/premi/cioccolata.jpg', pos: '50% 52%', msg: 'Una tavoletta intera, quadretto dopo quadretto.' },
+            { id: 'biscotti',     emoji: '🍪', name: 'Tazza di biscotti',       img: 'risorse/premi/biscotti.jpg',   pos: '62% 62%', msg: 'Tazza piena e biscotti a volontà: inzuppa senza fretta.' }
         ];
 
         var prizeDraw = { threshold: null, demo: false, spinning: false, done: false };
@@ -2509,23 +2553,26 @@
             if (!wheel || prizeWheelBuilt) return;
             var n = PRIZES.length;
             var step = 360 / n;
-            var stops = [];
-            for (var i = 0; i < n; i++) {
-                stops.push(PRIZES[i].color + ' ' + (i * step) + 'deg ' + ((i + 1) * step) + 'deg');
-            }
-            wheel.style.background = 'conic-gradient(from 0deg, ' + stops.join(', ') + ')';
             wheel.innerHTML = '';
             for (var j = 0; j < n; j++) {
-                var ang = j * step + step / 2;
-                var lab = document.createElement('div');
-                lab.className = 'prize-slice-label';
-                lab.style.transform = 'rotate(' + ang + 'deg)';
-                var sp = document.createElement('span');
-                sp.textContent = PRIZES[j].emoji;
-                sp.style.transform = 'rotate(' + (-ang) + 'deg)';
-                lab.appendChild(sp);
-                wheel.appendChild(lab);
+                // Lo spicchio punta in alto: lo si ruota al centro della sua fetta
+                var slice = document.createElement('div');
+                slice.className = 'prize-slice';
+                slice.style.transform = 'rotate(' + (j * step + step / 2) + 'deg)';
+                var im = document.createElement('img');
+                im.src = PRIZES[j].img;
+                im.alt = PRIZES[j].name;
+                if (PRIZES[j].pos) im.style.objectPosition = PRIZES[j].pos;
+                slice.appendChild(im);
+                var tag = document.createElement('span');
+                tag.className = 'prize-slice-tag';
+                tag.textContent = PRIZES[j].emoji;
+                slice.appendChild(tag);
+                wheel.appendChild(slice);
             }
+            var spokes = document.createElement('div');
+            spokes.id = 'prizeSpokes';
+            wheel.appendChild(spokes);
             prizeWheelBuilt = true;
         }
 
@@ -2623,8 +2670,8 @@
                 if (parts.length === 3) when = ' · vinto il ' + parts[2] + '/' + parts[1] + '/' + parts[0];
             }
             result.innerHTML =
-                '<div id="prizeResultEmoji">' + p.emoji + '</div>' +
-                '<div id="prizeResultName">' + p.name + '</div>' +
+                '<img id="prizeResultPhoto" src="' + p.img + '" alt="' + p.name + '">' +
+                '<div id="prizeResultName">' + p.emoji + ' ' + p.name + '</div>' +
                 '<div id="prizeResultMsg">' + p.msg + when + '</div>';
         }
 
