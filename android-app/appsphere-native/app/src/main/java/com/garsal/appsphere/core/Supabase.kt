@@ -6,6 +6,7 @@ import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.ExternalAuthAction
 import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.postgrest.Postgrest
 import io.ktor.client.engine.okhttp.OkHttp
 
@@ -117,6 +118,9 @@ object Supabase {
             enableLifecycleCallbacks = false
         }
         install(Postgrest)
+        // Una sola Edge Function viene chiamata da qui: `fill-notification-queue`,
+        // subito dopo aver scritto la regola Smart Block di una sfida di Ta Firi?.
+        install(Functions)
         // L'engine va scelto: supabase-kt non ne porta uno di serie.
         httpEngine = OkHttp.create()
     }

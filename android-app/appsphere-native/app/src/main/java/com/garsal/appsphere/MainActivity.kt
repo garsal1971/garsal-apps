@@ -42,6 +42,7 @@ import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
+import com.garsal.appsphere.tafiri.TaFiriScreen
 import com.garsal.appsphere.tasks.TasksScreen
 import kotlinx.coroutines.delay
 
@@ -214,6 +215,9 @@ private fun Navigazione() {
         }
         composable(Route.EVENTS_LOG) {
             EventsLogScreen(onIndietro = { nav.popBackStack() })
+        }
+        composable(Route.TA_FIRI) {
+            TaFiriScreen(onIndietro = { nav.popBackStack() })
         }
     }
 }

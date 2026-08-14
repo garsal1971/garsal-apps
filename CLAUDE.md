@@ -644,7 +644,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
@@ -759,6 +759,49 @@ dentro l'app il ⚙️ in home: `DialogoAggiornamento` legge la stessa scheda, c
 sapere **prima** di scaricare se c'è davvero qualcosa di nuovo — la domanda che l'11 agosto non
 aveva risposta da nessuna parte.
 
+### ⚠️ Ta Firi? nativo: il punteggio sta nella RPC, e il promemoria si scrive da qui
+
+`tafiri/` porta in nativo le due voci della sidebar del web, che qui sono due schede —
+**Dashboard** (banner del check-in di oggi + sfide attive) e **Storico** (sfide concluse, con
+badge, giorni fatti e punteggio finale) — più il **+ galleggiante** che apre `TaFiriForm`, lo
+stesso modale di `ta-firi.html`: titolo, obiettivo, inizio, durata, orario di check-in, punti in
+palio e schema di punteggio. I punti guadagnati stanno nella top bar invece che nel riquadro
+della sidebar.
+
+Le tre regole che **sono** la funzionalità, e che vanno cambiate nelle due implementazioni
+insieme:
+
+- **il punteggio finale non si calcola nel client, mai.** *Tutto o niente* e *proporzionale*
+  vivono in `sf_finalize_challenge`, che il ViewModel chiama all'apertura su ogni sfida con
+  l'ultimo giorno passato e poi rilegge l'elenco. È la stessa regola delle RPC dei task, per la
+  stessa ragione: due implementazioni dello stesso punteggio sono due punteggi diversi il giorno
+  che una delle due cambia;
+- **il check-in di oggi e la correzione di un giorno passato sono due cose diverse.** Il banner
+  passa da `sf_checkin_set`, che oltre a scrivere il giorno **sposta il promemoria al giorno
+  dopo** (o lo cancella se la sfida è finita); toccare una pallina della griglia gira fra i tre
+  stati con un `update` diretto e **non tocca il promemoria** — spostarlo indietro perché si è
+  corretto un giorno di tre giorni fa farebbe suonare la sveglia nel passato. È la stessa
+  divisione fra `submitTodayCheckin` e `cycleCheckin` nel web;
+- **la regola Smart Block la scrive anche il nativo.** Alla creazione, alla modifica (riagganciata
+  al prossimo giorno ancora da segnare, non alla data di partenza, che di solito è passata) e alla
+  cancellazione, più la rete di sicurezza all'avvio per le sfide attive che ne sono prive —
+  `upsertSmartBlockRule` / `ensureSmartBlockRules` riga per riga. Senza questa parte una sfida
+  creata dal telefono esisterebbe e non chiederebbe mai niente. Subito dopo si chiama
+  `fill-notification-queue` (è l'unica Edge Function invocata dall'APK, e la sola ragione per cui
+  `functions-kt` è fra le dipendenze): il cron gira ogni sei ore, e una sfida che parte stasera
+  alle 20 non può aspettarle.
+
+`checkin_time` è un orario di Roma e `due_at` un istante UTC: la conversione qui la fa `ZoneId`,
+mentre il web se la calcola a mano in `dateTimeToRomeUTC` con le ultime domeniche di marzo e
+ottobre scritte in JavaScript. Stesso risultato, e da questa parte il cambio d'ora non è una cosa
+da ricordarsi.
+
+Due differenze di forma, volute, entrambe per i caratteri di sistema grandi: sulla scheda ogni
+cosa sta **su una riga sua** (nel web titolo, badge e icone condividono una riga che
+all'ingrandimento si sfalda da sé, con le icone spinte a capo per prime — cioè proprio quelle che
+servono per toccare), e le palline della griglia hanno un diametro che segue `fontScale` invece
+dei 32 px fissi del CSS, altrimenti il numero dentro verrebbe tagliato.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -769,9 +812,12 @@ schermate.** I valori di ripiego servono perché non tutte le righe di `cm_apps`
 migration — `events-log.html` non compare in nessun file SQL — e senza quelli la bolla sparirebbe
 in silenzio.
 
-Gli avvisi in home sono per ora la **sola fonte Spuntiamola**: le altre cinque del web (decisioni,
-task urgenti, totale portafogli, Ta Firi, abitudini) porterebbero a schermate che qui non esistono,
-e un avviso che non apre niente è peggio di nessun avviso.
+Gli avvisi in home hanno per ora **due fonti, Spuntiamola e Ta Firi?**: le altre quattro del web
+(decisioni, task urgenti, totale portafogli, abitudini) porterebbero a schermate che qui non
+esistono, e un avviso che non apre niente è peggio di nessun avviso. Quello di Ta Firi? elenca le
+sfide in corso oggi con il loro orario di check-in, ed è la copia di `loadHomeAlertChallenges` —
+compreso il fatto che **compare anche se la sfida di oggi è già spuntata**: lì è un promemoria di
+cosa c'è in ballo, e la domanda vera la fa il banner dentro l'app.
 
 ### ⚠️ Deep link: schema proprio, pagina-ponte https, browser completo
 
@@ -854,9 +900,10 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Tre app ora esistono in due implementazioni
+### ⚠️ Quattro app ora esistono in due implementazioni
 
-`spuntiamola.html`, `obiettivi.html` ed `events-log.html` hanno un gemello Kotlin che lavora sulle
+`spuntiamola.html`, `obiettivi.html`, `events-log.html` e `ta-firi.html` hanno un gemello Kotlin
+che lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -876,6 +923,11 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   Conseguenza in entrambe: la riga di un evento cancellato non sta in nessun gruppo e non si vede
   più da nessuna parte, pur restando sul database e nel totale dei punti. Differenza voluta: il
   web si ferma agli 8 più recenti, il nativo li elenca tutti perché lì la lista scorre.
+- **Ta Firi?** — il punteggio finale resta in `sf_finalize_challenge`; il check-in di oggi passa
+  da `sf_checkin_set` e la correzione di un giorno passato no; la regola Smart Block si scrive da
+  tutt'e due. Dettagli nella sezione qui sopra.
+
+(`tasks.html` è la quinta, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -1342,7 +1394,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Tre app esistono anche in Kotlin**: Spuntiamola, Obiettivi ed Events Log hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle. Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **Quattro app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log e Ta Firi? hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 

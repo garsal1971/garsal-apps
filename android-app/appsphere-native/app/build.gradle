@@ -16,8 +16,8 @@ android {
         applicationId "com.garsal.appsphere"
         minSdk 28
         targetSdk 36
-        versionCode 15
-        versionName "1.0.14"
+        versionCode 16
+        versionName "1.0.15"
     }
 
     // Le pagine HTML scelgono fra dev e produzione dall'hostname (_IS_DEV).
@@ -82,6 +82,10 @@ dependencies {
     implementation platform('io.github.jan-tennert.supabase:bom:3.1.4')
     implementation 'io.github.jan-tennert.supabase:auth-kt'
     implementation 'io.github.jan-tennert.supabase:postgrest-kt'
+    // Serve a una chiamata sola: `fill-notification-queue` dopo aver scritto
+    // una regola Smart Block di Ta Firi?, per non aspettare il cron delle sei
+    // ore. È la stessa fetch che fa `ta-firi.html`.
+    implementation 'io.github.jan-tennert.supabase:functions-kt'
     // supabase-kt non porta un engine Ktor: va scelto qui. Versione allineata
     // a quella che supabase-kt 3.1.4 usa internamente (Ktor 3.1.2).
     implementation 'io.ktor:ktor-client-okhttp:3.1.2'
