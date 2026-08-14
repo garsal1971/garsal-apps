@@ -30,6 +30,39 @@ data class GruppoCategoria(
     val task: List<TsTask>,
 )
 
+/** Le quattro voci di «Raggruppa per» in Gestione. */
+enum class Raggruppa(val etichetta: String) {
+    NESSUNO("Nessun raggruppamento"),
+    CATEGORIA("Categoria"),
+    PRIORITA("Priorità"),
+    TIPO("Tipo"),
+}
+
+/**
+ * Quello che la scheda Gestione sta filtrando. Sono le stesse voci di
+ * `mgmtFilterState` nel web, con gli stessi valori di partenza — «Attivi» e
+ * nessun raggruppamento.
+ */
+data class FiltriGestione(
+    val cerca: String = "",
+    /** `active_group` | `terminated` | `archived` | `""` (tutti), come il web. */
+    val stato: String = "active_group",
+    val prioritaId: String? = null,
+    val categoriaId: String? = null,
+    val tipo: String? = null,
+    val raggruppa: Raggruppa = Raggruppa.NESSUNO,
+    val gruppiAperti: Boolean = false,
+) {
+    companion object {
+        val STATI = listOf(
+            "active_group" to "Attivi",
+            "terminated" to "Terminati",
+            "archived" to "Archiviati",
+            "" to "Tutti",
+        )
+    }
+}
+
 data class TasksState(
     val task: List<TsTask> = emptyList(),
     val storico: List<TsStorico> = emptyList(),
@@ -191,6 +224,87 @@ data class TasksState(
         } + fatti
     }
 
+    // ── Gestione ─────────────────────────────────────────────────────────
+
+    /**
+     * L'elenco filtrato della scheda Gestione, con gli stessi filtri e lo
+     * stesso ordine di `applyTaskFilters()`: per prossima occorrenza, e chi
+     * non ce l'ha va in fondo — non all'inizio, che è dove finirebbe da solo
+     * ordinando delle date nulle.
+     */
+    fun gestione(f: FiltriGestione): List<TsTask> {
+        val cercato = f.cerca.trim().lowercase()
+        return task
+            .filter { t ->
+                when (f.stato) {
+                    "active_group" -> t.vivo
+                    "" -> true
+                    else -> t.stato == f.stato
+                }
+            }
+            .filter { t -> f.categoriaId?.let { it in t.categorie } ?: true }
+            .filter { t -> f.prioritaId?.let { it == t.prioritaId } ?: true }
+            .filter { t -> f.tipo?.let { it == t.tipo } ?: true }
+            .filter { t ->
+                cercato.isEmpty() ||
+                    t.titolo.lowercase().contains(cercato) ||
+                    t.descrizione.orEmpty().lowercase().contains(cercato)
+            }
+            .sortedWith(compareBy(nullsLast<LocalDate>()) { giornoDa(it.prossimaOccorrenza) })
+    }
+
+    /**
+     * Gli stessi task, divisi in gruppi. Per categoria conta **solo la prima**
+     * del task, come nel web: qui un elenco è un inventario, e un task che
+     * compare in due gruppi si conterebbe due volte.
+     */
+    fun gruppiGestione(f: FiltriGestione): List<GruppoCategoria> {
+        val gruppi = linkedMapOf<String, MutableList<TsTask>>()
+        val etichette = mutableMapOf<String, Pair<String, String?>>()
+
+        gestione(f).forEach { t ->
+            val (chiave, etichetta) = when (f.raggruppa) {
+                Raggruppa.CATEGORIA -> t.categorie.firstNotNullOfOrNull { categoriaDi(it) }
+                    ?.let { it.id to (it.etichetta to it.colore) }
+                    ?: ("__senza__" to ("📋 Senza categoria" to null))
+
+                Raggruppa.PRIORITA -> prioritaDi(t.prioritaId)
+                    ?.let { it.id to ("🎯 ${it.nome}" to it.colore) }
+                    ?: ("__senza__" to ("⚪ Senza priorità" to null))
+
+                Raggruppa.TIPO -> t.tipo to (TsTask.etichettaTipo(t.tipo) to "#2563EB")
+
+                Raggruppa.NESSUNO -> "__tutti__" to ("Tutti" to null)
+            }
+            gruppi.getOrPut(chiave) { mutableListOf() }.add(t)
+            etichette[chiave] = etichetta
+        }
+
+        return gruppi.map { (chiave, suoi) ->
+            val (nome, colore) = etichette.getValue(chiave)
+            GruppoCategoria(chiave, nome, colore, suoi)
+        }
+    }
+
+    /**
+     * Il titolo di una copia: «Spesa» → «Spesa (2)», e la volta dopo «(3)».
+     * Stessa regola di `cloneTask()`, compreso il partire da (2) anche quando
+     * l'originale non ha nessun suffisso.
+     */
+    fun titoloClonato(task: TsTask): String {
+        val base = task.titolo.replace(Regex("""\s*\(\d+\)$"""), "")
+        val massimo = this.task.fold(0) { massimo, t ->
+            when {
+                t.titolo == base -> maxOf(massimo, 1)
+                else -> Regex("""^(.+?)\s*\((\d+)\)$""").find(t.titolo)
+                    ?.takeIf { it.groupValues[1] == base }
+                    ?.let { maxOf(massimo, it.groupValues[2].toIntOrNull() ?: 0) }
+                    ?: massimo
+            }
+        }
+        return "$base (${maxOf(massimo, 1) + 1})"
+    }
+
     fun categoriaDi(id: String): CmCategoria? = categorie.firstOrNull { it.id == id }
 
     fun prioritaDi(id: String?): CmPriorita? =
@@ -273,23 +387,40 @@ class TasksViewModel : ViewModel() {
     }
 
     /**
-     * Crea il task e chiude il form solo se il database l'ha accettato.
+     * Salva il task e chiude il form solo se il database l'ha accettato.
      *
      * Niente ottimismo qui, al contrario dell'eliminazione: se il form si
-     * chiudesse subito e l'insert fallisse, quello che si è appena scritto
+     * chiudesse subito e la scrittura fallisse, quello che si è appena scritto
      * sarebbe perso — e a differenza di una spunta, non si rifà in un secondo.
      */
-    fun crea(bozza: BozzaTask, poi: () -> Unit) {
+    fun salva(bozza: BozzaTask, id: String?, poi: () -> Unit) {
         viewModelScope.launch {
             try {
-                TasksRepository.crea(bozza)
-                _state.value = _state.value.copy(messaggio = "Task creato")
+                TasksRepository.salva(bozza, id)
+                _state.value = _state.value.copy(
+                    messaggio = if (id == null) "Task creato" else "Task aggiornato"
+                )
                 ricaricaTask()
                 poi()
             } catch (e: Exception) {
-                Log.w(TAG, "creazione non riuscita", e)
+                Log.w(TAG, "salvataggio non riuscito", e)
                 _state.value = _state.value.copy(
                     messaggio = "Non salvato: ${e.message ?: "connessione assente"}"
+                )
+            }
+        }
+    }
+
+    fun riattiva(task: TsTask) {
+        viewModelScope.launch {
+            try {
+                TasksRepository.riattiva(task.id, task.stato)
+                _state.value = _state.value.copy(messaggio = "Task riattivato")
+                ricaricaTask()
+            } catch (e: Exception) {
+                Log.w(TAG, "riattivazione non riuscita", e)
+                _state.value = _state.value.copy(
+                    messaggio = "Non riattivato: ${e.message ?: "connessione assente"}"
                 )
             }
         }

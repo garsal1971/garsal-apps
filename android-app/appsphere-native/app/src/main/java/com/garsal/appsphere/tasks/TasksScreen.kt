@@ -2,6 +2,7 @@ package com.garsal.appsphere.tasks
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -46,11 +48,17 @@ fun TasksScreen(
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
 
-    // `null` = form chiuso. La bozza sta qui e non nel ViewModel perché è
-    // roba della schermata: se si gira il telefono a metà compilazione si
-    // riparte da capo, ma un task a metà scritto che sopravvive alla chiusura
-    // dell'app sarebbe peggio — non si saprebbe più da dove viene.
-    var nuovoTask by remember { mutableStateOf<BozzaTask?>(null) }
+    // `null` = form chiuso. La coppia distingue il task nuovo (id nullo, e
+    // vale anche per la copia di un altro) da quello che si sta modificando.
+    // Sta qui e non nel ViewModel perché è roba della schermata: girando il
+    // telefono a metà compilazione si riparte da capo, ma un task mezzo
+    // scritto che sopravvive alla chiusura dell'app sarebbe peggio — non si
+    // saprebbe più da dove viene.
+    var inCompilazione by remember { mutableStateOf<Pair<BozzaTask, String?>?>(null) }
+    // I filtri di Gestione stanno qui e non dentro la sua vista: cambiando
+    // scheda e tornando indietro, ritrovarseli azzerati sembra che l'app abbia
+    // dimenticato quello che si stava guardando.
+    var filtri by remember { mutableStateOf(FiltriGestione()) }
     var azioniSu by remember { mutableStateOf<TsTask?>(null) }
     // Il planner si apre sul mese: è la vista che si guarda per sapere come sta
     // messo il periodo, ed è quella che serviva.
@@ -60,13 +68,14 @@ fun TasksScreen(
     var daEliminare by remember { mutableStateOf<TsTask?>(null) }
     var daSaltare by remember { mutableStateOf<TsTask?>(null) }
 
-    nuovoTask?.let { bozza ->
+    inCompilazione?.let { (bozza, id) ->
         TaskForm(
             bozzaIniziale = bozza,
+            id = id,
             categorie = stato.categorie,
             priorita = stato.priorita,
-            onAnnulla = { nuovoTask = null },
-            onSalva = { compilata -> vm.crea(compilata) { nuovoTask = null } },
+            onAnnulla = { inCompilazione = null },
+            onSalva = { compilata -> vm.salva(compilata, id) { inCompilazione = null } },
         )
         return
     }
@@ -90,7 +99,7 @@ fun TasksScreen(
         // schede può venire in mente di segnarsi una cosa da fare.
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { nuovoTask = BozzaTask() },
+                onClick = { inCompilazione = BozzaTask() to null },
                 containerColor = Palette.topBar,
                 contentColor = Palette.light,
             ) { Text("+", fontSize = 26.sp) }
@@ -131,6 +140,23 @@ fun TasksScreen(
                             onCompleta = { vm.completa(it.id) },
                             onFallisci = { vm.fallisci(it.id) },
                             onSalta = { daSaltare = it },
+                        )
+
+                        Vista.GESTIONE -> VistaGestione(
+                            stato = stato,
+                            filtri = filtri,
+                            onFiltri = { filtri = it },
+                            onNuovo = { inCompilazione = BozzaTask() to null },
+                            onVedi = { azioniSu = it },
+                            onModifica = { inCompilazione = BozzaTask.da(it) to it.id },
+                            // La copia nasce **senza id**: si salva come task
+                            // nuovo, col titolo numerato come fa `cloneTask()`.
+                            onClona = {
+                                inCompilazione =
+                                    BozzaTask.da(it).copy(titolo = stato.titoloClonato(it)) to null
+                            },
+                            onElimina = { daEliminare = it },
+                            onRiattiva = { vm.riattiva(it) },
                         )
 
                         Vista.MESE -> {
@@ -256,14 +282,25 @@ fun TasksScreen(
 /** Le tre viste del planner, come i tre pulsanti in cima a `tasks.html`. */
 enum class Vista(val etichetta: String) {
     PANORAMICA("Panoramica"),
+    GESTIONE("Gestione"),
     MESE("Mese"),
     SETTIMANA("Settimana"),
 }
 
+/**
+ * Le quattro schede. Da quando sono quattro **non si dividono più lo schermo
+ * in parti uguali**: con `weight(1f)` e i caratteri di sistema grandi,
+ * «Panoramica» e «Settimana» in un quarto di riga si tagliano a metà parola.
+ * Ognuna è larga quanto il suo nome e la fila scorre col dito, come le righe
+ * delle schede.
+ */
 @Composable
 private fun SelettoreVista(scelta: Vista, onScegli: (Vista) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Vista.entries.forEach { vista ->
@@ -274,13 +311,13 @@ private fun SelettoreVista(scelta: Vista, onScegli: (Vista) -> Unit) {
                 fontWeight = if (attiva) FontWeight.Bold else FontWeight.Normal,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
+                softWrap = false,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier
-                    .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (attiva) Palette.topBar else Palette.inputBg)
                     .clickable { onScegli(vista) }
-                    .padding(vertical = 12.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
             )
         }
     }
@@ -324,11 +361,10 @@ private fun DialogoAzioni(
                 }
                 Voce("✗ Fallito", "${task.puntiFallimento} punti", Palette.danger, onFallisci)
                 Voce("🗑 Elimina", null, Palette.danger, onElimina)
-                // Un task nuovo si fa col + in basso; cambiare uno che
-                // esiste già no, e il dialogo lo dice invece di lasciarlo
-                // scoprire cercando il pulsante che non c'è.
+                // Il dialogo dice dove stanno le azioni che qui non ci sono,
+                // invece di lasciarle cercare per le quattro schede.
                 Text(
-                    text = "Per modificare un task si usa tasks.html.",
+                    text = "Modifica e copia stanno nella scheda Gestione.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Palette.muted,
                     modifier = Modifier.padding(top = 12.dp),

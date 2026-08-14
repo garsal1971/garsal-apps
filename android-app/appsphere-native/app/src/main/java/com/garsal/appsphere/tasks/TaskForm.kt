@@ -38,12 +38,11 @@ import com.garsal.appsphere.core.coloreDaHex
 import java.time.LocalDate
 
 /**
- * Creazione di un task.
+ * Creazione e modifica di un task.
  *
- * **Solo creazione**: per modificarne uno che esiste già si usa `tasks.html`.
- * Il tipo decide quali colonne un task ha, e cambiarlo dopo lascerebbe dietro
- * quelle del tipo di prima — `multiple_dates` su un ricorrente, per dire — che
- * nessuno ripulisce.
+ * **Il tipo di un task che esiste già non si cambia** (`id != null`): decide
+ * quali colonne quel task ha, e passare da `multiple` a `recurring`
+ * lascerebbe dietro `multiple_dates` che nessuno ripulisce.
  *
  * ⚠️ **I `workflow` non passano da qui.** I loro step hanno dipendenze fra
  * loro (`depends_on`), e lo stato di ognuno — `locked`, `active`, `completed`
@@ -57,6 +56,7 @@ import java.time.LocalDate
 @Composable
 fun TaskForm(
     bozzaIniziale: BozzaTask,
+    id: String?,
     categorie: List<CmCategoria>,
     priorita: List<CmPriorita>,
     onAnnulla: () -> Unit,
@@ -68,7 +68,7 @@ fun TaskForm(
     Scaffold(
         topBar = {
             GarsalTopBar(
-                titolo = "Nuovo task",
+                titolo = if (id == null) "Nuovo task" else "Modifica task",
                 onIndietro = onAnnulla,
                 azioni = {
                     Text(
@@ -110,8 +110,9 @@ fun TaskForm(
             Titoletto("Tipo")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TsTask.TIPI.forEach { (valore, etichetta) ->
-                    // I `workflow` no: vedi il commento in cima.
-                    val disponibile = valore != "workflow"
+                    // I `workflow` non passano da qui, e il tipo di un task
+                    // che esiste già non si tocca: vedi il commento in cima.
+                    val disponibile = valore != "workflow" && (id == null || valore == b.tipo)
                     Pillola(
                         testo = etichetta,
                         scelta = b.tipo == valore,
@@ -120,6 +121,10 @@ fun TaskForm(
                     ) { b = b.copy(tipo = valore) }
                 }
             }
+            if (id != null) {
+                Nota("Il tipo di un task che esiste già non si cambia da qui.")
+            }
+
             // ── Quando ──────────────────────────────────────────────────
             Titoletto(if (b.tipo == "multiple") "Orario delle occorrenze" else "Data e ora")
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
