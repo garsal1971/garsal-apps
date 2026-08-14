@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.125</title>
+    <title>Weight Quest v3.5.126</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -726,6 +726,189 @@
             100% { transform: scale(0)   rotate(45deg);  opacity: 0; }
         }
 
+        /* ── Premio: stellina in attesa di estrazione ───────────────── */
+        .ms-th.prize-pending {
+            cursor: pointer;
+            border-color: #FF3366;
+            background: linear-gradient(135deg, #fff8dc, #ffd6a5);
+            animation: msPrizePulse 1.1s ease-in-out infinite alternate;
+        }
+        .ms-th.prize-won { cursor: pointer; }
+        .ms-th-prize {
+            font-size: 15px;
+            line-height: 1.2;
+            margin-top: 2px;
+        }
+        .ms-th-gift {
+            font-size: 13px;
+            line-height: 1.2;
+            margin-top: 2px;
+            animation: msGiftWiggle 0.9s ease-in-out infinite alternate;
+        }
+        @keyframes msPrizePulse {
+            from { box-shadow: 0 2px 8px rgba(255,51,102,0.30); transform: translateY(0); }
+            to   { box-shadow: 0 6px 18px rgba(255,51,102,0.65); transform: translateY(-3px); }
+        }
+        @keyframes msGiftWiggle {
+            from { transform: rotate(-12deg) scale(1);    }
+            to   { transform: rotate(12deg)  scale(1.18); }
+        }
+        #milestonePrizeHint {
+            font-size: 13px;
+            font-weight: 700;
+            color: #FFD700;
+            margin-top: 10px;
+        }
+
+        /* ── Ruota dei premi ────────────────────────────────────────── */
+        #prizeOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            overflow: auto;
+        }
+        #prizeCard {
+            position: relative;
+            background: linear-gradient(145deg, #1a1a2e, #16213e);
+            border: 2px solid #FFD700;
+            border-radius: 24px;
+            padding: 22px 20px 24px;
+            text-align: center;
+            box-shadow: 0 0 40px rgba(255,215,0,0.35);
+            animation: cardSlideIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+            width: 100%;
+            max-width: 340px;
+            max-height: 92vh;
+            overflow: auto;
+        }
+        #prizeTitle {
+            font-size: 19px;
+            font-weight: 900;
+            color: #fff;
+            line-height: 1.3;
+        }
+        #prizeSubtitle {
+            font-size: 12px;
+            color: #9aa5c4;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+        .prize-wheel-wrap {
+            position: relative;
+            width: 240px;
+            max-width: 78vw;
+            aspect-ratio: 1 / 1;
+            margin: 18px auto 6px;
+        }
+        #prizeWheel {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 6px solid #FFD700;
+            box-shadow: 0 0 24px rgba(255,215,0,0.45), inset 0 0 18px rgba(0,0,0,0.35);
+            transition: transform 4.4s cubic-bezier(0.17, 0.67, 0.16, 1);
+            transform: rotate(0deg);
+        }
+        .prize-slice-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 11%;
+            font-size: 26px;
+            pointer-events: none;
+        }
+        .prize-slice-label span {
+            display: block;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+        }
+        #prizePointer {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 30px;
+            line-height: 1;
+            z-index: 3;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
+        }
+        #prizeHub {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #16213e;
+            border: 3px solid #FFD700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            z-index: 2;
+        }
+        #prizeResult {
+            min-height: 68px;
+            margin-top: 12px;
+            color: #fff;
+        }
+        #prizeResultEmoji { font-size: 46px; line-height: 1.1; }
+        #prizeResultName {
+            font-size: 22px;
+            font-weight: 900;
+            color: #FFD700;
+            margin-top: 2px;
+            line-height: 1.25;
+        }
+        #prizeResultMsg {
+            font-size: 13px;
+            color: #cfd6ea;
+            margin-top: 6px;
+            line-height: 1.45;
+        }
+        .prize-btn {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 46px;
+            margin-top: 14px;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            background: #FFD700;
+            color: #1a1a2e;
+        }
+        .prize-btn.secondary { background: #2e3a5e; color: #dbe2f5; font-weight: 700; }
+        .prize-btn[disabled] { opacity: 0.5; cursor: default; }
+        #prizeConfetti {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: 24px;
+        }
+        .prize-conf {
+            position: absolute;
+            top: -14px;
+            font-size: 16px;
+            animation: prizeConfFall linear forwards;
+        }
+        @keyframes prizeConfFall {
+            0%   { transform: translateY(0)     rotate(0deg);   opacity: 1; }
+            100% { transform: translateY(420px) rotate(520deg); opacity: 0; }
+        }
+
         /* ── Toast notifiche ─────────────────────────────────────────── */
         .wq-toast {
             position: fixed;
@@ -940,6 +1123,14 @@
                                    style="width:100%; box-sizing:border-box;"
                                    oninput="updateMilestoneProgressBar()">
                             <div id="milestonePtsDistrib"></div>
+                            <button type="button" id="btnTestPrize" onclick="openPrizeDraw(null, true)"
+                                    style="margin-top:10px; min-height:44px; height:auto; white-space:normal;">
+                                🎲 Prova l'estrazione del premio
+                            </button>
+                            <div style="font-size:11px; color:#999; margin-top:5px; line-height:1.5;">
+                                Ogni stellina accesa dà anche un premio da estrarre: resta evidenziata con 🎁
+                                finché non la tocchi. La prova qui sopra non salva niente.
+                            </div>
                         </div>
 
                         <h4 style="margin: 20px 0 10px 0;">Milestone Progressive</h4>
@@ -1255,8 +1446,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.125';
-        var BUILD_TIME  = '2026-07-08T14:35:31Z';
+        var APP_VERSION = 'v3.5.126';
+        var BUILD_TIME  = '2026-08-14T16:40:09Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2103,18 +2294,33 @@
                 return null;
             }
 
+            // Premi già estratti per questo obiettivo
+            var prizes = obj ? loadPrizes(obj) : {};
+
             // Costruisce le stelle
             bar.innerHTML = '';
             bar.style.display = 'flex';
             thresholds.forEach(function(t, i) {
                 var reached = isFinite(minDailyMin) && minDailyMin <= t;
                 var firstDate = reached ? firstDateBelow(t) : null;
+                var won  = reached ? prizes[String(t)] : null;
+                var prize = won ? findPrize(won.id) : null;
 
                 var div = document.createElement('div');
-                div.className = 'ms-th' + (reached ? ' reached' : '');
+                div.className = 'ms-th' + (reached ? ' reached' : '')
+                              + (reached && !won ? ' prize-pending' : '')
+                              + (prize ? ' prize-won' : '');
                 div.title = reached
                     ? '✓ Prima volta < ' + t + ' kg: ' + (firstDate || '?')
+                        + (prize ? ' — premio: ' + prize.name : ' — 🎁 tocca per estrarre il premio!')
                     : 'Prima volta < ' + t + ' kg — non ancora raggiunta';
+
+                // La stellina raggiunta si clicca: estrae il premio (o lo rimostra)
+                if (reached) {
+                    div.onclick = (function(th) {
+                        return function() { openPrizeDraw(th, false); };
+                    })(t);
+                }
 
                 // Timbro data raggiungimento
                 if (firstDate) {
@@ -2140,14 +2346,20 @@
                 div.appendChild(icon);
                 div.appendChild(label);
                 div.appendChild(pts);
+
+                // Premio: 🎁 lampeggiante finché non si clicca, poi il cibo vinto
+                if (reached) {
+                    var prizeEl = document.createElement('div');
+                    prizeEl.className = prize ? 'ms-th-prize' : 'ms-th-gift';
+                    prizeEl.textContent = prize ? prize.emoji : '🎁';
+                    div.appendChild(prizeEl);
+                }
+
                 bar.appendChild(div);
             });
 
             // Mostra distribuzione punti sotto il campo input
             if (distrib && totalPts > 0) {
-                var reached = thresholds.filter(function(t, i) {
-                    return isFinite(minDailyMax) && minDailyMax < t;
-                }).length;
                 distrib.textContent = ptsArr.map(function(p, i) {
                     return '< ' + thresholds[i] + ' kg: +' + p + ' pt';
                 }).join('  ·  ');
@@ -2242,6 +2454,202 @@
             var overlay = document.getElementById('milestoneOverlay');
             if (overlay) overlay.style.display = 'none';
             if (milestoneTimer) { clearTimeout(milestoneTimer); milestoneTimer = null; }
+        }
+        // ────────────────────────────────────────────────────────────────
+
+        // ── Premio cibo: estrazione alla ruota ──────────────────────────
+        // Ogni soglia raggiunta dà, oltre ai punti, un premio da estrarre:
+        // la stellina resta evidenziata (🎁) finché non la si clicca.
+        // Il premio estratto è definitivo e resta salvato in localStorage,
+        // come i punti dei traguardi (vedi getMilestonePtsKey).
+        var PRIZES = [
+            { id: 'torta_savoia', emoji: '🍰', name: 'Torta Savoia',            color: '#7b4a2d', msg: 'Sette strati di gloria, e te li sei sudati tutti.' },
+            { id: 'cannolo',      emoji: '🥐', name: 'Cannolo',                 color: '#c9960c', msg: 'Ricotta e scorza croccante. Uno, però — non tre.' },
+            { id: 'pizza',        emoji: '🍕', name: 'Pizza',                   color: '#c0392b', msg: 'Stasera si esce: la pizza è già pagata dalla bilancia.' },
+            { id: 'cioccolata',   emoji: '🍫', name: 'Tavoletta di cioccolata', color: '#4e342e', msg: 'Una tavoletta intera, quadretto dopo quadretto.' },
+            { id: 'biscotti',     emoji: '🍪', name: 'Tazza di biscotti',       color: '#1f6fb2', msg: 'Tazza piena e biscotti a volontà: inzuppa senza fretta.' }
+        ];
+
+        var prizeDraw = { threshold: null, demo: false, spinning: false, done: false };
+        var prizeWheelRot = 0;
+        var prizeWheelBuilt = false;
+
+        function getPrizesKey(obj) {
+            return 'wq_prizes_' + (obj ? obj.id : 'new');
+        }
+
+        function loadPrizes(obj) {
+            try {
+                return JSON.parse(localStorage.getItem(getPrizesKey(obj)) || '{}') || {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function savePrize(obj, threshold, prizeId) {
+            if (!obj) return;
+            var all = loadPrizes(obj);
+            all[String(threshold)] = { id: prizeId, date: localDateStr() };
+            try {
+                localStorage.setItem(getPrizesKey(obj), JSON.stringify(all));
+            } catch (e) {
+                log('Errore salvataggio premio: ' + e.message);
+            }
+        }
+
+        function findPrize(id) {
+            for (var i = 0; i < PRIZES.length; i++) {
+                if (PRIZES[i].id === id) return PRIZES[i];
+            }
+            return null;
+        }
+
+        function buildPrizeWheel() {
+            var wheel = document.getElementById('prizeWheel');
+            if (!wheel || prizeWheelBuilt) return;
+            var n = PRIZES.length;
+            var step = 360 / n;
+            var stops = [];
+            for (var i = 0; i < n; i++) {
+                stops.push(PRIZES[i].color + ' ' + (i * step) + 'deg ' + ((i + 1) * step) + 'deg');
+            }
+            wheel.style.background = 'conic-gradient(from 0deg, ' + stops.join(', ') + ')';
+            wheel.innerHTML = '';
+            for (var j = 0; j < n; j++) {
+                var ang = j * step + step / 2;
+                var lab = document.createElement('div');
+                lab.className = 'prize-slice-label';
+                lab.style.transform = 'rotate(' + ang + 'deg)';
+                var sp = document.createElement('span');
+                sp.textContent = PRIZES[j].emoji;
+                sp.style.transform = 'rotate(' + (-ang) + 'deg)';
+                lab.appendChild(sp);
+                wheel.appendChild(lab);
+            }
+            prizeWheelBuilt = true;
+        }
+
+        // threshold = soglia in kg; demo = true → prova, non salva niente
+        function openPrizeDraw(threshold, demo) {
+            var overlay = document.getElementById('prizeOverlay');
+            if (!overlay) return;
+            buildPrizeWheel();
+
+            var obj  = userData.currentObjective;
+            var won  = (!demo && obj) ? loadPrizes(obj)[String(threshold)] : null;
+
+            prizeDraw = { threshold: threshold, demo: !!demo, spinning: false, done: !!won };
+
+            var title    = document.getElementById('prizeTitle');
+            var subtitle = document.getElementById('prizeSubtitle');
+            var spinBtn  = document.getElementById('prizeSpinBtn');
+            var closeBtn = document.getElementById('prizeCloseBtn');
+            var result   = document.getElementById('prizeResult');
+            var conf     = document.getElementById('prizeConfetti');
+            if (conf) conf.innerHTML = '';
+
+            if (demo) {
+                title.textContent = '🎲 Prova dell\'estrazione';
+                subtitle.textContent = 'È solo una prova: nessun premio viene salvato.';
+            } else {
+                title.textContent = '🎁 Premio per < ' + threshold + ' kg';
+                subtitle.textContent = won
+                    ? 'Premio già estratto per questa soglia.'
+                    : 'Gira la ruota e scopri cosa ti sei guadagnato.';
+            }
+
+            if (won) {
+                var p = findPrize(won.id) || PRIZES[0];
+                showPrizeResult(p, won.date);
+                spinBtn.style.display = 'none';
+                closeBtn.textContent = 'Chiudi';
+            } else {
+                result.innerHTML = '';
+                spinBtn.style.display = 'block';
+                spinBtn.disabled = false;
+                spinBtn.textContent = '🎡 Gira la ruota';
+                closeBtn.textContent = 'Più tardi';
+            }
+
+            overlay.style.display = 'flex';
+        }
+
+        function spinPrizeWheel() {
+            if (prizeDraw.spinning || prizeDraw.done) return;
+            var wheel   = document.getElementById('prizeWheel');
+            var spinBtn = document.getElementById('prizeSpinBtn');
+            if (!wheel) return;
+
+            prizeDraw.spinning = true;
+            spinBtn.disabled = true;
+            spinBtn.textContent = '🌀 Gira…';
+
+            var idx  = Math.floor(Math.random() * PRIZES.length);
+            var p    = PRIZES[idx];
+            var step = 360 / PRIZES.length;
+            // Centro dello spicchio, misurato in senso orario dall'alto (dove sta la freccia)
+            var center = idx * step + step / 2;
+            // Piccolo scarto perché non si fermi sempre esattamente al centro
+            var jitter = (Math.random() - 0.5) * (step - 14);
+            var target = center + jitter;
+            // Porta il centro dello spicchio sotto la freccia, più 5 giri interi
+            var delta = (360 - ((prizeWheelRot + target) % 360 + 360) % 360) % 360;
+            prizeWheelRot += 5 * 360 + delta;
+            wheel.style.transform = 'rotate(' + prizeWheelRot + 'deg)';
+
+            setTimeout(function() {
+                prizeDraw.spinning = false;
+                prizeDraw.done = true;
+                spinBtn.style.display = 'none';
+                document.getElementById('prizeCloseBtn').textContent = 'Chiudi';
+
+                if (!prizeDraw.demo && userData.currentObjective) {
+                    savePrize(userData.currentObjective, prizeDraw.threshold, p.id);
+                    updateMilestoneProgressBar();
+                    log('Premio estratto per < ' + prizeDraw.threshold + ' kg: ' + p.name);
+                }
+
+                showPrizeResult(p, prizeDraw.demo ? null : localDateStr());
+                prizeConfetti();
+            }, 4600);
+        }
+
+        function showPrizeResult(p, dateStr) {
+            var result = document.getElementById('prizeResult');
+            if (!result) return;
+            var when = '';
+            if (dateStr) {
+                var parts = String(dateStr).split('-');
+                if (parts.length === 3) when = ' · vinto il ' + parts[2] + '/' + parts[1] + '/' + parts[0];
+            }
+            result.innerHTML =
+                '<div id="prizeResultEmoji">' + p.emoji + '</div>' +
+                '<div id="prizeResultName">' + p.name + '</div>' +
+                '<div id="prizeResultMsg">' + p.msg + when + '</div>';
+        }
+
+        function prizeConfetti() {
+            var box = document.getElementById('prizeConfetti');
+            if (!box) return;
+            var chars = ['🍰', '🥐', '🍕', '🍫', '🍪', '✨', '⭐', '🎉'];
+            for (var i = 0; i < 26; i++) {
+                var s = document.createElement('span');
+                s.className = 'prize-conf';
+                s.textContent = chars[Math.floor(Math.random() * chars.length)];
+                s.style.left = (Math.random() * 96) + '%';
+                s.style.animationDelay = (Math.random() * 0.6) + 's';
+                s.style.animationDuration = (1.4 + Math.random() * 1.2) + 's';
+                s.style.fontSize = (12 + Math.floor(Math.random() * 12)) + 'px';
+                box.appendChild(s);
+            }
+            setTimeout(function() { box.innerHTML = ''; }, 3200);
+        }
+
+        function closePrizeOverlay() {
+            var overlay = document.getElementById('prizeOverlay');
+            if (overlay) overlay.style.display = 'none';
+            var conf = document.getElementById('prizeConfetti');
+            if (conf) conf.innerHTML = '';
         }
         // ────────────────────────────────────────────────────────────────
 
@@ -6994,7 +7402,28 @@
             <div id="milestoneArrow">↓</div>
             <div id="milestoneKg">-- kg</div>
             <div id="milestoneLabel">🏆 Soglia Superata!</div>
+            <div id="milestonePrizeHint">🎁 Ti aspetta un premio — tocca la stellina ⭐</div>
             <div id="milestoneSub">Tocca per chiudere</div>
+        </div>
+    </div>
+
+    <!-- Estrazione premio (ruota della fortuna) -->
+    <div id="prizeOverlay">
+        <div id="prizeCard">
+            <div id="prizeConfetti"></div>
+            <div id="prizeTitle">🎁 Hai vinto un premio!</div>
+            <div id="prizeSubtitle">Gira la ruota e scopri cosa ti sei guadagnato</div>
+
+            <div class="prize-wheel-wrap">
+                <div id="prizePointer">🔻</div>
+                <div id="prizeWheel"></div>
+                <div id="prizeHub">🍽️</div>
+            </div>
+
+            <div id="prizeResult"></div>
+
+            <button type="button" id="prizeSpinBtn" class="prize-btn" onclick="spinPrizeWheel()">🎡 Gira la ruota</button>
+            <button type="button" id="prizeCloseBtn" class="prize-btn secondary" onclick="closePrizeOverlay()">Chiudi</button>
         </div>
     </div>
 </body>

@@ -922,6 +922,16 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Chart.js weight graph centred on today (30-day window, scrollable)
 - Google Fit integration via OAuth token
 - Minimal inline Supabase client (no CDN); milestone and objective tracking
+- **Premio cibo alle soglie di peso**: ogni stellina accesa (`.ms-th.reached`) dà, oltre ai punti,
+  un premio da estrarre alla ruota — 🍰 Torta Savoia, 🥐 Cannolo, 🍕 Pizza, 🍫 Tavoletta di
+  cioccolata, 🍪 Tazza di biscotti. Finché non la si tocca la stellina resta **evidenziata in
+  rosso col 🎁 che pulsa**; dopo l'estrazione mostra l'emoji del premio vinto e ritoccandola lo
+  rimostra senza poter rigirare. Un pulsante *🎲 Prova l'estrazione del premio* (sotto ⭐ Punti
+  Totali Traguardi Intermedi) apre la ruota in prova, senza salvare.
+  I premi stanno in **localStorage** (`wq_prizes_<objective id>`), come i punti dei traguardi
+  (`wq_mpts_<id>`): nessuna tabella nuova, quindi il premio è **per dispositivo** — chi apre
+  l'app da un altro telefono si ritrova la stellina di nuovo da estrarre. Spostarlo sul DB
+  vorrebbe dire una colonna/tabella nuova, e quelle si chiedono prima.
 
 ### `casarosa.html` — Cassa Casa Rosa
 - Movimenti e saldo della cassa di Casa Rosa (`cntrs_transactions`, `cntrs_categories`,
