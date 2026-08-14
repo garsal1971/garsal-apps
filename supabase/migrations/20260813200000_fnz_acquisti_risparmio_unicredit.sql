@@ -18,15 +18,12 @@
 --   Nvidia   US67066G1040  225,60     15    2.935     195,6667
 --   TSMC     US8740391003  418,47      8    2.903     362,8750
 --   Micron   US5951121038  955,89      3    2.487     829,0000
---   Meta     US30303M1027  ~589        8    (v. nota) 510,8333
+--   Meta     US30303M1027  ~589        8    4.086,67  510,8333
 --
--- ⚠️ NOTA SU META: il controvalore del prospetto (~3.065 €) corrisponde a **6**
--- azioni, non a 8. Qui sono registrate 8 azioni come da correzione, e il prezzo
--- unitario è quello implicito nel prospetto (3.065 / 6 = 510,8333 €/az, cioè lo
--- stesso cambio delle altre tre). Il controvalore effettivo diventa quindi
--- 4.086,67 € e non 3.065 €: se le azioni sono davvero 8, è la colonna del
--- prospetto a essere rimasta indietro; se invece il controvalore è quello giusto,
--- allora le azioni sono 6 e questa riga va corretta prima di applicare il file.
+-- NOTA SU META: 8 azioni, confermate. Il controvalore del prospetto (~3.065 €)
+-- corrispondeva a 6 azioni ed era rimasto indietro: il prezzo unitario si ricava
+-- comunque da lì (3.065 / 6 = 510,8333 €/az, che è lo stesso cambio delle altre
+-- tre righe), e il controvalore effettivo è 4.086,67 €.
 --
 -- Commissioni: non indicate nel prospetto, registrate a 0. Se la banca le ha
 -- addebitate vanno messe in `commissione`, altrimenti il prezzo di carico è più
@@ -50,9 +47,22 @@ INSERT INTO _dati VALUES
   ('MU',   'MICRON TECHNOLOGY', 'US5951121038', 'stock', 'NASDAQ',  3, 829.0000, 0),
   ('META', 'META PLATFORMS',    'US30303M1027', 'stock', 'NASDAQ',  8, 510.8333, 0);
 
--- Data di acquisto: una sola riga da cambiare se non è questa.
+-- Data di acquisto.
 CREATE TEMP TABLE _quando (data date);
-INSERT INTO _quando VALUES (DATE '2026-08-13');
+INSERT INTO _quando VALUES (DATE '2026-08-12');
+
+-- ── Il dossier ──────────────────────────────────────────────────────────────
+-- Creato solo se non c'è già un dossier UniCredit con quel numero. Il confronto
+-- sulla banca è ILIKE e non «=» perché in archivio il nome è scritto a mano
+-- ('UNICREDIT'): con un confronto esatto, un 'UniCredit' già presente non
+-- verrebbe riconosciuto e qui nascerebbe un secondo dossier per lo stesso conto.
+INSERT INTO fnz_dossiers (user_id, bank_name, title, number)
+SELECT public.garsal_user_id(), 'UNICREDIT', 'PERSONALE', '0002'
+ WHERE NOT EXISTS (
+   SELECT 1 FROM fnz_dossiers d
+    WHERE d.user_id = public.garsal_user_id()
+      AND d.bank_name ILIKE 'unicredit' AND d.number = '0002'
+ );
 
 -- ── Controlli PRIMA di scrivere ─────────────────────────────────────────────
 -- Vanno qui e non in fondo. Una JOIN che non trova il portafoglio inserisce zero
@@ -78,9 +88,9 @@ BEGIN
 
   SELECT count(*) INTO v_dossier FROM fnz_dossiers
    WHERE user_id = public.garsal_user_id()
-     AND bank_name ILIKE '%unicredit%' AND title ILIKE '%personal%';
+     AND bank_name ILIKE 'unicredit' AND number = '0002';
   IF v_dossier <> 1 THEN
-    RAISE EXCEPTION 'dossier UniCredit «personale» trovati: % (ne serve esattamente 1 — se non esiste, va creato in Finanza → Dossier)', v_dossier;
+    RAISE EXCEPTION 'dossier UniCredit n. 0002 trovati: % (ne serve esattamente 1)', v_dossier;
   END IF;
 END $$;
 
@@ -113,7 +123,7 @@ SELECT public.garsal_user_id(),
        pr.id,
        (SELECT ds.id FROM fnz_dossiers ds
          WHERE ds.user_id = public.garsal_user_id()
-           AND ds.bank_name ILIKE '%unicredit%' AND ds.title ILIKE '%personal%'),
+           AND ds.bank_name ILIKE 'unicredit' AND ds.number = '0002'),
        'BUY', d.quantita, d.prezzo_eur, d.commissione, q.data
   FROM _dati d
  CROSS JOIN _quando q
