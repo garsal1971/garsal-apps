@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.5</title>
+  <title>GarsalFinanza v1.3.6</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -97,7 +97,9 @@
     .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
     .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
     .nav-item.active { background: #eef2ff; color: var(--c-primary); }
-    .nav-label { font-size: .68rem; font-weight: 700; color: var(--c-muted); text-transform: uppercase; letter-spacing: .08em; padding: 14px 11px 6px; }
+    .nav-label { font-size: .68rem; font-weight: 700; color: var(--c-text); text-transform: uppercase; letter-spacing: .08em; padding: 14px 11px 6px; }
+    .nav-sublabel { font-size: .66rem; font-weight: 600; color: var(--c-muted); letter-spacing: .04em; padding: 8px 11px 3px; }
+    .nav-group { display: flex; flex-direction: column; gap: 2px; margin-left: 6px; padding-left: 6px; border-left: 2px solid var(--c-border); }
     .nav-sep { height: 1px; background: var(--c-border); margin: 6px 4px; }
     /* ── Main ─────────────────────────────────────────────────── */
     .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
@@ -416,45 +418,72 @@
   <div id="mobile-nav-overlay"></div>
   <div class="app-layout">
     <nav class="sidebar">
-      <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
-      <button class="nav-item"        data-action="nav" data-view="progressione">📈 Sviluppo</button>
-
-      <div class="nav-label">Finanza</div>
-      <button class="nav-item"        data-action="nav" data-view="portafogli">💼 Portafogli</button>
-      <button class="nav-item"        data-action="nav" data-view="transazioni">💳 Transazioni</button>
-      <button class="nav-item"        data-action="nav" data-view="dossiers">📁 Dossier</button>
-      <button class="nav-item"        data-action="nav" data-view="fondi">🤝 Fondi</button>
-      <button class="nav-item"        data-action="nav" data-view="prodotti">📋 Prodotti</button>
-      <button class="nav-item"        data-action="nav" data-view="prezzi">🏷️ Prezzi</button>
-
       <div class="nav-label">Patrimonio</div>
-      <button class="nav-item"        data-action="nav" data-view="loans">🏠 Prestiti</button>
-      <button class="nav-item"        data-action="nav" data-view="other-assets">💎 Altri Asset</button>
-      
-      <div class="nav-label">Configurazione</div>
-      <button class="nav-item"        data-action="nav" data-view="tag-config">🏷️ Tag</button>
-      <button class="nav-item"        data-action="nav" data-view="conti-collegati">🏦 Banche e Conti</button>
-      
-      <div class="nav-sep"></div>
-      <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
-      
-      <div class="nav-label">Salvatore</div>
-      <a class="nav-item" href="spese-personali.html" style="text-decoration:none">💳 Spese Personali</a>
 
-      <div class="nav-label">Teresa</div>
-      <a class="nav-item" href="conto-risparmio-teresa.html" style="text-decoration:none">🏡 conto risparmio</a>
-      <button class="nav-item"        data-action="nav" data-view="analisi-costi">🧾 Spese Famiglia</button>
-      <!-- L'app non è più nella home: import, categorie, persone, regole e
-           conti collegati si raggiungono solo da qui (o dallo Smart Block). -->
-      <a class="nav-item" href="cost-analysis.html" style="text-decoration:none">🛠️ Spese Famiglia — gestione</a>
-      <a class="nav-item" href="conto-spese-teresa.html" style="text-decoration:none">💰 contribuzione</a>
+      <div class="nav-sublabel">Overview</div>
+      <div class="nav-group">
+        <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
+        <button class="nav-item"        data-action="nav" data-view="progressione">📈 Sviluppo</button>
+      </div>
 
-      <div class="nav-label">Ada</div>
-      <a class="nav-item" href="spese-ada.html" style="text-decoration:none">🧾 Spese Ada</a>
+      <div class="nav-sublabel">Investimenti</div>
+      <div class="nav-group">
+        <button class="nav-item"        data-action="nav" data-view="portafogli">💼 Portafogli</button>
+        <button class="nav-item"        data-action="nav" data-view="transazioni">💳 Transazioni</button>
+        <button class="nav-item"        data-action="nav" data-view="dossiers">📁 Dossier</button>
+        <button class="nav-item"        data-action="nav" data-view="fondi">🤝 Fondi</button>
+        <button class="nav-item"        data-action="nav" data-view="prodotti">📋 Prodotti</button>
+        <button class="nav-item"        data-action="nav" data-view="prezzi">🏷️ Prezzi</button>
+      </div>
+
+      <div class="nav-sublabel">Patrimonio</div>
+      <div class="nav-group">
+        <button class="nav-item"        data-action="nav" data-view="other-assets">💎 Asset</button>
+      </div>
+
+      <div class="nav-sublabel">Debiti</div>
+      <div class="nav-group">
+        <button class="nav-item"        data-action="nav" data-view="loans">🏠 Prestiti</button>
+      </div>
+
+      <div class="nav-sublabel">Conti</div>
+      <div class="nav-group">
+        <a class="nav-item" href="conto-risparmio-teresa.html" style="text-decoration:none">🏡 conto risparmio</a>
+      </div>
+
+      <div class="nav-label">Spese</div>
+
+      <div class="nav-sublabel">Personali</div>
+      <div class="nav-group">
+        <a class="nav-item" href="spese-personali.html" style="text-decoration:none">💳 Spese Personali</a>
+      </div>
+
+      <div class="nav-sublabel">Familiari</div>
+      <div class="nav-group">
+        <button class="nav-item"        data-action="nav" data-view="analisi-costi">🧾 Spese Famiglia — vista</button>
+        <!-- L'app non è più nella home: import, categorie, persone, regole e
+             conti collegati si raggiungono solo da qui (o dallo Smart Block). -->
+        <a class="nav-item" href="cost-analysis.html" style="text-decoration:none">🛠️ Spese Familiari</a>
+        <a class="nav-item" href="conto-spese-teresa.html" style="text-decoration:none">💰 contribuzione</a>
+      </div>
+
+      <div class="nav-sublabel">Ada</div>
+      <div class="nav-group">
+        <a class="nav-item" href="spese-ada.html" style="text-decoration:none">🧾 Spese Ada</a>
+      </div>
 
       <div class="nav-label">Rosa</div>
-      <button class="nav-item"        data-action="nav" data-view="danaro-rosa">🌹 Denaro</button>
-      <a class="nav-item" href="casarosa.html" style="text-decoration:none">🏠 Casa</a>
+      <div class="nav-group">
+        <button class="nav-item"        data-action="nav" data-view="danaro-rosa">🌹 Denaro</button>
+        <a class="nav-item" href="casarosa.html" style="text-decoration:none">🏠 Casa</a>
+      </div>
+
+      <div class="nav-label">Configurazione</div>
+      <div class="nav-group">
+        <button class="nav-item"        data-action="nav" data-view="tag-config">🏷️ Tag</button>
+        <button class="nav-item"        data-action="nav" data-view="conti-collegati">🏦 Banche e Conti</button>
+        <button class="nav-item"        data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
+      </div>
     </nav>
     <main class="app-main">
       <div id="view-dashboard"          class="view active"></div>
@@ -512,8 +541,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.5';
-const APP_BUILD   = '2026-08-10T13:40:00Z';
+const APP_VERSION = 'v1.3.6';
+const APP_BUILD   = '2026-08-14T10:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
