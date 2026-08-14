@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.127</title>
+    <title>Weight Quest v3.5.128</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -798,110 +798,49 @@
             margin-top: 4px;
             line-height: 1.4;
         }
-        .prize-wheel-wrap {
+        /* Il biglietto: la foto del premio sotto una patina d'argento */
+        .prize-ticket {
             position: relative;
-            width: 240px;
-            max-width: 78vw;
-            aspect-ratio: 1 / 1;
-            margin: 18px auto 6px;
-        }
-        #prizeWheel {
-            position: absolute;
-            inset: 0;
-            border-radius: 50%;
-            border: 6px solid #FFD700;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            margin: 16px 0 2px;
+            border: 3px solid #FFD700;
+            border-radius: 16px;
             overflow: hidden;
-            background: #16213e;
-            box-shadow: 0 0 24px rgba(255,215,0,0.45), inset 0 0 18px rgba(0,0,0,0.35);
-            transition: transform 4.4s cubic-bezier(0.17, 0.67, 0.16, 1);
-            transform: rotate(0deg);
+            background: #0f1730;
+            box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
-        /* Uno spicchio = una foto ritagliata a triangolo (l'arco lo dà il
-           border-radius del contenitore, che ritaglia quel che esce dal cerchio) */
-        .prize-slice {
+        #prizeTicketPhoto {
             position: absolute;
             inset: 0;
-            clip-path: polygon(50% 50%, 13.7% -1%, 86.3% -1%);
-        }
-        .prize-slice img {
-            position: absolute;
-            left: 13.7%;
-            top: -1%;
-            width: 72.6%;
-            height: 51%;
+            width: 100%;
+            height: 100%;
             object-fit: cover;
             display: block;
         }
-        /* Contrassegno del premio, verso il bordo dello spicchio: la foto
-           ritagliata a triangolo si riconosce a fatica, l'emoji no */
-        .prize-slice-tag {
-            position: absolute;
-            left: 50%;
-            top: 12%;
-            transform: translate(-50%, -50%);
-            width: 13%;
-            height: 13%;
-            border-radius: 50%;
-            background: rgba(10,14,30,0.72);
-            border: 1.5px solid rgba(255,215,0,0.9);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 15px;
-            line-height: 1;
-        }
-        /* Raggi dorati fra uno spicchio e l'altro + ombra verso il centro */
-        #prizeSpokes {
+        #prizeScratch {
             position: absolute;
             inset: 0;
-            border-radius: 50%;
-            pointer-events: none;
-            background:
-                repeating-conic-gradient(from -0.7deg at 50% 50%,
-                    rgba(255,215,0,0.95) 0deg 1.4deg, rgba(255,215,0,0) 1.4deg 72deg),
-                radial-gradient(circle at 50% 50%,
-                    rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.45) 14%, rgba(0,0,0,0) 34%);
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: crosshair;
+            touch-action: none;
+            transition: opacity 0.55s ease;
         }
-        #prizePointer {
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 30px;
-            line-height: 1;
-            z-index: 3;
-            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
-        }
-        #prizeHub {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: #16213e;
-            border: 3px solid #FFD700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            z-index: 2;
+        #prizeScratch.revealed { opacity: 0; pointer-events: none; }
+        .prize-ticket.revealed { animation: prizeTicketPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+        @keyframes prizeTicketPop {
+            0%   { transform: scale(1);    }
+            45%  { transform: scale(1.045); }
+            100% { transform: scale(1);    }
         }
         #prizeResult {
             margin-top: 14px;
             color: #fff;
-        }
-        #prizeResultPhoto {
-            width: 104px;
-            height: 104px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 3px solid #FFD700;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.45);
-            display: block;
-            margin: 0 auto;
         }
         #prizeResultName {
             font-size: 22px;
@@ -1489,8 +1428,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.127';
-        var BUILD_TIME  = '2026-08-14T17:17:21Z';
+        var APP_VERSION = 'v3.5.128';
+        var BUILD_TIME  = '2026-08-14T17:39:45Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2514,9 +2453,11 @@
             { id: 'biscotti',     emoji: '🍪', name: 'Tazza di biscotti',       img: 'risorse/premi/biscotti.jpg',   pos: '62% 62%', msg: 'Tazza piena e biscotti a volontà: inzuppa senza fretta.' }
         ];
 
-        var prizeDraw = { threshold: null, demo: false, spinning: false, done: false };
-        var prizeWheelRot = 0;
-        var prizeWheelBuilt = false;
+        var prizeDraw = { threshold: null, demo: false, prize: null, done: false };
+        var prizeScratchCtx = null;
+        var prizeScratching = false;
+        var prizeScratchLast = null;
+        var prizeScratchMoves = 0;
 
         function getPrizesKey(obj) {
             return 'wq_prizes_' + (obj ? obj.id : 'new');
@@ -2548,117 +2489,244 @@
             return null;
         }
 
-        function buildPrizeWheel() {
-            var wheel = document.getElementById('prizeWheel');
-            if (!wheel || prizeWheelBuilt) return;
-            var n = PRIZES.length;
-            var step = 360 / n;
-            wheel.innerHTML = '';
-            for (var j = 0; j < n; j++) {
-                // Lo spicchio punta in alto: lo si ruota al centro della sua fetta
-                var slice = document.createElement('div');
-                slice.className = 'prize-slice';
-                slice.style.transform = 'rotate(' + (j * step + step / 2) + 'deg)';
-                var im = document.createElement('img');
-                im.src = PRIZES[j].img;
-                im.alt = PRIZES[j].name;
-                if (PRIZES[j].pos) im.style.objectPosition = PRIZES[j].pos;
-                slice.appendChild(im);
-                var tag = document.createElement('span');
-                tag.className = 'prize-slice-tag';
-                tag.textContent = PRIZES[j].emoji;
-                slice.appendChild(tag);
-                wheel.appendChild(slice);
+        // Stende la patina d'argento sul biglietto. Il canvas viene ridimensionato
+        // ad ogni apertura: la card è larga quanto lo schermo, che cambia.
+        function buildScratchFoil() {
+            var ticket = document.getElementById('prizeTicket');
+            var cv     = document.getElementById('prizeScratch');
+            if (!ticket || !cv) return;
+
+            var w = ticket.clientWidth;
+            var h = ticket.clientHeight;
+            if (!w || !h) return;
+            var dpr = Math.min(window.devicePixelRatio || 1, 2);
+            cv.width  = Math.round(w * dpr);
+            cv.height = Math.round(h * dpr);
+
+            var ctx = cv.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.clearRect(0, 0, w, h);
+
+            // Argento con riflesso in diagonale
+            var g = ctx.createLinearGradient(0, 0, w, h);
+            g.addColorStop(0,    '#9aa3ad');
+            g.addColorStop(0.28, '#d9dee5');
+            g.addColorStop(0.46, '#f2f5f8');
+            g.addColorStop(0.62, '#c3cad3');
+            g.addColorStop(1,    '#8f98a3');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+
+            // Righine oblique, per non farlo sembrare una lastra piatta
+            ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+            ctx.lineWidth = 2;
+            for (var x = -h; x < w; x += 11) {
+                ctx.beginPath();
+                ctx.moveTo(x, h);
+                ctx.lineTo(x + h, 0);
+                ctx.stroke();
             }
-            var spokes = document.createElement('div');
-            spokes.id = 'prizeSpokes';
-            wheel.appendChild(spokes);
-            prizeWheelBuilt = true;
+
+            // Istruzioni: si consumano man mano che si gratta
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'rgba(35,42,60,0.62)';
+            ctx.font = '900 ' + Math.max(15, Math.round(w * 0.075)) + 'px "Space Mono", monospace';
+            ctx.fillText('GRATTA QUI', w / 2, h / 2 - h * 0.06);
+            ctx.font = Math.max(11, Math.round(w * 0.045)) + 'px "Space Mono", monospace';
+            ctx.fillText('col dito 👆', w / 2, h / 2 + h * 0.11);
+
+            prizeScratchCtx = ctx;
+            prizeScratchMoves = 0;
+            cv.classList.remove('revealed');
+            cv.style.display = 'block';
+            ticket.classList.remove('revealed');
+        }
+
+        function prizeScratchPoint(ev) {
+            var cv = document.getElementById('prizeScratch');
+            var r  = cv.getBoundingClientRect();
+            return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+        }
+
+        function prizeScratchDraw(pt) {
+            if (!prizeScratchCtx) return;
+            var ctx = prizeScratchCtx;
+            var cv  = document.getElementById('prizeScratch');
+            var brush = Math.max(16, cv.clientWidth * 0.075);
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = brush * 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            if (prizeScratchLast) {
+                ctx.beginPath();
+                ctx.moveTo(prizeScratchLast.x, prizeScratchLast.y);
+                ctx.lineTo(pt.x, pt.y);
+                ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, brush, 0, Math.PI * 2);
+            ctx.fill();
+            prizeScratchLast = pt;
+        }
+
+        // Percentuale già grattata, campionando un pixel ogni 8 per lato
+        function prizeScratchProgress() {
+            var cv = document.getElementById('prizeScratch');
+            if (!cv || !prizeScratchCtx) return 0;
+            var data;
+            try {
+                data = prizeScratchCtx.getImageData(0, 0, cv.width, cv.height).data;
+            } catch (e) {
+                return 0;
+            }
+            var cleared = 0, total = 0;
+            for (var i = 3; i < data.length; i += 4 * 8) {
+                total++;
+                if (data[i] < 40) cleared++;
+            }
+            return total ? cleared / total : 0;
+        }
+
+        function onPrizeScratchStart(ev) {
+            if (prizeDraw.done) return;
+            ev.preventDefault();
+            prizeScratching = true;
+            prizeScratchLast = null;
+            var cv = document.getElementById('prizeScratch');
+            if (cv.setPointerCapture && ev.pointerId != null) {
+                try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
+            }
+            prizeScratchDraw(prizeScratchPoint(ev));
+        }
+
+        function onPrizeScratchMove(ev) {
+            if (!prizeScratching || prizeDraw.done) return;
+            ev.preventDefault();
+            prizeScratchDraw(prizeScratchPoint(ev));
+            // Il controllo costa: si fa ogni 6 movimenti, non ad ognuno
+            if (++prizeScratchMoves % 6 === 0 && prizeScratchProgress() > 0.55) {
+                revealPrizeNow();
+            }
+        }
+
+        function onPrizeScratchEnd() {
+            if (!prizeScratching) return;
+            prizeScratching = false;
+            prizeScratchLast = null;
+            if (!prizeDraw.done && prizeScratchProgress() > 0.42) revealPrizeNow();
+        }
+
+        function bindPrizeScratch() {
+            var cv = document.getElementById('prizeScratch');
+            if (!cv || cv._bound) return;
+            if (window.PointerEvent) {
+                cv.addEventListener('pointerdown', onPrizeScratchStart);
+                cv.addEventListener('pointermove', onPrizeScratchMove);
+                cv.addEventListener('pointerup', onPrizeScratchEnd);
+                cv.addEventListener('pointercancel', onPrizeScratchEnd);
+                cv.addEventListener('pointerleave', onPrizeScratchEnd);
+            } else {
+                // WebView vecchie: mouse + touch separati
+                cv.addEventListener('mousedown', onPrizeScratchStart);
+                cv.addEventListener('mousemove', onPrizeScratchMove);
+                cv.addEventListener('mouseup', onPrizeScratchEnd);
+                cv.addEventListener('touchstart', function(e) { onPrizeScratchStart(e.touches[0]); e.preventDefault(); });
+                cv.addEventListener('touchmove',  function(e) { onPrizeScratchMove(e.touches[0]); e.preventDefault(); });
+                cv.addEventListener('touchend',   onPrizeScratchEnd);
+            }
+            cv._bound = true;
         }
 
         // threshold = soglia in kg; demo = true → prova, non salva niente
         function openPrizeDraw(threshold, demo) {
             var overlay = document.getElementById('prizeOverlay');
             if (!overlay) return;
-            buildPrizeWheel();
+            bindPrizeScratch();
 
-            var obj  = userData.currentObjective;
-            var won  = (!demo && obj) ? loadPrizes(obj)[String(threshold)] : null;
+            var obj = userData.currentObjective;
+            var won = (!demo && obj) ? loadPrizes(obj)[String(threshold)] : null;
+            // Il premio è già deciso quando il biglietto si apre: grattare
+            // scopre quello che c'è sotto, non lo estrae mano a mano
+            var p = won ? (findPrize(won.id) || PRIZES[0])
+                        : PRIZES[Math.floor(Math.random() * PRIZES.length)];
 
-            prizeDraw = { threshold: threshold, demo: !!demo, spinning: false, done: !!won };
+            prizeDraw = { threshold: threshold, demo: !!demo, prize: p, done: !!won };
 
             var title    = document.getElementById('prizeTitle');
             var subtitle = document.getElementById('prizeSubtitle');
-            var spinBtn  = document.getElementById('prizeSpinBtn');
+            var revealBtn= document.getElementById('prizeRevealBtn');
             var closeBtn = document.getElementById('prizeCloseBtn');
             var result   = document.getElementById('prizeResult');
             var conf     = document.getElementById('prizeConfetti');
+            var photo    = document.getElementById('prizeTicketPhoto');
+            var cv       = document.getElementById('prizeScratch');
             if (conf) conf.innerHTML = '';
 
+            photo.src = p.img;
+            photo.alt = p.name;
+            photo.style.objectPosition = p.pos || '50% 50%';
+
             if (demo) {
-                title.textContent = '🎲 Prova dell\'estrazione';
+                title.textContent = '🎲 Prova del gratta e vinci';
                 subtitle.textContent = 'È solo una prova: nessun premio viene salvato.';
             } else {
                 title.textContent = '🎁 Premio per < ' + threshold + ' kg';
                 subtitle.textContent = won
-                    ? 'Premio già estratto per questa soglia.'
-                    : 'Gira la ruota e scopri cosa ti sei guadagnato.';
-            }
-
-            if (won) {
-                var p = findPrize(won.id) || PRIZES[0];
-                showPrizeResult(p, won.date);
-                spinBtn.style.display = 'none';
-                closeBtn.textContent = 'Chiudi';
-            } else {
-                result.innerHTML = '';
-                spinBtn.style.display = 'block';
-                spinBtn.disabled = false;
-                spinBtn.textContent = '🎡 Gira la ruota';
-                closeBtn.textContent = 'Più tardi';
+                    ? 'Premio già grattato per questa soglia.'
+                    : 'Gratta l\'argento col dito e scopri cosa hai vinto.';
             }
 
             overlay.style.display = 'flex';
+
+            if (won) {
+                cv.style.display = 'none';
+                showPrizeResult(p, won.date);
+                revealBtn.style.display = 'none';
+                closeBtn.textContent = 'Chiudi';
+            } else {
+                result.innerHTML = '';
+                revealBtn.style.display = 'block';
+                revealBtn.disabled = false;
+                revealBtn.textContent = '👆 Scopri tutto';
+                closeBtn.textContent = 'Più tardi';
+                // Il canvas si dimensiona solo a overlay visibile: prima è 0×0
+                buildScratchFoil();
+            }
         }
 
-        function spinPrizeWheel() {
-            if (prizeDraw.spinning || prizeDraw.done) return;
-            var wheel   = document.getElementById('prizeWheel');
-            var spinBtn = document.getElementById('prizeSpinBtn');
-            if (!wheel) return;
+        // Scopre il resto del biglietto: chiamata a mano dal pulsante oppure
+        // da sola quando si è grattato abbastanza
+        function revealPrizeNow() {
+            if (prizeDraw.done) return;
+            prizeDraw.done = true;
+            prizeScratching = false;
 
-            prizeDraw.spinning = true;
-            spinBtn.disabled = true;
-            spinBtn.textContent = '🌀 Gira…';
+            var p        = prizeDraw.prize || PRIZES[0];
+            var cv       = document.getElementById('prizeScratch');
+            var ticket   = document.getElementById('prizeTicket');
+            var revealBtn= document.getElementById('prizeRevealBtn');
 
-            var idx  = Math.floor(Math.random() * PRIZES.length);
-            var p    = PRIZES[idx];
-            var step = 360 / PRIZES.length;
-            // Centro dello spicchio, misurato in senso orario dall'alto (dove sta la freccia)
-            var center = idx * step + step / 2;
-            // Piccolo scarto perché non si fermi sempre esattamente al centro
-            var jitter = (Math.random() - 0.5) * (step - 14);
-            var target = center + jitter;
-            // Porta il centro dello spicchio sotto la freccia, più 5 giri interi
-            var delta = (360 - ((prizeWheelRot + target) % 360 + 360) % 360) % 360;
-            prizeWheelRot += 5 * 360 + delta;
-            wheel.style.transform = 'rotate(' + prizeWheelRot + 'deg)';
+            if (cv) {
+                cv.classList.add('revealed');
+                setTimeout(function() { cv.style.display = 'none'; }, 600);
+            }
+            if (ticket) ticket.classList.add('revealed');
+            if (revealBtn) revealBtn.style.display = 'none';
+            document.getElementById('prizeSubtitle').textContent = prizeDraw.demo
+                ? 'Era una prova: non è stato salvato niente.'
+                : 'Scoperto! Il premio è tuo, la stellina se lo ricorda.';
+            document.getElementById('prizeCloseBtn').textContent = 'Chiudi';
 
-            setTimeout(function() {
-                prizeDraw.spinning = false;
-                prizeDraw.done = true;
-                spinBtn.style.display = 'none';
-                document.getElementById('prizeCloseBtn').textContent = 'Chiudi';
+            if (!prizeDraw.demo && userData.currentObjective) {
+                savePrize(userData.currentObjective, prizeDraw.threshold, p.id);
+                updateMilestoneProgressBar();
+                log('Premio grattato per < ' + prizeDraw.threshold + ' kg: ' + p.name);
+            }
 
-                if (!prizeDraw.demo && userData.currentObjective) {
-                    savePrize(userData.currentObjective, prizeDraw.threshold, p.id);
-                    updateMilestoneProgressBar();
-                    log('Premio estratto per < ' + prizeDraw.threshold + ' kg: ' + p.name);
-                }
-
-                showPrizeResult(p, prizeDraw.demo ? null : localDateStr());
-                prizeConfetti();
-            }, 4600);
+            showPrizeResult(p, prizeDraw.demo ? null : localDateStr());
+            prizeConfetti();
         }
 
         function showPrizeResult(p, dateStr) {
@@ -2670,8 +2738,7 @@
                 if (parts.length === 3) when = ' · vinto il ' + parts[2] + '/' + parts[1] + '/' + parts[0];
             }
             result.innerHTML =
-                '<img id="prizeResultPhoto" src="' + p.img + '" alt="' + p.name + '">' +
-                '<div id="prizeResultName">' + p.emoji + ' ' + p.name + '</div>' +
+                '<div id="prizeResultName">🎉 ' + p.name + '!</div>' +
                 '<div id="prizeResultMsg">' + p.msg + when + '</div>';
         }
 
@@ -7459,17 +7526,16 @@
         <div id="prizeCard">
             <div id="prizeConfetti"></div>
             <div id="prizeTitle">🎁 Hai vinto un premio!</div>
-            <div id="prizeSubtitle">Gira la ruota e scopri cosa ti sei guadagnato</div>
+            <div id="prizeSubtitle">Gratta l'argento e scopri cosa ti sei guadagnato</div>
 
-            <div class="prize-wheel-wrap">
-                <div id="prizePointer">🔻</div>
-                <div id="prizeWheel"></div>
-                <div id="prizeHub">🍽️</div>
+            <div class="prize-ticket" id="prizeTicket">
+                <img id="prizeTicketPhoto" src="" alt="">
+                <canvas id="prizeScratch"></canvas>
             </div>
 
             <div id="prizeResult"></div>
 
-            <button type="button" id="prizeSpinBtn" class="prize-btn" onclick="spinPrizeWheel()">🎡 Gira la ruota</button>
+            <button type="button" id="prizeRevealBtn" class="prize-btn" onclick="revealPrizeNow()">👆 Scopri tutto</button>
             <button type="button" id="prizeCloseBtn" class="prize-btn secondary" onclick="closePrizeOverlay()">Chiudi</button>
         </div>
     </div>
