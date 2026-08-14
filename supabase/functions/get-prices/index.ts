@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const VERSION = "5.19.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
+const VERSION = "5.20.0"; // fonte per tipo: BTPi→SoldiOnline, BTP→rendimentibtp, ETF→JustETF(HTML)/Yahoo/Investing, crypto→CoinGecko(batch)+Coinbase, azioni→TD/GoogleFinance
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -191,6 +191,11 @@ const YAHOO_FINANCE_TICKER_MAP: Record<string, string> = {
   // quando la quota ne vale ≈157. È lo stesso strumento di `LU1598691217`, ma
   // chiesto per nome invece che cercato per ISIN.
   "BTP10": "BTP10.MI",
+  // SMEA, iShares Core MSCI Europe (IE00B4K48X80), su Borsa Italiana in EUR.
+  // Fissato perché il prodotto non è registrato come `etf` (come ITAMID), quindi
+  // il prezzo veniva chiesto a Twelve Data col simbolo nudo «SMEA»: un nome, non
+  // un'identità: nostro, non necessariamente lo stesso strumento su TD.
+  "SMEA": "SMEA.MI",
 };
 
 // Known symbol → Google Finance exchange + currency.
@@ -1057,13 +1062,24 @@ serve(async (req) => {
         // Bond/ETF/crypto: salta TD diretto (simboli custom non esistono su TD)
         const useIsinDirectly = !!(isin && (isBond || isEtf)) || isCrypto;
 
+        // Un ticker fissato salta anche Twelve Data, ma solo se per quel simbolo non
+        // c'è un override TD: l'override dice *quale* simbolo chiedere a TD ed è a
+        // sua volta una scelta esplicita, quindi resta il primo (è il caso di RY4C).
+        // Senza override si chiederebbe a TD il simbolo nudo, che è il nome che il
+        // titolo ha *da noi*: niente garantisce che su TD indichi lo stesso
+        // strumento, e se TD risponde `outcome.ok` è vero e tutta la catena — ticker
+        // fissato compreso — non viene nemmeno interpellata. Fra un ticker scelto a
+        // mano e una omonimia da verificare, viene prima il primo.
+        const tickerFissato = !!YAHOO_FINANCE_TICKER_MAP[symbol]
+            && !TWELVE_DATA_SYMBOL_OVERRIDES[symbol];
+
         let madeApiCall = false;
         let resolvedAs = symbol;
 
         try {
           // Step 1: TD diretto — solo per azioni (e tipi sconosciuti senza ISIN)
           let outcome: QuoteOutcome;
-          if (useIsinDirectly) {
+          if (useIsinDirectly || tickerFissato) {
             outcome = { ok: false, status: 200, message: "skip-td-direct" };
           } else {
             const tdSymbol = TWELVE_DATA_SYMBOL_OVERRIDES[symbol] ?? symbol;
