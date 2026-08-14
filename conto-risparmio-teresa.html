@@ -3,12 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Conto Risparmio Teresa v1.1.1</title>
+  <title>Conto Risparmio Teresa v1.2.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Incastonata in finanza.html (?embed=1): la top bar e il suo spazio
+       spariscono, perché lì la barra blu e la sidebar ci sono già. La classe
+       si mette qui, prima del <body>, o la barra lampeggerebbe a ogni apertura. -->
+  <script>
+    if (new URLSearchParams(location.search).has('embed')) document.documentElement.classList.add('embed');
+  </script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,6 +43,10 @@
     .gap-8   { gap: 8px; }
     #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
     #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+    html.embed body { padding-top: 0; }
+    html.embed #garsal-top-bar { display: none; }
+    /* Il margine attorno lo mette già l'area di lavoro di finanza.html */
+    html.embed .app-main { padding: 0; }
     .app-main { padding: 24px 28px; }
     .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
     .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
@@ -211,8 +222,10 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.1.1';
-    const APP_BUILD   = '2026-08-07T10:00:00Z';
+    const APP_VERSION = 'v1.2.0';
+    const APP_BUILD   = '2026-08-14T10:40:00Z';
+    // Aperta dentro finanza.html (voce «🏡 conto risparmio») invece che da sola.
+    const EMBED = document.documentElement.classList.contains('embed');
     console.log('%c CONTO RISPARMIO ' + APP_VERSION + ' %c build: ' + APP_BUILD,
       'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
       'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1308,8 +1321,16 @@
         try { S.session = JSON.parse(localStorage.getItem('garsal_session')); } catch {}
       }
 
+      // Incastonata in finanza.html: mandare l'iframe su finanza.html
+      // caricherebbe l'intera app dentro il riquadro. Meglio dirlo e basta —
+      // il rientro si fa dalla pagina che ci contiene.
       if (!S.session) {
-        location.href = 'finanza.html';
+        if (EMBED) {
+          document.querySelector('.app-main').innerHTML =
+            '<p style="padding:24px;color:var(--c-muted)">Sessione scaduta: ricarica la pagina per rientrare.</p>';
+        } else {
+          location.href = 'finanza.html';
+        }
         return;
       }
 
@@ -1319,7 +1340,7 @@
         if (!e.data) return;
         if (e.data.type === 'LOGOUT') {
           localStorage.removeItem('sb_token');
-          location.href = 'finanza.html';
+          if (EMBED) top.location.reload(); else location.href = 'finanza.html';
         } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
           localStorage.setItem('sb_token', e.data.sbToken);
           if (S.session) S.session.access_token = e.data.sbToken;
