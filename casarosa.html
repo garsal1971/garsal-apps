@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Cassa Casa Rosa v1.1.0</title>
+  <title>Situazione Cassa Casa Rosa v1.2.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -36,7 +36,28 @@
     .gap-8   { gap: 8px; }
     #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
     #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
-    .app-main { padding: 24px 28px; }
+    .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+    /* ── Sidebar ──────────────────────────────────────────────────
+       La pagina scorre tutta insieme (niente area di lavoro con
+       scorrimento proprio): la sidebar sta ferma con position:sticky
+       sotto la barra blu, alta 56px. */
+    .app-layout { display: flex; align-items: flex-start; min-height: calc(100dvh - 56px); }
+    .sidebar { width: 200px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 56px; height: calc(100dvh - 56px); overflow-y: auto; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #dcfce7; color: var(--c-primary); }
+    .nav-sep { height: 1px; background: var(--c-border); margin: 10px 4px 4px; }
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .app-main { flex: 1; min-width: 0; padding: 24px 28px; }
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; transform: translateX(-100%); transition: transform .25s ease; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+    }
     .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
     .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
     .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; margin-bottom: 6px; }
@@ -88,20 +109,52 @@
 </head>
 <body>
 <div id="garsal-top-bar">
-  <a href="finanza.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">
+  <a href="finanza.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
     <span style="width:22px;height:22px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">💰</span>
     <div id="garsal-top-bar-text">GarsalFinanza</div>
   </a>
+  <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu"><span></span><span></span><span></span></button>
 </div>
 
+<div id="mobile-nav-overlay"></div>
+<div class="app-layout">
+  <nav class="sidebar" id="sidebar">
+    <button class="nav-item active" data-view="dashboard" onclick="showView('dashboard')">📊 Dashboard</button>
+    <button class="nav-item"        data-view="movimenti" onclick="showView('movimenti')">🧾 Movimenti</button>
+    <div class="nav-sep"></div>
+    <a class="nav-item" href="finanza.html" style="text-decoration:none">← Torna a 💰 Finanza</a>
+  </nav>
   <main class="app-main">
-    <div class="hstack gap-8" style="justify-content: space-between; margin-bottom: 20px;">
-      <div class="hstack gap-8">
-        <h2 style="font-size: 1.3rem;">Situazione Cassa</h2>
-        <select id="year-select" class="year-select"></select>
-        <select id="cat-select" class="year-select" style="display:none"></select>
+    <div class="hstack gap-8" style="margin-bottom: 20px;">
+      <h2 id="page-title" style="font-size: 1.3rem;">Situazione Cassa</h2>
+      <!-- Anno e categoria filtrano tutt'e due le pagine: restano qui sopra,
+           fuori dalle view, invece di essere duplicati in ciascuna. -->
+      <select id="year-select" class="year-select"></select>
+      <select id="cat-select" class="year-select" style="display:none"></select>
+    </div>
+
+    <div id="view-dashboard" class="view active">
+      <div class="kpi-grid" id="kpi-container">
+        <div class="kpi-card"><div class="kpi-label">Totale</div><div class="kpi-value mono" id="tot-voce">€0,00</div></div>
+        <div class="kpi-card"><div class="kpi-label">Saldo <span id="saldo-date" style="font-weight:400"></span></div><div class="kpi-value mono" id="tot-saldo">€0,00</div></div>
       </div>
-      <div class="hstack gap-8">
+
+      <div class="card" id="expected-payments-card" style="margin-bottom:14px">
+        <div style="font-size:.74rem;font-weight:600;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px">Pagamenti Attesi</div>
+        <div id="expected-payments" style="display:flex;gap:12px;flex-wrap:wrap">
+          <div id="expected-payments-main" class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));flex:2 1 520px;margin-bottom:0"></div>
+          <div id="expected-payments-side" style="display:flex;flex-direction:column;gap:10px;flex:1 1 220px"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-size:.74rem;font-weight:600;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px">Riepilogo Categorie</div>
+        <div id="cat-summary" class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))"></div>
+      </div>
+    </div>
+
+    <div id="view-movimenti" class="view">
+      <div class="hstack gap-8" style="flex-wrap:wrap;margin-bottom:14px">
         <button class="btn btn-primary btn-sm" onclick="openModal()">+ Nuovo Movimento</button>
         <button class="btn btn-sm" style="border:1px solid var(--c-border)" onclick="document.getElementById('xlsx-input').click()">📊 Importa Excel</button>
         <input type="file" id="xlsx-input" accept=".xls,.xlsx" style="display:none" />
@@ -109,45 +162,28 @@
         <input type="file" id="csv-input" accept=".csv" style="display:none" />
         <button class="btn btn-sm" style="border:1px solid var(--c-border)" onclick="openBankImport()">🏦 Importa dalla banca</button>
       </div>
-    </div>
 
-    <div class="kpi-grid" id="kpi-container">
-      <div class="kpi-card"><div class="kpi-label">Totale</div><div class="kpi-value mono" id="tot-voce">€0,00</div></div>
-      <div class="kpi-card"><div class="kpi-label">Saldo <span id="saldo-date" style="font-weight:400"></span></div><div class="kpi-value mono" id="tot-saldo">€0,00</div></div>
-    </div>
-
-    <div class="card" id="expected-payments-card" style="margin-bottom:14px">
-      <div style="font-size:.74rem;font-weight:600;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px">Pagamenti Attesi</div>
-      <div id="expected-payments" style="display:flex;gap:12px;flex-wrap:wrap">
-        <div id="expected-payments-main" class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));flex:2 1 520px;margin-bottom:0"></div>
-        <div id="expected-payments-side" style="display:flex;flex-direction:column;gap:10px;flex:1 1 220px"></div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom:14px">
-      <div style="font-size:.74rem;font-weight:600;color:var(--c-muted);text-transform:uppercase;margin-bottom:10px">Riepilogo Categorie</div>
-      <div id="cat-summary" class="kpi-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))"></div>
-    </div>
-
-    <div class="card">
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Categoria</th>
-              <th class="text-right">Importo</th>
-              <th>Descrizione / Note</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tx-table-body">
-            <tr><td colspan="5" style="text-align:center; padding: 40px;">Caricamento...</td></tr>
-          </tbody>
-        </table>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Categoria</th>
+                <th class="text-right">Importo</th>
+                <th>Descrizione / Note</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tx-table-body">
+              <tr><td colspan="5" style="text-align:center; padding: 40px;">Caricamento...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </main>
+</div>
 
   <div id="confirm-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeConfirm()">
     <div class="modal" style="max-width:320px;text-align:center;">
@@ -219,8 +255,8 @@
   </div>
 
   <script>
-    var APP_VERSION = 'v1.1.0';
-    var BUILD_TIME  = '2026-08-08T17:00:00Z';
+    var APP_VERSION = 'v1.2.0';
+    var BUILD_TIME  = '2026-08-14T12:00:00Z';
     console.log('%c CASSA CASA ROSA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -297,6 +333,23 @@
 
     function catName(t) {
       return S.catMap[t.category_id] || '(nessuna)';
+    }
+
+    /* ── Navigazione ────────────────────────────────────────────
+       Due pagine sole: il riepilogo (saldo, pagamenti attesi, categorie) e
+       l'elenco dei movimenti con gli import. Anno e categoria stanno fuori
+       dalle view perché filtrano tutt'e due. */
+    const VIEW_TITLES = { dashboard: 'Situazione Cassa', movimenti: 'Movimenti' };
+    function showView(view) {
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${view}`));
+      document.querySelectorAll('.nav-item[data-view]').forEach(n => n.classList.toggle('active', n.dataset.view === view));
+      document.getElementById('page-title').textContent = VIEW_TITLES[view] || '';
+      closeMobileNav();
+      window.scrollTo(0, 0);
+    }
+    function closeMobileNav() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('mobile-nav-overlay').classList.remove('open');
     }
 
     function render() {
@@ -1299,6 +1352,12 @@
         alert('Errore: ' + e.message);
       }
     }
+
+    document.getElementById('btn-hamburger').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('mobile-nav-overlay').classList.toggle('open');
+    });
+    document.getElementById('mobile-nav-overlay').addEventListener('click', closeMobileNav);
 
     document.getElementById('year-select').addEventListener('change', (e) => {
       S.selectedYear = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
