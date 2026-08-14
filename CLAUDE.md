@@ -933,8 +933,8 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   *👆 Scopri tutto* fa la stessa cosa: serve da scorciatoia e da ripiego se il tocco non passa.
   Finché non la si tocca la stellina resta **evidenziata in
   rosso col 🎁 che pulsa**; dopo l'estrazione mostra l'emoji del premio vinto e ritoccandola lo
-  rimostra già scoperto. Un pulsante *🎲 Prova l'estrazione del premio* (sotto ⭐ Punti
-  Totali Traguardi Intermedi) apre un biglietto di prova, senza salvare.
+  rimostra già scoperto. Il biglietto di prova non ha più un pulsante: la modalità resta in
+  `openPrizeDraw(null, true)`, richiamabile dalla console, e non salva niente.
   I premi stanno in **localStorage** (`wq_prizes_<objective id>`), come i punti dei traguardi
   (`wq_mpts_<id>`): nessuna tabella nuova, quindi il premio è **per dispositivo** — chi apre
   l'app da un altro telefono si ritrova la stellina di nuovo da estrarre. Spostarlo sul DB
