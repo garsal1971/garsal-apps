@@ -1105,6 +1105,16 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
   Finita la chiusura non c'è più nessun periodo (`S.configured = false`) e `salvaCache()` **svuota
   le chiavi `sp_*` di localStorage**, altrimenti al riavvio `dbLoad()` scambierebbe la cache per
   dati locali da ricaricare e resusciterebbe la stecca appena archiviata.
+- **Cancellare un traguardo è l'opposto di chiuderlo**, e sono due comandi diversi:
+  *🗑️ Cancella il traguardo* (Impostazioni → zona rossa, `dbDeleteGoal()`) butta via periodo,
+  spunte e giornate chiave **senza scrivere niente in `sp_stecche`** — è l'uscita per un traguardo
+  sbagliato o abbandonato; il cestino su ogni scheda di *🏅 Le stecche chiuse* (`dbDeleteStecca()`)
+  toglie invece una stecca già archiviata. Tutt'e due cancellano **prima sul DB e poi in locale**,
+  al contrario dell'ottimismo con rollback delle spunte: sparita solo dall'app, la riga tornerebbe
+  da sé al primo `dbLoad()` e sembrerebbe che la cancellazione non funzioni. Cancellato il
+  traguardo, `S` torna ai valori di partenza (`goal`, `emoji`, date) e non solo a
+  `configured = false`: le impostazioni si riaprono su un foglio bianco invece di riproporre
+  quello appena buttato. ⚠️ Il gemello nativo non ha né l'uno né l'altro comando.
 - **Avviso "oggi non spuntato"** in due punti: banner giallo dentro l'app e sezione dedicata nel
   fumetto avvisi di AppSphere (`loadHomeAlertSpuntiamola` in `index.html`). Se oggi è una
   giornata chiave entrambi gli avvisi lo dicono esplicitamente.
