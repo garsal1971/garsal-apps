@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.69</title>
+    <title>Analisi Costi v1.0.70</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -68,9 +68,8 @@
         .nav-item:hover { background: rgba(255, 255, 255, 0.1); transform: translateX(5px); }
         .nav-item.active { background: var(--primary); color: #fff; }
         .nav-item::after { content: " " attr(data-text); }
-        /* Collegamenti alle altre pagine del conto familiare: il testo è nel nodo, non in data-text */
+        /* Rientro a Finanza: il testo è nel nodo, non in data-text */
         a.nav-item { display: block; text-decoration: none; color: inherit; }
-        .nav-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 0.9rem 0.6rem 0.35rem; }
         .nav-sep { height: 1px; background: var(--border); margin: 0.5rem 0.4rem; }
 
         @media (min-width: 769px) {
@@ -269,14 +268,10 @@
             <div class="nav-item" onclick="showPage('bankConnectionsPage', this)" data-text="Sincronizza e Carte">🏦</div>
             <div class="nav-item" onclick="showPage('tripsPage', this)" data-text="Viaggi">✈️</div>
 
-            <!-- Conto familiare: le altre pagine si raggiungevano solo tornando a Finanza -->
+            <!-- Il rientro: le altre pagine del conto familiare si raggiungono
+                 dalla sidebar di finanza.html, che le elenca tutte. -->
             <div class="nav-sep"></div>
-            <div class="nav-label">Conto familiare</div>
-            <a class="nav-item" href="finanza.html">💰 Finanza</a>
-            <a class="nav-item" href="conto-spese-teresa.html">💳 Contribuzione</a>
-            <a class="nav-item" href="conto-risparmio-teresa.html">🏡 Conto risparmio</a>
-            <a class="nav-item" href="spese-ada.html">🧾 Spese Ada</a>
-            <a class="nav-item" href="casarosa.html">🏠 Casa Rosa</a>
+            <a class="nav-item" href="finanza.html">← Torna a 💰 Finanza</a>
         </nav>
     </aside>
 
@@ -843,8 +838,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.69';
-    var BUILD_TIME  = '2026-08-13T11:05:00Z';
+    var APP_VERSION = 'v1.0.70';
+    var BUILD_TIME  = '2026-08-14T11:15:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
