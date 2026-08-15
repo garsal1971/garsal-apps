@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.9</title>
+  <title>GarsalFinanza v1.3.10</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -446,6 +446,7 @@
       <div class="nav-sublabel">Patrimonio</div>
       <div class="nav-group">
         <button class="nav-item"        data-action="nav" data-view="other-assets">💎 Asset</button>
+        <button class="nav-item"        data-action="nav" data-view="reddito">💶 Reddito</button>
       </div>
 
       <div class="nav-sublabel">Debiti</div>
@@ -514,6 +515,7 @@
       <div id="view-loans"              class="view"></div>
       <div id="view-loan-detail"        class="view"></div>
       <div id="view-other-assets"       class="view"></div>
+      <div id="view-reddito"            class="view"></div>
       <div id="view-danaro-rosa"        class="view"></div>
       <div id="view-conto-risparmio"    class="view"></div>
       <div id="view-prodotti"           class="view"></div>
@@ -559,8 +561,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.9';
-const APP_BUILD   = '2026-08-14T12:20:00Z';
+const APP_VERSION = 'v1.3.10';
+const APP_BUILD   = '2026-08-15T10:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -578,6 +580,9 @@ const S = {
   // Movimenti del conto di Rosa: caricati solo quando si apre la sua pagina (null = mai letti),
   // non a ogni reload — è una vista che si guarda di rado e non entra in nessun totale.
   rosaTx: null,
+  // Reddito anno per anno: stessa scelta di rosaTx (null = mai letto). Si compila una volta
+  // l'anno e non entra in nessun calcolo del patrimonio, quindi non pesa su ogni avvio.
+  income: null,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -3093,6 +3098,229 @@ function renderOtherAssets() {
     }
   `);
 }
+/* ══════════════ REDDITO ══════════════════════════════════════════
+   Quanto è entrato, anno per anno, diviso per tipo. È un dato che si scrive a mano una volta
+   l'anno — a differenza di tutto il resto di Finanza non viene da nessuna banca — e non entra
+   in nessun totale del patrimonio: il patrimonio è quello che c'è, il reddito è quello che è
+   passato.
+
+   La tabella arriva fino all'ANNO SCORSO e non a quest'anno: un anno in corso è per forza
+   incompleto, e messo in colonna accanto agli altri sembrerebbe un crollo del reddito.
+
+   I tipi stanno qui e non nel database (fnz_income.kind è testo libero): aggiungerne uno è
+   una riga in questo elenco, senza migration. */
+const INCOME_KINDS = [
+  { key: 'lavoro',        label: 'Lavoro',        icon: '💼' },
+  { key: 'pensione',      label: 'Pensione',      icon: '🧓' },
+  { key: 'affitto',       label: 'Affitto',       icon: '🏠' },
+  { key: 'dichiarazione', label: 'Dichiarazione', icon: '📄' },
+];
+const INCOME_LAST_YEAR = () => new Date().getFullYear() - 1;
+// Quanti anni vuoti mostrare quando non c'è ancora niente: la tabella si apre già pronta da
+// riempire invece che su uno stato vuoto che non dice cosa fare.
+const INCOME_DEFAULT_SPAN = 5;
+
+async function loadIncome() {
+  S.income = await sbQ('fnz_income', 'select=*&order=year.desc');
+}
+// Importi di un anno, per tipo: { lavoro: 1234, … }. Gli anni senza riga tornano vuoti.
+function incomeByYear() {
+  const map = {};
+  for (const r of (S.income || [])) {
+    const y = parseInt(r.year, 10);
+    (map[y] || (map[y] = {}))[r.kind] = parseFloat(r.amount) || 0;
+  }
+  return map;
+}
+const incomeTotal = row => INCOME_KINDS.reduce((s, k) => s + (row?.[k.key] || 0), 0);
+// Gli anni della tabella: dal più vecchio compilato (o cinque anni indietro) fino all'anno
+// scorso, senza buchi — un anno saltato deve restare visibile come riga da riempire, non
+// sparire dall'elenco.
+function incomeYears() {
+  const last = INCOME_LAST_YEAR();
+  const withData = Object.keys(incomeByYear()).map(Number).filter(y => !isNaN(y));
+  const first = Math.min(last - INCOME_DEFAULT_SPAN + 1, ...(withData.length ? withData : [last]));
+  const years = [];
+  for (let y = last; y >= first; y--) years.push(y);
+  return years;
+}
+
+function renderReddito() {
+  if (S.income === null) {
+    S.income = [];
+    loadIncome().then(() => { if (S.view === 'reddito') renderReddito(); })
+                .catch(e => console.error('Reddito:', e));
+  }
+  const byYear = incomeByYear();
+  const years  = incomeYears();
+  const totOf  = y => incomeTotal(byYear[y]);
+  const compilati = years.filter(y => totOf(y) > 0);
+  const ultimo    = compilati[0] ?? null;
+  const media     = compilati.length ? compilati.reduce((s, y) => s + totOf(y), 0) / compilati.length : null;
+
+  setHtml('view-reddito', `
+    <div class="view-header">
+      <div>
+        <h2 class="page-title">Reddito</h2>
+        <p class="page-sub">Reddito percepito anno per anno, fino al ${INCOME_LAST_YEAR()}</p>
+      </div>
+      <button class="btn btn-primary btn-sm" data-action="edit-income" data-year="${ultimo ?? INCOME_LAST_YEAR()}">✎ Compila un anno</button>
+    </div>
+    <div class="kpi-grid">
+      ${kpi(ultimo ? `Reddito ${ultimo}` : 'Ultimo anno compilato', ultimo ? fmtEUR(totOf(ultimo)) : '—', 'neutral',
+            ultimo && byYear[ultimo - 1] ? deltaHtml(totOf(ultimo), totOf(ultimo - 1)) : '')}
+      ${kpi('Media annua', media == null ? '—' : fmtEUR(media), 'neutral')}
+      ${kpi('Anni compilati', String(compilati.length), 'neutral')}
+    </div>
+    ${compilati.length > 1 ? `<div class="card"><div class="card-title">Andamento</div>
+      <div class="chart-wrap" style="height:240px"><canvas id="chart-reddito"></canvas></div>
+    </div>` : ''}
+    <div class="card">
+      <div class="card-title">Anno per anno</div>
+      <p class="text-muted text-sm mb-12">Tocca ✎ su una riga per inserire o correggere gli importi di quell'anno.</p>
+      <div class="table-wrap"><table class="table">
+        <thead><tr>
+          <th>Anno</th>
+          ${INCOME_KINDS.map(k => `<th class="text-right">${k.icon} ${k.label}</th>`).join('')}
+          <th class="text-right">Totale</th>
+          <th class="text-right">Var.</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${years.map(y => {
+          const row = byYear[y];
+          const tot = incomeTotal(row);
+          const prev = byYear[y - 1] ? incomeTotal(byYear[y - 1]) : null;
+          return `<tr${tot ? '' : ' class="text-muted"'}>
+            <td class="mono"><strong>${y}</strong></td>
+            ${INCOME_KINDS.map(k => `<td class="mono text-right">${row?.[k.key] ? fmtEUR(row[k.key]) : '—'}</td>`).join('')}
+            <td class="mono text-right"><strong>${tot ? fmtEUR(tot) : '—'}</strong></td>
+            <td class="mono text-right">${tot && prev ? deltaHtml(tot, prev) : '—'}</td>
+            <td class="text-right"><div class="hstack gap-4" style="justify-content:flex-end">
+              <button class="btn-icon" data-action="edit-income" data-year="${y}" title="Compila ${y}">✎</button>
+              ${tot ? `<button class="btn-icon btn-icon-danger" data-action="del-income" data-year="${y}" title="Cancella ${y}">✕</button>` : ''}
+            </div></td>
+          </tr>`;
+        }).join('')}</tbody>
+        ${compilati.length ? `<tfoot><tr>
+          <td><strong>Totale</strong></td>
+          ${INCOME_KINDS.map(k => {
+            const s = years.reduce((acc, y) => acc + (byYear[y]?.[k.key] || 0), 0);
+            return `<td class="mono text-right"><strong>${s ? fmtEUR(s) : '—'}</strong></td>`;
+          }).join('')}
+          <td class="mono text-right"><strong>${fmtEUR(years.reduce((acc, y) => acc + totOf(y), 0))}</strong></td>
+          <td></td><td></td>
+        </tr></tfoot>` : ''}
+      </table></div>
+    </div>
+  `);
+  if (compilati.length > 1) drawIncomeChart(years.filter(y => totOf(y) > 0).slice().reverse(), byYear);
+}
+
+// Barre impilate: un colore per tipo, un anno per barra. Impilate e non affiancate perché la
+// domanda che ci si fa guardandolo è «quanto ho preso in tutto», e la scomposizione viene dopo.
+function drawIncomeChart(years, byYear) {
+  const canvas = $('chart-reddito');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (S.charts['reddito']) { S.charts['reddito'].destroy(); delete S.charts['reddito']; }
+  S.charts['reddito'] = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: years.map(String),
+      datasets: INCOME_KINDS.map((k, i) => ({
+        label: k.label,
+        data: years.map(y => byYear[y]?.[k.key] || 0),
+        backgroundColor: PALETTE[i % PALETTE.length],
+        borderWidth: 0,
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, ticks: { callback: v => fmtEUR(v) } },
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11, padding: 12 } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtEUR(c.parsed.y)}` } },
+      },
+      animation: { duration: 400 },
+    },
+  });
+}
+
+// Un anno per volta, con tutti i tipi insieme: gli importi di un anno si copiano da un unico
+// foglio (il 730, il CUD) e aprirli in quattro finestre diverse sarebbe solo più lavoro.
+function openIncomeModal(year) {
+  const anno = parseInt(year, 10) || INCOME_LAST_YEAR();
+  const byYear = incomeByYear();
+  const row = byYear[anno] || {};
+  const anni = incomeYears();
+  // La nota è una per anno, non una per tipo: si scrive sulle righe dell'anno e si rilegge dalla
+  // prima che ce l'ha, così non c'è una casella note per ognuno dei quattro importi.
+  const nota = (S.income || []).find(r => parseInt(r.year, 10) === anno && r.notes)?.notes || '';
+
+  openModal(`Reddito ${anno}`, `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Anno *</label>
+        <select name="year" id="income-year" class="form-input form-select" required>
+          ${anni.map(y => `<option value="${y}" ${y === anno ? 'selected' : ''}>${y}</option>`).join('')}
+        </select>
+      </div>
+      ${INCOME_KINDS.map(k => `
+      <div class="form-group">
+        <label class="form-label">${k.icon} ${k.label}</label>
+        <input name="amount_${k.key}" type="number" step="any" min="0" class="form-input mono"
+               placeholder="0" value="${row[k.key] || ''}" />
+      </div>`).join('')}
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${nota}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    const y = parseInt(data.year, 10);
+    const now = new Date().toISOString();
+    // Un upsert solo con tutte e quattro le righe: la chiave (user_id, year, kind) fa il resto,
+    // quindi ricompilare un anno riscrive quello che c'è invece di aggiungere righe doppie.
+    // Le caselle lasciate vuote valgono zero e la loro riga viene tolta, altrimenti un importo
+    // cancellato resterebbe scritto nel database e continuerebbe a fare totale.
+    const rows = [], daTogliere = [];
+    for (const k of INCOME_KINDS) {
+      const v = parseFloat(data['amount_' + k.key]);
+      if (!isNaN(v) && v > 0) {
+        rows.push({ user_id: S.session.user.id, year: y, kind: k.key, amount: v,
+                    notes: (data.notes || '').trim(), updated_at: now });
+      } else {
+        daTogliere.push(k.key);
+      }
+    }
+    if (rows.length) await sbUpsert('fnz_income', rows, 'user_id,year,kind');
+    if (daTogliere.length) {
+      await sbDel('fnz_income', `year=eq.${y}&kind=in.(${daTogliere.join(',')})`);
+    }
+    await loadIncome();
+    closeModal();
+    render();
+  });
+
+  // Cambiando anno la finestra si riapre su quell'anno: senza, le caselle resterebbero quelle
+  // dell'anno di prima e salvando si copierebbero gli importi da un anno all'altro.
+  $('income-year')?.addEventListener('change', e => openIncomeModal(e.target.value));
+}
+
+async function deleteIncomeYear(year) {
+  const y = parseInt(year, 10);
+  if (!confirm(`Cancellare tutti gli importi del ${y}?`)) return;
+  await sbDel('fnz_income', `year=eq.${y}`);
+  await loadIncome();
+  render();
+}
+
 /* ── Movimenti del conto di Rosa ──────────────────────────────
    Il conto si collega come tutti gli altri (Configurazione → 🏦 Banche e Conti) e si spunta
    come «🌹 Danaro di Rosa». Qui i movimenti si leggono e si archiviano in
@@ -5788,6 +6016,7 @@ function render() {
     case 'loans':             renderPrestiti();           break;
     case 'loan-detail':       renderLoanDetail();         break;
     case 'other-assets':       renderOtherAssets();        break;
+    case 'reddito':            renderReddito();            break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
     case 'conto-risparmio':    renderContoRisparmio();     break;
     case 'configurazione':     renderConfigurazione();     break;
@@ -6007,6 +6236,8 @@ document.addEventListener('click', async e => {
     case 'del-other-asset':
       if (confirm('Eliminare questo asset?')) { await sbDel('fnz_other_assets', `id=eq.${t.dataset.id}`); await reload(); }
       break;
+    case 'edit-income':      openIncomeModal(t.dataset.year); break;
+    case 'del-income':       await deleteIncomeYear(t.dataset.year); break;
     case 'rosa-bank-read':    openRosaBankModal(); break;
     case 'rosa-bank-load':    await loadRosaBankMovements(); break;
     case 'rosa-bank-confirm': await confirmRosaBankRead(); break;

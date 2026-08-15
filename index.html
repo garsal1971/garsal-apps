@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.125</title>
+<title>AppSphere v1.5.126</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1948,8 +1948,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.125';
-const BUILD_TIME  = '2026-08-09T09:20:00Z';
+const APP_VERSION = 'v1.5.126';
+const BUILD_TIME  = '2026-08-15T10:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3046,15 +3046,19 @@ async function loadHomeAlertPortfolioTotal(headers) {
     const yearStart = new Date().getFullYear() + '-01-01';
 
     // Termini di paragone: l'ultimo snapshot dell'anno scorso e l'ultimo
-    // salvato prima di oggi — quest'ultimo è esattamente S.prevSnapshot di
-    // finanza.html, così la percentuale "da ieri" coincide con la sua.
+    // salvato prima di IERI, cioè di due giorni fa.
+    // Non prima di oggi: fra due sere consecutive i prezzi si muovono di
+    // pochissimo — e nel fine settimana per niente — quindi il confronto col
+    // giorno prima mostrava quasi sempre +0,00%, che è un avviso che non dice
+    // nulla. Con due giorni di distanza lo scarto si vede.
+    const twoDaysBase = localDayStr(-1); // "prima di ieri" = due giorni fa
     const [liveValue, yearRes, dayRes] = await Promise.all([
       fetchPortfolioLiveValue(headers).catch(e => {
         console.warn('Valore portafogli live non calcolabile:', e);
         return null;
       }),
       fetch(`${base}&snapshot_date=lt.${yearStart}&order=snapshot_date.desc&limit=1`, { headers }),
-      fetch(`${base}&snapshot_date=lt.${today}&order=snapshot_date.desc&limit=1`, { headers })
+      fetch(`${base}&snapshot_date=lt.${twoDaysBase}&order=snapshot_date.desc&limit=1`, { headers })
     ]);
     const prevYear = await readSnapshotRow(yearRes);
     const prevDay  = await readSnapshotRow(dayRes);
@@ -3079,10 +3083,10 @@ async function loadHomeAlertPortfolioTotal(headers) {
     }
 
     if (prevDay && prevDay.day < currentDay) {
-      // "da ieri" solo se lo snapshot di confronto è davvero del giorno
-      // prima, altrimenti si indica la data esplicita
-      const label = prevDay.day === localDayStr(-1)
-        ? 'da ieri'
+      // "da due giorni" solo se lo snapshot di confronto è davvero
+      // dell'altroieri, altrimenti si indica la data esplicita
+      const label = prevDay.day === localDayStr(-2)
+        ? 'da due giorni'
         : 'dal ' + prevDay.day.slice(8, 10) + '/' + prevDay.day.slice(5, 7);
       const p = fmtPctVar(current, prevDay.value, label);
       if (p) parts.push(p);

@@ -246,6 +246,27 @@ con quel saldo non c'entrano.
 Rosa vede le voci in `situazione-rosa.html` (via `cm_guest_access`), **non i movimenti**:
 `fnz_rosa_transactions` ha la sola policy owner.
 
+### Reddito (`fnz_income`)
+| Table | Purpose |
+|---|---|
+| `fnz_income` | Reddito percepito, **una riga per anno e per tipo**: `year`, `kind`, `amount`, `notes` |
+
+Si compila a mano da `finanza.html` → 💶 **Reddito** (menù *Patrimonio*): è l'unico dato di
+Finanza che non viene da nessuna banca. **Non entra in nessun totale del patrimonio** — il
+patrimonio è quello che c'è, il reddito è quello che è passato — quindi né lo snapshot né la
+dashboard lo guardano.
+
+Una riga per anno *e* per tipo, non una riga per anno con quattro colonne fisse: i tipi vivono
+in `INCOME_KINDS` dentro `finanza.html` (`lavoro`, `pensione`, `affitto`, `dichiarazione`) e
+aggiungerne uno è una riga di JavaScript, non una migration. `kind` è testo libero di proposito;
+il vincolo che conta è `UNIQUE (user_id, year, kind)`, su cui la pagina scrive in **upsert** —
+senza, ricompilare un anno raddoppierebbe il totale in silenzio. Una casella lasciata vuota
+**cancella** la sua riga invece di salvare zero, o un importo tolto continuerebbe a fare totale.
+
+La tabella arriva **fino all'anno scorso** e non a quello in corso: un anno incompleto messo in
+colonna accanto agli altri sembrerebbe un crollo del reddito. Gli anni senza dati restano
+visibili come righe da riempire — un anno saltato deve vedersi, non sparire dall'elenco.
+
 ### Weight Quest (`ps_`)
 | Table | Purpose |
 |---|---|
