@@ -39,6 +39,26 @@
                 <data android:scheme="garsalnative" android:host="oauth" />
             </intent-filter>
         </activity>
+
+        <!--
+            Serve alla fotocamera per le foto di Memo: lo scatto va scritto in
+            un file nostro, e senza un FileProvider l'uri che passeremmo
+            all'app fotocamera sarebbe un `file://` che da Android 7 fa
+            crashare l'app chiamata (FileUriExposedException).
+
+            L'autorità porta l'applicationId, che qui è diverso da quello
+            dell'APK WebView: due FileProvider con la stessa autorità sullo
+            stesso telefono impediscono l'installazione della seconda app.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

@@ -8,6 +8,7 @@ import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.storage.Storage
 import io.ktor.client.engine.okhttp.OkHttp
 
 /**
@@ -121,6 +122,9 @@ object Supabase {
         // Una sola Edge Function viene chiamata da qui: `fill-notification-queue`,
         // subito dopo aver scritto la regola Smart Block di una sfida di Ta Firi?.
         install(Functions)
+        // Le foto delle schede di Memo stanno nel bucket privato `mm-images`:
+        // servono gli URL firmati per vederle e l'upload per aggiungerne.
+        install(Storage)
         // L'engine va scelto: supabase-kt non ne porta uno di serie.
         httpEngine = OkHttp.create()
     }
