@@ -16,8 +16,8 @@ android {
         applicationId "com.garsal.appsphere"
         minSdk 28
         targetSdk 36
-        versionCode 18
-        versionName "1.0.17"
+        versionCode 19
+        versionName "1.0.18"
     }
 
     // Le pagine HTML scelgono fra dev e produzione dall'hostname (_IS_DEV).
@@ -86,12 +86,26 @@ dependencies {
     // una regola Smart Block di Ta Firi?, per non aspettare il cron delle sei
     // ore. È la stessa fetch che fa `ta-firi.html`.
     implementation 'io.github.jan-tennert.supabase:functions-kt'
+    // Le immagini di Memo stanno nel bucket `mm-images`, che è privato: servono
+    // gli URL firmati e l'upload dei file scelti dal telefono.
+    implementation 'io.github.jan-tennert.supabase:storage-kt'
     // supabase-kt non porta un engine Ktor: va scelto qui. Versione allineata
     // a quella che supabase-kt 3.1.4 usa internamente (Ktor 3.1.2).
     implementation 'io.ktor:ktor-client-okhttp:3.1.2'
 
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
+
+    // Memo: le foto delle schede si scaricano da URL firmati e si mostrano in
+    // griglia. Coil pesa poche centinaia di KB — è l'opposto di
+    // material-icons-extended, che è la ragione dell'avviso qui sopra.
+    implementation 'io.coil-kt:coil-compose:2.7.0'
+    // OCR delle foto, la stessa libreria e la stessa versione dell'APK WebView
+    // (`android-app/app/build.gradle`), così le due app leggono uguale.
+    implementation 'com.google.mlkit:text-recognition:16.0.0'
+    // FileProvider per la foto scattata dalla fotocamera: la si scrive in
+    // cache e se ne passa l'uri alla fotocamera di sistema.
+    implementation 'androidx.core:core-ktx:1.16.0'
 
     // Anteprime dell'IDE: servono solo mentre si sviluppa, non nell'APK
     // pubblicato. Erano `implementation`, quindi finivano anche nel release.

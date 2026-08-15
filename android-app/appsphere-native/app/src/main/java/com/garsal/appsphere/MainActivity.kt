@@ -40,6 +40,7 @@ import com.garsal.appsphere.core.Supabase
 import com.garsal.appsphere.eventslog.EventsLogScreen
 import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
+import com.garsal.appsphere.memo.MemoScreen
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
 import com.garsal.appsphere.peso.PesoScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
@@ -222,6 +223,9 @@ private fun Navigazione() {
         }
         composable(Route.PESO) {
             PesoScreen(onIndietro = { nav.popBackStack() })
+        }
+        composable(Route.MEMO) {
+            MemoScreen(onIndietro = { nav.popBackStack() })
         }
     }
 }

@@ -9,6 +9,7 @@ object Route {
     const val TASKS = "tasks"
     const val TA_FIRI = "tafiri"
     const val PESO = "peso"
+    const val MEMO = "memo"
 }
 
 /**
@@ -75,6 +76,12 @@ object PortedApps {
             titoloDiRipiego = "Ta Firi?",
             descrizioneDiRipiego = "Sfide a tempo — Ta Firi?",
             coloreDiRipiego = "#8E44AD",
+        ),
+        "memo.html" to AppPortata(
+            route = Route.MEMO,
+            titoloDiRipiego = "Memo",
+            descrizioneDiRipiego = "Schede e appunti",
+            coloreDiRipiego = "#2563EB",
         ),
         "weight-quest.html" to AppPortata(
             route = Route.PESO,

@@ -645,7 +645,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
@@ -844,6 +844,51 @@ su uno schermo di telefono è illeggibile prima ancora di essere utile.
 ragione — `id` può essere un numero o un uuid e `weight` un intero o un decimale, e con una data
 class una colonna del tipo inatteso non darebbe un campo storto ma la schermata vuota.
 
+### ⚠️ Memo nativo: il contenuto è HTML, e il giro deve chiudersi
+
+`memo/` porta in nativo le schede di `memo.html`: elenco con **ricerca su titolo e testo**, filtro
+per categoria, ordinamento (ultime modificate / ultime create / titolo), il filtro 📌 *In evidenza*
+che sul web è una pagina a sé, il **dettaglio in lettura** e la **modifica** con foto e OCR. Le
+tabelle sono le stesse (`mm_cards`, `mm_card_categories`, `mm_images`) più le categorie condivise
+`cm_categories`, e si leggono come `JsonObject`: non stanno in nessuna migration — nascono dal SQL
+che la pagina mostra in Impostazioni — quindi vale la stessa scelta di `ts_tasks`.
+
+**Il punto delicato è `content`, che è HTML** scritto da un `contenteditable` con `execCommand`. Qui
+un contenteditable non c'è, e il giro è in due tempi (`MemoHtml`): l'HTML diventa **testo con
+marcatori** (`**grassetto**`, `*corsivo*`, `__sottolineato__`, `~~barrato~~`, `#`/`##` per i
+titoli, `- ` e `1. ` per gli elenchi, `---` per la linea, `[testo](url)`, `![](url)` per le
+immagini incorporate), si modifica quello, e al salvataggio **si ritorna in HTML**. I pulsanti
+della barra infilano i marcatori attorno a quel che è selezionato e l'occhio 👁 mostra il
+risultato vero; in lettura si rende l'HTML com'è (`AnnotatedString.fromHtml`), non i marcatori.
+
+⚠️ **Ogni voce della barra del web deve avere il suo marcatore qui.** Aggiungendone una là senza
+aggiungerla qui, una scheda modificata dal telefono perde quella formattazione **in silenzio** —
+il giro non si chiude più. Un tag sconosciuto invece non fa danni: si scarta il tag e si tiene il
+testo, come `stripHtml()`.
+
+Le altre regole copiate riga per riga, da cambiare nelle due implementazioni insieme:
+
+- **le categorie si riscrivono da capo a ogni salvataggio** (`delete` di tutte le righe della
+  scheda e `insert` di quelle scelte, come `saveCard()`): senza la cancellazione una categoria
+  tolta resterebbe attaccata per sempre;
+- **cancellando si tolgono prima i file dal bucket, poi la riga**: `mm_images` sparisce da sé per
+  cascata, ma il bucket quel vincolo non lo conosce, e nell'ordine inverso i file resterebbero
+  senza più nessuna riga che dica dove sono;
+- **una scheda vale se ha il titolo *oppure* il contenuto**, non per forza tutt'e due;
+- **le foto si caricano dopo la scheda**, perché il percorso nel bucket è
+  `utente/scheda/file` e per una scheda nuova l'id non esiste prima; il tetto è 5 MB a foto come
+  nel web.
+
+L'OCR è **ML Kit**, la stessa libreria e la stessa versione dell'APK WebView: là passa da
+`AndroidBridge.performOcr`, qui si chiama direttamente. Il ripiego su Tesseract non c'è — serve al
+browser desktop, che ML Kit non ce l'ha. Il testo estratto si accoda dopo una linea `---`, come sul
+web. Fissare una scheda dall'elenco (📌) **non passa dalla conversione**: riscrive `content` com'è,
+o un giro andata-e-ritorno si porterebbe via la formattazione senza che nessuno abbia toccato il
+testo.
+
+Restano su `memo.html` la tavolozza del colore personalizzato (qui ci sono i sette campioni) e la
+scala dei caratteri delle schede, che su Android la decide già il sistema.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -974,10 +1019,10 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Cinque app ora esistono in due implementazioni
+### ⚠️ Sei app ora esistono in due implementazioni
 
-`spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html` e `weight-quest.html`
-hanno un gemello Kotlin che lavora sulle
+`spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html`, `weight-quest.html` e
+`memo.html` hanno un gemello Kotlin che lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -1004,8 +1049,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   ricostruiti e contati lo stesso, confronto peso/target **a un decimale**, `target_weight`
   congelato nella riga. Il nativo porta solo pesata, tabella e grafico: obiettivi, statistiche,
   dieta, sync e premi restano di là. Dettagli nella sezione qui sopra.
+- **Memo** — il contenuto è **HTML**: il nativo lo converte in marcatori per modificarlo e lo
+  riconverte salvando (`MemoHtml`), quindi ogni voce della barra del web deve avere il suo
+  marcatore di qua. Categorie riscritte da capo a ogni salvataggio, file del bucket cancellati
+  prima della riga. Dettagli nella sezione qui sopra.
 
-(`tasks.html` è la sesta, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
+(`tasks.html` è la settima, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -1472,7 +1521,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Cinque app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi? e Ti pisasti? (Weight Quest) hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **Sei app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest) e Memo hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 
