@@ -12,12 +12,13 @@ import kotlin.random.Random
 
 /**
  * Posizionamento delle bolle, portato da `index.html` (`sizeOf`,
- * `initialPlace`, `settlePositions`, `resolveCollisions`).
+ * `initialPlace`, `settlePositions`, `resolveCollisions`, `pushFromPanel`).
  *
- * Una differenza voluta rispetto al web: là i cerchi devono anche scansare il
- * pannello del punteggio, che galleggia sopra la stessa area (`pushFromPanel`).
- * Qui il totale sta nella barra in alto, fuori dall'area delle bolle, quindi
- * non c'è nessun rettangolo da evitare e quel pezzo non è stato portato.
+ * Il pannello del totale galleggia sopra la stessa area delle bolle, in basso a
+ * sinistra: i cerchi devono scansarlo, o coprirebbero l'unica cifra che il
+ * riquadro esiste per mostrare. È [Pannello], e vale per tutti — anche per la
+ * bolla che si sta trascinando, come nel web, dove il pannello ha «l'ultima
+ * parola» sia nell'assestamento sia durante il trascinamento.
  */
 object BubbleLayout {
 
@@ -31,6 +32,9 @@ object BubbleLayout {
         var y: Float,
         val r: Float,
     )
+
+    /** Il rettangolo occupato dal riquadro del totale, in pixel. */
+    data class Pannello(val x: Float, val y: Float, val w: Float, val h: Float)
 
     /**
      * Diametro proporzionale al punteggio: `area = (score/maxScore) * MAX_AREA`,
@@ -78,11 +82,13 @@ object BubbleLayout {
      * Assesta le posizioni dopo il primo disegno: si separano le coppie che si
      * toccano finché nessuno si muove più (o dopo 300 giri).
      */
-    fun assesta(nodi: List<Nodo>, w: Float, h: Float) {
+    fun assesta(nodi: List<Nodo>, w: Float, h: Float, pannello: Pannello? = null) {
         repeat(300) {
             val prima = nodi.map { it.x to it.y }
             separaCoppie(nodi, fissato = null)
-            nodi.forEach { limita(it, w, h) }
+            // Prima il bordo dello schermo, poi il pannello: l'ultima parola è
+            // sua, altrimenti il limite lo rimetterebbe sotto il riquadro.
+            nodi.forEach { limita(it, w, h); scansaPannello(it, pannello) }
             val spostamento = nodi.mapIndexed { i, n ->
                 abs(n.x - prima[i].first) + abs(n.y - prima[i].second)
             }.sum()
@@ -100,8 +106,18 @@ object BubbleLayout {
      * trascinata e il bordo riceve spinte non nulle che si annullano fra loro,
      * e senza questo accorgimento il ciclo non finirebbe mai.
      */
-    fun risolviTrascinamento(nodi: List<Nodo>, trascinato: Int, w: Float, h: Float) {
+    fun risolviTrascinamento(
+        nodi: List<Nodo>,
+        trascinato: Int,
+        w: Float,
+        h: Float,
+        pannello: Pannello? = null,
+    ) {
         val dn = nodi.firstOrNull { it.indice == trascinato } ?: return
+
+        // Anche la bolla in mano scansa il pannello, come nel web: il dito può
+        // portarla lì sopra, e il riquadro del totale resterebbe coperto.
+        scansaPannello(dn, pannello)
 
         repeat(8) {
             // ── Fase 1: si spostano gli altri, il trascinato sta fermo ──
@@ -111,7 +127,12 @@ object BubbleLayout {
                 repeat(60) {
                     val prima = nodi.map { it.x to it.y }
                     separaCoppie(nodi, fissato = trascinato)
-                    nodi.forEach { if (it.indice != trascinato) limita(it, w, h) }
+                    nodi.forEach {
+                        if (it.indice != trascinato) {
+                            limita(it, w, h)
+                            scansaPannello(it, pannello)
+                        }
+                    }
                     val spostamento = nodi.mapIndexed { i, n ->
                         if (n.indice == trascinato) 0f
                         else abs(n.x - prima[i].first) + abs(n.y - prima[i].second)
@@ -144,6 +165,7 @@ object BubbleLayout {
             dn.x += spintaX
             dn.y += spintaY
             limita(dn, w, h)
+            scansaPannello(dn, pannello)
             if (abs(dn.x - primaX) + abs(dn.y - primaY) < 0.01f) return
         }
     }
@@ -177,6 +199,44 @@ object BubbleLayout {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Sposta la bolla fuori dal riquadro del totale, se ci finisce sopra —
+     * `pushFromPanel` del web, caso limite compreso.
+     *
+     * Il caso normale è spingere il centro lontano dal punto più vicino del
+     * rettangolo. Quando invece il centro è **dentro** il rettangolo quella
+     * direzione non esiste (distanza zero): si esce dal lato con la
+     * penetrazione minore, che è lo spostamento più corto.
+     */
+    private fun scansaPannello(n: Nodo, p: Pannello?) {
+        if (p == null) return
+        val vicinoX = n.x.coerceIn(p.x, max(p.x, p.x + p.w))
+        val vicinoY = n.y.coerceIn(p.y, max(p.y, p.y + p.h))
+        val dx = n.x - vicinoX
+        val dy = n.y - vicinoY
+        val distanza = hypot(dx, dy)
+        val minima = n.r + GAP
+        if (distanza >= minima) return
+
+        if (distanza > 0.001f) {
+            val fattore = (minima - distanza) / distanza
+            n.x += dx * fattore
+            n.y += dy * fattore
+            return
+        }
+
+        val sinistra = n.x - p.x
+        val destra = (p.x + p.w) - n.x
+        val sopra = n.y - p.y
+        val sotto = (p.y + p.h) - n.y
+        when (min(min(sinistra, destra), min(sopra, sotto))) {
+            sinistra -> n.x = p.x - n.r - GAP
+            destra -> n.x = p.x + p.w + n.r + GAP
+            sopra -> n.y = p.y - n.r - GAP
+            else -> n.y = p.y + p.h + n.r + GAP
         }
     }
 

@@ -1,6 +1,8 @@
 package com.garsal.appsphere.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
@@ -37,10 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,9 +54,24 @@ import com.garsal.appsphere.core.DialogoAggiornamento
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.premi.PremiScreen
+import com.garsal.appsphere.premi.RossoPremi
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
+
+/** Quanto il riquadro del totale sta staccato dagli angoli (web: 20 px). */
+private val MARGINE_PANNELLO = 16.dp
+
+/**
+ * Il bordo nero di bolle e riquadro. Nel CSS sono 4 px, che su questo schermo
+ * varrebbero un dp e mezzo: qui è in dp perché resti spesso come si vede sul
+ * monitor, dove quel bordo è il segno grafico dell'app.
+ */
+private val BORDO_BOLLA = 3.dp
+
+/** Il `#111` del web, non il nero pieno. */
+private val NeroBordo = Color(0xFF111111)
 
 @Composable
 fun HomeScreen(
@@ -59,8 +79,25 @@ fun HomeScreen(
     vm: HomeViewModel = viewModel(),
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
-    val totale = stato.bolle.sumOf { it.punteggio }
     var mostraVersione by remember { mutableStateOf(false) }
+    var mostraPremi by remember { mutableStateOf(false) }
+
+    fun chiudiPremi() {
+        mostraPremi = false
+        // Un premio ritirato ha speso dei punti: il riquadro in basso deve
+        // dirlo appena si torna, non al prossimo avvio.
+        vm.ricaricaPuntiSpesi()
+    }
+
+    // Il catalogo premi non è una destinazione di navigazione ma una schermata
+    // che prende il posto della home, quindi il tasto indietro va intercettato
+    // qui: senza, chiuderebbe l'app invece del catalogo.
+    BackHandler(enabled = mostraPremi) { chiudiPremi() }
+
+    if (mostraPremi) {
+        PremiScreen(lordo = stato.totaleLordo, onIndietro = { chiudiPremi() })
+        return
+    }
 
     // Le icone in `dp` non seguono l'ingrandimento dei caratteri: accanto a un
     // punteggio scritto grande resterebbero minuscole, e soprattutto piccole da
@@ -72,12 +109,9 @@ fun HomeScreen(
             GarsalTopBar(
                 titolo = if (stato.modalitaNascosta) "AppSphere ·" else "AppSphere",
                 azioni = {
-                    Text(
-                        text = String.format(Locale.ITALY, "%,d", totale),
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
+                    // Il totale non sta più qui ma nel riquadro in basso, come
+                    // sul web: due volte la stessa cifra, con i caratteri di
+                    // sistema grandi, sono solo una riga in meno per il titolo.
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Ricarica",
@@ -127,6 +161,12 @@ fun HomeScreen(
             }
 
             Box(Modifier.fillMaxSize()) {
+                // Il riquadro del totale galleggia sopra il campo delle bolle,
+                // che lo scansano: qui se ne misura l'ingombro, perché con i
+                // caratteri di sistema grandi è alto il doppio e un rettangolo
+                // scritto a mano nel codice sarebbe sbagliato proprio lì.
+                var ingombroPannello by remember { mutableStateOf(IntSize.Zero) }
+
                 if (stato.bolle.isEmpty() && stato.caricamento) {
                     CircularProgressIndicator(
                         color = Palette.topBar,
@@ -139,8 +179,21 @@ fun HomeScreen(
                         modifier = Modifier.align(Alignment.Center),
                     )
                 } else {
-                    CampoBolle(bolle = stato.bolle, onApri = onApriApp)
+                    CampoBolle(
+                        bolle = stato.bolle,
+                        ingombroPannello = ingombroPannello,
+                        onApri = onApriApp,
+                    )
                 }
+
+                PannelloTotale(
+                    totale = stato.totaleNetto,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(MARGINE_PANNELLO)
+                        .onSizeChanged { ingombroPannello = it },
+                    onClick = { mostraPremi = true },
+                )
             }
         }
     }
@@ -153,23 +206,42 @@ fun HomeScreen(
 /**
  * L'area delle bolle: dimensioni e collocazione le decide [BubbleLayout],
  * qui si disegnano e si trascinano.
+ *
+ * `ingombroPannello` è quanto misura il riquadro del totale, che sta in basso
+ * a sinistra sopra quest'area: serve a ricavarne il rettangolo da scansare.
  */
 @Composable
-private fun CampoBolle(bolle: List<Bolla>, onApri: (String) -> Unit) {
+private fun CampoBolle(
+    bolle: List<Bolla>,
+    ingombroPannello: IntSize,
+    onApri: (String) -> Unit,
+) {
     val densita = LocalDensity.current.density
+    val marginePx = with(LocalDensity.current) { MARGINE_PANNELLO.toPx() }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
+
+        val pannello = remember(ingombroPannello, w, h, marginePx) {
+            if (ingombroPannello == IntSize.Zero) null
+            else BubbleLayout.Pannello(
+                x = marginePx,
+                y = h - marginePx - ingombroPannello.height,
+                w = ingombroPannello.width.toFloat(),
+                h = ingombroPannello.height.toFloat(),
+            )
+        }
 
         val raggi = remember(bolle, w, h, densita) {
             val massimo = bolle.maxOfOrNull { it.punteggio } ?: 0
             bolle.map { BubbleLayout.diametro(it.punteggio, massimo, densita) / 2f }
         }
 
-        // Le posizioni si ricalcolano solo quando cambiano le bolle o la
-        // dimensione dell'area: un trascinamento non deve rimescolare tutto.
-        var posizioni by remember(bolle, w, h) {
+        // Le posizioni si ricalcolano solo quando cambiano le bolle, la
+        // dimensione dell'area o quella del pannello: un trascinamento non deve
+        // rimescolare tutto.
+        var posizioni by remember(bolle, w, h, pannello) {
             mutableStateOf(
                 buildList {
                     val nodi = mutableListOf<BubbleLayout.Nodo>()
@@ -177,7 +249,7 @@ private fun CampoBolle(bolle: List<Bolla>, onApri: (String) -> Unit) {
                         val (x, y) = BubbleLayout.collocazioneIniziale(r, nodi, w, h)
                         nodi += BubbleLayout.Nodo(i, x, y, r)
                     }
-                    BubbleLayout.assesta(nodi, w, h)
+                    BubbleLayout.assesta(nodi, w, h, pannello)
                     addAll(nodi.map { Offset(it.x, it.y) })
                 }
             )
@@ -199,7 +271,7 @@ private fun CampoBolle(bolle: List<Bolla>, onApri: (String) -> Unit) {
                     }.toMutableList()
                     nodi[i].x += spostamento.x
                     nodi[i].y += spostamento.y
-                    BubbleLayout.risolviTrascinamento(nodi, i, w, h)
+                    BubbleLayout.risolviTrascinamento(nodi, i, w, h, pannello)
                     posizioni = nodi.map { Offset(it.x, it.y) }
                 },
             )
@@ -223,7 +295,10 @@ private fun BollaCerchio(
     // olimpico con scritta bianca sopra non si legge.
     val coloreTesto = if (coloreCerchio.luminance() > 0.6f) Palette.dark else Palette.light
     val diametroDp = (raggio * 2f / densita).dp
-    val dimensioneTesto = misuraTesto(bolla.nome, raggio * 2f, densita)
+    val conPunteggio = bolla.punteggio > 0
+    val dimensioneTesto = misuraTesto(bolla.nome, raggio * 2f, densita, conPunteggio)
+    // `size * 0.13` come il web, con lo stesso minimo di 9.
+    val dimensionePunteggio = ((raggio * 2f * 0.13f) / densita).coerceAtLeast(9f).sp
 
     Box(
         modifier = Modifier
@@ -236,6 +311,9 @@ private fun BollaCerchio(
             .size(diametroDp)
             .clip(CircleShape)
             .background(coloreCerchio)
+            // Il bordo nero del web (`border: 4px solid #111`), che stacca le
+            // bolle scure dallo sfondo bianco e quelle chiare fra loro.
+            .border(BORDO_BOLLA, NeroBordo, CircleShape)
             .pointerInput(bolla.htmlFile) {
                 detectDragGestures { cambiamento, spostamento ->
                     cambiamento.consume()
@@ -245,15 +323,70 @@ private fun BollaCerchio(
             .clickable(onClick = onApri),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = bolla.nome,
-            color = coloreTesto,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            fontSize = dimensioneTesto,
-            lineHeight = dimensioneTesto * 1.2f,
-            maxLines = 3,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = (diametroDp.value * 0.12f).dp),
+        ) {
+            Text(
+                text = bolla.nome,
+                color = coloreTesto,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                fontSize = dimensioneTesto,
+                lineHeight = dimensioneTesto * 1.2f,
+                maxLines = 3,
+            )
+            // Il punteggio a zero non si scrive, come sul web: una bolla al
+            // minimo con uno «0» sotto sembra rotta, non vuota.
+            if (conPunteggio) {
+                Text(
+                    text = "${bolla.punteggio}",
+                    color = coloreTesto.copy(alpha = 0.75f),
+                    textAlign = TextAlign.Center,
+                    fontSize = dimensionePunteggio,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Il riquadro rosso in basso a sinistra: i punti che restano da spendere.
+ *
+ * È il `#score-panel` del web, compreso il fatto che si tocca — ed è l'unico
+ * modo per arrivare al catalogo premi, di là come di qua.
+ */
+@Composable
+private fun PannelloTotale(
+    totale: Int,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(RossoPremi)
+            .border(BORDO_BOLLA, NeroBordo, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            // `heightIn` implicito: niente altezza fissa attorno a due scritte
+            // che coi caratteri di sistema grandi crescono da sole.
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = "TOTALE",
+            color = Palette.light.copy(alpha = 0.7f),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        Text(
+            text = String.format(Locale.ITALY, "%,d", totale),
+            color = Palette.light,
+            fontSize = 28.sp,
+            lineHeight = 32.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
         )
     }
 }
@@ -264,12 +397,22 @@ private fun BollaCerchio(
  * Il web fa una ricerca binaria misurando davvero il testo (`fitFontSize`);
  * qui è una stima sulla parola più lunga, che con nomi di due o tre parole dà
  * lo stesso risultato a occhio senza dover misurare fuori schermo.
+ *
+ * Col punteggio sotto il nome il tetto si abbassa: la riga in più vuole il suo
+ * posto, e un nome alto quanto prima uscirebbe dal cerchio invece di
+ * stringersi.
  */
-private fun misuraTesto(nome: String, diametro: Float, densita: Float) = run {
+private fun misuraTesto(
+    nome: String,
+    diametro: Float,
+    densita: Float,
+    conPunteggio: Boolean,
+) = run {
     val parolaPiuLunga = max(nome.split(" ").maxOfOrNull { it.length } ?: 1, 1)
     val larghezzaUtile = diametro * 0.64f
     val stimaPx = larghezzaUtile / (parolaPiuLunga * 0.58f)
-    (stimaPx / densita).coerceIn(9f, (diametro * 0.26f) / densita).sp
+    val tetto = (diametro * if (conPunteggio) 0.22f else 0.26f) / densita
+    (stimaPx / densita).coerceIn(9f, tetto).sp
 }
 
 @Composable

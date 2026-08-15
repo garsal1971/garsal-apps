@@ -7,6 +7,7 @@ import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -39,6 +40,17 @@ data class Bolla(
 
 data class Avviso(val testo: String, val route: String)
 
+/**
+ * Quello che serve per disegnare la home: le bolle e il punteggio **lordo**.
+ *
+ * I due numeri non coincidono, ed è voluto: le bolle sono le sole app portate
+ * in nativo, il lordo è la somma dei punteggi di **tutte** le app attive, come
+ * il pannello del web. Con quella cifra si comprano i premi, che costano lo
+ * stesso da qui e dall'app WebView: sommare solo le cinque bolle darebbe un
+ * saldo più basso a seconda di che APK si è aperto.
+ */
+data class DatiHome(val bolle: List<Bolla>, val totaleLordo: Int)
+
 @Serializable
 private data class SpSettingsAvviso(
     val goal: String = "",
@@ -62,17 +74,22 @@ object HomeRepository {
     private const val TAG = "AppSphereHome"
 
     /**
-     * Le app da mostrare, con il punteggio.
+     * Le app da mostrare, con il punteggio, e il totale lordo.
      *
      * Stessa lettura di `loadApps()` in index.html — `cm_apps` attive, ordinate
      * per id, punteggio dalla RPC `run_score_query` con l'SQL scritto nella
      * riga — con in più l'incrocio col registro delle app portate.
      *
+     * ⚠️ **Il punteggio si calcola per tutte le app attive, non solo per quelle
+     * portate**: le altre non hanno una bolla da disegnare qui, ma i loro punti
+     * entrano nel totale in basso esattamente come sul web, ed è quel totale
+     * che paga i premi. Sono una manciata di RPC in più, tutte in parallelo.
+     *
      * Il filtro su `riservato` è fatto qui e non nella query: le righe in gioco
-     * sono una manciata, e la pagina web ha già la stessa strada come ripiego
-     * per quando la colonna non c'è.
+     * sono poche, e la pagina web ha già la stessa strada come ripiego per
+     * quando la colonna non c'è.
      */
-    suspend fun bolle(modalitaNascosta: Boolean): List<Bolla> = withContext(Dispatchers.IO) {
+    suspend fun carica(modalitaNascosta: Boolean): DatiHome = withContext(Dispatchers.IO) {
         val righe = Supabase.client().postgrest
             .from("cm_apps")
             .select(
@@ -83,29 +100,48 @@ object HomeRepository {
             }
             .decodeList<CmApp>()
 
-        val perFile = righe.associateBy { it.htmlFile }
+        val visibili = righe.filter { modalitaNascosta || it.riservato != true }
 
-        coroutineScope {
-            PortedApps.perHtmlFile.map { (file, portata) ->
-                async {
-                    val riga = perFile[file]
-                    val riservata = riga?.riservato == true
-                    if (riservata && !modalitaNascosta) return@async null
-
-                    Bolla(
-                        htmlFile = file,
-                        nome = riga?.title?.takeIf { it.isNotBlank() } ?: portata.titoloDiRipiego,
-                        descrizione = riga?.description?.takeIf { !it.isNullOrBlank() }
-                            ?: portata.descrizioneDiRipiego,
-                        punteggio = punteggio(riga?.scoreQuery),
-                        colore = riga?.color?.takeIf { !it.isNullOrBlank() }
-                            ?: portata.coloreDiRipiego,
-                        riservata = riservata,
-                        route = portata.route,
-                    )
-                }
-            }.mapNotNull { it.await() }
+        val punteggi = coroutineScope {
+            visibili.map { riga -> async { punteggio(riga.scoreQuery) } }.awaitAll()
         }
+
+        // Le bolle nell'ordine di `cm_apps`, come sul web.
+        val dalDatabase = visibili.mapIndexedNotNull { i, riga ->
+            val portata = PortedApps.perHtmlFile[riga.htmlFile] ?: return@mapIndexedNotNull null
+            Bolla(
+                htmlFile = riga.htmlFile ?: return@mapIndexedNotNull null,
+                nome = riga.title.takeIf { it.isNotBlank() } ?: portata.titoloDiRipiego,
+                descrizione = riga.description?.takeIf { it.isNotBlank() }
+                    ?: portata.descrizioneDiRipiego,
+                punteggio = punteggi[i],
+                colore = riga.color?.takeIf { it.isNotBlank() } ?: portata.coloreDiRipiego,
+                riservata = riga.riservato == true,
+                route = portata.route,
+            )
+        }
+
+        // Le app portate che in `cm_apps` non hanno una riga (events-log.html
+        // non compare in nessuna migration): si disegnano coi valori di
+        // ripiego invece di sparire in silenzio. Il confronto è su `righe` e
+        // non su `visibili`, o una riservata rispunterebbe da qui a modalità
+        // nascosta spenta.
+        val conRiga = righe.mapNotNull { it.htmlFile }.toSet()
+        val senzaRiga = PortedApps.perHtmlFile
+            .filterKeys { it !in conRiga }
+            .map { (file, portata) ->
+                Bolla(
+                    htmlFile = file,
+                    nome = portata.titoloDiRipiego,
+                    descrizione = portata.descrizioneDiRipiego,
+                    punteggio = 0,
+                    colore = portata.coloreDiRipiego,
+                    riservata = false,
+                    route = portata.route,
+                )
+            }
+
+        DatiHome(bolle = dalDatabase + senzaRiga, totaleLordo = punteggi.sum())
     }
 
     /**
