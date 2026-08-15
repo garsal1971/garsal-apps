@@ -256,16 +256,40 @@ Finanza che non viene da nessuna banca. **Non entra in nessun totale del patrimo
 patrimonio è quello che c'è, il reddito è quello che è passato — quindi né lo snapshot né la
 dashboard lo guardano.
 
-Una riga per anno *e* per tipo, non una riga per anno con quattro colonne fisse: i tipi vivono
-in `INCOME_KINDS` dentro `finanza.html` (`lavoro`, `pensione`, `affitto`, `dichiarazione`) e
-aggiungerne uno è una riga di JavaScript, non una migration. `kind` è testo libero di proposito;
-il vincolo che conta è `UNIQUE (user_id, year, kind)`, su cui la pagina scrive in **upsert** —
-senza, ricompilare un anno raddoppierebbe il totale in silenzio. Una casella lasciata vuota
-**cancella** la sua riga invece di salvare zero, o un importo tolto continuerebbe a fare totale.
+Una riga per anno *e* per tipo, non una riga per anno con colonne fisse: i tipi vivono in
+`INCOME_SECTIONS` dentro `finanza.html` e aggiungerne uno è una riga di JavaScript, non una
+migration. `kind` è testo libero di proposito; il vincolo che conta è
+`UNIQUE (user_id, year, kind)`, su cui la pagina scrive in **upsert** — senza, ricompilare un
+anno raddoppierebbe il totale in silenzio. Una casella lasciata vuota **cancella** la sua riga
+invece di salvare zero: «dato assente» e «zero euro» sono due cose diverse, e un importo tolto
+che restasse scritto continuerebbe a fare totale.
+
+La pagina è in **cinque sezioni**, una tabella ciascuna, tutte su questa tabella: redditi
+(`lavoro`, `pensione`, `fabbricati`, `abitazione_principale`, `reddito_complessivo`), ritenute in
+busta paga (`rit_*`), liquidazione della dichiarazione (`liq_*`), contributi previdenziali
+(`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`). Il ✎ e il ✕ agiscono **sulla singola
+sezione** di un anno, non sull'anno intero: le cinque tabelle vengono da documenti diversi.
+`liq_esito` è l'unico importo **con segno** (rimborso > 0, debito < 0) e la colonna non ha nessun
+CHECK che lo impedisca.
+
+⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
+(lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730
+disponibili tornano esatte, quindi archiviarle vorrebbe dire tenere due verità sullo stesso
+numero. Tornano `null` — non zero — se manca un ingrediente: il totale lav. dip. del 2017 resta
+vuoto perché la pensione di quell'anno non compare, e sommare solo quel che c'è darebbe un
+totale più basso del vero senza dirlo. Il **reddito complessivo invece si archivia**: è la cifra
+scritta sul 730 e per l'ultimo anno non è ricavabile (mancano fabbricati e abitazione
+principale). Per la stessa ragione il KPI in cima mostra la variazione **solo fra anni misurati
+allo stesso modo** — complessivo contro complessivo.
 
 La tabella arriva **fino all'anno scorso** e non a quello in corso: un anno incompleto messo in
 colonna accanto agli altri sembrerebbe un crollo del reddito. Gli anni senza dati restano
 visibili come righe da riempire — un anno saltato deve vedersi, non sparire dall'elenco.
+
+I dati storici 2017-2025 ricavati dai 730 e dalle CU sono in
+`20260815160000_fnz_income_dati_storici.sql`: l'insert è idempotente (`ON CONFLICT … DO UPDATE`)
+e intestato all'utente cercato per email, e salta senza fallire se quell'utente non esiste
+(progetto dev).
 
 ### Weight Quest (`ps_`)
 | Table | Purpose |
