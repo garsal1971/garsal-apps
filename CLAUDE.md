@@ -644,7 +644,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
@@ -802,6 +802,47 @@ all'ingrandimento si sfalda da sé, con le icone spinte a capo per prime — cio
 servono per toccare), e le palline della griglia hanno un diametro che segue `fontScale` invece
 dei 32 px fissi del CSS, altrimenti il numero dentro verrebbe tagliato.
 
+### ⚠️ «Ti pisasti?» nativo: la pesata sì, l'obiettivo no
+
+`peso/` porta in nativo **le tre cose che si fanno col telefono in mano**:
+segnare la pesata (il pulsante ⚖️, che scrive in `ps_weight_tracking`), la **Tabella**
+giorno per giorno e il **Grafico** dell'andamento. La scheda *Oggi* apre con la domanda che dà
+il nome all'app — *oggi ti sei pesato?* — e sotto i **sei riquadri della pagina**, nello stesso
+ordine: Minimo oggi, Target oggi, Mancano al target, Kg alla fine, Punteggio, Punti oggi.
+
+**Restano su `weight-quest.html`**, che è dove si fanno da seduti: creare e modificare obiettivi e
+traguardi, le statistiche, *genera dieta*, la sincronizzazione con Google Fit e con la bilancia, e
+il gratta e vinci dei premi — che vive in `localStorage` ed è **per dispositivo**, quindi da qui
+non avrebbe niente da mostrare. Da nativo l'obiettivo si **sceglie** (per guardarne un altro) ma
+non si tocca.
+
+Le regole di calcolo stanno tutte in `peso/PesoRegole.kt`, ricalcate una per una dalla pagina, e
+**vanno cambiate nelle due implementazioni insieme**:
+
+- **il target di un giorno è interpolato fra i traguardi** (`getInterpolatedTarget`): con meno di
+  due traguardi non esiste e diventa un trattino, prima del primo e dopo l'ultimo vale il valore
+  estremo, in mezzo è lineare arrotondata a due decimali;
+- **i giorni senza pesata contano lo stesso.** Vengono ricostruiti interpolando fra la pesata prima
+  e quella dopo (`getInterpolatedWeightFromSeries`) e prendono punti come gli altri: toglierli
+  cambierebbe il punteggio. Sono marcati «giorno ricostruito» invece di sembrare una pesata vera;
+- **il confronto peso/target si fa a un decimale** (`Math.round(x*10)/10`): 74,04 contro un target
+  di 74,0 è una giornata vinta, e a piena precisione sarebbe persa;
+- **il target si congela nella riga** al momento della pesata (`target_weight`) e non si ricalcola
+  mai: spostare i traguardi domani non deve riscrivere il giudizio sui giorni già passati;
+- **`timestamp` (millisecondi di giorno + ora) è la chiave** della pesata: l'upsert ci si appoggia,
+  quindi ripesarsi alla stessa ora riscrive la riga di prima invece di aggiungerne una.
+
+Due differenze di forma. La **tabella non è una tabella**: sei colonne coi caratteri di sistema
+grandi si tagliano o vanno a capo ognuna per conto suo, quindi ogni giornata è una scheda con la
+data e il peso in cima. E il **grafico è disegnato a mano su un `Canvas`** invece che con Chart.js:
+restano le due curve che si guardano davvero — peso e target — perché un grafico fitto di etichette
+su uno schermo di telefono è illeggibile prima ancora di essere utile.
+
+`ps_weight_tracking` e `ps_objectives` non stanno in nessuna migration e si leggono come
+`JsonObject`, non come `data class` serializzate: è la stessa scelta di `ts_tasks` e per la stessa
+ragione — `id` può essere un numero o un uuid e `weight` un intero o un decimale, e con una data
+class una colonna del tipo inatteso non darebbe un campo storto ma la schermata vuota.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -900,10 +941,10 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Quattro app ora esistono in due implementazioni
+### ⚠️ Cinque app ora esistono in due implementazioni
 
-`spuntiamola.html`, `obiettivi.html`, `events-log.html` e `ta-firi.html` hanno un gemello Kotlin
-che lavora sulle
+`spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html` e `weight-quest.html`
+hanno un gemello Kotlin che lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -926,8 +967,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Ta Firi?** — il punteggio finale resta in `sf_finalize_challenge`; il check-in di oggi passa
   da `sf_checkin_set` e la correzione di un giorno passato no; la regola Smart Block si scrive da
   tutt'e due. Dettagli nella sezione qui sopra.
+- **Ti pisasti?** (`weight-quest.html`) — target interpolato fra i traguardi, giorni senza pesata
+  ricostruiti e contati lo stesso, confronto peso/target **a un decimale**, `target_weight`
+  congelato nella riga. Il nativo porta solo pesata, tabella e grafico: obiettivi, statistiche,
+  dieta, sync e premi restano di là. Dettagli nella sezione qui sopra.
 
-(`tasks.html` è la quinta, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
+(`tasks.html` è la sesta, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -1394,7 +1439,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Quattro app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log e Ta Firi? hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **Cinque app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi? e Ti pisasti? (Weight Quest) hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 
