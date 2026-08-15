@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.garsal.appsphere.premi.PremiRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,6 +14,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.math.max
 
 @Serializable
 private data class BollaSalvata(
@@ -32,7 +34,19 @@ data class HomeState(
     val errore: String? = null,
     val modalitaNascosta: Boolean = false,
     val avvisiChiusi: Boolean = false,
-)
+    /** Punti guadagnati: la somma dei punteggi di **tutte** le app attive. */
+    val totaleLordo: Int = 0,
+    /** Punti già spesi in premi (`cm_rewards_log`). */
+    val puntiSpesi: Int = 0,
+) {
+    /**
+     * Quello che il riquadro in basso mostra, e con cui si comprano i premi:
+     * guadagnati meno spesi, mai sotto zero. È la stessa cifra di
+     * `updateScorePanel()` nel web — se le due divergono, un premio comprabile
+     * da una parte non lo è dall'altra.
+     */
+    val totaleNetto: Int get() = max(0, totaleLordo - puntiSpesi)
+}
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -54,14 +68,17 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.value = _state.value.copy(caricamento = true, errore = null)
             try {
-                val bolle = HomeRepository.bolle(_state.value.modalitaNascosta)
+                val dati = HomeRepository.carica(_state.value.modalitaNascosta)
                 val avvisi = HomeRepository.avvisi()
+                val spesi = PremiRepository.puntiSpesi()
                 _state.value = _state.value.copy(
-                    bolle = bolle,
+                    bolle = dati.bolle,
                     avvisi = avvisi,
                     caricamento = false,
+                    totaleLordo = dati.totaleLordo,
+                    puntiSpesi = spesi,
                 )
-                salvaCache(bolle)
+                salvaCache(dati.bolle, dati.totaleLordo, spesi)
             } catch (e: Exception) {
                 Log.w("AppSphereHome", "caricamento home fallito", e)
                 _state.value = _state.value.copy(
@@ -84,6 +101,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(avvisiChiusi = true)
     }
 
+    /**
+     * Rilegge i soli punti spesi, al ritorno dal catalogo premi.
+     *
+     * I punteggi delle app non possono essere cambiati nel frattempo — di là
+     * non si tocca nessuna app — e rifarli vorrebbe dire una `score_query` per
+     * riga per vedere gli stessi numeri di un momento fa.
+     */
+    fun ricaricaPuntiSpesi() {
+        viewModelScope.launch {
+            val spesi = PremiRepository.puntiSpesi()
+            _state.value = _state.value.copy(puntiSpesi = spesi)
+            salvaCache(_state.value.bolle, _state.value.totaleLordo, spesi)
+        }
+    }
+
     private fun leggiCache() {
         val grezzo = prefs.getString(CHIAVE_CACHE, null) ?: return
         try {
@@ -93,21 +125,32 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             // Una bolla in cache che nel frattempo non è più portata va buttata,
             // o si aprirebbe una rotta che non esiste più.
             val valide = bolle.filter { PortedApps.perHtmlFile.containsKey(it.htmlFile) }
-            _state.value = _state.value.copy(bolle = valide)
+            _state.value = _state.value.copy(
+                bolle = valide,
+                // Il totale si tiene in cache insieme alle bolle: mostrare il
+                // solo lordo mentre i punti spesi arrivano darebbe un numero
+                // più alto del vero, che poi cala sotto gli occhi.
+                totaleLordo = prefs.getInt(CHIAVE_LORDO, 0),
+                puntiSpesi = prefs.getInt(CHIAVE_SPESI, 0),
+            )
         } catch (e: Exception) {
             Log.w("AppSphereHome", "cache bolle illeggibile, la butto: ${e.message}")
             prefs.edit().remove(CHIAVE_CACHE).apply()
         }
     }
 
-    private fun salvaCache(bolle: List<Bolla>) {
+    private fun salvaCache(bolle: List<Bolla>, lordo: Int, spesi: Int) {
         // Le riservate non finiscono in cache: al prossimo avvio la modalità
         // nascosta è spenta, e comparirebbero prima che qualcuno la riaccenda.
         val daSalvare = bolle.filterNot { it.riservata }.map {
             BollaSalvata(it.htmlFile, it.nome, it.descrizione, it.punteggio, it.colore, it.riservata, it.route)
         }
         try {
-            prefs.edit().putString(CHIAVE_CACHE, json.encodeToString(daSalvare)).apply()
+            prefs.edit()
+                .putString(CHIAVE_CACHE, json.encodeToString(daSalvare))
+                .putInt(CHIAVE_LORDO, lordo)
+                .putInt(CHIAVE_SPESI, spesi)
+                .apply()
         } catch (e: Exception) {
             Log.w("AppSphereHome", "cache bolle non salvata: ${e.message}")
         }
@@ -115,5 +158,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val CHIAVE_CACHE = "bolle_cache"
+        const val CHIAVE_LORDO = "totale_lordo"
+        const val CHIAVE_SPESI = "punti_spesi"
     }
 }

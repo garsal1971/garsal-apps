@@ -643,7 +643,8 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 
 | Cosa | Dove |
 |---|---|
-| Home a bolle, avvisi, login, biometria | `home/`, `MainActivity.kt`, `core/` |
+| Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
+| Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
 | App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
@@ -852,6 +853,38 @@ bolla si disegna e *dove* porta il tap. **Portare una quarta app = una riga lì 
 schermate.** I valori di ripiego servono perché non tutte le righe di `cm_apps` nascono da una
 migration — `events-log.html` non compare in nessun file SQL — e senza quelli la bolla sparirebbe
 in silenzio.
+
+Le bolle sono disegnate come sul web: **cerchio col bordo nero** (`border: 4px solid #111`) e
+dentro il nome col **punteggio** sotto, che a zero non si scrive — una bolla al minimo con uno «0»
+sotto sembra rotta, non vuota.
+
+### ⚠️ Il totale in home e i premi: la stessa cifra da tutt'e due le parti
+
+In basso a sinistra c'è il **riquadro rosso del totale** (`PannelloTotale`, il `#score-panel` del
+web), e toccarlo è l'unico modo per arrivare al **catalogo premi** — di qua come di là. Il numero
+è **guadagnati meno spesi**, mai sotto zero: `HomeState.totaleNetto` qui, `updateScorePanel()` sul
+web. Se le due formule divergono, un premio comprabile da una parte non lo è dall'altra.
+
+⚠️ **Il lordo è la somma dei punteggi di *tutte* le app attive, non delle sole app portate.**
+`HomeRepository.carica()` fa girare la `score_query` di ogni riga di `cm_apps`, comprese quelle che
+qui non hanno una bolla: quei punti sono guadagnati lo stesso, e un premio costa uguale da tutt'e
+due gli APK. Sommare le sole bolle darebbe un saldo diverso a seconda di che app si è aperta.
+
+Le bolle **scansano il riquadro** (`BubbleLayout.Pannello`, portato da `pushFromPanel`), e
+l'ingombro si **misura** (`onSizeChanged`) invece di essere un rettangolo scritto nel codice: coi
+caratteri di sistema grandi quel riquadro è alto il doppio, e una misura fissa sarebbe sbagliata
+proprio dove serve.
+
+Il catalogo (`premi/`) ha le tre viste del modale web — premi da ritirare, 🛠 gestione,
+📋 cronologia — sulle stesse tabelle `cm_rewards` e `cm_rewards_log`, lette come `JsonObject` e non
+come `data class` serializzate (non stanno in nessuna migration: stessa scelta di `ts_tasks`). Le
+due regole che **sono** la funzionalità, da cambiare nelle due implementazioni insieme:
+
+- **il riscatto è in due passi, in quest'ordine**: prima la riga in `cm_rewards_log` — che è quella
+  che scala i punti — poi l'aggiornamento del premio. Al contrario, una rete che cade lascerebbe un
+  premio segnato come ritirato senza che nessun punto sia stato speso;
+- **una tantum e ripetibile finiscono diversamente**: il primo esce dal catalogo (`is_redeemed`),
+  il secondo resta e **rincara** di `points_per_use` a ogni uso, contandoli in `use_count`.
 
 Gli avvisi in home hanno per ora **due fonti, Spuntiamola e Ta Firi?**: le altre quattro del web
 (decisioni, task urgenti, totale portafogli, abitudini) porterebbero a schermate che qui non
