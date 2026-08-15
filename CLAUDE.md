@@ -645,7 +645,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
@@ -896,6 +896,45 @@ testo.
 Restano su `memo.html` la tavolozza del colore personalizzato (qui ci sono i sette campioni) e la
 scala dei caratteri delle schede, che su Android la decide già il sistema.
 
+### ⚠️ Abituati nativo: le regole stanno nel database, non in Kotlin
+
+`abituati/` porta in nativo le abitudini di `habit-tracker.html`: la scheda
+🎯 **Oggi** con le spunte (fatto / fallito / saltato, e una riga per orario sulle abitudini a più
+slot), 📋 **Tutte** con creazione, modifica ed eliminazione, 📦 **Archivio** degli stack finiti, più
+le due cerimonie del web — lo stack vinto e il game over, ciascuna con *Ricomincia da una data*
+oppure basta. Restano di là statistiche, categorie, promemoria e impostazioni.
+
+**Qui non c'è nessuna regola.** Streak, jolly, giorni mancati e chiusura degli stack vivevano solo
+nel JavaScript della pagina; riscriverli in Kotlin avrebbe voluto dire due copie della stessa
+formula, e in ballo ci sono punti e archivi. Sono invece scesi nel database
+(`20260815120000_hb_regole_rpc.sql`), che è la stessa scelta di `task_complete` / `task_skip`:
+
+| Funzione | Cosa fa |
+|---|---|
+| `hb_streak` / `hb_giorni_fatti` / `hb_fallimenti` | Le tre misure. Sola lettura, `SECURITY INVOKER` perché la RLS resti in mezzo |
+| `hb_set_completion` | **L'unica strada per segnare un periodo**: scrive la riga e ricalcola i jolly |
+| `hb_reconcile` | Il giro che il web fa a ogni disegno della dashboard: periodi passati senza riga → `missed`, jolly riallineati, stack completati archiviati, stack scaduti chiusi. Torna cosa è successo, perché il client mostri le sue cerimonie |
+| `hb_clona` / `hb_chiudi_stack` | Le due uscite del game over: *Ricomincia* e *Interrompi* |
+
+Tre cose che *sono* la funzionalità:
+
+- **la fonte di verità sono i completamenti.** `current_failures` non si incrementa e non si
+  decrementa: si **ricalcola** da `hb_completions` a ogni scrittura. È quello che il JS già faceva
+  in `checkMissedDays`, ed è ciò che permette a due client di segnare lo stesso giorno senza
+  contare due volte lo stesso jolly;
+- **«oggi» lo passa il client** (`p_oggi`), come `p_today` in `task_complete`: il database sta in
+  UTC e fra mezzanotte e le due sarebbe ancora ieri;
+- **lo stack che ha esaurito i jolly si segnala e basta.** La chiusura è una cerimonia con una
+  scelta dentro, e la scelta la fa l'utente: `hb_reconcile` la annuncia, `hb_chiudi_stack` la
+  esegue dopo.
+
+⚠️ **Il giro non è ancora chiuso da tutt'e due le parti**: `habit-tracker.html` continua a usare la
+sua copia in JavaScript (`checkMissedDays`, `checkCompletedStacks`, `checkExpiredStacks`,
+`updateStreak`, `handleFailure`, `restoreJolly`). Oggi le due strade dicono la stessa cosa — il SQL
+è stato ricalcato da quel JavaScript riga per riga — ma finché la pagina non chiama le RPC, **una
+modifica alle regole va fatta in tutt'e due**. Il passaggio del web è il pezzo che manca, ed è
+quello che rende vera la frase «una regola sola».
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -1026,10 +1065,10 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Sei app ora esistono in due implementazioni
+### ⚠️ Sette app ora esistono in due implementazioni
 
-`spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html`, `weight-quest.html` e
-`memo.html` hanno un gemello Kotlin che lavora sulle
+`spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html`, `weight-quest.html`,
+`memo.html` e `habit-tracker.html` hanno un gemello Kotlin che lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -1060,8 +1099,11 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   riconverte salvando (`MemoHtml`), quindi ogni voce della barra del web deve avere il suo
   marcatore di qua. Categorie riscritte da capo a ogni salvataggio, file del bucket cancellati
   prima della riga. Dettagli nella sezione qui sopra.
+- **Abituati** — è l'unica dove le regole **non** sono duplicate: streak, jolly, giorni mancati e
+  chiusura degli stack stanno nelle RPC `hb_*`, che il nativo chiama già e la pagina web deve
+  ancora cominciare a chiamare. Dettagli nella sezione qui sopra.
 
-(`tasks.html` è la settima, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
+(`tasks.html` è l'ottava, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -1528,7 +1570,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Sei app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest) e Memo hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **Sette app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo e Abituati hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 
