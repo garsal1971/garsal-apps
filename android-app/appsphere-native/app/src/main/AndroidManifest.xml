@@ -13,6 +13,16 @@
         android:theme="@style/Theme.AppSphereNative"
         android:usesCleartextTraffic="false">
 
+        <!--
+            Il modello OCR di ML Kit non sta nell'APK (vedi build.gradle): lo
+            tiene Google Play Services. Questa riga glielo fa scaricare
+            all'installazione dell'app invece che al primo utilizzo — senza,
+            la prima foto con l'OCR acceso fallirebbe mentre il modello arriva.
+        -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

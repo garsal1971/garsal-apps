@@ -879,8 +879,15 @@ Le altre regole copiate riga per riga, da cambiare nelle due implementazioni ins
   `utente/scheda/file` e per una scheda nuova l'id non esiste prima; il tetto è 5 MB a foto come
   nel web.
 
-L'OCR è **ML Kit**, la stessa libreria e la stessa versione dell'APK WebView: là passa da
-`AndroidBridge.performOcr`, qui si chiama direttamente. Il ripiego su Tesseract non c'è — serve al
+L'OCR è **ML Kit**, come nell'APK WebView (là passa da `AndroidBridge.performOcr`, qui si chiama
+direttamente), ma nella variante **non incorporata**
+(`com.google.android.gms:play-services-mlkit-text-recognition`): il modello lo tiene Google Play
+Services e lo scarica all'installazione, grazie al `meta-data com.google.mlkit.vision.DEPENDENCIES`
+nel manifest. ⚠️ La variante `com.google.mlkit:text-recognition`, che il modello se lo porta dentro
+per tutte e quattro le ABI, ha portato l'APK da 30 a **73 MB** in un colpo solo (v1.0.18, ritirata
+subito): è lo stesso difetto di `material-icons-extended` con un'altra faccia, e con l'APK
+committato a ogni build ci va di mezzo anche il peso della repo. Il codice è identico nelle due
+varianti — cambia solo dove sta il modello. Il ripiego su Tesseract non c'è — serve al
 browser desktop, che ML Kit non ce l'ha. Il testo estratto si accoda dopo una linea `---`, come sul
 web. Fissare una scheda dall'elenco (📌) **non passa dalla conversione**: riscrive `content` com'è,
 o un giro andata-e-ritorno si porterebbe via la formattazione senza che nessuno abbia toccato il

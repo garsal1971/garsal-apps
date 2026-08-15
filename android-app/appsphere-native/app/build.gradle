@@ -16,8 +16,8 @@ android {
         applicationId "com.garsal.appsphere"
         minSdk 28
         targetSdk 36
-        versionCode 19
-        versionName "1.0.18"
+        versionCode 20
+        versionName "1.0.19"
     }
 
     // Le pagine HTML scelgono fra dev e produzione dall'hostname (_IS_DEV).
@@ -100,9 +100,21 @@ dependencies {
     // griglia. Coil pesa poche centinaia di KB — è l'opposto di
     // material-icons-extended, che è la ragione dell'avviso qui sopra.
     implementation 'io.coil-kt:coil-compose:2.7.0'
-    // OCR delle foto, la stessa libreria e la stessa versione dell'APK WebView
-    // (`android-app/app/build.gradle`), così le due app leggono uguale.
-    implementation 'com.google.mlkit:text-recognition:16.0.0'
+    // OCR delle foto — ML Kit, ma nella variante **non incorporata**.
+    //
+    // ⚠️ `com.google.mlkit:text-recognition` (quella dell'APK WebView) porta
+    // dentro l'APK il modello e le librerie native per tutte e quattro le ABI:
+    // da sola ha portato questo pacchetto da 30 a **73 MB** — oltre il limite
+    // di 50 MB oltre il quale GitHub avvisa, e con l'APK committato a ogni
+    // build anche la repo ci va di mezzo. È lo stesso difetto di
+    // material-icons-extended, con un'altra faccia.
+    //
+    // Qui il modello lo tiene Google Play Services e l'APK cresce di poco. Il
+    // codice è identico (`TextRecognition.getClient(DEFAULT_OPTIONS)`), il
+    // riconoscimento pure: cambia solo *dove sta* il modello. Il `meta-data`
+    // nel manifest lo fa scaricare all'installazione, così al primo OCR è già
+    // pronto.
+    implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
     // FileProvider per la foto scattata dalla fotocamera: la si scrive in
     // cache e se ne passa l'uri alla fotocamera di sistema.
     implementation 'androidx.core:core-ktx:1.16.0'
