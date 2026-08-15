@@ -10,6 +10,7 @@ object Route {
     const val TA_FIRI = "tafiri"
     const val PESO = "peso"
     const val MEMO = "memo"
+    const val ABITUATI = "abituati"
 }
 
 /**
@@ -76,6 +77,12 @@ object PortedApps {
             titoloDiRipiego = "Ta Firi?",
             descrizioneDiRipiego = "Sfide a tempo — Ta Firi?",
             coloreDiRipiego = "#8E44AD",
+        ),
+        "habit-tracker.html" to AppPortata(
+            route = Route.ABITUATI,
+            titoloDiRipiego = "Abituati",
+            descrizioneDiRipiego = "Abitudini a stack",
+            coloreDiRipiego = "#1A1A1A",
         ),
         "memo.html" to AppPortata(
             route = Route.MEMO,
