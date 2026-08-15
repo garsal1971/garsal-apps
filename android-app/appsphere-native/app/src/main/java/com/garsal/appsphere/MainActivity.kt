@@ -41,6 +41,7 @@ import com.garsal.appsphere.eventslog.EventsLogScreen
 import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
+import com.garsal.appsphere.peso.PesoScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
 import com.garsal.appsphere.tafiri.TaFiriScreen
 import com.garsal.appsphere.tasks.TasksScreen
@@ -218,6 +219,9 @@ private fun Navigazione() {
         }
         composable(Route.TA_FIRI) {
             TaFiriScreen(onIndietro = { nav.popBackStack() })
+        }
+        composable(Route.PESO) {
+            PesoScreen(onIndietro = { nav.popBackStack() })
         }
     }
 }

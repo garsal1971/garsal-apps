@@ -8,6 +8,7 @@ object Route {
     const val EVENTS_LOG = "eventslog"
     const val TASKS = "tasks"
     const val TA_FIRI = "tafiri"
+    const val PESO = "peso"
 }
 
 /**
@@ -74,6 +75,12 @@ object PortedApps {
             titoloDiRipiego = "Ta Firi?",
             descrizioneDiRipiego = "Sfide a tempo — Ta Firi?",
             coloreDiRipiego = "#8E44AD",
+        ),
+        "weight-quest.html" to AppPortata(
+            route = Route.PESO,
+            titoloDiRipiego = "Ti pisasti?",
+            descrizioneDiRipiego = "Il peso, giorno per giorno",
+            coloreDiRipiego = "#00B894",
         ),
     )
 }
