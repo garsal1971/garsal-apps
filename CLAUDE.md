@@ -313,8 +313,8 @@ e intestato all'utente cercato per email, e salta senza fallire se quell'utente 
 | `mm_card_categories` | Associazione scheda ↔ `cm_categories` |
 | `mm_images` | Metadati delle foto (i file stanno nel bucket `mm-images`) |
 | `mm_list_items` | Voci di una lista: `text`, `done`, `position`, `done_at` |
-| `mm_diary_metrics` | Le misure di un diario: `kind` `'scala'` (con `min_value`/`max_value`) \| `'numero'` (con `unit`) \| `'bool'` \| `'scelta'` (con `options`) |
-| `mm_diary_entries` | Le registrazioni: `entry_date`, `note`, e `measures` jsonb |
+| `mm_diary_metrics` | Le misure di un diario: `kind` `'scala'` (con `min_value`/`max_value`) \| `'numero'` (con `unit`) \| `'bool'` \| `'scelta'` (con `options`); `hint` spiega cosa vuol dire il punteggio |
+| `mm_diary_entries` | Le registrazioni: `title` (obbligatorio lato app), `entry_date`, `note`, e `measures` jsonb |
 
 **Una scheda è una riga sola in tutt'e tre i casi**: il tipo è una colonna, non una tabella a
 parte, quindi ricerca, categorie, colore, 📌 e foto valgono uguale per note, liste e diari.
@@ -1315,8 +1315,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   (`openListView` / `openDiaryView`), perché la cosa che si fa più spesso su di loro — spuntare una
   voce, aggiungere una registrazione — non è modificare la scheda. All'editor si arriva da lì con
   *✏️ Modifica scheda*. `openCard()` è il bivio.
-- La striscia di filtri **Tutte / Note / Liste / Diari** sta sopra il filtro per categoria, e i
-  conteggi delle categorie seguono il tipo scelto.
+- **Tre Tab nella barra laterale, una per tipo** — 📄 Note, ☑️ Liste, 📊 Diari — accanto a
+  📌 Fissa e ⚙️ Impostazioni. Non esiste una vista che li mescola: si apre sulle Note, ogni Tab ha
+  la sua ricerca, il suo ordinamento e il suo filtro categoria (i conteggi delle categorie seguono
+  il tipo aperto), e il **+ crea una scheda del tipo della Tab** invece di chiedere quale.
+  **📌 Fissa è l'unica che attraversa i tre tipi**, ed è la ragione per cui il badge del tipo resta
+  sulla scheda anche ora che ogni Tab ne mostra uno solo.
+- ⚠️ Il filtro categoria **non sopravvive al cambio di Tab**: le categorie di un tipo non sono
+  quelle di un altro, e una Tab che si aprisse già filtrata su una categoria che lì non esiste
+  sembrerebbe vuota.
 - **Le spunte di una lista sono ottimistiche con rollback** (come Spuntiamola): la voce cambia
   subito e torna indietro se il DB rifiuta, così non resta a schermo una spunta finta che sparisce
   al ricarico.
@@ -1325,6 +1332,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   si dà con lo slider o con la casella, un numero con la casella e la sua unità, un sì/no con due
   pulsanti che si ripremono per annullare, una scelta con una combo la cui prima voce
   (*— non l'ho misurata*) toglie il valore invece di archiviarne uno finto.
+- **Ogni misura porta una nota che spiega il punteggio** (`hint`, es. *1 = per niente, 20 = non
+  riesco a pensare ad altro*): si scrive nella definizione e ricompare **sotto il nome della
+  misura al momento di registrare**, che è l'unico momento in cui serve. È facoltativa, e si
+  cambia senza toccare lo storico — vive sulla riga della misura, che non viene mai ricreata.
+- **La registrazione vuole un titolo breve**, obbligatorio: l'elenco delle registrazioni è fatto
+  di date tutte uguali, e senza una riga di testo non si ritrova più il giorno che si cerca.
+  ⚠️ L'obbligo è **nell'app, non nel database**: `title` è `NOT NULL DEFAULT ''` perché le
+  registrazioni fatte prima della colonna un titolo non ce l'hanno, e un vincolo che le rifiutasse
+  renderebbe impossibile perfino aprirle per correggerle.
 - Il riepilogo per misura mostra l'ultimo valore e le **ultime 12 registrazioni in miniatura**
   (`.spark`, div e non Chart.js — questa pagina non lo carica). Il fondo scala è quello della
   misura per le scale, quello osservato per i numeri liberi. **Per una scelta al posto della
