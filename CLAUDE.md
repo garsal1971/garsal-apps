@@ -265,8 +265,8 @@ invece di salvare zero: «dato assente» e «zero euro» sono due cose diverse, 
 che restasse scritto continuerebbe a fare totale.
 
 La pagina è in **due sezioni**, una tabella ciascuna: redditi (`lavoro`, `pensione`,
-`fabbricati`, `abitazione_principale`, `reddito_complessivo`) e liquidazione della dichiarazione
-(`liq_imponibile`, `liq_imposta_lorda`). Il ✎ e il ✕ agiscono **sulla singola sezione** di un
+`altri_lordi`, `altri_netti`) e liquidazione della dichiarazione (`liq_imponibile`,
+`liq_imposta_lorda`, `liq_reddito_netto`). Il ✎ e il ✕ agiscono **sulla singola sezione** di un
 anno, non sull'anno intero: le due tabelle vengono da documenti diversi.
 
 ⚠️ **Si mostra solo quello che è archiviato: nessuna colonna calcolata, nessun riquadro
@@ -277,9 +277,10 @@ quello che è scritto sui documenti e basta. Le formule sono nella storia di git
 (`e78fd62` e precedenti) se un giorno servissero.
 
 ⚠️ **Molti kind hanno i dati ma non hanno più una colonna che li mostri**: ritenute in busta paga
-(`rit_*`), contributi previdenziali (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`) e
+(`rit_*`), contributi previdenziali (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`),
 cinque voci della liquidazione (`liq_detrazioni`, `liq_imposta_netta`, `liq_acconti`,
-`liq_esito`, `liq_reddito_rif`). Sono stati tolti da `INCOME_SECTIONS`, **non cancellati**:
+`liq_esito`, `liq_reddito_rif`) e tre dei redditi (`fabbricati`, `abitazione_principale`,
+`reddito_complessivo`). Sono stati tolti da `INCOME_SECTIONS`, **non cancellati**:
 togliere una voce dall'elenco è una riga di JavaScript e si disfa, cancellare gli storici dei 730
 no. Rimettendola, gli importi tornano a vedersi com'erano. Finché non hanno una colonna quelle
 righe non vengono né scritte né cancellate dalla pagina — nemmeno dal ✕, che agisce solo sui kind
