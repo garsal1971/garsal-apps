@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.13</title>
+  <title>GarsalFinanza v1.3.14</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -561,8 +561,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.13';
-const APP_BUILD   = '2026-08-16T09:00:00Z';
+const APP_VERSION = 'v1.3.14';
+const APP_BUILD   = '2026-08-16T09:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3111,31 +3111,30 @@ function renderOtherAssets() {
    quindi una voce nuova è una riga di questo elenco e non una migration — e una voce tolta di
    qui smette di vedersi senza che nessun dato venga cancellato.
 
-   Netto, totale lavoro dipendente e totale trattenuto NON si archiviano: sono esattamente
-   ricavabili dagli altri (verificato su tutti gli anni dei 730), e archiviare un numero che si
-   può ricalcolare vuol dire tenere due verità che prima o poi divergono. */
+   ⚠️ Si mostra SOLO quello che è archiviato: nessuna colonna calcolata, nessun riquadro
+   calcolato, e per questo non esiste nessun INCOME_CALC. Netto in busta, totale lavoro
+   dipendente e totale trattenuto c'erano e sono stati tolti di proposito: erano esatti, ma qui
+   si vuole vedere quello che c'è scritto sui documenti e basta.
+
+   Restano in fnz_income, senza nessuna colonna che li mostri, i kind delle sezioni ritirate —
+   ritenute in busta paga (rit_*), contributi previdenziali (prev_*), premi/welfare/cedolare
+   (prem_*, ced_*) e cinque voci della liquidazione (liq_detrazioni, liq_imposta_netta,
+   liq_acconti, liq_esito, liq_reddito_rif). Non sono cancellati: togliere una voce da questo
+   elenco è una riga di JavaScript e si disfa, cancellare gli storici dei 730 no. Finché non
+   hanno una colonna non vengono né scritti né cancellati dalla pagina, nemmeno dal ✕. */
 const INCOME_SECTIONS = [
   {
     key: 'redditi', icon: '💶', title: 'Redditi',
-    sub: 'Quanto è entrato nell\'anno, per fonte. Netto e totale lavoro dipendente sono calcolati, non inseriti.',
+    sub: 'Quanto è entrato nell\'anno, per fonte.',
     sommaAnni: false,
     cols: [
       { kind: 'lavoro',                label: 'UniCredit lordo' },
-      { calc: 'netto',                 label: 'UniCredit netto' },
       { kind: 'pensione',              label: 'Pensione INPS' },
-      { calc: 'lav_dip',               label: 'Tot. lav. dip.' },
       { kind: 'fabbricati',            label: 'Fabbricati' },
       { kind: 'abitazione_principale', label: 'Ab. principale' },
       { kind: 'reddito_complessivo',   label: 'Reddito compl.', forte: true },
     ],
   },
-  // ⚠️ La sezione «Ritenute in busta paga» non c'è più (rit_irpef, rit_add_regionale,
-  // rit_add_com_acconto, rit_add_com_saldo). Le righe restano in fnz_income e non vengono
-  // toccate dalla pagina: togliere una sezione è una riga di qui, cancellare i dati non si
-  // disfa. Ma quei valori NON sono inerti — «UniCredit netto» e il riquadro «Trattenute» si
-  // calcolano da lì (INCOME_CALC.netto e tot_ritenute), quindi continuano a funzionare sugli
-  // anni 2017-2025 già archiviati e resteranno vuoti per gli anni nuovi, che non hanno più
-  // dove essere inseriti. Rimettendo la sezione nell'elenco torna tutto com'era.
   {
     key: 'liquidazione', icon: '🧾', title: 'Liquidazione dichiarazione',
     sub: 'Il reddito su cui si calcola l\'IRPEF e l\'imposta che ne risulta.',
@@ -3150,47 +3149,9 @@ const INCOME_SECTIONS = [
     // una colonna è una riga di qui, cancellare i dati non si disfa. Rimettendo la voce
     // nell'elenco gli importi tornano a vedersi come prima.
   },
-  {
-    key: 'previdenza', icon: '🏛️', title: 'Contributi previdenziali',
-    sub: 'Negli anni in cui il dato non compare nel 730 la riga resta vuota: sta solo nella CU.',
-    sommaAnni: true,
-    cols: [
-      { kind: 'prev_imponibile', label: 'Imponibile previdenziale' },
-      { kind: 'prev_contributi', label: 'Contributi a tuo carico', forte: true },
-    ],
-  },
-  {
-    key: 'premi', icon: '🎁', title: 'Premi, welfare, cedolare secca',
-    sub: 'Premio di risultato con imposta sostitutiva, credito welfare e affitti a cedolare secca.',
-    sommaAnni: true,
-    cols: [
-      { kind: 'prem_risultato',    label: 'Premio risultato' },
-      { kind: 'prem_imposta_sost', label: 'Imposta sost.' },
-      { kind: 'prem_welfare',      label: 'Benefit welfare' },
-      { kind: 'ced_imponibile',    label: 'Cedolare: imponibile' },
-      { kind: 'ced_dovuta',        label: 'Cedolare dovuta', forte: true },
-    ],
-  },
 ];
 // Tutte le colonne archiviate, in fila: serve al form e alla cancellazione di un anno intero.
 const INCOME_KINDS = INCOME_SECTIONS.flatMap(s => s.cols.filter(c => c.kind));
-// Le colonne calcolate. Ricevono la mappa di TUTTO l'anno, non solo della loro sezione: il netto
-// nasce dal lordo della prima tabella meno le ritenute della seconda. Tornano null — non zero —
-// quando manca l'ingrediente, o una casella vuota diventerebbe uno zero che sembra un dato.
-const INCOME_CALC = {
-  tot_ritenute: r => {
-    const v = ['rit_irpef', 'rit_add_regionale', 'rit_add_com_acconto', 'rit_add_com_saldo']
-      .map(k => r[k]).filter(x => x != null);
-    return v.length ? v.reduce((s, x) => s + x, 0) : null;
-  },
-  netto: r => {
-    const rit = INCOME_CALC.tot_ritenute(r);
-    return (r.lavoro != null && rit != null) ? r.lavoro - rit : null;
-  },
-  // Serve che ci siano tutte e due le voci: nel 2017 la pensione non compare sul documento, e
-  // sommare quello che c'è darebbe un «totale» più basso del vero senza dirlo.
-  lav_dip: r => (r.lavoro != null && r.pensione != null) ? r.lavoro + r.pensione : null,
-};
 const INCOME_LAST_YEAR = () => new Date().getFullYear() - 1;
 // Quanti anni vuoti mostrare quando non c'è ancora niente: la tabella si apre già pronta da
 // riempire invece che su uno stato vuoto che non dice cosa fare.
@@ -3208,8 +3169,9 @@ function incomeByYear() {
   }
   return map;
 }
-// Il valore di una colonna per un anno: archiviato o calcolato, null se non c'è.
-const incomeCell = (col, row) => col.calc ? INCOME_CALC[col.calc](row || {}) : (row || {})[col.kind] ?? null;
+// Il valore di una colonna per un anno, null se non c'è. Ogni colonna è un importo archiviato:
+// non esistono colonne calcolate, e una cella vuota vuol dire «documento assente», non zero.
+const incomeCell = (col, row) => (row || {})[col.kind] ?? null;
 const incomeSectionFilled = (sec, row) => sec.cols.some(c => c.kind && (row || {})[c.kind] != null);
 // Gli anni della tabella: dal più vecchio compilato (o cinque anni indietro) fino all'anno
 // scorso, senza buchi — un anno saltato deve restare visibile come riga da riempire, non
@@ -3231,42 +3193,40 @@ function renderReddito() {
   }
   const byYear = incomeByYear();
   const years  = incomeYears();
-  // L'anno di riferimento dei KPI è l'ultimo con un reddito da lavoro dentro, non l'ultimo in
-  // assoluto: un anno in cui è stata compilata solo la cedolare non è un anno di reddito.
-  const ultimo = years.find(y => byYear[y]?.lavoro != null) ?? null;
-  const rowU   = ultimo ? byYear[ultimo] : null;
-  const rowP   = ultimo && byYear[ultimo - 1] ? byYear[ultimo - 1] : null;
-  // Il reddito complessivo dell'anno in cima, o il totale lavoro dipendente quando il 730 non
-  // c'è ancora. La variazione si mostra SOLO se i due anni sono misurati allo stesso modo:
-  // confrontare un complessivo con un totale lav. dip. è confrontare due cose diverse, e la
-  // percentuale che ne esce sembra un calo del reddito quando è solo un documento mancante.
-  const complOf = r => r?.reddito_complessivo != null
-    ? { v: r.reddito_complessivo, fonte: 'compl' }
-    : { v: INCOME_CALC.lav_dip(r || {}), fonte: 'lavdip' };
-  const cU = complOf(rowU), cP = complOf(rowP);
+  // I due riquadri mostrano un importo archiviato di un anno preciso, non una grandezza
+  // ricavata: l'ultimo anno che ha quella voce, e la variazione solo se ce l'ha pure l'anno
+  // prima — cioè fra due cifre lette dallo stesso tipo di documento.
+  const ultimoCon = kind => years.find(y => byYear[y]?.[kind] != null) ?? null;
+  const riquadro = (kind, etichetta) => {
+    const y = ultimoCon(kind);
+    const v = y ? byYear[y][kind] : null;
+    const prev = y && byYear[y - 1]?.[kind] != null ? byYear[y - 1][kind] : null;
+    return kpi(y ? `${etichetta} ${y}` : etichetta, v == null ? '—' : fmtEUR(v), 'neutral',
+               prev != null ? deltaHtml(v, prev) : '');
+  };
+  const ultimo = ultimoCon('lavoro');
 
   setHtml('view-reddito', `
     <div class="view-header">
       <div>
         <h2 class="page-title">Reddito</h2>
-        <p class="page-sub">Redditi, ritenute e dichiarazioni anno per anno, fino al ${INCOME_LAST_YEAR()}</p>
+        <p class="page-sub">Redditi e dichiarazioni anno per anno, fino al ${INCOME_LAST_YEAR()}</p>
       </div>
       <button class="btn btn-primary btn-sm" data-action="edit-income"
               data-year="${ultimo ?? INCOME_LAST_YEAR()}" data-section="redditi">✎ Compila un anno</button>
     </div>
     <div class="kpi-grid">
-      ${kpi(ultimo ? `${cU.fonte === 'compl' ? 'Reddito complessivo' : 'Tot. lav. dip.'} ${ultimo}` : 'Ultimo anno compilato',
-            cU.v == null ? '—' : fmtEUR(cU.v), 'neutral',
-            (cU.v != null && cP.v != null && cU.fonte === cP.fonte) ? deltaHtml(cU.v, cP.v) : '')}
-      ${kpi(ultimo ? `Netto in busta ${ultimo}` : 'Netto in busta',
-            INCOME_CALC.netto(rowU || {}) == null ? '—' : fmtEUR(INCOME_CALC.netto(rowU)), 'neutral')}
-      ${kpi(ultimo ? `Trattenute ${ultimo}` : 'Trattenute',
-            INCOME_CALC.tot_ritenute(rowU || {}) == null ? '—' : fmtEUR(INCOME_CALC.tot_ritenute(rowU)), 'neg')}
-      ${kpi('Anni compilati', String(years.filter(y => byYear[y]).length), 'neutral')}
+      ${riquadro('lavoro', 'UniCredit lordo')}
+      ${riquadro('reddito_complessivo', 'Reddito complessivo')}
+      ${/* Conta gli anni che hanno qualcosa nelle tabelle che si vedono: un anno che porta solo
+            voci di una sezione ritirata è una riga vuota a schermo, e contarlo direbbe il falso. */''}
+      ${kpi('Anni compilati',
+            String(years.filter(y => INCOME_SECTIONS.some(s => incomeSectionFilled(s, byYear[y]))).length),
+            'neutral')}
     </div>
     ${years.filter(y => byYear[y]?.lavoro != null).length > 1 ? `<div class="card">
       <div class="card-title">Andamento</div>
-      <p class="text-muted text-sm mb-12">Lordo per fonte, con il netto in busta sovrapposto.</p>
+      <p class="text-muted text-sm mb-12">Gli importi archiviati delle quattro fonti di reddito, impilati per anno.</p>
       <div class="chart-wrap" style="height:260px"><canvas id="chart-reddito"></canvas></div>
     </div>` : ''}
     ${INCOME_SECTIONS.map(sec => renderIncomeSection(sec, years, byYear)).join('')}
@@ -3288,7 +3248,7 @@ function renderIncomeSection(sec, years, byYear) {
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th>Anno</th>
-          ${sec.cols.map(c => `<th class="text-right">${c.label}${c.calc ? ' <span class="text-muted">(calc.)</span>' : ''}</th>`).join('')}
+          ${sec.cols.map(c => `<th class="text-right">${c.label}</th>`).join('')}
           <th></th>
         </tr></thead>
         <tbody>${years.map(y => {
@@ -3332,21 +3292,13 @@ function drawIncomeChart(allYears, byYear) {
     type: 'bar',
     data: {
       labels: years.map(String),
-      datasets: [
-        ...fonti.map((f, i) => ({
-          label: f.label,
-          data: years.map(y => byYear[y]?.[f.kind] || 0),
-          backgroundColor: PALETTE[i % PALETTE.length],
-          borderWidth: 0,
-          stack: 'lordo',
-        })),
-        {
-          label: 'Netto in busta', type: 'line',
-          data: years.map(y => INCOME_CALC.netto(byYear[y] || {})),
-          borderColor: '#111', backgroundColor: '#111',
-          borderWidth: 2, pointRadius: 3, tension: .25, spanGaps: true,
-        },
-      ],
+      datasets: fonti.map((f, i) => ({
+        label: f.label,
+        data: years.map(y => byYear[y]?.[f.kind] || 0),
+        backgroundColor: PALETTE[i % PALETTE.length],
+        borderWidth: 0,
+        stack: 'lordo',
+      })),
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -3393,7 +3345,6 @@ function openIncomeModal(year, sectionKey) {
         <label class="form-label">Note</label>
         <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${nota}</textarea>
       </div>
-      ${sec.cols.some(c => c.calc) ? `<p class="text-muted text-sm">Le colonne segnate «calc.» non si inseriscono: ${sec.cols.filter(c => c.calc).map(c => c.label).join(', ')} ${sec.cols.filter(c => c.calc).length > 1 ? 'si ricavano' : 'si ricava'} da quello che scrivi qui e nelle altre sezioni.</p>` : ''}
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
         <button type="submit" class="btn btn-primary">Salva</button>
