@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.29</title>
+    <title>Memorandum v1.0.30</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -479,16 +479,6 @@
         }
 
         /* ── TIPO SCHEDA (nota / lista / diario) ── */
-        .kind-filter { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-        .kind-tab {
-            padding: 0.3rem 0.7rem; border: 2px solid var(--border); background: white;
-            cursor: pointer; font-family: 'Darker Grotesque', sans-serif;
-            font-size: 0.95rem; font-weight: 700; color: var(--muted);
-            transition: all 0.15s; white-space: nowrap;
-        }
-        .kind-tab:hover { border-color: var(--accent); color: var(--accent); }
-        .kind-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
-
         .kind-badge {
             font-size: 0.68rem; font-weight: 700; padding: 0.1rem 0.4rem;
             border-radius: 3px; text-transform: uppercase; letter-spacing: 0.4px;
@@ -597,6 +587,7 @@
         .metric-card-name { font-weight: 700; font-size: 1.05rem; }
         .metric-card-last { font-family: 'Space Mono', monospace; font-size: 1rem; color: var(--accent); }
         .metric-card-range { font-size: 0.78rem; color: var(--muted); }
+        .metric-card-hint { font-size: 0.85rem; color: var(--muted); margin-top: 0.15rem; line-height: 1.35; }
         .spark { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-top: 0.4rem; }
         /* max-width: con due o tre registrazioni le colonne a flex:1 diventano
            blocchi larghi mezzo riquadro, e non si legge più come uno storico */
@@ -620,7 +611,11 @@
             display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
             margin-bottom: 0.4rem;
         }
+        .entry-heading {
+            display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; min-width: 0;
+        }
         .entry-date { font-family: 'Space Mono', monospace; font-size: 0.85rem; font-weight: 700; }
+        .entry-title { font-size: 1.05rem; font-weight: 700; word-break: break-word; }
         .entry-note { font-size: 0.95rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.45; }
         .entry-vals { display: flex; flex-wrap: wrap; gap: 0.35rem; }
         .entry-val {
@@ -643,6 +638,14 @@
             font-family: 'Space Mono', monospace; font-size: 1.3rem; font-weight: 700;
             color: var(--accent); min-width: 3rem; text-align: right;
         }
+        /* la nota della misura: sta sotto il nome nel momento in cui si
+           dà il voto, che è l'unico momento in cui serve davvero */
+        .measure-hint {
+            font-size: 0.92rem; color: var(--muted); line-height: 1.4;
+            margin: -0.25rem 0 0.6rem 0;
+        }
+        .metric-hint { margin-top: 0.5rem; font-size: 0.95rem; }
+
         .measure-scale { display: flex; align-items: center; gap: 0.6rem; }
         .measure-scale input[type=range] {
             flex: 1; height: 8px; accent-color: var(--primary);
@@ -746,8 +749,12 @@
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
         <nav class="nav-menu">
-            <div class="nav-item active" data-text="Tutte le schede" data-section="schede"
-                 onclick="showPage('schede'); setNavActive(this)">📄</div>
+            <div class="nav-item active" data-text="Note" data-section="schede" data-kind="nota"
+                 onclick="showKind('nota', this)">📄</div>
+            <div class="nav-item" data-text="Liste" data-section="schede" data-kind="lista"
+                 onclick="showKind('lista', this)">☑️</div>
+            <div class="nav-item" data-text="Diari" data-section="schede" data-kind="diario"
+                 onclick="showKind('diario', this)">📊</div>
             <div class="nav-item" data-text="Fissa" data-section="pinned"
                  onclick="showPage('pinned'); setNavActive(this)">📌</div>
             <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
@@ -760,6 +767,9 @@
 
         <!-- PAGE: SCHEDE -->
         <section class="page active" id="page-schede">
+            <div class="page-header" style="margin-bottom:1rem;">
+                <div class="page-title" id="kindTitle">Note</div>
+            </div>
             <div class="search-bar">
                 <div class="search-input-wrap">
                     <span class="search-icon">🔍</span>
@@ -773,13 +783,6 @@
                     <option value="created">Creazione</option>
                     <option value="title">Titolo</option>
                 </select>
-            </div>
-
-            <div class="kind-filter" id="kindFilter">
-                <button class="kind-tab active" data-kind="" onclick="setKindFilter('')">Tutte</button>
-                <button class="kind-tab" data-kind="nota"   onclick="setKindFilter('nota')">📄 Note</button>
-                <button class="kind-tab" data-kind="lista"  onclick="setKindFilter('lista')">☑️ Liste</button>
-                <button class="kind-tab" data-kind="diario" onclick="setKindFilter('diario')">📊 Diari</button>
             </div>
 
             <div style="padding:0 0 0.75rem 0;">
@@ -868,32 +871,8 @@
     </main>
 </div>
 
-<!-- FAB -->
-<button class="fab" onclick="openNewCardPopup()" title="Nuova scheda">+</button>
-
-<!-- ========================================================= -->
-<!-- POPUP: TIPO DELLA NUOVA SCHEDA                             -->
-<!-- ========================================================= -->
-<div class="img-popup-overlay" id="newCardOverlay" onclick="closeNewCardPopup(event)">
-    <div class="img-popup" onclick="event.stopPropagation()">
-        <div class="img-popup-title">Cosa vuoi creare?</div>
-        <div class="img-popup-btns" style="grid-template-columns:1fr 1fr 1fr;">
-            <button type="button" class="img-popup-btn" onclick="newCardOfKind('nota')">
-                <span class="btn-icon">📄</span>
-                Nota
-            </button>
-            <button type="button" class="img-popup-btn" onclick="newCardOfKind('lista')">
-                <span class="btn-icon">☑️</span>
-                Lista
-            </button>
-            <button type="button" class="img-popup-btn" onclick="newCardOfKind('diario')">
-                <span class="btn-icon">📊</span>
-                Diario
-            </button>
-        </div>
-        <button type="button" class="img-popup-cancel" onclick="closeNewCardPopup()">Annulla</button>
-    </div>
-</div>
+<!-- FAB — crea una scheda del tipo della Tab aperta -->
+<button class="fab" id="fabNew" onclick="newCardOfKind(currentKind)" title="Nuova nota">+</button>
 
 <!-- ========================================================= -->
 <!-- MODAL: CARD EDITOR                                        -->
@@ -1114,6 +1093,12 @@
         <div id="entryNote" class="view-note" style="display:none;"></div>
 
         <div class="form-group">
+            <label class="form-label">Titolo <span style="font-weight:400;text-transform:none;color:var(--danger)">(obbligatorio)</span></label>
+            <input type="text" class="form-input" id="entryTitle" maxlength="80"
+                   placeholder="In due parole: com'è andata…">
+        </div>
+
+        <div class="form-group">
             <label class="form-label">Data</label>
             <input type="date" class="form-input" id="entryDate" style="max-width:14rem;">
         </div>
@@ -1206,8 +1191,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.29';
-var BUILD_TIME  = '2026-08-16T16:00:00Z';
+var APP_VERSION = 'v1.0.30';
+var BUILD_TIME  = '2026-08-16T18:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1260,7 +1245,9 @@ const KINDS = {
     diario: { icon: '📊', label: 'Diario' }
 };
 
-let currentKindFilter = '';   // '' | 'nota' | 'lista' | 'diario'
+// La Tab aperta: ogni tipo ha la sua pagina, e non esiste una vista
+// che li mescola — 📌 Fissa è l'unica che attraversa i tre tipi.
+let currentKind = 'nota';     // 'nota' | 'lista' | 'diario'
 
 let editorKind       = 'nota';
 let editorItems      = [];    // voci in modifica    { id?, tempId?, text, done, done_at }
@@ -1390,8 +1377,7 @@ function startApp() {
     log('===========================================');
 
     Promise.all([loadCategories(), loadCards()]).then(() => {
-        renderCatFilters();
-        renderCards();
+        showKind('nota', document.querySelector('.nav-item[data-kind="nota"]'));
         renderPinned();
         updateStats();
     });
@@ -1509,9 +1495,7 @@ function closeSidebar() {
 function getFilteredCards() {
     let list = [...cards];
 
-    if (currentKindFilter) {
-        list = list.filter(c => c.kind === currentKindFilter);
-    }
+    list = list.filter(c => c.kind === currentKind);
 
     if (currentCatFilter) {
         list = list.filter(c => c.categoryIds.includes(currentCatFilter));
@@ -1537,10 +1521,14 @@ function renderCards() {
     const grid = document.getElementById('cardsGrid');
     const list = getFilteredCards();
     if (!list.length) {
+        const k = KINDS[currentKind];
+        const nome = { nota: 'nota', lista: 'lista', diario: 'diario' }[currentKind];
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
-            <div class="empty-icon">📋</div>
-            <div class="empty-title">${searchQuery ? 'Nessun risultato' : 'Nessuna scheda'}</div>
-            <div class="empty-desc">${searchQuery ? 'Prova con un altro termine.' : 'Crea la prima scheda con il pulsante + in alto.'}</div>
+            <div class="empty-icon">${k.icon}</div>
+            <div class="empty-title">${searchQuery ? 'Nessun risultato' : 'Nessun' + (currentKind === 'diario' ? ' diario' : 'a ' + nome)}</div>
+            <div class="empty-desc">${searchQuery
+                ? 'Prova con un altro termine.'
+                : `Crea la prima ${nome} col pulsante + in basso a destra.`}</div>
         </div>`;
         return;
     }
@@ -1619,13 +1607,29 @@ function openCard(cardId) {
     return openCardModal(cardId);
 }
 
-function setKindFilter(kind) {
-    currentKindFilter = kind || '';
-    document.querySelectorAll('#kindFilter .kind-tab').forEach(t => {
-        t.classList.toggle('active', (t.dataset.kind || '') === currentKindFilter);
-    });
+const KIND_TITLES = { nota: 'Note', lista: 'Liste', diario: 'Diari' };
+
+function showKind(kind, navEl) {
+    currentKind = kind;
+    // il filtro categoria non sopravvive al cambio di Tab: le categorie
+    // di un tipo non sono quelle di un altro, e una tab che si apre già
+    // filtrata su una categoria che qui non c'è sembra vuota
+    currentCatFilter = null;
+
+    document.getElementById('kindTitle').textContent = KIND_TITLES[kind];
+    document.getElementById('fabNew').title = 'Nuov' +
+        (kind === 'nota' ? 'a nota' : kind === 'lista' ? 'a lista' : 'o diario');
+    document.getElementById('searchInput').placeholder =
+        'Cerca fra le ' + KIND_TITLES[kind].toLowerCase() + '…';
+
+    showPage('schede');
+    if (navEl) setNavActive(navEl);
     renderCatFilters();
     renderCards();
+}
+
+function newCardOfKind(kind) {
+    openCardModal(null, kind);
 }
 
 function renderCatFilters() {
@@ -1633,7 +1637,7 @@ function renderCatFilters() {
     if (!sel) return;
     // i conteggi seguono il filtro per tipo: con "Liste" attivo, una
     // categoria che ha solo note deve mostrare 0, non il totale
-    const pool = currentKindFilter ? cards.filter(c => c.kind === currentKindFilter) : cards;
+    const pool = cards.filter(c => c.kind === currentKind);
     const countByCat = {};
     pool.forEach(c => c.categoryIds.forEach(cid => { countByCat[cid] = (countByCat[cid]||0)+1; }));
 
@@ -1651,10 +1655,11 @@ function setCatFilter(catId) {
     currentCatFilter = catId;
     renderCatFilters();
     renderCards();
-    // attiva tab Schede se non attivo
+    // la Tab attiva resta quella del tipo aperto: le tre condividono
+    // la stessa pagina, e cercare per data-section le accenderebbe tutte
     showPage('schede');
     document.querySelectorAll('.nav-item').forEach(n => {
-        n.classList.toggle('active', n.dataset.section === 'schede');
+        n.classList.toggle('active', n.dataset.kind === currentKind);
     });
 }
 
@@ -1782,21 +1787,6 @@ function closeCardModal() {
 }
 
 // ============================================================
-// NUOVA SCHEDA — scelta del tipo
-// ============================================================
-function openNewCardPopup() {
-    document.getElementById('newCardOverlay').classList.add('active');
-}
-function closeNewCardPopup(e) {
-    if (e && e.target !== e.currentTarget) return;
-    document.getElementById('newCardOverlay').classList.remove('active');
-}
-function newCardOfKind(kind) {
-    closeNewCardPopup();
-    openCardModal(null, kind);
-}
-
-// ============================================================
 // EDITOR — VOCI DELLA LISTA
 // ============================================================
 function renderEditorItems() {
@@ -1907,6 +1897,9 @@ function renderEditorMetrics() {
                 <button type="button" class="li-del" onclick="removeEditorMetric(${i})" title="Togli">✕</button>
             </div>
             <div class="metric-row-opts${m.kind === 'scelta' ? ' colonna' : ''}">${opts}</div>
+            <input type="text" class="form-input metric-hint" maxlength="200"
+                   placeholder="Cosa vuol dire il punteggio (es. 1 = per niente, 20 = non penso ad altro)"
+                   value="${escAttr(m.hint || '')}" oninput="editorMetrics[${i}].hint = this.value">
         </div>`;
     }).join('');
 }
@@ -1914,7 +1907,7 @@ function renderEditorMetrics() {
 function addEditorMetric() {
     editorMetrics.push({
         tempId: tempId(), name: '', kind: 'scala',
-        min_value: 1, max_value: 10, unit: '', options: []
+        min_value: 1, max_value: 10, unit: '', options: [], hint: ''
     });
     renderEditorMetrics();
 }
@@ -2124,6 +2117,7 @@ async function syncDiaryMetrics(cardId) {
             min_value: m.kind === 'scala' ? Number(m.min_value) : null,
             max_value: m.kind === 'scala' ? Number(m.max_value) : null,
             unit: m.kind === 'numero' ? (m.unit || '').trim() : '',
+            hint: (m.hint || '').trim(),
             // le opzioni tengono il loro id: le registrazioni passate lo citano
             options: m.kind === 'scelta'
                 ? (m.options || []).map(o => ({ id: o.id, label: o.label.trim() }))
@@ -2389,6 +2383,7 @@ function renderDiaryMetricsSummary() {
                     <div>
                         <div class="metric-card-name">${escHtml(m.name)}</div>
                         <div class="metric-card-range">scelta fra ${(m.options || []).length} opzioni</div>
+                        ${m.hint ? `<div class="metric-card-hint">${escHtml(m.hint)}</div>` : ''}
                     </div>
                     <div class="metric-card-last">${ultimo === null ? '—' : optionLabel(m, ultimo)}</div>
                 </div>
@@ -2422,6 +2417,7 @@ function renderDiaryMetricsSummary() {
                 <div>
                     <div class="metric-card-name">${escHtml(m.name)}</div>
                     <div class="metric-card-range">${range}</div>
+                    ${m.hint ? `<div class="metric-card-hint">${escHtml(m.hint)}</div>` : ''}
                 </div>
                 <div class="metric-card-last">${ultimo === null ? '—' : displayValue(m, ultimo)}</div>
             </div>
@@ -2448,7 +2444,10 @@ function renderDiaryEntries() {
 
         return `<div class="entry-row">
             <div class="entry-row-head">
-                <span class="entry-date">${fmtDay(e.entry_date)}</span>
+                <span class="entry-heading">
+                    <span class="entry-date">${fmtDay(e.entry_date)}</span>
+                    ${e.title ? `<span class="entry-title">${escHtml(e.title)}</span>` : ''}
+                </span>
                 <div style="display:flex;gap:0.3rem;">
                     <button class="btn btn-secondary btn-small" onclick="openEntryModal('${e.id}')">✏️</button>
                     <button class="btn btn-secondary btn-small" onclick="deleteEntry('${e.id}')">🗑</button>
@@ -2530,6 +2529,7 @@ async function openEntryModal(entryId) {
     const entry = entryId ? viewEntries.find(e => e.id === entryId) : null;
     document.getElementById('entryModalTitle').textContent =
         entry ? 'Modifica registrazione' : 'Nuova registrazione';
+    document.getElementById('entryTitle').value = entry ? (entry.title || '') : '';
     document.getElementById('entryDate').value =
         entry ? entry.entry_date : new Date().toISOString().slice(0, 10);
     document.getElementById('entryComment').value = entry ? (entry.note || '') : '';
@@ -2605,6 +2605,7 @@ function renderEntryMeasures() {
                 <span class="measure-name">${escHtml(m.name)}</span>
                 <span class="measure-value">${dato_c ? valueLabel(m, dato) : '—'}</span>
             </div>
+            ${m.hint ? `<div class="measure-hint">${escHtml(m.hint)}</div>` : ''}
             ${corpo}
             ${dato_c ? `<button type="button" class="btn btn-secondary btn-small" style="margin-top:0.5rem;"
                     onclick="setEntryValue('${m.id}', null)">Non l'ho misurata</button>` : ''}
@@ -2633,6 +2634,13 @@ function setEntryValue(metricId, value) {
 
 async function saveEntry() {
     if (!viewCardId) return;
+    const title = document.getElementById('entryTitle').value.trim();
+    if (!title) {
+        showToast('Dai un titolo a questa registrazione.');
+        document.getElementById('entryTitle').focus();
+        return;
+    }
+
     const entry_date = document.getElementById('entryDate').value;
     if (!entry_date) { showToast('Scegli una data.'); return; }
 
@@ -2647,7 +2655,7 @@ async function saveEntry() {
     try {
         const payload = {
             card_id: viewCardId, user_id: currentUserId,
-            entry_date, note, measures: entryValues
+            title, entry_date, note, measures: entryValues
         };
 
         if (editingEntryId) {
@@ -2680,7 +2688,8 @@ async function deleteCurrentEntry() {
 
 async function deleteEntry(entryId) {
     const e = viewEntries.find(x => x.id === entryId);
-    const ok = await customConfirm(`Eliminare la registrazione del ${fmtDay(e?.entry_date)}?`);
+    const ok = await customConfirm(
+        `Eliminare la registrazione del ${fmtDay(e?.entry_date)}${e?.title ? ' — «' + e.title + '»' : ''}?`);
     if (!ok) return;
 
     const { error } = await sb.from('mm_diary_entries').delete().eq('id', entryId);
@@ -3200,6 +3209,7 @@ CREATE TABLE IF NOT EXISTS mm_cards (
   color       text NOT NULL DEFAULT '#FFFFFF'
 );
 ALTER TABLE mm_cards ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_cards: utente vede solo le sue" ON mm_cards;
 CREATE POLICY "mm_cards: utente vede solo le sue" ON mm_cards
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE INDEX IF NOT EXISTS mm_cards_fts
@@ -3212,6 +3222,7 @@ CREATE TABLE IF NOT EXISTS mm_card_categories (
   PRIMARY KEY (card_id, category_id)
 );
 ALTER TABLE mm_card_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_card_categories: utente vede solo le sue" ON mm_card_categories;
 CREATE POLICY "mm_card_categories: utente vede solo le sue" ON mm_card_categories
   FOR ALL USING (
     EXISTS (SELECT 1 FROM mm_cards WHERE id = card_id AND user_id = auth.uid())
@@ -3228,6 +3239,7 @@ CREATE TABLE IF NOT EXISTS mm_images (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE mm_images ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_images: utente vede solo le sue" ON mm_images;
 CREATE POLICY "mm_images: utente vede solo le sue" ON mm_images
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -3267,6 +3279,8 @@ CREATE INDEX IF NOT EXISTS mm_list_items_card ON mm_list_items(card_id, position
 --    kind = 'scelta' → combo: options è [{id, label}] e la
 --                      registrazione archivia l'**id** dell'opzione,
 --                      così rinominarla rilegge anche lo storico
+--    hint            → cosa vuol dire il punteggio, rimostrato
+--                      sotto il nome della misura a ogni registrazione
 CREATE TABLE IF NOT EXISTS mm_diary_metrics (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
@@ -3277,6 +3291,7 @@ CREATE TABLE IF NOT EXISTS mm_diary_metrics (
   max_value  numeric,
   unit       text NOT NULL DEFAULT '',
   options    jsonb NOT NULL DEFAULT '[]'::jsonb,
+  hint       text NOT NULL DEFAULT '',
   position   integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT mm_diary_metrics_scala_check CHECK (
@@ -3286,6 +3301,7 @@ CREATE TABLE IF NOT EXISTS mm_diary_metrics (
 -- su un database che ha già la tabella il CREATE qui sopra non fa niente:
 -- colonna e vincoli si aggiungono a parte
 ALTER TABLE mm_diary_metrics ADD COLUMN IF NOT EXISTS options jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE mm_diary_metrics ADD COLUMN IF NOT EXISTS hint text NOT NULL DEFAULT '';
 ALTER TABLE mm_diary_metrics DROP CONSTRAINT IF EXISTS mm_diary_metrics_kind_check;
 ALTER TABLE mm_diary_metrics ADD CONSTRAINT mm_diary_metrics_kind_check
   CHECK (kind IN ('scala', 'numero', 'bool', 'scelta'));
@@ -3308,11 +3324,16 @@ CREATE TABLE IF NOT EXISTS mm_diary_entries (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
   user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title      text NOT NULL DEFAULT '',
   entry_date date NOT NULL DEFAULT current_date,
   note       text NOT NULL DEFAULT '',
   measures   jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- il titolo lo chiede l'app, non il database: le registrazioni fatte
+-- prima di questa colonna non ce l'hanno, e un NOT NULL senza default
+-- renderebbe impossibile perfino correggerle
+ALTER TABLE mm_diary_entries ADD COLUMN IF NOT EXISTS title text NOT NULL DEFAULT '';
 ALTER TABLE mm_diary_entries ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "mm_diary_entries: utente vede solo le sue" ON mm_diary_entries;
 CREATE POLICY "mm_diary_entries: utente vede solo le sue" ON mm_diary_entries
