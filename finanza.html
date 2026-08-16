@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.12</title>
+  <title>GarsalFinanza v1.3.13</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -561,8 +561,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.12';
-const APP_BUILD   = '2026-08-15T22:00:00Z';
+const APP_VERSION = 'v1.3.13';
+const APP_BUILD   = '2026-08-16T09:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3106,9 +3106,10 @@ function renderOtherAssets() {
    La tabella arriva fino all'ANNO SCORSO e non a quest'anno: un anno in corso è per forza
    incompleto, e messo in colonna accanto agli altri sembrerebbe un crollo del reddito.
 
-   Cinque sezioni, una tabella per sezione, tutte sulla stessa tabella fnz_income: ogni cella è
-   una riga (anno, kind, importo). I kind stanno qui e non nel database (fnz_income.kind è testo
-   libero), quindi una voce nuova è una riga di questo elenco e non una migration.
+   Una tabella per sezione, tutte sulla stessa tabella fnz_income: ogni cella è una riga
+   (anno, kind, importo). I kind stanno qui e non nel database (fnz_income.kind è testo libero),
+   quindi una voce nuova è una riga di questo elenco e non una migration — e una voce tolta di
+   qui smette di vedersi senza che nessun dato venga cancellato.
 
    Netto, totale lavoro dipendente e totale trattenuto NON si archiviano: sono esattamente
    ricavabili dagli altri (verificato su tutti gli anni dei 730), e archiviare un numero che si
@@ -3128,18 +3129,13 @@ const INCOME_SECTIONS = [
       { kind: 'reddito_complessivo',   label: 'Reddito compl.', forte: true },
     ],
   },
-  {
-    key: 'ritenute', icon: '📉', title: 'Ritenute in busta paga',
-    sub: 'Quanto è stato trattenuto alla fonte. Il totale è la somma delle quattro voci.',
-    sommaAnni: true,
-    cols: [
-      { kind: 'rit_irpef',           label: 'IRPEF' },
-      { kind: 'rit_add_regionale',   label: 'Add. regionale' },
-      { kind: 'rit_add_com_acconto', label: 'Add. com. acconto' },
-      { kind: 'rit_add_com_saldo',   label: 'Add. com. saldo' },
-      { calc: 'tot_ritenute',        label: 'Totale trattenuto', forte: true },
-    ],
-  },
+  // ⚠️ La sezione «Ritenute in busta paga» non c'è più (rit_irpef, rit_add_regionale,
+  // rit_add_com_acconto, rit_add_com_saldo). Le righe restano in fnz_income e non vengono
+  // toccate dalla pagina: togliere una sezione è una riga di qui, cancellare i dati non si
+  // disfa. Ma quei valori NON sono inerti — «UniCredit netto» e il riquadro «Trattenute» si
+  // calcolano da lì (INCOME_CALC.netto e tot_ritenute), quindi continuano a funzionare sugli
+  // anni 2017-2025 già archiviati e resteranno vuoti per gli anni nuovi, che non hanno più
+  // dove essere inseriti. Rimettendo la sezione nell'elenco torna tutto com'era.
   {
     key: 'liquidazione', icon: '🧾', title: 'Liquidazione dichiarazione',
     sub: 'Il reddito su cui si calcola l\'IRPEF e l\'imposta che ne risulta.',

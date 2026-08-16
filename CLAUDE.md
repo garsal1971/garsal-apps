@@ -264,21 +264,26 @@ anno raddoppierebbe il totale in silenzio. Una casella lasciata vuota **cancella
 invece di salvare zero: «dato assente» e «zero euro» sono due cose diverse, e un importo tolto
 che restasse scritto continuerebbe a fare totale.
 
-La pagina è in **cinque sezioni**, una tabella ciascuna, tutte su questa tabella: redditi
-(`lavoro`, `pensione`, `fabbricati`, `abitazione_principale`, `reddito_complessivo`), ritenute in
-busta paga (`rit_*`), liquidazione della dichiarazione (`liq_*`), contributi previdenziali
-(`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`). Il ✎ e il ✕ agiscono **sulla singola
-sezione** di un anno, non sull'anno intero: le cinque tabelle vengono da documenti diversi.
+La pagina è in **quattro sezioni**, una tabella ciascuna, tutte su questa tabella: redditi
+(`lavoro`, `pensione`, `fabbricati`, `abitazione_principale`, `reddito_complessivo`),
+liquidazione della dichiarazione (`liq_imponibile`, `liq_imposta_lorda`), contributi
+previdenziali (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`). Il ✎ e il ✕ agiscono
+**sulla singola sezione** di un anno, non sull'anno intero: le tabelle vengono da documenti
+diversi.
 
-⚠️ **Della liquidazione si mostrano solo `liq_imponibile` e `liq_imposta_lorda`.** Le altre
-cinque voci (`liq_detrazioni`, `liq_imposta_netta`, `liq_acconti`, `liq_esito`,
-`liq_reddito_rif`) hanno i loro dati storici in `fnz_income` ma **nessuna colonna che le mostri**:
-sono state tolte da `INCOME_SECTIONS`, non cancellate. Togliere una colonna è una riga di
-JavaScript e si disfa; cancellare le righe no. Rimettendo la voce nell'elenco gli importi tornano
-a vedersi. Finché non c'è la colonna, quelle righe non vengono lette né scritte né cancellate
-dalla pagina — nemmeno dal ✕ della sezione, che agisce solo sui kind dichiarati. `liq_esito` è
-l'unico importo **con segno** (rimborso > 0, debito < 0) e la colonna non ha nessun CHECK che lo
-impedisca.
+⚠️ **Alcuni kind hanno i dati ma non hanno più una colonna**: le quattro ritenute in busta paga
+(`rit_*`, era una sezione intera) e cinque voci della liquidazione (`liq_detrazioni`,
+`liq_imposta_netta`, `liq_acconti`, `liq_esito`, `liq_reddito_rif`). Sono state tolte da
+`INCOME_SECTIONS`, **non cancellate**: togliere una voce dall'elenco è una riga di JavaScript e
+si disfa, cancellare le righe storiche no. Rimettendola, gli importi tornano a vedersi com'erano.
+Finché non c'è la colonna quelle righe non vengono scritte né cancellate dalla pagina — nemmeno
+dal ✕, che agisce solo sui kind dichiarati.
+
+⚠️ **Le `rit_*` però non sono inerti**: «UniCredit netto» e il riquadro «Trattenute» si calcolano
+da lì (`INCOME_CALC.netto` e `tot_ritenute`). Funzionano sugli anni 2017-2025 già archiviati e
+resteranno vuoti per gli anni nuovi, che non hanno più dove essere inseriti — è la conseguenza
+voluta di aver tolto la sezione, non un difetto. `liq_esito` è l'unico importo **con segno**
+(rimborso > 0, debito < 0) e la colonna non ha nessun CHECK che lo impedisca.
 
 ⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
 (lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730
