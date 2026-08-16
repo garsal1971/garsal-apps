@@ -276,16 +276,16 @@ proposito**: erano esatti — verificati su tutti i 730 disponibili — ma qui s
 quello che è scritto sui documenti e basta. Le formule sono nella storia di git
 (`e78fd62` e precedenti) se un giorno servissero.
 
-⚠️ **Molti kind hanno i dati ma non hanno più una colonna che li mostri**: ritenute in busta paga
-(`rit_*`), contributi previdenziali (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`),
-cinque voci della liquidazione (`liq_detrazioni`, `liq_imposta_netta`, `liq_acconti`,
-`liq_esito`, `liq_reddito_rif`) e tre dei redditi (`fabbricati`, `abitazione_principale`,
-`reddito_complessivo`). Sono stati tolti da `INCOME_SECTIONS`, **non cancellati**:
-togliere una voce dall'elenco è una riga di JavaScript e si disfa, cancellare gli storici dei 730
-no. Rimettendola, gli importi tornano a vedersi com'erano. Finché non hanno una colonna quelle
-righe non vengono né scritte né cancellate dalla pagina — nemmeno dal ✕, che agisce solo sui kind
-dichiarati. `liq_esito` è l'unico importo **con segno** (rimborso > 0, debito < 0) e la colonna
-non ha nessun CHECK che lo impedisca.
+⚠️ **I kind usciti dalle tabelle sono stati cancellati dal database**, su richiesta esplicita:
+`20260816110000_fnz_income_cancella_kind_ritirati.sql` ha tolto 86 righe su 112 in 19 kind —
+ritenute in busta paga (`rit_*`), contributi previdenziali (`prev_*`), premi/welfare/cedolare
+(`prem_*`, `ced_*`), cinque voci della liquidazione (`liq_detrazioni`, `liq_imposta_netta`,
+`liq_acconti`, `liq_esito`, `liq_reddito_rif`) e tre dei redditi (`fabbricati`,
+`abitazione_principale`, `reddito_complessivo`). In `fnz_income` restano solo i kind mostrati.
+**La via di recupero è la migration dei dati storici**, dove gli importi sono scritti in chiaro:
+le due migration girano in ordine anche su un database nuovo, prima l'insert e poi la
+cancellazione, quindi il risultato coincide con la produzione. Togliere una voce da
+`INCOME_SECTIONS` resta reversibile in sé, ma da qui in poi la colonna riaperta è vuota.
 
 ⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
 (lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730
