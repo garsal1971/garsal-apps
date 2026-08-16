@@ -313,7 +313,7 @@ e intestato all'utente cercato per email, e salta senza fallire se quell'utente 
 | `mm_card_categories` | Associazione scheda ↔ `cm_categories` |
 | `mm_images` | Metadati delle foto (i file stanno nel bucket `mm-images`) |
 | `mm_list_items` | Voci di una lista: `text`, `done`, `position`, `done_at` |
-| `mm_diary_metrics` | Le misure di un diario: `kind` `'scala'` (con `min_value`/`max_value`) \| `'numero'` (con `unit`) \| `'bool'` |
+| `mm_diary_metrics` | Le misure di un diario: `kind` `'scala'` (con `min_value`/`max_value`) \| `'numero'` (con `unit`) \| `'bool'` \| `'scelta'` (con `options`) |
 | `mm_diary_entries` | Le registrazioni: `entry_date`, `note`, e `measures` jsonb |
 
 **Una scheda è una riga sola in tutt'e tre i casi**: il tipo è una colonna, non una tabella a
@@ -336,6 +336,23 @@ della casella vuota in `fnz_income`.
 Togliere una misura da un diario **non cancella le registrazioni**: i valori restano scritti in
 `measures` con una chiave che non ha più una riga, e l'app li mostra come *misura tolta* invece di
 farli sparire. L'avviso prima di togliere lo dice.
+
+**Le misure `'scelta'` sono combo configurabili** (es. *origine*: sociale, autorità, sbagliare,
+giudizio). Le opzioni stanno in `mm_diary_metrics.options` come `[{id, label}]` e la registrazione
+archivia l'**id**, mai l'etichetta: rinominare un'opzione deve rileggere anche lo storico col nome
+nuovo, mentre archiviando la parola una rinomina spaccherebbe la stessa origine in due categorie
+che ai conteggi sembrano diverse. È la stessa ragione per cui le misure si aggiornano riga per
+riga invece di essere ricreate, un livello più sotto. Un'opzione tolta segue la regola della
+misura tolta: le registrazioni restano e mostrano *opzione tolta*.
+
+Una combo **deve avere almeno un'opzione** (vincolo `mm_diary_metrics_scelta_check`): senza, la
+misura non chiederebbe niente — è rotta, non vuota. Le opzioni lasciate in bianco si scartano da
+sé al salvataggio.
+
+⚠️ Una scelta **non ha un numero** e `numericValue()` torna `null`: l'ordine delle opzioni è un
+elenco, non una scala, e farne una media o una spezzata vorrebbe dire trattare *giudizio* come il
+doppio di *autorità*. Nel riepilogo al posto dello storico in miniatura c'è la **distribuzione** —
+quante volte è uscita ciascuna opzione — che è la domanda che una combo pone davvero.
 
 ### Weight Quest (`ps_`)
 | Table | Purpose |
@@ -1292,6 +1309,8 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
     (`mm_list_items`);
   - **📊 Diario** — il contenuto è lo **scopo** («perché sto misurando»), e la scheda porta le
     **misure** da raccogliere (`mm_diary_metrics`) e le **registrazioni** (`mm_diary_entries`).
+    Una misura è una **scala** (minimo e massimo), un **numero** libero con unità, un **sì/no** o
+    una **scelta** fra opzioni configurabili.
 - **Una nota si apre in modifica, una lista e un diario no**: hanno una vista propria
   (`openListView` / `openDiaryView`), perché la cosa che si fa più spesso su di loro — spuntare una
   voce, aggiungere una registrazione — non è modificare la scheda. All'editor si arriva da lì con
@@ -1304,10 +1323,13 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **La registrazione di un diario rimostra lo scopo della scheda** prima di chiedere le misure: è
   il promemoria di come vanno lette, e senza si finisce a dare voti a caso dopo un mese. Una scala
   si dà con lo slider o con la casella, un numero con la casella e la sua unità, un sì/no con due
-  pulsanti che si ripremono per annullare.
+  pulsanti che si ripremono per annullare, una scelta con una combo la cui prima voce
+  (*— non l'ho misurata*) toglie il valore invece di archiviarne uno finto.
 - Il riepilogo per misura mostra l'ultimo valore e le **ultime 12 registrazioni in miniatura**
   (`.spark`, div e non Chart.js — questa pagina non lo carica). Il fondo scala è quello della
-  misura per le scale, quello osservato per i numeri liberi.
+  misura per le scale, quello osservato per i numeri liberi. **Per una scelta al posto della
+  miniatura c'è la distribuzione** (`.dist`): un numero non ce l'ha, e quello che si vuole sapere
+  è quante volte è uscita ciascuna opzione.
 
 ### `casarosa.html` — Cassa Casa Rosa
 - Movimenti e saldo della cassa di Casa Rosa (`cntrs_transactions`, `cntrs_categories`,
