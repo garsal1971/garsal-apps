@@ -1487,6 +1487,24 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   l'import fa girare merchant appresi, regole e attribuzione per carta, che vivono solo lì.
 - La **consultazione** è stata spostata dentro le due app dove serve, come vista in sola lettura:
   `finanza.html` (Salvatore) e `situazione-teresa.html` (Teresa) — vedi sotto.
+- **Negozi imparati** (pagina *Regole*, in cima): l'elenco di `ca_merchant_map` +
+  `ca_merchant_map_categories`, che fino alla v1.0.71 si scriveva da solo e **non si vedeva da
+  nessuna parte**. Ogni riga porta la chiave, la categoria, quante transazioni in archivio
+  aggancia e quante di quelle hanno una categoria *diversa*; da lì si modifica, si dimentica e si
+  propaga allo storico (🔁, che riusa il modale di `previewMerchantCategoryPropagation`).
+  Filtri: *Da allineare*, *Senza categoria*, *Mai usati*.
+  ⚠️ Tre cose che sono la ragione per cui la pagina esiste:
+  - **il confronto è per uguaglianza sull'intera descrizione normalizzata**, non «contiene» come
+    in `spese-ada.html` / `spese-personali.html`. Accorciare una chiave non allarga l'aggancio:
+    la restringe a zero. Per allargare servono le **Regole**, che cercano il testo *dentro* la
+    descrizione. Il campo del modale mostra dal vivo la chiave che verrà salvata e quante
+    transazioni aggancia, perché una chiave «quasi giusta» altrimenti si scopre inerte solo dopo;
+  - **le righe orfane** (negozio in `ca_merchant_map` senza figlia in
+    `ca_merchant_map_categories`, che `learnMerchantCategories(desc, null)` lascia dietro) non
+    categorizzano niente e prima erano invisibili: ora si vedono col filtro *Senza categoria*;
+  - **imparare non è propagare.** Salvare un negozio vale per le transazioni future; quelle già in
+    archivio si toccano solo confermando l'anteprima — la stessa regola per cui
+    `ca_smart_block_set_category` impara e non propaga.
 - **Navigazione con hamburger** come le altre app del conto familiare: su desktop la sidebar da
   280 px resta fissa, sotto i 768 px diventa un cassetto a scomparsa aperto dal ⬛ nella top bar
   (prima era una striscia di sole icone incollata sotto la barra blu, senza etichette). Il menù
