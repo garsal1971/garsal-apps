@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.28</title>
+    <title>Memorandum v1.0.29</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -538,6 +538,32 @@
             margin-top: 0.5rem; font-size: 0.9rem; color: var(--muted);
         }
         .metric-row-opts input { width: 5.5rem; }
+        /* con le opzioni in colonna la riga della misura non basta più */
+        .metric-row-opts.colonna { display: block; }
+        .metric-options { margin-top: 0.2rem; }
+        .opt-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; }
+        .opt-row input { flex: 1; border-width: 1px; background: white; }
+        .opt-n {
+            font-family: 'Space Mono', monospace; font-size: 0.75rem;
+            color: var(--muted); width: 1.4rem; flex-shrink: 0;
+        }
+        .opt-vuoto { font-size: 0.9rem; color: var(--muted); padding: 0.3rem 0; }
+
+        /* distribuzione delle scelte: quante volte è uscita ciascuna */
+        .dist { margin-top: 0.5rem; }
+        .dist-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+        .dist-label {
+            flex: 0 0 40%; font-size: 0.92rem; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+        }
+        .dist-label.tolta { color: var(--muted); }
+        .dist-bar { flex: 1; height: 12px; background: var(--border); overflow: hidden; }
+        .dist-bar > i { display: block; height: 100%; background: var(--secondary); }
+        .dist-n {
+            flex: 0 0 1.8rem; text-align: right;
+            font-family: 'Space Mono', monospace; font-size: 0.8rem; color: var(--muted);
+        }
+
         .metric-presets { display: flex; gap: 0.3rem; flex-wrap: wrap; }
         .metric-preset {
             padding: 0.15rem 0.45rem; border: 1px solid var(--border); background: white;
@@ -931,7 +957,8 @@
             <div style="font-size:0.9rem;color:var(--muted);margin-bottom:0.6rem;">
                 Ogni misura viene chiesta a ogni registrazione. Una <b>scala</b> ha un minimo e un
                 massimo (1-20, 1-100…), un <b>numero</b> è libero e può avere un'unità di misura,
-                un <b>sì/no</b> vale 0 o 1 nei riepiloghi.
+                un <b>sì/no</b> vale 0 o 1 nei riepiloghi, una <b>scelta</b> è una combo fra le
+                opzioni che scrivi tu (es. <i>origine</i>: sociale, autorità, sbagliare, giudizio).
             </div>
             <div id="editorMetrics"></div>
             <button type="button" class="btn btn-accent btn-small" onclick="addEditorMetric()">➕ Aggiungi misura</button>
@@ -1179,8 +1206,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.28';
-var BUILD_TIME  = '2026-08-16T14:00:00Z';
+var APP_VERSION = 'v1.0.29';
+var BUILD_TIME  = '2026-08-16T16:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1819,6 +1846,13 @@ function removeEditorItem(i) {
 // ============================================================
 const METRIC_PRESETS = [[1,5], [1,10], [1,20], [0,100], [1,100]];
 
+// Le opzioni di una combo hanno un id stabile e la registrazione
+// archivia quello: rinominare un'opzione rilegge lo storico col nome
+// nuovo invece di spaccarlo in due categorie che sembrano diverse.
+function optionId() {
+    return 'o' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
 function renderEditorMetrics() {
     const box = document.getElementById('editorMetrics');
     if (!editorMetrics.length) {
@@ -1842,22 +1876,37 @@ function renderEditorMetrics() {
             opts = `<span>unità</span>
                 <input type="text" class="form-input" style="width:8rem;" placeholder="kg, km, €, min…"
                        value="${escAttr(m.unit || '')}" oninput="editorMetrics[${i}].unit = this.value">`;
+        } else if (m.kind === 'scelta') {
+            const righe = (m.options || []).map((o, j) => `
+                <div class="opt-row">
+                    <span class="opt-n">${j + 1}.</span>
+                    <input type="text" class="form-input" placeholder="Etichetta dell'opzione…"
+                           value="${escAttr(o.label)}"
+                           oninput="editorMetrics[${i}].options[${j}].label = this.value">
+                    <button type="button" class="li-del" onclick="removeMetricOption(${i}, ${j})" title="Togli">✕</button>
+                </div>`).join('');
+            opts = `<div class="metric-options">
+                ${righe || '<div class="opt-vuoto">Nessuna opzione: una combo senza opzioni non chiede niente.</div>'}
+                <button type="button" class="btn btn-secondary btn-small" style="margin-top:0.4rem;"
+                        onclick="addMetricOption(${i})">➕ Aggiungi opzione</button>
+            </div>`;
         } else {
             opts = `<span>sì / no — vale 1 o 0 nei riepiloghi</span>`;
         }
 
         return `<div class="metric-row">
             <div class="metric-row-top">
-                <input type="text" class="form-input" placeholder="Cosa misuri (es. umore, sonno, passi…)"
+                <input type="text" class="form-input" placeholder="Cosa misuri (es. umore, sonno, origine…)"
                        value="${escAttr(m.name)}" oninput="editorMetrics[${i}].name = this.value">
                 <select class="form-select" style="width:auto;" onchange="setMetricKind(${i}, this.value)">
                     <option value="scala"  ${m.kind === 'scala'  ? 'selected' : ''}>Scala</option>
                     <option value="numero" ${m.kind === 'numero' ? 'selected' : ''}>Numero</option>
                     <option value="bool"   ${m.kind === 'bool'   ? 'selected' : ''}>Sì/No</option>
+                    <option value="scelta" ${m.kind === 'scelta' ? 'selected' : ''}>Scelta</option>
                 </select>
                 <button type="button" class="li-del" onclick="removeEditorMetric(${i})" title="Togli">✕</button>
             </div>
-            <div class="metric-row-opts">${opts}</div>
+            <div class="metric-row-opts${m.kind === 'scelta' ? ' colonna' : ''}">${opts}</div>
         </div>`;
     }).join('');
 }
@@ -1865,7 +1914,7 @@ function renderEditorMetrics() {
 function addEditorMetric() {
     editorMetrics.push({
         tempId: tempId(), name: '', kind: 'scala',
-        min_value: 1, max_value: 10, unit: ''
+        min_value: 1, max_value: 10, unit: '', options: []
     });
     renderEditorMetrics();
 }
@@ -1881,6 +1930,11 @@ function setMetricKind(i, kind) {
         m.min_value = null; m.max_value = null;
     }
     if (kind !== 'numero') m.unit = '';
+    // le opzioni non si buttano passando a un altro tipo e tornando
+    // indietro: sono la cosa più lunga da riscrivere di tutta la misura
+    if (kind === 'scelta' && !(m.options || []).length) {
+        m.options = [{ id: optionId(), label: '' }, { id: optionId(), label: '' }];
+    }
     renderEditorMetrics();
 }
 
@@ -1888,6 +1942,35 @@ function setMetricRange(i, min, max) {
     const m = editorMetrics[i];
     if (!m) return;
     m.min_value = min; m.max_value = max;
+    renderEditorMetrics();
+}
+
+function addMetricOption(i) {
+    const m = editorMetrics[i];
+    if (!m) return;
+    m.options = m.options || [];
+    m.options.push({ id: optionId(), label: '' });
+    renderEditorMetrics();
+    // il campo appena nato prende il fuoco, o si aggiunge al buio
+    const campi = document.querySelectorAll(
+        `#editorMetrics .metric-row:nth-child(${i + 1}) .opt-row input`);
+    campi[campi.length - 1]?.focus();
+}
+
+async function removeMetricOption(i, j) {
+    const m = editorMetrics[i];
+    if (!m || !m.options?.[j]) return;
+    const o = m.options[j];
+
+    // su una misura già salvata l'opzione può essere citata da registrazioni
+    // passate: quelle restano, e mostreranno «opzione tolta»
+    if (m.id && o.label.trim()) {
+        const ok = await customConfirm(
+            `Togliere l'opzione "${o.label}"?\n\n` +
+            'Le registrazioni che l\'hanno scelta restano, ma al posto del nome mostreranno «opzione tolta».');
+        if (!ok) return;
+    }
+    m.options.splice(j, 1);
     renderEditorMetrics();
 }
 
@@ -1929,6 +2012,13 @@ async function saveCard() {
         const scalaStorta = editorMetrics.some(m =>
             m.kind === 'scala' && (m.min_value == null || m.max_value == null || Number(m.max_value) <= Number(m.min_value)));
         if (scalaStorta) { showToast('Ogni scala vuole un massimo maggiore del minimo.'); return; }
+        // le opzioni lasciate in bianco si buttano da sé, ma una combo
+        // che resta senza non chiederebbe niente
+        editorMetrics.forEach(m => {
+            if (m.kind === 'scelta') m.options = (m.options || []).filter(o => o.label.trim());
+        });
+        const comboVuota = editorMetrics.some(m => m.kind === 'scelta' && !m.options.length);
+        if (comboVuota) { showToast('Una misura a scelta vuole almeno un\'opzione.'); renderEditorMetrics(); return; }
     }
 
     const btn = document.querySelector('#cardModal .btn-primary');
@@ -2034,6 +2124,10 @@ async function syncDiaryMetrics(cardId) {
             min_value: m.kind === 'scala' ? Number(m.min_value) : null,
             max_value: m.kind === 'scala' ? Number(m.max_value) : null,
             unit: m.kind === 'numero' ? (m.unit || '').trim() : '',
+            // le opzioni tengono il loro id: le registrazioni passate lo citano
+            options: m.kind === 'scelta'
+                ? (m.options || []).map(o => ({ id: o.id, label: o.label.trim() }))
+                : [],
             position: i
         };
         if (m.id) esistenti.push({ id: m.id, ...riga });
@@ -2265,6 +2359,43 @@ function renderDiaryMetricsSummary() {
     const storico = [...viewEntries].reverse();
 
     box.innerHTML = viewMetrics.map(m => {
+        // Una scelta non ha un andamento: ha una distribuzione. Disegnarne
+        // la spezzata vorrebbe dire trattare l'ordine delle opzioni come
+        // una scala, che non è — quello che si vuole sapere è quante volte
+        // è uscita ciascuna.
+        if (m.kind === 'scelta') {
+            const scelte = storico.map(e => e.measures?.[m.id]).filter(v => v !== undefined && v !== null);
+            const conteggi = {};
+            scelte.forEach(id => { conteggi[id] = (conteggi[id] || 0) + 1; });
+            const max = Math.max(1, ...Object.values(conteggi));
+            const ultimo = scelte.length ? scelte[scelte.length - 1] : null;
+
+            // prima le opzioni definite, nel loro ordine; poi quelle tolte
+            // che qualche registrazione cita ancora
+            const tolte = Object.keys(conteggi).filter(id => !(m.options || []).some(o => o.id === id));
+            const righe = [...(m.options || []).map(o => [o.id, o.label]),
+                           ...tolte.map(id => [id, null])]
+                .map(([id, label]) => {
+                    const n = conteggi[id] || 0;
+                    return `<div class="dist-row">
+                        <span class="dist-label${label === null ? ' tolta' : ''}">${label === null ? '<i>opzione tolta</i>' : escHtml(label)}</span>
+                        <span class="dist-bar"><i style="width:${n / max * 100}%"></i></span>
+                        <span class="dist-n">${n}</span>
+                    </div>`;
+                }).join('');
+
+            return `<div class="metric-card">
+                <div class="metric-card-head">
+                    <div>
+                        <div class="metric-card-name">${escHtml(m.name)}</div>
+                        <div class="metric-card-range">scelta fra ${(m.options || []).length} opzioni</div>
+                    </div>
+                    <div class="metric-card-last">${ultimo === null ? '—' : optionLabel(m, ultimo)}</div>
+                </div>
+                <div class="dist">${righe}</div>
+            </div>`;
+        }
+
         const serie = storico
             .map(e => numericValue(m, e.measures?.[m.id]))
             .filter(v => v !== null)
@@ -2312,7 +2443,7 @@ function renderDiaryEntries() {
             const m = viewMetrics.find(x => x.id === mid);
             // una misura tolta dopo: il valore c'è ancora ma non ha più un nome
             if (!m) return `<span class="entry-val orfana" title="misura non più definita">misura tolta: <b>${escHtml(String(raw))}</b></span>`;
-            return `<span class="entry-val">${escHtml(m.name)} <b>${displayValue(m, numericValue(m, raw))}</b></span>`;
+            return `<span class="entry-val">${escHtml(m.name)} <b>${valueLabel(m, raw)}</b></span>`;
         }).join('');
 
         return `<div class="entry-row">
@@ -2329,12 +2460,29 @@ function renderDiaryEntries() {
     }).join('');
 }
 
-// il valore archiviato torna numero: i sì/no valgono 1 e 0
+// il valore archiviato torna numero: i sì/no valgono 1 e 0.
+// Una scelta non è un numero e non se ne inventa uno: l'ordine delle
+// opzioni è un elenco, non una scala, e mediarlo non vorrebbe dire niente.
 function numericValue(m, raw) {
     if (raw === null || raw === undefined || raw === '') return null;
+    if (m.kind === 'scelta') return null;
     if (m.kind === 'bool') return raw === true || raw === 1 || raw === '1' ? 1 : 0;
     const n = Number(raw);
     return Number.isFinite(n) ? n : null;
+}
+
+// un'opzione tolta dopo: la registrazione tiene il suo id, e quell'id
+// non ha più un'etichetta — si dice, invece di far sparire il valore
+function optionLabel(m, id) {
+    const o = (m.options || []).find(x => x.id === id);
+    return o ? escHtml(o.label) : '<i>opzione tolta</i>';
+}
+
+// che cosa mostrare per un valore archiviato, qualunque sia il tipo
+function valueLabel(m, raw) {
+    if (raw === null || raw === undefined || raw === '') return '—';
+    if (m.kind === 'scelta') return optionLabel(m, raw);
+    return displayValue(m, numericValue(m, raw));
 }
 
 function displayValue(m, v) {
@@ -2391,7 +2539,9 @@ async function openEntryModal(entryId) {
         Object.entries(entry.measures || {}).forEach(([mid, raw]) => {
             const m = viewMetrics.find(x => x.id === mid);
             if (!m) return;
-            entryValues[mid] = m.kind === 'bool' ? !!numericValue(m, raw) : numericValue(m, raw);
+            entryValues[mid] = m.kind === 'scelta' ? String(raw)
+                             : m.kind === 'bool'   ? !!numericValue(m, raw)
+                             : numericValue(m, raw);
         });
     }
 
@@ -2429,6 +2579,17 @@ function renderEntryMeasures() {
                        oninput="setEntryValue('${m.id}', this.value === '' ? null : Number(this.value))">
                 ${m.unit ? `<span class="measure-unit">${escHtml(m.unit)}</span>` : ''}
             </div>`;
+        } else if (m.kind === 'scelta') {
+            // la casella vuota in cima è «non l'ho misurata»: sceglierla
+            // toglie il valore invece di archiviarne uno finto
+            const voci = (m.options || []).map(o =>
+                `<option value="${escAttr(o.id)}" ${dato === o.id ? 'selected' : ''}>${escHtml(o.label)}</option>`).join('');
+            const orfana = dato_c && !(m.options || []).some(o => o.id === dato)
+                ? `<option value="${escAttr(dato)}" selected>opzione tolta</option>` : '';
+            corpo = `<select class="form-select" onchange="setEntryValue('${m.id}', this.value || null)">
+                <option value="">— non l'ho misurata</option>
+                ${orfana}${voci}
+            </select>`;
         } else {
             const si = dato === true, no = dato === false;
             corpo = `<div class="measure-bool">
@@ -2442,7 +2603,7 @@ function renderEntryMeasures() {
         return `<div class="measure-box">
             <div class="measure-head">
                 <span class="measure-name">${escHtml(m.name)}</span>
-                <span class="measure-value">${dato_c ? displayValue(m, numericValue(m, dato)) : '—'}</span>
+                <span class="measure-value">${dato_c ? valueLabel(m, dato) : '—'}</span>
             </div>
             ${corpo}
             ${dato_c ? `<button type="button" class="btn btn-secondary btn-small" style="margin-top:0.5rem;"
@@ -3103,6 +3264,9 @@ CREATE INDEX IF NOT EXISTS mm_list_items_card ON mm_list_items(card_id, position
 --    kind = 'scala'  → min_value/max_value obbligatori (1-20, 1-100…)
 --    kind = 'numero' → nessun limite, unit è l'unità di misura
 --    kind = 'bool'   → sì/no, vale 0 o 1 nei riepiloghi
+--    kind = 'scelta' → combo: options è [{id, label}] e la
+--                      registrazione archivia l'**id** dell'opzione,
+--                      così rinominarla rilegge anche lo storico
 CREATE TABLE IF NOT EXISTS mm_diary_metrics (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
@@ -3112,13 +3276,23 @@ CREATE TABLE IF NOT EXISTS mm_diary_metrics (
   min_value  numeric,
   max_value  numeric,
   unit       text NOT NULL DEFAULT '',
+  options    jsonb NOT NULL DEFAULT '[]'::jsonb,
   position   integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT mm_diary_metrics_kind_check CHECK (kind IN ('scala', 'numero', 'bool')),
   CONSTRAINT mm_diary_metrics_scala_check CHECK (
     kind <> 'scala' OR (min_value IS NOT NULL AND max_value IS NOT NULL AND max_value > min_value)
   )
 );
+-- su un database che ha già la tabella il CREATE qui sopra non fa niente:
+-- colonna e vincoli si aggiungono a parte
+ALTER TABLE mm_diary_metrics ADD COLUMN IF NOT EXISTS options jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE mm_diary_metrics DROP CONSTRAINT IF EXISTS mm_diary_metrics_kind_check;
+ALTER TABLE mm_diary_metrics ADD CONSTRAINT mm_diary_metrics_kind_check
+  CHECK (kind IN ('scala', 'numero', 'bool', 'scelta'));
+ALTER TABLE mm_diary_metrics DROP CONSTRAINT IF EXISTS mm_diary_metrics_scelta_check;
+ALTER TABLE mm_diary_metrics ADD CONSTRAINT mm_diary_metrics_scelta_check
+  CHECK (kind <> 'scelta'
+         OR (jsonb_typeof(options) = 'array' AND jsonb_array_length(options) > 0));
 ALTER TABLE mm_diary_metrics ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "mm_diary_metrics: utente vede solo le sue" ON mm_diary_metrics;
 CREATE POLICY "mm_diary_metrics: utente vede solo le sue" ON mm_diary_metrics
