@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.30</title>
+    <title>Memorandum v1.0.31</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -209,6 +209,31 @@
             transition: all 0.2s; z-index: 100;
         }
         .fab:hover { transform: scale(1.1); box-shadow: 0 6px 24px rgba(255,51,102,0.5); }
+
+        /* ── MODALITÀ NASCOSTA ── */
+        /* sta a sinistra del +, non sotto: due cerchi sovrapposti
+           nell'angolo si toccano l'uno per l'altro */
+        .hidden-mode-fab {
+            display: none; position: fixed; bottom: 2rem; right: 5.5rem;
+            width: 50px; height: 50px; border-radius: 50%;
+            background: var(--muted); color: white; border: none;
+            font-size: 1.3rem; cursor: pointer; z-index: 100;
+            align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25); transition: all 0.2s;
+        }
+        .hidden-mode-fab:hover  { transform: scale(1.1); }
+        .hidden-mode-fab:active { transform: scale(0.95); }
+        .hidden-mode-fab.active { background: var(--secondary); }
+
+        .riservato-row {
+            display: flex; align-items: flex-start; gap: 0.75rem;
+            padding: 0.7rem; border: 2px solid var(--border);
+            background: var(--input-bg); margin-bottom: 1rem;
+        }
+        .riservato-row input { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; margin-top: 2px; }
+        .riservato-desc { font-size: 0.88rem; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+        .kind-badge.riservato { background: var(--secondary); }
 
         /* ── BUTTONS ── */
         .btn {
@@ -871,6 +896,10 @@
     </main>
 </div>
 
+<!-- Modalità nascosta: compare solo se il launcher l'ha attivata -->
+<button class="hidden-mode-fab" id="hiddenModeFab" onclick="toggleHiddenMode()"
+        title="Mostra solo le riservate">🙈</button>
+
 <!-- FAB — crea una scheda del tipo della Tab aperta -->
 <button class="fab" id="fabNew" onclick="newCardOfKind(currentKind)" title="Nuova nota">+</button>
 
@@ -932,6 +961,19 @@
 
         <!-- MISURE DEL DIARIO (solo kind = diario) -->
         <div class="form-group" id="diarySection" style="display:none;">
+            <div class="riservato-row">
+                <input type="checkbox" id="cardRiservato">
+                <div>
+                    <label for="cardRiservato" style="cursor:pointer;font-weight:700;font-size:1rem;">
+                        🙈 Riservato
+                    </label>
+                    <div class="riservato-desc">
+                        Il diario si vede solo in modalità nascosta, che si attiva da AppSphere.
+                        Fuori da lì non compare in elenco e non viene nemmeno letto dal database.
+                    </div>
+                </div>
+            </div>
+
             <label class="form-label">Cosa misurare</label>
             <div style="font-size:0.9rem;color:var(--muted);margin-bottom:0.6rem;">
                 Ogni misura viene chiesta a ogni registrazione. Una <b>scala</b> ha un minimo e un
@@ -1191,8 +1233,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.30';
-var BUILD_TIME  = '2026-08-16T18:00:00Z';
+var APP_VERSION = 'v1.0.31';
+var BUILD_TIME  = '2026-08-16T20:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1264,6 +1306,44 @@ let editingEntryId = null;    // registrazione in modifica
 let _tempSeq = 0;
 function tempId() { return 'tmp-' + (++_tempSeq); }
 
+// ── MODALITÀ NASCOSTA ───────────────────────────────────────
+// Tre stati, gli stessi di events-log.html e del launcher:
+//   spenta                       → si vedono solo le schede normali
+//   accesa, filtro spento        → si vede tutto
+//   accesa, filtro acceso (👁)   → si vedono solo le riservate
+// La modalità la accende AppSphere, non questa pagina: qui si può
+// solo alzare o abbassare il filtro quando è già accesa.
+let hiddenMode      = false;
+let riservatoFilter = false;
+
+function updateHiddenModeFab() {
+    const fab = document.getElementById('hiddenModeFab');
+    if (!fab) return;
+    fab.classList.toggle('active', riservatoFilter);
+    fab.textContent = riservatoFilter ? '👁' : '🙈';
+    fab.title = riservatoFilter
+        ? 'Solo le riservate — premi per mostrarle tutte'
+        : 'Mostra solo le riservate';
+    fab.style.display = hiddenMode ? 'flex' : 'none';
+}
+
+function toggleHiddenMode() {
+    if (!hiddenMode) return;
+    riservatoFilter = !riservatoFilter;
+    sessionStorage.setItem('riservato_filter', riservatoFilter ? '1' : '0');
+    updateHiddenModeFab();
+    if (sb) loadCards().then(() => { renderCatFilters(); renderCards(); renderPinned(); });
+}
+
+// il launcher può cambiarla mentre la pagina è aperta
+function applyHiddenMode(active) {
+    hiddenMode = !!active;
+    riservatoFilter = false;
+    sessionStorage.setItem('riservato_filter', '0');
+    updateHiddenModeFab();
+    if (sb) loadCards().then(() => { renderCatFilters(); renderCards(); renderPinned(); });
+}
+
 // ============================================================
 // AUTH
 // ============================================================
@@ -1305,6 +1385,9 @@ window.addEventListener('message', (e) => {
     if (e.data.type === 'SB_TOKEN' && e.data.token) {
         console.log('✅ SB_TOKEN ricevuto dal launcher (Memorandum)');
         initWithToken(e.data.token);
+    } else if (e.data.type === 'HIDDEN_MODE') {
+        applyHiddenMode(e.data.active);
+        console.log('👁 Modalità nascosta:', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
     }
 });
 
@@ -1315,6 +1398,9 @@ _authChannel.onmessage = (e) => {
         sb = null; sbAccessToken = null;
         localStorage.removeItem('sb_token');
         document.getElementById('authOverlay').style.display = 'flex';
+    } else if (e.data.type === 'HIDDEN_MODE') {
+        applyHiddenMode(e.data.active);
+        console.log('👁 Modalità nascosta (broadcast):', hiddenMode ? 'ATTIVA' : 'DISATTIVA');
     } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken) {
         const t = e.data.sbToken;
         localStorage.setItem('sb_token', t); sbAccessToken = t;
@@ -1328,6 +1414,13 @@ _authChannel.onmessage = (e) => {
 };
 
 window.addEventListener('load', () => {
+    const storedHidden = sessionStorage.getItem('hidden_mode');
+    if (storedHidden !== null) {
+        hiddenMode = storedHidden === '1';
+        riservatoFilter = hiddenMode && sessionStorage.getItem('riservato_filter') === '1';
+        updateHiddenModeFab();
+    }
+
     const stored = localStorage.getItem('sb_token');
     if (stored) initWithToken(stored);
     else document.getElementById('authOverlay').style.display = 'flex';
@@ -1395,7 +1488,7 @@ async function loadCategories() {
 }
 
 async function loadCards() {
-    const { data, error } = await sb
+    let q = sb
         .from('mm_cards')
         .select(`
             *,
@@ -1407,6 +1500,13 @@ async function loadCards() {
         .order('pinned', { ascending: false })
         .order('updated_at', { ascending: false });
 
+    // fuori dalla modalità nascosta la riga non si legge nemmeno:
+    // nasconderla solo a schermo la lascerebbe in chiaro a chiunque
+    // apra gli strumenti del browser
+    if (riservatoFilter)   q = q.eq('riservato', true);
+    else if (!hiddenMode)  q = q.or('riservato.eq.false,riservato.is.null');
+
+    const { data, error } = await q;
     if (error) { if (handleAuthError(error)) return; console.error('loadCards:', error); return; }
 
     cards = (data || []).map(c => {
@@ -1559,9 +1659,10 @@ function renderCardTile(c) {
 
     // il tipo si vede sulla scheda: una lista e un diario si aprono
     // diversamente da una nota, e deve saperlo prima di toccarli
-    const badge = c.kind !== 'nota'
-        ? `<span class="kind-badge ${c.kind}">${KINDS[c.kind].icon} ${KINDS[c.kind].label}</span>`
-        : '';
+    const badge = (c.kind !== 'nota'
+            ? `<span class="kind-badge ${c.kind}">${KINDS[c.kind].icon} ${KINDS[c.kind].label}</span>`
+            : '')
+        + (c.riservato ? '<span class="kind-badge riservato">🙈 Riservato</span>' : '');
 
     let extra = '';
     if (c.kind === 'lista' && c.itemsTotal > 0) {
@@ -1698,6 +1799,7 @@ async function openCardModal(cardId, kind) {
     document.getElementById('cardTitle').value   = '';
     document.getElementById('editorArea').innerHTML = '';
     document.getElementById('cardPinned').checked  = false;
+    document.getElementById('cardRiservato').checked = false;
     document.getElementById('deletCardBtn').style.display = 'none';
     document.getElementById('imagesGrid').innerHTML = '';
     document.getElementById('newItemText').value = '';
@@ -1712,6 +1814,7 @@ async function openCardModal(cardId, kind) {
             document.getElementById('cardTitle').value      = card.title;
             document.getElementById('editorArea').innerHTML = card.content;
             document.getElementById('cardPinned').checked   = card.pinned;
+            document.getElementById('cardRiservato').checked = !!card.riservato;
             selectedCatIds = [...(card.categoryIds || [])];
             selectedColor  = card.color || '#FFFFFF';
             selectColor(selectedColor, null, true);
@@ -1990,6 +2093,10 @@ async function saveCard() {
     const title   = document.getElementById('cardTitle').value.trim();
     const content = document.getElementById('editorArea').innerHTML.trim();
     const pinned  = document.getElementById('cardPinned').checked;
+    // la spunta vale solo dove si vede: su una nota o una lista il campo
+    // non c'è, e leggerlo lì scriverebbe il valore rimasto dall'ultima volta
+    const riservato = editorKind === 'diario'
+        && document.getElementById('cardRiservato').checked;
 
     // una lista può nascere col solo titolo e le sue voci, un diario
     // col titolo e le sue misure: il contenuto lì è facoltativo
@@ -2019,7 +2126,7 @@ async function saveCard() {
 
     try {
         const payload = {
-            title, content, pinned, color: selectedColor,
+            title, content, pinned, riservato, color: selectedColor,
             kind: editorKind,
             updated_at: new Date().toISOString(),
             user_id: currentUserId
@@ -3206,8 +3313,12 @@ CREATE TABLE IF NOT EXISTS mm_cards (
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
   pinned      boolean NOT NULL DEFAULT false,
+  riservato   boolean NOT NULL DEFAULT false,
   color       text NOT NULL DEFAULT '#FFFFFF'
 );
+-- su un database che ha già la tabella il CREATE qui sopra non fa niente
+ALTER TABLE mm_cards ADD COLUMN IF NOT EXISTS riservato boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS mm_cards_user_riservato ON mm_cards(user_id, riservato);
 ALTER TABLE mm_cards ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "mm_cards: utente vede solo le sue" ON mm_cards;
 CREATE POLICY "mm_cards: utente vede solo le sue" ON mm_cards

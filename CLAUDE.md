@@ -309,7 +309,7 @@ e intestato all'utente cercato per email, e salta senza fallire se quell'utente 
 ### Memorandum (`mm_`)
 | Table | Purpose |
 |---|---|
-| `mm_cards` | Le schede. `kind` vale `'nota'`, `'lista'` o `'diario'` |
+| `mm_cards` | Le schede. `kind` vale `'nota'`, `'lista'` o `'diario'`; `riservato` le tiene fuori dagli elenchi |
 | `mm_card_categories` | Associazione scheda ↔ `cm_categories` |
 | `mm_images` | Metadati delle foto (i file stanno nel bucket `mm-images`) |
 | `mm_list_items` | Voci di una lista: `text`, `done`, `position`, `done_at` |
@@ -1321,6 +1321,20 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   il tipo aperto), e il **+ crea una scheda del tipo della Tab** invece di chiedere quale.
   **📌 Fissa è l'unica che attraversa i tre tipi**, ed è la ragione per cui il badge del tipo resta
   sulla scheda anche ora che ogni Tab ne mostra uno solo.
+- **Un diario può essere 🙈 riservato** (`mm_cards.riservato`), con la spunta nella sua
+  definizione. È la stessa modalità nascosta di `events-log.html` e del launcher, tre stati:
+  spenta si vedono solo le schede normali, accesa si vede tutto, accesa col 👁 si vedono **solo**
+  le riservate. ⚠️ **Il filtro sta nella query, non nel rendering**: fuori dalla modalità nascosta
+  la riga non viene proprio letta — nasconderla a schermo la lascerebbe in chiaro a chiunque apra
+  gli strumenti del browser. Vale anche per 📌 Fissa, che quindi non la mostra.
+- La modalità la accende **AppSphere, non questa pagina**: arriva da `sessionStorage.hidden_mode`
+  (il launcher naviga con `window.location.href`), da `postMessage` e dal `BroadcastChannel`
+  `appsphere_auth`. Il pulsante 🙈/👁 compare solo quando è già accesa e alza o abbassa il solo
+  filtro; `toggleHiddenMode()` a modalità spenta non fa niente.
+- ⚠️ La spunta si legge **solo dove si vede**: `saveCard()` la considera solo per i diari, perché
+  su una nota il campo non c'è e leggerlo scriverebbe il valore rimasto dall'ultima volta. La
+  colonna però è su `mm_cards` e il filtro vale per tutti i tipi, quindi estenderla a note e liste
+  è una riga di HTML.
 - ⚠️ Il filtro categoria **non sopravvive al cambio di Tab**: le categorie di un tipo non sono
   quelle di un altro, e una Tab che si aprisse già filtrata su una categoria che lì non esiste
   sembrerebbe vuota.
