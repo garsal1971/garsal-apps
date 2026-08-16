@@ -269,8 +269,16 @@ La pagina è in **cinque sezioni**, una tabella ciascuna, tutte su questa tabell
 busta paga (`rit_*`), liquidazione della dichiarazione (`liq_*`), contributi previdenziali
 (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`). Il ✎ e il ✕ agiscono **sulla singola
 sezione** di un anno, non sull'anno intero: le cinque tabelle vengono da documenti diversi.
-`liq_esito` è l'unico importo **con segno** (rimborso > 0, debito < 0) e la colonna non ha nessun
-CHECK che lo impedisca.
+
+⚠️ **Della liquidazione si mostrano solo `liq_imponibile` e `liq_imposta_lorda`.** Le altre
+cinque voci (`liq_detrazioni`, `liq_imposta_netta`, `liq_acconti`, `liq_esito`,
+`liq_reddito_rif`) hanno i loro dati storici in `fnz_income` ma **nessuna colonna che le mostri**:
+sono state tolte da `INCOME_SECTIONS`, non cancellate. Togliere una colonna è una riga di
+JavaScript e si disfa; cancellare le righe no. Rimettendo la voce nell'elenco gli importi tornano
+a vedersi. Finché non c'è la colonna, quelle righe non vengono lette né scritte né cancellate
+dalla pagina — nemmeno dal ✕ della sezione, che agisce solo sui kind dichiarati. `liq_esito` è
+l'unico importo **con segno** (rimborso > 0, debito < 0) e la colonna non ha nessun CHECK che lo
+impedisca.
 
 ⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
 (lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730

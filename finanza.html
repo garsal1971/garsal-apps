@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.11</title>
+  <title>GarsalFinanza v1.3.12</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -561,8 +561,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.11';
-const APP_BUILD   = '2026-08-15T16:30:00Z';
+const APP_VERSION = 'v1.3.12';
+const APP_BUILD   = '2026-08-15T22:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3142,17 +3142,17 @@ const INCOME_SECTIONS = [
   },
   {
     key: 'liquidazione', icon: '🧾', title: 'Liquidazione dichiarazione',
-    sub: 'Come è finita la dichiarazione. L\'esito è l\'unico importo con segno: positivo rimborso, negativo debito.',
+    sub: 'Il reddito su cui si calcola l\'IRPEF e l\'imposta che ne risulta.',
     sommaAnni: false,
     cols: [
       { kind: 'liq_imponibile',    label: 'Imponibile' },
-      { kind: 'liq_imposta_lorda', label: 'Imposta lorda' },
-      { kind: 'liq_detrazioni',    label: 'Detrazioni' },
-      { kind: 'liq_imposta_netta', label: 'Imposta netta' },
-      { kind: 'liq_acconti',       label: 'Acconti' },
-      { kind: 'liq_esito',         label: 'Esito', signed: true, forte: true },
-      { kind: 'liq_reddito_rif',   label: 'Reddito di riferimento' },
+      { kind: 'liq_imposta_lorda', label: 'Imposta lorda', forte: true },
     ],
+    // Detrazioni, imposta netta, acconti, esito e reddito di riferimento non si mostrano più.
+    // Le loro righe (liq_detrazioni, liq_imposta_netta, liq_acconti, liq_esito,
+    // liq_reddito_rif) restano in fnz_income e non vengono toccate da questa pagina: togliere
+    // una colonna è una riga di qui, cancellare i dati non si disfa. Rimettendo la voce
+    // nell'elenco gli importi tornano a vedersi come prima.
   },
   {
     key: 'previdenza', icon: '🏛️', title: 'Contributi previdenziali',
