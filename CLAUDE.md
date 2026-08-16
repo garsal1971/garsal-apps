@@ -264,26 +264,27 @@ anno raddoppierebbe il totale in silenzio. Una casella lasciata vuota **cancella
 invece di salvare zero: «dato assente» e «zero euro» sono due cose diverse, e un importo tolto
 che restasse scritto continuerebbe a fare totale.
 
-La pagina è in **quattro sezioni**, una tabella ciascuna, tutte su questa tabella: redditi
-(`lavoro`, `pensione`, `fabbricati`, `abitazione_principale`, `reddito_complessivo`),
-liquidazione della dichiarazione (`liq_imponibile`, `liq_imposta_lorda`), contributi
-previdenziali (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`). Il ✎ e il ✕ agiscono
-**sulla singola sezione** di un anno, non sull'anno intero: le tabelle vengono da documenti
-diversi.
+La pagina è in **due sezioni**, una tabella ciascuna: redditi (`lavoro`, `pensione`,
+`fabbricati`, `abitazione_principale`, `reddito_complessivo`) e liquidazione della dichiarazione
+(`liq_imponibile`, `liq_imposta_lorda`). Il ✎ e il ✕ agiscono **sulla singola sezione** di un
+anno, non sull'anno intero: le due tabelle vengono da documenti diversi.
 
-⚠️ **Alcuni kind hanno i dati ma non hanno più una colonna**: le quattro ritenute in busta paga
-(`rit_*`, era una sezione intera) e cinque voci della liquidazione (`liq_detrazioni`,
-`liq_imposta_netta`, `liq_acconti`, `liq_esito`, `liq_reddito_rif`). Sono state tolte da
-`INCOME_SECTIONS`, **non cancellate**: togliere una voce dall'elenco è una riga di JavaScript e
-si disfa, cancellare le righe storiche no. Rimettendola, gli importi tornano a vedersi com'erano.
-Finché non c'è la colonna quelle righe non vengono scritte né cancellate dalla pagina — nemmeno
-dal ✕, che agisce solo sui kind dichiarati.
+⚠️ **Si mostra solo quello che è archiviato: nessuna colonna calcolata, nessun riquadro
+calcolato**, e per questo non esiste nessun `INCOME_CALC`. Netto in busta (lordo − ritenute),
+totale lavoro dipendente (lordo + pensione) e totale trattenuto c'erano e sono stati **tolti di
+proposito**: erano esatti — verificati su tutti i 730 disponibili — ma qui si vuole leggere
+quello che è scritto sui documenti e basta. Le formule sono nella storia di git
+(`e78fd62` e precedenti) se un giorno servissero.
 
-⚠️ **Le `rit_*` però non sono inerti**: «UniCredit netto» e il riquadro «Trattenute» si calcolano
-da lì (`INCOME_CALC.netto` e `tot_ritenute`). Funzionano sugli anni 2017-2025 già archiviati e
-resteranno vuoti per gli anni nuovi, che non hanno più dove essere inseriti — è la conseguenza
-voluta di aver tolto la sezione, non un difetto. `liq_esito` è l'unico importo **con segno**
-(rimborso > 0, debito < 0) e la colonna non ha nessun CHECK che lo impedisca.
+⚠️ **Molti kind hanno i dati ma non hanno più una colonna che li mostri**: ritenute in busta paga
+(`rit_*`), contributi previdenziali (`prev_*`), premi/welfare/cedolare (`prem_*`, `ced_*`) e
+cinque voci della liquidazione (`liq_detrazioni`, `liq_imposta_netta`, `liq_acconti`,
+`liq_esito`, `liq_reddito_rif`). Sono stati tolti da `INCOME_SECTIONS`, **non cancellati**:
+togliere una voce dall'elenco è una riga di JavaScript e si disfa, cancellare gli storici dei 730
+no. Rimettendola, gli importi tornano a vedersi com'erano. Finché non hanno una colonna quelle
+righe non vengono né scritte né cancellate dalla pagina — nemmeno dal ✕, che agisce solo sui kind
+dichiarati. `liq_esito` è l'unico importo **con segno** (rimborso > 0, debito < 0) e la colonna
+non ha nessun CHECK che lo impedisca.
 
 ⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
 (lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730
