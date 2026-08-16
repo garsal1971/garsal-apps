@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.14</title>
+  <title>GarsalFinanza v1.3.15</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -561,8 +561,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.14';
-const APP_BUILD   = '2026-08-16T09:40:00Z';
+const APP_VERSION = 'v1.3.15';
+const APP_BUILD   = '2026-08-16T10:15:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3116,10 +3116,11 @@ function renderOtherAssets() {
    dipendente e totale trattenuto c'erano e sono stati tolti di proposito: erano esatti, ma qui
    si vuole vedere quello che c'è scritto sui documenti e basta.
 
-   Restano in fnz_income, senza nessuna colonna che li mostri, i kind delle sezioni ritirate —
-   ritenute in busta paga (rit_*), contributi previdenziali (prev_*), premi/welfare/cedolare
-   (prem_*, ced_*) e cinque voci della liquidazione (liq_detrazioni, liq_imposta_netta,
-   liq_acconti, liq_esito, liq_reddito_rif). Non sono cancellati: togliere una voce da questo
+   Restano in fnz_income, senza nessuna colonna che li mostri, i kind delle sezioni e delle
+   colonne ritirate — ritenute in busta paga (rit_*), contributi previdenziali (prev_*),
+   premi/welfare/cedolare (prem_*, ced_*), cinque voci della liquidazione (liq_detrazioni,
+   liq_imposta_netta, liq_acconti, liq_esito, liq_reddito_rif) e tre dei redditi (fabbricati,
+   abitazione_principale, reddito_complessivo). Non sono cancellati: togliere una voce da questo
    elenco è una riga di JavaScript e si disfa, cancellare gli storici dei 730 no. Finché non
    hanno una colonna non vengono né scritti né cancellati dalla pagina, nemmeno dal ✕. */
 const INCOME_SECTIONS = [
@@ -3128,11 +3129,13 @@ const INCOME_SECTIONS = [
     sub: 'Quanto è entrato nell\'anno, per fonte.',
     sommaAnni: false,
     cols: [
-      { kind: 'lavoro',                label: 'UniCredit lordo' },
-      { kind: 'pensione',              label: 'Pensione INPS' },
-      { kind: 'fabbricati',            label: 'Fabbricati' },
-      { kind: 'abitazione_principale', label: 'Ab. principale' },
-      { kind: 'reddito_complessivo',   label: 'Reddito compl.', forte: true },
+      { kind: 'lavoro',       label: 'UniCredit lordo' },
+      { kind: 'pensione',     label: 'Pensione INPS' },
+      // Le due voci libere: tutto quello che non è la busta UniCredit né la pensione INPS. Si
+      // scrivono a mano come le altre, e restano separate lordo/netto perché sommarle fra loro
+      // darebbe un numero che non vuol dire niente.
+      { kind: 'altri_lordi',  label: 'Altri lordi' },
+      { kind: 'altri_netti',  label: 'Altri netti' },
     ],
   },
   {
@@ -3140,8 +3143,11 @@ const INCOME_SECTIONS = [
     sub: 'Il reddito su cui si calcola l\'IRPEF e l\'imposta che ne risulta.',
     sommaAnni: false,
     cols: [
-      { kind: 'liq_imponibile',    label: 'Imponibile' },
-      { kind: 'liq_imposta_lorda', label: 'Imposta lorda', forte: true },
+      { kind: 'liq_imponibile',     label: 'Imponibile' },
+      { kind: 'liq_imposta_lorda',  label: 'Imposta lorda' },
+      // Voce nuova, da scrivere a mano: è quello che resta in tasca, e non si ricava da
+      // imponibile e imposta lorda (in mezzo ci sono detrazioni, addizionali e acconti).
+      { kind: 'liq_reddito_netto',  label: 'Reddito netto', forte: true },
     ],
     // Detrazioni, imposta netta, acconti, esito e reddito di riferimento non si mostrano più.
     // Le loro righe (liq_detrazioni, liq_imposta_netta, liq_acconti, liq_esito,
@@ -3217,7 +3223,7 @@ function renderReddito() {
     </div>
     <div class="kpi-grid">
       ${riquadro('lavoro', 'UniCredit lordo')}
-      ${riquadro('reddito_complessivo', 'Reddito complessivo')}
+      ${riquadro('liq_reddito_netto', 'Reddito netto')}
       ${/* Conta gli anni che hanno qualcosa nelle tabelle che si vedono: un anno che porta solo
             voci di una sezione ritirata è una riga vuota a schermo, e contarlo direbbe il falso. */''}
       ${kpi('Anni compilati',
@@ -3282,11 +3288,12 @@ function drawIncomeChart(allYears, byYear) {
   if (S.charts['reddito']) { S.charts['reddito'].destroy(); delete S.charts['reddito']; }
   const years = allYears.filter(y => byYear[y]?.lavoro != null).slice().reverse();
   if (years.length < 2) return;
+  // Solo importi LORDI, e solo quelli che hanno una colonna in tabella: impilare un netto sopra
+  // un lordo darebbe una torre che non corrisponde a niente.
   const fonti = [
-    { kind: 'lavoro',                label: 'Lavoro (lordo)' },
-    { kind: 'pensione',              label: 'Pensione' },
-    { kind: 'fabbricati',            label: 'Fabbricati' },
-    { kind: 'abitazione_principale', label: 'Ab. principale' },
+    { kind: 'lavoro',      label: 'UniCredit lordo' },
+    { kind: 'pensione',    label: 'Pensione INPS' },
+    { kind: 'altri_lordi', label: 'Altri lordi' },
   ];
   S.charts['reddito'] = new Chart(canvas.getContext('2d'), {
     type: 'bar',
