@@ -306,6 +306,37 @@ I dati storici 2017-2025 ricavati dai 730 e dalle CU sono in
 e intestato all'utente cercato per email, e salta senza fallire se quell'utente non esiste
 (progetto dev).
 
+### Memorandum (`mm_`)
+| Table | Purpose |
+|---|---|
+| `mm_cards` | Le schede. `kind` vale `'nota'`, `'lista'` o `'diario'` |
+| `mm_card_categories` | Associazione scheda ↔ `cm_categories` |
+| `mm_images` | Metadati delle foto (i file stanno nel bucket `mm-images`) |
+| `mm_list_items` | Voci di una lista: `text`, `done`, `position`, `done_at` |
+| `mm_diary_metrics` | Le misure di un diario: `kind` `'scala'` (con `min_value`/`max_value`) \| `'numero'` (con `unit`) \| `'bool'` |
+| `mm_diary_entries` | Le registrazioni: `entry_date`, `note`, e `measures` jsonb |
+
+**Una scheda è una riga sola in tutt'e tre i casi**: il tipo è una colonna, non una tabella a
+parte, quindi ricerca, categorie, colore, 📌 e foto valgono uguale per note, liste e diari.
+`kind` ha `DEFAULT 'nota'`: le schede nate prima della colonna restano quello che erano.
+
+`mm_diary_entries.measures` è `{ "<id della misura>": numero|booleano }`. Le **misure sono righe
+vere e i valori no**, ed è voluto: una misura deve sopravvivere alle registrazioni che la citano
+(cambiarle nome non deve riscrivere lo storico), mentre i valori si leggono e si scrivono sempre
+tutti insieme, quindi una tabella in più sarebbe solo una join in più. Per la stessa ragione le
+misure si **aggiornano riga per riga e non si cancellano per ricrearle** (`syncDiaryMetrics`):
+ricreandole cambierebbero id e tutte le registrazioni passate resterebbero senza nome.
+
+⚠️ **Una misura non registrata non sta in `measures`**, non ci sta come zero: «non l'ho misurata»
+e «vale zero» sono due cose diverse, e uno slider lasciato a metà scriverebbe la seconda al posto
+della prima. Nella schermata di registrazione una misura non toccata mostra `—` e non finisce
+nell'archivio; il pulsante *Non l'ho misurata* la toglie anche a posteriori. È la stessa scelta
+della casella vuota in `fnz_income`.
+
+Togliere una misura da un diario **non cancella le registrazioni**: i valori restano scritti in
+`measures` con una chiave che non ha più una riga, e l'app li mostra come *misura tolta* invece di
+farli sparire. L'avviso prima di togliere lo dice.
+
 ### Weight Quest (`ps_`)
 | Table | Purpose |
 |---|---|
@@ -956,6 +987,27 @@ testo.
 Restano su `memo.html` la tavolozza del colore personalizzato (qui ci sono i sette campioni) e la
 scala dei caratteri delle schede, che su Android la decide già il sistema.
 
+#### ⚠️ Liste e diari: il nativo non li conosce ancora
+
+`mm_cards.kind`, `mm_list_items`, `mm_diary_metrics` e `mm_diary_entries` esistono **solo nel web**.
+Sul nativo una lista e un diario compaiono nell'elenco come **note qualunque**: si vede il titolo e
+il contenuto — che per un diario è lo scopo — ma non le voci, non le misure e non le registrazioni.
+
+Il dato però **non si rovina**, ed è la ragione per cui la cosa si può lasciare così finché serve:
+`MemoRepository.salva()` fa un `update` dei soli campi che conosce (`title`, `content`, `pinned`,
+`color`, `updated_at`, `user_id`), quindi `kind` sopravvive a una modifica fatta dal telefono, e le
+righe figlie non le tocca nessuno. Le due cose da non fare senza portare anche il nativo:
+
+- **non far scrivere `kind` al nativo** con un `update` di riga intera: azzererebbe il tipo di una
+  scheda e lista e diario diventerebbero note, con le loro righe figlie ancora lì e più nessuno che
+  le mostri;
+- **una scheda creata dal nativo nasce `'nota'`** per via del `DEFAULT`, che è il comportamento
+  giusto — ma vuol dire che da lì una lista non si può creare, non che il tipo sia opzionale.
+
+Portarle vorrebbe dire tre schermate (voci spuntabili, misure, raccolta delle misure) e le stesse
+regole di qua: la spunta ottimistica con rollback, le misure aggiornate riga per riga e mai
+ricreate, e la misura non toccata che **non** finisce in `measures`.
+
 ### ⚠️ Abituati nativo: le regole stanno nel database, non in Kotlin
 
 `abituati/` porta in nativo le abitudini di `habit-tracker.html`: la scheda
@@ -1155,7 +1207,10 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   ricostruiti e contati lo stesso, confronto peso/target **a un decimale**, `target_weight`
   congelato nella riga. Il nativo porta solo pesata, tabella e grafico: obiettivi, statistiche,
   dieta, sync e premi restano di là. Dettagli nella sezione qui sopra.
-- **Memo** — il contenuto è **HTML**: il nativo lo converte in marcatori per modificarlo e lo
+- **Memo** — ⚠️ **liste e diari esistono solo nel web**: sul nativo compaiono come note qualunque,
+  senza voci né misure né registrazioni. Il tipo sopravvive comunque a una modifica dal telefono,
+  perché il nativo aggiorna i soli campi che conosce. Il contenuto è **HTML**: il nativo lo
+  converte in marcatori per modificarlo e lo
   riconverte salvando (`MemoHtml`), quindi ogni voce della barra del web deve avere il suo
   marcatore di qua. Categorie riscritte da capo a ogni salvataggio, file del bucket cancellati
   prima della riga. Dettagli nella sezione qui sopra.
@@ -1227,6 +1282,32 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   (`wq_mpts_<id>`): nessuna tabella nuova, quindi il premio è **per dispositivo** — chi apre
   l'app da un altro telefono si ritrova la stellina di nuovo da estrarre. Spostarlo sul DB
   vorrebbe dire una colonna/tabella nuova, e quelle si chiedono prima.
+
+### `memo.html` — Memorandum
+- Schede con testo formattato, foto con OCR, categorie condivise, colore e 📌 in evidenza.
+- **Tre tipi di scheda** (`mm_cards.kind`), scelti col + galleggiante, che apre un popup invece di
+  creare subito una nota:
+  - **📄 Nota** — quello che c'era prima, e resta il default;
+  - **☑️ Lista** — la nota diventa facoltativa e la scheda porta delle voci spuntabili
+    (`mm_list_items`);
+  - **📊 Diario** — il contenuto è lo **scopo** («perché sto misurando»), e la scheda porta le
+    **misure** da raccogliere (`mm_diary_metrics`) e le **registrazioni** (`mm_diary_entries`).
+- **Una nota si apre in modifica, una lista e un diario no**: hanno una vista propria
+  (`openListView` / `openDiaryView`), perché la cosa che si fa più spesso su di loro — spuntare una
+  voce, aggiungere una registrazione — non è modificare la scheda. All'editor si arriva da lì con
+  *✏️ Modifica scheda*. `openCard()` è il bivio.
+- La striscia di filtri **Tutte / Note / Liste / Diari** sta sopra il filtro per categoria, e i
+  conteggi delle categorie seguono il tipo scelto.
+- **Le spunte di una lista sono ottimistiche con rollback** (come Spuntiamola): la voce cambia
+  subito e torna indietro se il DB rifiuta, così non resta a schermo una spunta finta che sparisce
+  al ricarico.
+- **La registrazione di un diario rimostra lo scopo della scheda** prima di chiedere le misure: è
+  il promemoria di come vanno lette, e senza si finisce a dare voti a caso dopo un mese. Una scala
+  si dà con lo slider o con la casella, un numero con la casella e la sua unità, un sì/no con due
+  pulsanti che si ripremono per annullare.
+- Il riepilogo per misura mostra l'ultimo valore e le **ultime 12 registrazioni in miniatura**
+  (`.spark`, div e non Chart.js — questa pagina non lo carica). Il fondo scala è quello della
+  misura per le scale, quello osservato per i numeri liberi.
 
 ### `casarosa.html` — Cassa Casa Rosa
 - Movimenti e saldo della cassa di Casa Rosa (`cntrs_transactions`, `cntrs_categories`,

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.26</title>
+    <title>Memorandum v1.0.28</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -478,6 +478,155 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
+        /* ── TIPO SCHEDA (nota / lista / diario) ── */
+        .kind-filter { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+        .kind-tab {
+            padding: 0.3rem 0.7rem; border: 2px solid var(--border); background: white;
+            cursor: pointer; font-family: 'Darker Grotesque', sans-serif;
+            font-size: 0.95rem; font-weight: 700; color: var(--muted);
+            transition: all 0.15s; white-space: nowrap;
+        }
+        .kind-tab:hover { border-color: var(--accent); color: var(--accent); }
+        .kind-tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+        .kind-badge {
+            font-size: 0.68rem; font-weight: 700; padding: 0.1rem 0.4rem;
+            border-radius: 3px; text-transform: uppercase; letter-spacing: 0.4px;
+            flex-shrink: 0; color: white;
+        }
+        .kind-badge.lista  { background: var(--success); }
+        .kind-badge.diario { background: var(--secondary); }
+
+        /* barra di avanzamento della lista, in fondo alla scheda */
+        .list-progress {
+            height: 6px; background: var(--border); overflow: hidden; margin-top: 0.6rem;
+        }
+        .list-progress > i { display: block; height: 100%; background: var(--success); }
+
+        /* ── VOCI DI LISTA ── */
+        .li-row {
+            display: flex; align-items: flex-start; gap: 0.6rem;
+            padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--border);
+        }
+        .li-row:last-child { border-bottom: none; }
+        .li-check {
+            width: 22px; height: 22px; flex-shrink: 0; cursor: pointer;
+            accent-color: var(--success); margin-top: 2px;
+        }
+        .li-text {
+            flex: 1; font-size: 1.05rem; line-height: 1.4; word-break: break-word;
+            cursor: pointer;
+        }
+        .li-row.done .li-text { text-decoration: line-through; color: var(--muted); }
+        .li-del {
+            background: none; border: none; cursor: pointer; color: var(--muted);
+            font-size: 1rem; padding: 0 0.3rem; flex-shrink: 0;
+        }
+        .li-del:hover { color: var(--danger); }
+        .li-add { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+        .li-add input { flex: 1; }
+
+        /* ── MISURE DEL DIARIO ── */
+        .metric-row {
+            border: 2px solid var(--border); background: var(--input-bg);
+            padding: 0.6rem; margin-bottom: 0.6rem;
+        }
+        .metric-row-top { display: flex; gap: 0.5rem; align-items: center; }
+        .metric-row-top input[type=text] { flex: 1; }
+        .metric-row-opts {
+            display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+            margin-top: 0.5rem; font-size: 0.9rem; color: var(--muted);
+        }
+        .metric-row-opts input { width: 5.5rem; }
+        .metric-presets { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+        .metric-preset {
+            padding: 0.15rem 0.45rem; border: 1px solid var(--border); background: white;
+            cursor: pointer; font-family: 'Space Mono', monospace; font-size: 0.7rem;
+            transition: all 0.15s;
+        }
+        .metric-preset:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* ── VISTA LISTA / DIARIO ── */
+        .view-note {
+            border-left: 4px solid var(--accent); background: var(--input-bg);
+            padding: 0.75rem 0.9rem; margin-bottom: 1.25rem;
+            font-size: 1.02rem; line-height: 1.6; max-height: 260px; overflow-y: auto;
+        }
+        .view-note :is(h1,h2) { font-size: 1.2rem; font-weight: 700; margin: 0.3rem 0; }
+        .view-note ul, .view-note ol { padding-left: 1.4rem; margin: 0.3rem 0; }
+        .view-note img { max-width: 100%; height: auto; }
+        .view-note a { color: var(--accent); }
+        .view-section-title {
+            font-size: 0.85rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--muted); margin-bottom: 0.5rem;
+        }
+
+        /* riepilogo per misura, con lo storico in miniatura */
+        .metric-card {
+            border: 2px solid var(--border); padding: 0.6rem 0.7rem; margin-bottom: 0.5rem;
+        }
+        .metric-card-head {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem;
+        }
+        .metric-card-name { font-weight: 700; font-size: 1.05rem; }
+        .metric-card-last { font-family: 'Space Mono', monospace; font-size: 1rem; color: var(--accent); }
+        .metric-card-range { font-size: 0.78rem; color: var(--muted); }
+        .spark { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-top: 0.4rem; }
+        /* max-width: con due o tre registrazioni le colonne a flex:1 diventano
+           blocchi larghi mezzo riquadro, e non si legge più come uno storico */
+        .spark > i {
+            flex: 1; max-width: 26px; background: var(--secondary); min-height: 2px;
+            opacity: 0.75; transition: opacity 0.15s;
+        }
+        .spark > i:last-child { background: var(--primary); opacity: 1; }
+
+        /* i due pulsanti del sì/no larghi uguali: il bordo del ghost
+           basta a farli venire di due misure diverse */
+        .measure-bool { display: flex; gap: 0.5rem; }
+        .measure-bool .btn { min-width: 5rem; border: 2px solid transparent; }
+
+        /* registrazioni */
+        .entry-row {
+            border: 1px solid var(--border); padding: 0.6rem 0.7rem; margin-bottom: 0.5rem;
+            background: white;
+        }
+        .entry-row-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+            margin-bottom: 0.4rem;
+        }
+        .entry-date { font-family: 'Space Mono', monospace; font-size: 0.85rem; font-weight: 700; }
+        .entry-note { font-size: 0.95rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.45; }
+        .entry-vals { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .entry-val {
+            font-size: 0.8rem; padding: 0.15rem 0.45rem; background: var(--input-bg);
+            border: 1px solid var(--border);
+        }
+        .entry-val b { font-family: 'Space Mono', monospace; }
+        .entry-val.orfana { border-style: dashed; color: var(--muted); }
+
+        /* ── RACCOLTA DELLE MISURE ── */
+        .measure-box {
+            border: 2px solid var(--border); padding: 0.75rem; margin-bottom: 0.75rem;
+        }
+        .measure-head {
+            display: flex; align-items: baseline; justify-content: space-between;
+            gap: 0.5rem; margin-bottom: 0.5rem;
+        }
+        .measure-name { font-weight: 700; font-size: 1.1rem; }
+        .measure-value {
+            font-family: 'Space Mono', monospace; font-size: 1.3rem; font-weight: 700;
+            color: var(--accent); min-width: 3rem; text-align: right;
+        }
+        .measure-scale { display: flex; align-items: center; gap: 0.6rem; }
+        .measure-scale input[type=range] {
+            flex: 1; height: 8px; accent-color: var(--primary);
+            -webkit-appearance: auto; appearance: auto;
+        }
+        .measure-scale .lim { font-size: 0.75rem; color: var(--muted); font-family: 'Space Mono', monospace; }
+        .measure-num { display: flex; align-items: center; gap: 0.5rem; }
+        .measure-num input { width: 8rem; }
+        .measure-unit { font-size: 0.95rem; color: var(--muted); font-weight: 700; }
+
         /* ── MOBILE ── */
         @media (max-width: 768px) {
             .app-container { grid-template-columns: 1fr; }
@@ -600,6 +749,13 @@
                 </select>
             </div>
 
+            <div class="kind-filter" id="kindFilter">
+                <button class="kind-tab active" data-kind="" onclick="setKindFilter('')">Tutte</button>
+                <button class="kind-tab" data-kind="nota"   onclick="setKindFilter('nota')">📄 Note</button>
+                <button class="kind-tab" data-kind="lista"  onclick="setKindFilter('lista')">☑️ Liste</button>
+                <button class="kind-tab" data-kind="diario" onclick="setKindFilter('diario')">📊 Diari</button>
+            </div>
+
             <div style="padding:0 0 0.75rem 0;">
                 <select id="catFilterSelect" class="form-input" style="width:100%;" onchange="setCatFilter(this.value||null)">
                     <option value="">Tutte le categorie</option>
@@ -687,7 +843,31 @@
 </div>
 
 <!-- FAB -->
-<button class="fab" onclick="openCardModal(null)" title="Nuova scheda">+</button>
+<button class="fab" onclick="openNewCardPopup()" title="Nuova scheda">+</button>
+
+<!-- ========================================================= -->
+<!-- POPUP: TIPO DELLA NUOVA SCHEDA                             -->
+<!-- ========================================================= -->
+<div class="img-popup-overlay" id="newCardOverlay" onclick="closeNewCardPopup(event)">
+    <div class="img-popup" onclick="event.stopPropagation()">
+        <div class="img-popup-title">Cosa vuoi creare?</div>
+        <div class="img-popup-btns" style="grid-template-columns:1fr 1fr 1fr;">
+            <button type="button" class="img-popup-btn" onclick="newCardOfKind('nota')">
+                <span class="btn-icon">📄</span>
+                Nota
+            </button>
+            <button type="button" class="img-popup-btn" onclick="newCardOfKind('lista')">
+                <span class="btn-icon">☑️</span>
+                Lista
+            </button>
+            <button type="button" class="img-popup-btn" onclick="newCardOfKind('diario')">
+                <span class="btn-icon">📊</span>
+                Diario
+            </button>
+        </div>
+        <button type="button" class="img-popup-cancel" onclick="closeNewCardPopup()">Annulla</button>
+    </div>
+</div>
 
 <!-- ========================================================= -->
 <!-- MODAL: CARD EDITOR                                        -->
@@ -707,7 +887,9 @@
 
         <!-- EDITOR TESTO -->
         <div class="form-group">
-            <label class="form-label">Contenuto</label>
+            <label class="form-label" id="cardContentLabel">Contenuto</label>
+            <div class="editor-hint" id="cardContentHint"
+                 style="display:none;font-size:0.9rem;color:var(--muted);margin-bottom:0.4rem;"></div>
             <div class="editor-toolbar" id="editorToolbar">
                 <button class="toolbar-btn" onclick="execCmd('bold')" title="Grassetto" data-cmd="bold"><b>B</b></button>
                 <button class="toolbar-btn" onclick="execCmd('italic')" title="Corsivo" data-cmd="italic"><i>I</i></button>
@@ -730,6 +912,29 @@
                  onkeyup="updateToolbarState()" onmouseup="updateToolbarState()"
                  onfocus="updateToolbarState()">
             </div>
+        </div>
+
+        <!-- VOCI DELLA LISTA (solo kind = lista) -->
+        <div class="form-group" id="listSection" style="display:none;">
+            <label class="form-label">Voci della lista</label>
+            <div id="editorItems" style="border:2px solid var(--border);background:white;"></div>
+            <div class="li-add">
+                <input type="text" class="form-input" id="newItemText" placeholder="Aggiungi una voce…"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();addEditorItem();}">
+                <button type="button" class="btn btn-accent" onclick="addEditorItem()">Aggiungi</button>
+            </div>
+        </div>
+
+        <!-- MISURE DEL DIARIO (solo kind = diario) -->
+        <div class="form-group" id="diarySection" style="display:none;">
+            <label class="form-label">Cosa misurare</label>
+            <div style="font-size:0.9rem;color:var(--muted);margin-bottom:0.6rem;">
+                Ogni misura viene chiesta a ogni registrazione. Una <b>scala</b> ha un minimo e un
+                massimo (1-20, 1-100…), un <b>numero</b> è libero e può avere un'unità di misura,
+                un <b>sì/no</b> vale 0 o 1 nei riepiloghi.
+            </div>
+            <div id="editorMetrics"></div>
+            <button type="button" class="btn btn-accent btn-small" onclick="addEditorMetric()">➕ Aggiungi misura</button>
         </div>
 
         <!-- CATEGORIE -->
@@ -804,6 +1009,112 @@
 </div>
 
 <!-- ========================================================= -->
+<!-- MODAL: VISTA LISTA                                        -->
+<!-- ========================================================= -->
+<div class="modal" id="listViewModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <div class="modal-title" id="listViewTitle">Lista</div>
+            <button class="modal-close" onclick="closeListView()">✕</button>
+        </div>
+
+        <div id="listViewNote" class="view-note" style="display:none;"></div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;margin-bottom:0.4rem;">
+            <div class="view-section-title" style="margin:0;" id="listViewCount">—</div>
+            <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.9rem;color:var(--muted);cursor:pointer;">
+                <input type="checkbox" id="listHideDone" onchange="renderListView()" style="width:16px;height:16px;cursor:pointer;">
+                Nascondi le fatte
+            </label>
+        </div>
+        <div class="list-progress" style="margin-bottom:0.75rem;"><i id="listViewBar" style="width:0%"></i></div>
+
+        <div id="listViewItems" style="border:2px solid var(--border);background:white;"></div>
+
+        <div class="li-add">
+            <input type="text" class="form-input" id="listViewNewItem" placeholder="Aggiungi una voce…"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();addItemFromView();}">
+            <button type="button" class="btn btn-accent" onclick="addItemFromView()">Aggiungi</button>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;gap:0.75rem;">
+            <button class="btn btn-ghost" onclick="editFromView()">✏️ Modifica scheda</button>
+            <button class="btn btn-secondary" onclick="closeListView()">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- MODAL: VISTA DIARIO                                       -->
+<!-- ========================================================= -->
+<div class="modal" id="diaryViewModal">
+    <div class="modal-content" style="max-width:720px;">
+        <div class="modal-header">
+            <div class="modal-title" id="diaryViewTitle">Diario</div>
+            <button class="modal-close" onclick="closeDiaryView()">✕</button>
+        </div>
+
+        <div id="diaryViewNote" class="view-note" style="display:none;"></div>
+
+        <button class="btn btn-primary" style="width:100%;margin-bottom:1.25rem;padding:0.7rem;"
+                onclick="openEntryModal(null)">
+            ➕ Nuova registrazione
+        </button>
+
+        <div id="diaryMetricsSummary" style="margin-bottom:1.25rem;"></div>
+
+        <div class="view-section-title">Registrazioni</div>
+        <div id="diaryEntriesList"></div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;gap:0.75rem;">
+            <button class="btn btn-ghost" onclick="editFromView()">✏️ Modifica scheda</button>
+            <button class="btn btn-secondary" onclick="closeDiaryView()">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- MODAL: REGISTRAZIONE DEL DIARIO                           -->
+<!-- ========================================================= -->
+<div class="modal" id="entryModal">
+    <div class="modal-content" style="max-width:620px;">
+        <div class="modal-header">
+            <div class="modal-title" id="entryModalTitle">Nuova registrazione</div>
+            <button class="modal-close" onclick="closeEntryModal()">✕</button>
+        </div>
+
+        <!-- la nota del diario: è il promemoria di cosa si sta misurando e perché -->
+        <div id="entryNote" class="view-note" style="display:none;"></div>
+
+        <div class="form-group">
+            <label class="form-label">Data</label>
+            <input type="date" class="form-input" id="entryDate" style="max-width:14rem;">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Misure</label>
+            <div id="entryMeasures"></div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Commento <span style="font-weight:400;text-transform:none;color:var(--muted)">(facoltativo)</span></label>
+            <textarea class="form-input" id="entryComment" rows="3"
+                      placeholder="Cos'è successo oggi…" style="resize:vertical;"></textarea>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;gap:0.75rem;">
+            <button class="btn btn-danger" id="deleteEntryBtn" onclick="deleteCurrentEntry()" style="display:none;">
+                Elimina
+            </button>
+            <div style="display:flex;gap:0.75rem;margin-left:auto;">
+                <button class="btn btn-secondary" onclick="closeEntryModal()">Annulla</button>
+                <button class="btn btn-primary" id="saveEntryBtn" onclick="saveEntry()">💾 Registra</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
 <!-- IMAGE VIEWER MODAL                                        -->
 <!-- ========================================================= -->
 <!-- ── IMG POPUP ── -->
@@ -868,8 +1179,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.27';
-var BUILD_TIME  = '2026-06-02T15:00:00Z';
+var APP_VERSION = 'v1.0.28';
+var BUILD_TIME  = '2026-08-16T14:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -910,6 +1221,34 @@ let currentCatFilter = null; // id categoria filtro sidebar
 
 // stato ricerca
 let searchQuery = '';
+
+// ── LISTE E DIARIO ──────────────────────────────────────────
+// Una scheda è una nota, una lista o un diario (mm_cards.kind).
+// Voci, misure e registrazioni si caricano solo quando si apre
+// la scheda: nell'elenco bastano i conteggi, che arrivano già
+// con la query delle schede.
+const KINDS = {
+    nota:   { icon: '📄', label: 'Nota'   },
+    lista:  { icon: '☑️', label: 'Lista'  },
+    diario: { icon: '📊', label: 'Diario' }
+};
+
+let currentKindFilter = '';   // '' | 'nota' | 'lista' | 'diario'
+
+let editorKind       = 'nota';
+let editorItems      = [];    // voci in modifica    { id?, tempId?, text, done, done_at }
+let editorMetrics    = [];    // misure in modifica  { id?, tempId?, name, kind, min_value, max_value, unit }
+let deletedItemIds   = [];
+let deletedMetricIds = [];
+
+let viewCardId    = null;     // scheda aperta in vista lista/diario
+let viewItems     = [];       // voci della lista aperta
+let viewMetrics   = [];       // misure del diario aperto
+let viewEntries   = [];       // registrazioni del diario aperto
+let editingEntryId = null;    // registrazione in modifica
+
+let _tempSeq = 0;
+function tempId() { return 'tmp-' + (++_tempSeq); }
 
 // ============================================================
 // AUTH
@@ -1048,18 +1387,58 @@ async function loadCards() {
         .select(`
             *,
             mm_card_categories(category_id),
-            mm_images(id)
+            mm_images(id),
+            mm_list_items(id, done),
+            mm_diary_entries(id, entry_date)
         `)
         .order('pinned', { ascending: false })
         .order('updated_at', { ascending: false });
 
     if (error) { if (handleAuthError(error)) return; console.error('loadCards:', error); return; }
 
-    cards = (data || []).map(c => ({
-        ...c,
-        categoryIds: (c.mm_card_categories || []).map(r => r.category_id),
-        imagesCount: (c.mm_images || []).length
-    }));
+    cards = (data || []).map(c => {
+        const items   = c.mm_list_items    || [];
+        const entries = c.mm_diary_entries || [];
+        return {
+            ...c,
+            kind:        c.kind || 'nota',
+            categoryIds: (c.mm_card_categories || []).map(r => r.category_id),
+            imagesCount: (c.mm_images || []).length,
+            itemsTotal:  items.length,
+            itemsDone:   items.filter(i => i.done).length,
+            entriesCount: entries.length,
+            lastEntryDate: entries.length
+                ? entries.map(e => e.entry_date).sort().slice(-1)[0]
+                : null
+        };
+    });
+}
+
+// ── voci di una lista ──
+async function loadListItems(cardId) {
+    const { data, error } = await sb.from('mm_list_items')
+        .select('*').eq('card_id', cardId)
+        .order('position').order('created_at');
+    if (error) { if (handleAuthError(error)) return []; console.error('loadListItems:', error); return []; }
+    return data || [];
+}
+
+// ── misure e registrazioni di un diario ──
+async function loadDiaryMetrics(cardId) {
+    const { data, error } = await sb.from('mm_diary_metrics')
+        .select('*').eq('card_id', cardId)
+        .order('position').order('created_at');
+    if (error) { if (handleAuthError(error)) return []; console.error('loadDiaryMetrics:', error); return []; }
+    return data || [];
+}
+
+async function loadDiaryEntries(cardId) {
+    const { data, error } = await sb.from('mm_diary_entries')
+        .select('*').eq('card_id', cardId)
+        .order('entry_date', { ascending: false })
+        .order('created_at', { ascending: false });
+    if (error) { if (handleAuthError(error)) return []; console.error('loadDiaryEntries:', error); return []; }
+    return data || [];
 }
 
 async function loadCardImages(cardId) {
@@ -1102,6 +1481,10 @@ function closeSidebar() {
 // ============================================================
 function getFilteredCards() {
     let list = [...cards];
+
+    if (currentKindFilter) {
+        list = list.filter(c => c.kind === currentKindFilter);
+    }
 
     if (currentCatFilter) {
         list = list.filter(c => c.categoryIds.includes(currentCatFilter));
@@ -1159,30 +1542,75 @@ function renderCardTile(c) {
     const pin      = c.pinned ? '<span class="pin-badge">📌</span>' : '';
     const imgBadge = c.imagesCount > 0 ? `<span class="memo-card-img-count">📷 ${c.imagesCount}</span>` : '';
 
-    return `<div class="memo-card${c.pinned?' pinned':''}" onclick="openCardModal('${c.id}')">
+    // il tipo si vede sulla scheda: una lista e un diario si aprono
+    // diversamente da una nota, e deve saperlo prima di toccarli
+    const badge = c.kind !== 'nota'
+        ? `<span class="kind-badge ${c.kind}">${KINDS[c.kind].icon} ${KINDS[c.kind].label}</span>`
+        : '';
+
+    let extra = '';
+    if (c.kind === 'lista' && c.itemsTotal > 0) {
+        const pct = Math.round(c.itemsDone / c.itemsTotal * 100);
+        extra = `<div class="list-progress" title="${c.itemsDone} di ${c.itemsTotal}"><i style="width:${pct}%"></i></div>`;
+    }
+
+    let meta = imgBadge;
+    if (c.kind === 'lista') {
+        meta = `<span class="memo-card-img-count">☑️ ${c.itemsDone}/${c.itemsTotal}</span>` + imgBadge;
+    } else if (c.kind === 'diario') {
+        const last = c.lastEntryDate ? ' · ultima ' + fmtDay(c.lastEntryDate) : '';
+        meta = `<span class="memo-card-img-count">📊 ${c.entriesCount}${last}</span>` + imgBadge;
+    }
+
+    return `<div class="memo-card${c.pinned?' pinned':''}" onclick="openCard('${c.id}')">
         <div class="memo-card-color-bar" style="background:${barColor}"></div>
         <div class="memo-card-body">
             <div class="memo-card-header">
                 <div class="memo-card-title">${escHtml(c.title) || '<em style="opacity:0.4">Senza titolo</em>'}</div>
+                ${badge}
                 ${pin}
             </div>
             <div class="memo-card-excerpt">${escHtml(excerpt)}</div>
+            ${extra}
             ${cats ? `<div class="cat-chips">${cats}</div>` : ''}
         </div>
         <div class="memo-card-footer">
             <span class="memo-card-date">${dateStr}</span>
-            <div class="memo-card-meta">${imgBadge}</div>
+            <div class="memo-card-meta">${meta}</div>
         </div>
     </div>`;
+}
+
+// Una nota si apre in modifica, come sempre; lista e diario hanno
+// una vista propria, perché la cosa che si fa più spesso — spuntare
+// una voce, aggiungere una registrazione — non è modificare la scheda.
+function openCard(cardId) {
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+    if (card.kind === 'lista')  return openListView(cardId);
+    if (card.kind === 'diario') return openDiaryView(cardId);
+    return openCardModal(cardId);
+}
+
+function setKindFilter(kind) {
+    currentKindFilter = kind || '';
+    document.querySelectorAll('#kindFilter .kind-tab').forEach(t => {
+        t.classList.toggle('active', (t.dataset.kind || '') === currentKindFilter);
+    });
+    renderCatFilters();
+    renderCards();
 }
 
 function renderCatFilters() {
     const sel = document.getElementById('catFilterSelect');
     if (!sel) return;
+    // i conteggi seguono il filtro per tipo: con "Liste" attivo, una
+    // categoria che ha solo note deve mostrare 0, non il totale
+    const pool = currentKindFilter ? cards.filter(c => c.kind === currentKindFilter) : cards;
     const countByCat = {};
-    cards.forEach(c => c.categoryIds.forEach(cid => { countByCat[cid] = (countByCat[cid]||0)+1; }));
+    pool.forEach(c => c.categoryIds.forEach(cid => { countByCat[cid] = (countByCat[cid]||0)+1; }));
 
-    let html = `<option value="">Tutte le categorie (${cards.length})</option>`;
+    let html = `<option value="">Tutte le categorie (${pool.length})</option>`;
     categories.forEach(cat => {
         const cnt = countByCat[cat.id] || 0;
         const sel = currentCatFilter === cat.id ? ' selected' : '';
@@ -1223,27 +1651,32 @@ function clearSearch() {
 // ============================================================
 // CARD MODAL — OPEN
 // ============================================================
-async function openCardModal(cardId) {
+async function openCardModal(cardId, kind) {
     editingCardId  = cardId;
     selectedCatIds = [];
     selectedColor  = '#FFFFFF';
     pendingImages  = [];
     existingImages = [];
+    editorItems      = [];
+    editorMetrics    = [];
+    deletedItemIds   = [];
+    deletedMetricIds = [];
+    editorKind = kind || 'nota';
 
     document.getElementById('cardTitle').value   = '';
     document.getElementById('editorArea').innerHTML = '';
     document.getElementById('cardPinned').checked  = false;
     document.getElementById('deletCardBtn').style.display = 'none';
     document.getElementById('imagesGrid').innerHTML = '';
+    document.getElementById('newItemText').value = '';
     renderCatMulti();
     renderCatDropdownList();
     selectColor('#FFFFFF', document.querySelector('.color-swatch[data-color="#FFFFFF"]'));
 
     if (cardId) {
-        document.getElementById('cardModalTitle').textContent = 'Modifica scheda';
-        document.getElementById('deletCardBtn').style.display = 'block';
         const card = cards.find(c => c.id === cardId);
         if (card) {
+            editorKind = card.kind || 'nota';
             document.getElementById('cardTitle').value      = card.title;
             document.getElementById('editorArea').innerHTML = card.content;
             document.getElementById('cardPinned').checked   = card.pinned;
@@ -1252,18 +1685,61 @@ async function openCardModal(cardId) {
             selectColor(selectedColor, null, true);
             renderCatMulti();
             renderCatDropdownList();
-
-            // carica immagini
-            showToast('Caricamento immagini…');
-            existingImages = await loadCardImages(cardId);
-            renderImagesGrid();
         }
+        document.getElementById('cardModalTitle').textContent =
+            'Modifica ' + KINDS[editorKind].label.toLowerCase();
+        document.getElementById('deletCardBtn').style.display = 'block';
     } else {
-        document.getElementById('cardModalTitle').textContent = 'Nuova scheda';
+        document.getElementById('cardModalTitle').textContent =
+            'Nuov' + (editorKind === 'nota' ? 'a nota' : editorKind === 'lista' ? 'a lista' : 'o diario');
     }
 
+    applyEditorKind();
     document.getElementById('cardModal').classList.add('active');
     document.getElementById('cardTitle').focus();
+
+    // il resto arriva dopo: la scheda è già utilizzabile mentre carica
+    if (cardId) {
+        if (editorKind === 'lista') {
+            editorItems = (await loadListItems(cardId)).map(r => ({ ...r }));
+            renderEditorItems();
+        } else if (editorKind === 'diario') {
+            editorMetrics = (await loadDiaryMetrics(cardId)).map(r => ({ ...r }));
+            renderEditorMetrics();
+        }
+        showToast('Caricamento immagini…');
+        existingImages = await loadCardImages(cardId);
+        renderImagesGrid();
+    }
+}
+
+// Mostra le sezioni che il tipo di scheda richiede e adatta le
+// etichette: per un diario il "contenuto" è lo scopo, ed è quello
+// che verrà rimostrato a ogni registrazione.
+function applyEditorKind() {
+    const isLista  = editorKind === 'lista';
+    const isDiario = editorKind === 'diario';
+
+    document.getElementById('listSection').style.display  = isLista  ? 'block' : 'none';
+    document.getElementById('diarySection').style.display = isDiario ? 'block' : 'none';
+
+    const label = document.getElementById('cardContentLabel');
+    const hint  = document.getElementById('cardContentHint');
+    if (isDiario) {
+        label.textContent = 'Scopo del diario';
+        hint.textContent  = 'Perché stai misurando, e come vanno lette le misure. Te lo rimostro a ogni registrazione.';
+        hint.style.display = 'block';
+    } else if (isLista) {
+        label.textContent = 'Nota della lista';
+        hint.textContent  = 'Facoltativa: a cosa serve questa lista.';
+        hint.style.display = 'block';
+    } else {
+        label.textContent = 'Contenuto';
+        hint.style.display = 'none';
+    }
+
+    if (isDiario) renderEditorMetrics();
+    if (isLista)  renderEditorItems();
 }
 
 function closeCardModal() {
@@ -1272,6 +1748,163 @@ function closeCardModal() {
     editingCardId  = null;
     pendingImages  = [];
     existingImages = [];
+    editorItems    = [];
+    editorMetrics  = [];
+    deletedItemIds   = [];
+    deletedMetricIds = [];
+}
+
+// ============================================================
+// NUOVA SCHEDA — scelta del tipo
+// ============================================================
+function openNewCardPopup() {
+    document.getElementById('newCardOverlay').classList.add('active');
+}
+function closeNewCardPopup(e) {
+    if (e && e.target !== e.currentTarget) return;
+    document.getElementById('newCardOverlay').classList.remove('active');
+}
+function newCardOfKind(kind) {
+    closeNewCardPopup();
+    openCardModal(null, kind);
+}
+
+// ============================================================
+// EDITOR — VOCI DELLA LISTA
+// ============================================================
+function renderEditorItems() {
+    const box = document.getElementById('editorItems');
+    if (!editorItems.length) {
+        box.innerHTML = `<div style="padding:0.9rem;color:var(--muted);font-size:0.95rem;">
+            Nessuna voce. Scrivi qui sotto e premi Invio.</div>`;
+        return;
+    }
+    box.innerHTML = editorItems.map((it, i) => `
+        <div class="li-row${it.done ? ' done' : ''}">
+            <input type="checkbox" class="li-check" ${it.done ? 'checked' : ''}
+                   onchange="editorItemDone(${i}, this.checked)">
+            <input type="text" class="form-input" style="flex:1;border-width:1px;background:white;"
+                   value="${escAttr(it.text)}" oninput="editorItems[${i}].text = this.value">
+            <button type="button" class="li-del" onclick="removeEditorItem(${i})" title="Togli">✕</button>
+        </div>`).join('');
+}
+
+function addEditorItem() {
+    const input = document.getElementById('newItemText');
+    const text  = input.value.trim();
+    if (!text) return;
+    editorItems.push({ tempId: tempId(), text, done: false, done_at: null });
+    input.value = '';
+    renderEditorItems();
+    input.focus();
+}
+
+function editorItemDone(i, done) {
+    if (!editorItems[i]) return;
+    editorItems[i].done    = done;
+    editorItems[i].done_at = done ? new Date().toISOString() : null;
+    renderEditorItems();
+}
+
+function removeEditorItem(i) {
+    const it = editorItems[i];
+    if (!it) return;
+    if (it.id) deletedItemIds.push(it.id);
+    editorItems.splice(i, 1);
+    renderEditorItems();
+}
+
+// ============================================================
+// EDITOR — MISURE DEL DIARIO
+// ============================================================
+const METRIC_PRESETS = [[1,5], [1,10], [1,20], [0,100], [1,100]];
+
+function renderEditorMetrics() {
+    const box = document.getElementById('editorMetrics');
+    if (!editorMetrics.length) {
+        box.innerHTML = `<div style="padding:0.75rem;color:var(--muted);font-size:0.95rem;border:2px dashed var(--border);margin-bottom:0.6rem;">
+            Nessuna misura: aggiungine almeno una, altrimenti una registrazione non raccoglie niente.</div>`;
+        return;
+    }
+    box.innerHTML = editorMetrics.map((m, i) => {
+        const presets = METRIC_PRESETS.map(([a,b]) =>
+            `<button type="button" class="metric-preset" onclick="setMetricRange(${i},${a},${b})">${a}-${b}</button>`).join('');
+        let opts = '';
+        if (m.kind === 'scala') {
+            opts = `<span>da</span>
+                <input type="number" class="form-input" value="${m.min_value ?? 1}"
+                       oninput="editorMetrics[${i}].min_value = this.value === '' ? null : Number(this.value)">
+                <span>a</span>
+                <input type="number" class="form-input" value="${m.max_value ?? 10}"
+                       oninput="editorMetrics[${i}].max_value = this.value === '' ? null : Number(this.value)">
+                <div class="metric-presets">${presets}</div>`;
+        } else if (m.kind === 'numero') {
+            opts = `<span>unità</span>
+                <input type="text" class="form-input" style="width:8rem;" placeholder="kg, km, €, min…"
+                       value="${escAttr(m.unit || '')}" oninput="editorMetrics[${i}].unit = this.value">`;
+        } else {
+            opts = `<span>sì / no — vale 1 o 0 nei riepiloghi</span>`;
+        }
+
+        return `<div class="metric-row">
+            <div class="metric-row-top">
+                <input type="text" class="form-input" placeholder="Cosa misuri (es. umore, sonno, passi…)"
+                       value="${escAttr(m.name)}" oninput="editorMetrics[${i}].name = this.value">
+                <select class="form-select" style="width:auto;" onchange="setMetricKind(${i}, this.value)">
+                    <option value="scala"  ${m.kind === 'scala'  ? 'selected' : ''}>Scala</option>
+                    <option value="numero" ${m.kind === 'numero' ? 'selected' : ''}>Numero</option>
+                    <option value="bool"   ${m.kind === 'bool'   ? 'selected' : ''}>Sì/No</option>
+                </select>
+                <button type="button" class="li-del" onclick="removeEditorMetric(${i})" title="Togli">✕</button>
+            </div>
+            <div class="metric-row-opts">${opts}</div>
+        </div>`;
+    }).join('');
+}
+
+function addEditorMetric() {
+    editorMetrics.push({
+        tempId: tempId(), name: '', kind: 'scala',
+        min_value: 1, max_value: 10, unit: ''
+    });
+    renderEditorMetrics();
+}
+
+function setMetricKind(i, kind) {
+    const m = editorMetrics[i];
+    if (!m) return;
+    m.kind = kind;
+    if (kind === 'scala') {
+        if (m.min_value == null) m.min_value = 1;
+        if (m.max_value == null) m.max_value = 10;
+    } else {
+        m.min_value = null; m.max_value = null;
+    }
+    if (kind !== 'numero') m.unit = '';
+    renderEditorMetrics();
+}
+
+function setMetricRange(i, min, max) {
+    const m = editorMetrics[i];
+    if (!m) return;
+    m.min_value = min; m.max_value = max;
+    renderEditorMetrics();
+}
+
+async function removeEditorMetric(i) {
+    const m = editorMetrics[i];
+    if (!m) return;
+    // una misura tolta si porta via la colonna, non le registrazioni:
+    // i valori già raccolti restano scritti ma non si vedono più
+    if (m.id) {
+        const ok = await customConfirm(
+            `Togliere la misura "${m.name || 'senza nome'}"?\n\n` +
+            'Le registrazioni già fatte restano, ma il valore di questa misura non si vedrà più.');
+        if (!ok) return;
+        deletedMetricIds.push(m.id);
+    }
+    editorMetrics.splice(i, 1);
+    renderEditorMetrics();
 }
 
 // ============================================================
@@ -1282,7 +1915,21 @@ async function saveCard() {
     const content = document.getElementById('editorArea').innerHTML.trim();
     const pinned  = document.getElementById('cardPinned').checked;
 
-    if (!title && !content) { showToast('Inserisci almeno un titolo o del contenuto.'); return; }
+    // una lista può nascere col solo titolo e le sue voci, un diario
+    // col titolo e le sue misure: il contenuto lì è facoltativo
+    const hasExtra = (editorKind === 'lista'  && editorItems.length)
+                  || (editorKind === 'diario' && editorMetrics.length);
+    if (!title && !content && !hasExtra) {
+        showToast('Inserisci almeno un titolo o del contenuto.'); return;
+    }
+
+    if (editorKind === 'diario') {
+        const senzaNome = editorMetrics.some(m => !m.name.trim());
+        if (senzaNome) { showToast('Dai un nome a ogni misura.'); return; }
+        const scalaStorta = editorMetrics.some(m =>
+            m.kind === 'scala' && (m.min_value == null || m.max_value == null || Number(m.max_value) <= Number(m.min_value)));
+        if (scalaStorta) { showToast('Ogni scala vuole un massimo maggiore del minimo.'); return; }
+    }
 
     const btn = document.querySelector('#cardModal .btn-primary');
     btn.disabled = true; btn.textContent = 'Salvataggio…';
@@ -1290,6 +1937,7 @@ async function saveCard() {
     try {
         const payload = {
             title, content, pinned, color: selectedColor,
+            kind: editorKind,
             updated_at: new Date().toISOString(),
             user_id: currentUserId
         };
@@ -1313,6 +1961,10 @@ async function saveCard() {
             const { error } = await sb.from('mm_card_categories').insert(rows);
             if (error) console.error('Errore categorie:', error);
         }
+
+        // sync voci di lista / misure del diario
+        if (editorKind === 'lista')  await syncListItems(cardId);
+        if (editorKind === 'diario') await syncDiaryMetrics(cardId);
 
         // carica immagini pendenti
         for (const pi of pendingImages) {
@@ -1339,13 +1991,72 @@ async function saveCard() {
 }
 
 // ============================================================
+// SYNC — VOCI E MISURE
+//
+// ⚠️ Le misure si aggiornano riga per riga e non si cancellano
+// per ricrearle: le registrazioni le richiamano per id dentro
+// `measures`, e ricrearle vorrebbe dire perdere tutto lo storico
+// pur avendo le righe ancora lì. Vale anche per le voci di lista,
+// che portano created_at e done_at.
+// ============================================================
+async function syncListItems(cardId) {
+    if (deletedItemIds.length) {
+        const { error } = await sb.from('mm_list_items').delete().in('id', deletedItemIds);
+        if (error) throw error;
+    }
+
+    const nuove = [], esistenti = [];
+    editorItems.forEach((it, i) => {
+        const riga = {
+            card_id: cardId, user_id: currentUserId,
+            text: it.text.trim(), done: !!it.done,
+            position: i, done_at: it.done_at || null
+        };
+        if (it.id) esistenti.push({ id: it.id, ...riga });
+        else if (riga.text) nuove.push(riga);
+    });
+
+    if (nuove.length)     { const { error } = await sb.from('mm_list_items').insert(nuove); if (error) throw error; }
+    if (esistenti.length) { const { error } = await sb.from('mm_list_items').upsert(esistenti); if (error) throw error; }
+}
+
+async function syncDiaryMetrics(cardId) {
+    if (deletedMetricIds.length) {
+        const { error } = await sb.from('mm_diary_metrics').delete().in('id', deletedMetricIds);
+        if (error) throw error;
+    }
+
+    const nuove = [], esistenti = [];
+    editorMetrics.forEach((m, i) => {
+        const riga = {
+            card_id: cardId, user_id: currentUserId,
+            name: m.name.trim(), kind: m.kind,
+            min_value: m.kind === 'scala' ? Number(m.min_value) : null,
+            max_value: m.kind === 'scala' ? Number(m.max_value) : null,
+            unit: m.kind === 'numero' ? (m.unit || '').trim() : '',
+            position: i
+        };
+        if (m.id) esistenti.push({ id: m.id, ...riga });
+        else nuove.push(riga);
+    });
+
+    if (nuove.length)     { const { error } = await sb.from('mm_diary_metrics').insert(nuove); if (error) throw error; }
+    if (esistenti.length) { const { error } = await sb.from('mm_diary_metrics').upsert(esistenti); if (error) throw error; }
+}
+
+// ============================================================
 // DELETE CARD
 // ============================================================
 async function deleteCurrentCard() {
     if (!editingCardId) return;
     const card = cards.find(c => c.id === editingCardId);
     const name = card?.title || 'questa scheda';
-    const ok = await customConfirm(`Eliminare "${name}"? Anche le immagini verranno eliminate.`);
+    // le voci, le misure e le registrazioni se ne vanno per cascata:
+    // che sparisca uno storico va detto prima, non scoperto dopo
+    const extra = card?.kind === 'lista'  ? ' Anche le voci della lista verranno eliminate.'
+                : card?.kind === 'diario' ? ' Anche le misure e tutte le registrazioni verranno eliminate.'
+                : '';
+    const ok = await customConfirm(`Eliminare "${name}"? Anche le immagini verranno eliminate.${extra}`);
     if (!ok) return;
 
     // elimina immagini da Storage
@@ -1364,6 +2075,460 @@ async function deleteCurrentCard() {
     updateStats();
     closeCardModal();
     showToast('🗑 Scheda eliminata');
+}
+
+// ============================================================
+// VISTA LISTA
+//
+// Le spunte sono ottimistiche con rollback: la voce cambia
+// subito e torna indietro se il DB rifiuta, così non resta a
+// schermo una spunta finta che sparisce al ricarico.
+// ============================================================
+async function openListView(cardId) {
+    viewCardId = cardId;
+    viewItems  = [];
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    document.getElementById('listViewTitle').textContent = card.title || 'Lista senza titolo';
+    const note = document.getElementById('listViewNote');
+    if (card.content && stripHtml(card.content).trim()) {
+        note.innerHTML = card.content; note.style.display = 'block';
+    } else {
+        note.innerHTML = ''; note.style.display = 'none';
+    }
+    document.getElementById('listHideDone').checked = false;
+    document.getElementById('listViewNewItem').value = '';
+    document.getElementById('listViewItems').innerHTML =
+        '<div style="padding:0.9rem;color:var(--muted);">Caricamento…</div>';
+    document.getElementById('listViewModal').classList.add('active');
+
+    viewItems = await loadListItems(cardId);
+    renderListView();
+}
+
+function closeListView() {
+    document.getElementById('listViewModal').classList.remove('active');
+    viewCardId = null; viewItems = [];
+}
+
+function renderListView() {
+    const box  = document.getElementById('listViewItems');
+    const tot  = viewItems.length;
+    const fatt = viewItems.filter(i => i.done).length;
+
+    document.getElementById('listViewCount').textContent = tot
+        ? `${fatt} di ${tot} fatte`
+        : 'Nessuna voce';
+    document.getElementById('listViewBar').style.width = tot ? (fatt / tot * 100) + '%' : '0%';
+
+    const hideDone = document.getElementById('listHideDone').checked;
+    const list = hideDone ? viewItems.filter(i => !i.done) : viewItems;
+
+    if (!list.length) {
+        box.innerHTML = `<div style="padding:0.9rem;color:var(--muted);font-size:0.95rem;">${
+            tot ? 'Tutte fatte 🎉' : 'Nessuna voce: aggiungine una qui sotto.'}</div>`;
+        return;
+    }
+
+    box.innerHTML = list.map(it => `
+        <div class="li-row${it.done ? ' done' : ''}">
+            <input type="checkbox" class="li-check" ${it.done ? 'checked' : ''}
+                   onchange="toggleViewItem('${it.id}', this.checked)">
+            <div class="li-text" onclick="toggleViewItem('${it.id}', ${!it.done})">${escHtml(it.text)}</div>
+            <button type="button" class="li-del" onclick="deleteViewItem('${it.id}')" title="Elimina">✕</button>
+        </div>`).join('');
+}
+
+async function toggleViewItem(itemId, done) {
+    const it = viewItems.find(x => x.id === itemId);
+    if (!it) return;
+
+    const prima = { done: it.done, done_at: it.done_at };
+    it.done    = done;
+    it.done_at = done ? new Date().toISOString() : null;
+    renderListView();
+
+    const { error } = await sb.from('mm_list_items')
+        .update({ done: it.done, done_at: it.done_at }).eq('id', itemId);
+
+    if (error) {
+        it.done = prima.done; it.done_at = prima.done_at;
+        renderListView();
+        if (!handleAuthError(error)) showToast('⚠️ Non sono riuscito a salvare la spunta');
+        return;
+    }
+    refreshCardCounts();
+}
+
+async function addItemFromView() {
+    const input = document.getElementById('listViewNewItem');
+    const text  = input.value.trim();
+    if (!text || !viewCardId) return;
+
+    const position = viewItems.length ? Math.max(...viewItems.map(i => i.position)) + 1 : 0;
+    input.value = '';
+
+    const { data, error } = await sb.from('mm_list_items').insert({
+        card_id: viewCardId, user_id: currentUserId, text, position
+    }).select('*').single();
+
+    if (error) {
+        if (!handleAuthError(error)) showToast('⚠️ Errore: ' + error.message);
+        input.value = text;
+        return;
+    }
+    viewItems.push(data);
+    renderListView();
+    refreshCardCounts();
+    input.focus();
+}
+
+async function deleteViewItem(itemId) {
+    const it = viewItems.find(x => x.id === itemId);
+    if (!it) return;
+    const ok = await customConfirm(`Eliminare "${it.text}"?`);
+    if (!ok) return;
+
+    const { error } = await sb.from('mm_list_items').delete().eq('id', itemId);
+    if (error) { if (!handleAuthError(error)) showToast('⚠️ Errore: ' + error.message); return; }
+
+    viewItems = viewItems.filter(x => x.id !== itemId);
+    renderListView();
+    refreshCardCounts();
+}
+
+// dalla vista si passa alla modifica della scheda
+function editFromView() {
+    const cardId = viewCardId;
+    closeListView(); closeDiaryView();
+    openCardModal(cardId);
+}
+
+// i conteggi in elenco (☑️ 3/7, 📊 12) vanno riletti dopo ogni
+// modifica fatta dalla vista, o restano fermi finché non si ricarica
+async function refreshCardCounts() {
+    await loadCards();
+    renderCards();
+    renderPinned();
+    renderCatFilters();
+}
+
+// ============================================================
+// VISTA DIARIO
+// ============================================================
+async function openDiaryView(cardId) {
+    viewCardId  = cardId;
+    viewMetrics = []; viewEntries = [];
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    document.getElementById('diaryViewTitle').textContent = card.title || 'Diario senza titolo';
+    const note = document.getElementById('diaryViewNote');
+    if (card.content && stripHtml(card.content).trim()) {
+        note.innerHTML = card.content; note.style.display = 'block';
+    } else {
+        note.innerHTML = ''; note.style.display = 'none';
+    }
+    document.getElementById('diaryMetricsSummary').innerHTML = '';
+    document.getElementById('diaryEntriesList').innerHTML =
+        '<div style="padding:0.5rem;color:var(--muted);">Caricamento…</div>';
+    document.getElementById('diaryViewModal').classList.add('active');
+
+    [viewMetrics, viewEntries] = await Promise.all([
+        loadDiaryMetrics(cardId), loadDiaryEntries(cardId)
+    ]);
+    renderDiaryView();
+}
+
+function closeDiaryView() {
+    document.getElementById('diaryViewModal').classList.remove('active');
+    viewCardId = null; viewMetrics = []; viewEntries = [];
+}
+
+function renderDiaryView() {
+    renderDiaryMetricsSummary();
+    renderDiaryEntries();
+}
+
+// Riepilogo per misura: ultimo valore e lo storico in miniatura.
+// Le registrazioni arrivano dalla più recente, qui servono in ordine
+// di tempo, quindi si rovesciano.
+function renderDiaryMetricsSummary() {
+    const box = document.getElementById('diaryMetricsSummary');
+    if (!viewMetrics.length) {
+        box.innerHTML = `<div style="padding:0.75rem;border:2px dashed var(--border);color:var(--muted);font-size:0.95rem;">
+            Questo diario non misura ancora niente. Apri ✏️ Modifica scheda e aggiungi almeno una misura.</div>`;
+        return;
+    }
+
+    const storico = [...viewEntries].reverse();
+
+    box.innerHTML = viewMetrics.map(m => {
+        const serie = storico
+            .map(e => numericValue(m, e.measures?.[m.id]))
+            .filter(v => v !== null)
+            .slice(-12);
+
+        const ultimo = serie.length ? serie[serie.length - 1] : null;
+        const range  = m.kind === 'scala'  ? `scala ${fmtNum(m.min_value)}-${fmtNum(m.max_value)}`
+                     : m.kind === 'numero' ? (m.unit ? 'numero in ' + escHtml(m.unit) : 'numero')
+                     : 'sì / no';
+
+        // fondo scala: la scala ha i suoi limiti, il numero libero no
+        let lo = 0, hi = 1;
+        if (m.kind === 'scala')      { lo = Number(m.min_value); hi = Number(m.max_value); }
+        else if (m.kind === 'numero'){ lo = Math.min(...serie, 0); hi = Math.max(...serie, 1); }
+        const span = (hi - lo) || 1;
+
+        const spark = serie.length
+            ? `<div class="spark">${serie.map(v =>
+                `<i style="height:${Math.max(4, Math.round((v - lo) / span * 100))}%" title="${fmtNum(v)}"></i>`).join('')}</div>`
+            : '';
+
+        return `<div class="metric-card">
+            <div class="metric-card-head">
+                <div>
+                    <div class="metric-card-name">${escHtml(m.name)}</div>
+                    <div class="metric-card-range">${range}</div>
+                </div>
+                <div class="metric-card-last">${ultimo === null ? '—' : displayValue(m, ultimo)}</div>
+            </div>
+            ${spark}
+        </div>`;
+    }).join('');
+}
+
+function renderDiaryEntries() {
+    const box = document.getElementById('diaryEntriesList');
+    if (!viewEntries.length) {
+        box.innerHTML = `<div style="padding:0.75rem;color:var(--muted);font-size:0.95rem;">
+            Nessuna registrazione. Premi ➕ Nuova registrazione.</div>`;
+        return;
+    }
+
+    box.innerHTML = viewEntries.map(e => {
+        const vals = Object.entries(e.measures || {}).map(([mid, raw]) => {
+            const m = viewMetrics.find(x => x.id === mid);
+            // una misura tolta dopo: il valore c'è ancora ma non ha più un nome
+            if (!m) return `<span class="entry-val orfana" title="misura non più definita">misura tolta: <b>${escHtml(String(raw))}</b></span>`;
+            return `<span class="entry-val">${escHtml(m.name)} <b>${displayValue(m, numericValue(m, raw))}</b></span>`;
+        }).join('');
+
+        return `<div class="entry-row">
+            <div class="entry-row-head">
+                <span class="entry-date">${fmtDay(e.entry_date)}</span>
+                <div style="display:flex;gap:0.3rem;">
+                    <button class="btn btn-secondary btn-small" onclick="openEntryModal('${e.id}')">✏️</button>
+                    <button class="btn btn-secondary btn-small" onclick="deleteEntry('${e.id}')">🗑</button>
+                </div>
+            </div>
+            <div class="entry-vals">${vals || '<span style="color:var(--muted);font-size:0.85rem;">nessuna misura registrata</span>'}</div>
+            ${e.note ? `<div class="entry-note">${escHtml(e.note)}</div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// il valore archiviato torna numero: i sì/no valgono 1 e 0
+function numericValue(m, raw) {
+    if (raw === null || raw === undefined || raw === '') return null;
+    if (m.kind === 'bool') return raw === true || raw === 1 || raw === '1' ? 1 : 0;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+}
+
+function displayValue(m, v) {
+    if (v === null) return '—';
+    if (m.kind === 'bool')   return v ? 'sì' : 'no';
+    if (m.kind === 'scala')  return `${fmtNum(v)}/${fmtNum(m.max_value)}`;
+    return fmtNum(v) + (m.unit ? ' ' + escHtml(m.unit) : '');
+}
+
+function fmtNum(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return '—';
+    return Number.isInteger(x) ? String(x) : String(Math.round(x * 100) / 100);
+}
+
+// ============================================================
+// REGISTRAZIONE — raccolta delle misure
+//
+// Una misura non toccata NON viene archiviata: «non l'ho
+// misurata» e «vale zero» sono due cose diverse, e uno slider
+// lasciato a metà scriverebbe la seconda al posto della prima.
+// ============================================================
+let entryValues = {};   // { <metric_id>: numero | booleano }
+
+async function openEntryModal(entryId) {
+    if (!viewCardId) return;
+    if (!viewMetrics.length) {
+        showToast('Prima aggiungi almeno una misura (✏️ Modifica scheda)');
+        return;
+    }
+
+    editingEntryId = entryId || null;
+    entryValues = {};
+
+    const card = cards.find(c => c.id === viewCardId);
+    // la nota del diario si rilegge qui: è il promemoria di cosa
+    // significano le misure che si stanno per dare
+    const note = document.getElementById('entryNote');
+    if (card && card.content && stripHtml(card.content).trim()) {
+        note.innerHTML = card.content; note.style.display = 'block';
+    } else {
+        note.innerHTML = ''; note.style.display = 'none';
+    }
+
+    const entry = entryId ? viewEntries.find(e => e.id === entryId) : null;
+    document.getElementById('entryModalTitle').textContent =
+        entry ? 'Modifica registrazione' : 'Nuova registrazione';
+    document.getElementById('entryDate').value =
+        entry ? entry.entry_date : new Date().toISOString().slice(0, 10);
+    document.getElementById('entryComment').value = entry ? (entry.note || '') : '';
+    document.getElementById('deleteEntryBtn').style.display = entry ? 'block' : 'none';
+
+    if (entry) {
+        Object.entries(entry.measures || {}).forEach(([mid, raw]) => {
+            const m = viewMetrics.find(x => x.id === mid);
+            if (!m) return;
+            entryValues[mid] = m.kind === 'bool' ? !!numericValue(m, raw) : numericValue(m, raw);
+        });
+    }
+
+    renderEntryMeasures();
+    document.getElementById('entryModal').classList.add('active');
+}
+
+function closeEntryModal() {
+    document.getElementById('entryModal').classList.remove('active');
+    editingEntryId = null; entryValues = {};
+}
+
+function renderEntryMeasures() {
+    document.getElementById('entryMeasures').innerHTML = viewMetrics.map(m => {
+        const dato = entryValues[m.id];
+        const dato_c = dato !== undefined && dato !== null;
+
+        let corpo = '';
+        if (m.kind === 'scala') {
+            const min = Number(m.min_value), max = Number(m.max_value);
+            const pos = dato_c ? dato : Math.round((min + max) / 2);
+            corpo = `<div class="measure-scale">
+                <span class="lim">${fmtNum(min)}</span>
+                <input type="range" min="${min}" max="${max}" step="1" value="${pos}"
+                       oninput="setEntryValue('${m.id}', Number(this.value))">
+                <span class="lim">${fmtNum(max)}</span>
+                <input type="number" class="form-input" style="width:5.5rem;"
+                       min="${min}" max="${max}" value="${dato_c ? dato : ''}" placeholder="—"
+                       oninput="setEntryValue('${m.id}', this.value === '' ? null : Number(this.value))">
+            </div>`;
+        } else if (m.kind === 'numero') {
+            corpo = `<div class="measure-num">
+                <input type="number" class="form-input" step="any" placeholder="—"
+                       value="${dato_c ? dato : ''}"
+                       oninput="setEntryValue('${m.id}', this.value === '' ? null : Number(this.value))">
+                ${m.unit ? `<span class="measure-unit">${escHtml(m.unit)}</span>` : ''}
+            </div>`;
+        } else {
+            const si = dato === true, no = dato === false;
+            corpo = `<div class="measure-bool">
+                <button type="button" class="btn ${si ? 'btn-success' : 'btn-ghost'}"
+                        onclick="setEntryValue('${m.id}', ${si ? 'null' : 'true'})">Sì</button>
+                <button type="button" class="btn ${no ? 'btn-danger' : 'btn-ghost'}"
+                        onclick="setEntryValue('${m.id}', ${no ? 'null' : 'false'})">No</button>
+            </div>`;
+        }
+
+        return `<div class="measure-box">
+            <div class="measure-head">
+                <span class="measure-name">${escHtml(m.name)}</span>
+                <span class="measure-value">${dato_c ? displayValue(m, numericValue(m, dato)) : '—'}</span>
+            </div>
+            ${corpo}
+            ${dato_c ? `<button type="button" class="btn btn-secondary btn-small" style="margin-top:0.5rem;"
+                    onclick="setEntryValue('${m.id}', null)">Non l'ho misurata</button>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function setEntryValue(metricId, value) {
+    if (value === null || (typeof value === 'number' && !Number.isFinite(value))) {
+        delete entryValues[metricId];
+        renderEntryMeasures();
+        return;
+    }
+
+    // la casella numerica non è vincolata come lo slider: un 500 su una
+    // scala 1-20 passerebbe, e da lì in poi lo storico in miniatura
+    // sarebbe schiacciato da un valore che quella misura non può avere
+    const m = viewMetrics.find(x => x.id === metricId);
+    if (m && m.kind === 'scala' && typeof value === 'number') {
+        value = Math.min(Number(m.max_value), Math.max(Number(m.min_value), value));
+    }
+
+    entryValues[metricId] = value;
+    renderEntryMeasures();
+}
+
+async function saveEntry() {
+    if (!viewCardId) return;
+    const entry_date = document.getElementById('entryDate').value;
+    if (!entry_date) { showToast('Scegli una data.'); return; }
+
+    const note = document.getElementById('entryComment').value.trim();
+    if (!Object.keys(entryValues).length && !note) {
+        showToast('Registra almeno una misura o scrivi un commento.'); return;
+    }
+
+    const btn = document.getElementById('saveEntryBtn');
+    btn.disabled = true; btn.textContent = 'Salvataggio…';
+
+    try {
+        const payload = {
+            card_id: viewCardId, user_id: currentUserId,
+            entry_date, note, measures: entryValues
+        };
+
+        if (editingEntryId) {
+            const { error } = await sb.from('mm_diary_entries').update(payload).eq('id', editingEntryId);
+            if (error) { if (handleAuthError(error)) return; throw error; }
+        } else {
+            const { error } = await sb.from('mm_diary_entries').insert(payload);
+            if (error) { if (handleAuthError(error)) return; throw error; }
+        }
+
+        viewEntries = await loadDiaryEntries(viewCardId);
+        renderDiaryView();
+        closeEntryModal();
+        await refreshCardCounts();
+        showToast('✅ Registrazione salvata');
+    } catch (err) {
+        console.error('saveEntry:', err);
+        alert('Errore nel salvataggio: ' + (err.message || String(err)));
+    } finally {
+        btn.disabled = false; btn.textContent = '💾 Registra';
+    }
+}
+
+async function deleteCurrentEntry() {
+    if (!editingEntryId) return;
+    const id = editingEntryId;
+    closeEntryModal();
+    await deleteEntry(id);
+}
+
+async function deleteEntry(entryId) {
+    const e = viewEntries.find(x => x.id === entryId);
+    const ok = await customConfirm(`Eliminare la registrazione del ${fmtDay(e?.entry_date)}?`);
+    if (!ok) return;
+
+    const { error } = await sb.from('mm_diary_entries').delete().eq('id', entryId);
+    if (error) { if (!handleAuthError(error)) showToast('⚠️ Errore: ' + error.message); return; }
+
+    viewEntries = viewEntries.filter(x => x.id !== entryId);
+    renderDiaryView();
+    await refreshCardCounts();
+    showToast('🗑 Registrazione eliminata');
 }
 
 // ============================================================
@@ -1780,6 +2945,15 @@ function fmtDate(iso) {
          + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
+// Le date delle registrazioni sono già 'YYYY-MM-DD' e vanno
+// spezzate a mano: passarle da new Date() le legge come UTC e
+// a fuso orario positivo tornano indietro di un giorno.
+function fmtDay(iso) {
+    if (!iso) return '';
+    const [y, m, d] = String(iso).slice(0, 10).split('-');
+    return `${d}/${m}/${y}`;
+}
+
 let toastTimer = null;
 function showToast(msg, ms) {
     const t = document.getElementById('toast');
@@ -1896,7 +3070,83 @@ ALTER TABLE mm_images ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "mm_images: utente vede solo le sue" ON mm_images
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
--- 4. Storage bucket (eseguire come service_role o nella dashboard)
+-- 4. Tipo di scheda: nota, lista o diario
+--    'nota' è il default, quindi le schede che esistono già
+--    restano quello che sono senza toccarle una per una.
+ALTER TABLE mm_cards ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'nota';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mm_cards_kind_check') THEN
+    ALTER TABLE mm_cards ADD CONSTRAINT mm_cards_kind_check
+      CHECK (kind IN ('nota', 'lista', 'diario'));
+  END IF;
+END $$;
+
+-- 5. Voci di una lista
+CREATE TABLE IF NOT EXISTS mm_list_items (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  text       text NOT NULL DEFAULT '',
+  done       boolean NOT NULL DEFAULT false,
+  position   integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  done_at    timestamptz
+);
+ALTER TABLE mm_list_items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_list_items: utente vede solo le sue" ON mm_list_items;
+CREATE POLICY "mm_list_items: utente vede solo le sue" ON mm_list_items
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE INDEX IF NOT EXISTS mm_list_items_card ON mm_list_items(card_id, position);
+
+-- 6. Le misure di un diario
+--    kind = 'scala'  → min_value/max_value obbligatori (1-20, 1-100…)
+--    kind = 'numero' → nessun limite, unit è l'unità di misura
+--    kind = 'bool'   → sì/no, vale 0 o 1 nei riepiloghi
+CREATE TABLE IF NOT EXISTS mm_diary_metrics (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name       text NOT NULL,
+  kind       text NOT NULL DEFAULT 'scala',
+  min_value  numeric,
+  max_value  numeric,
+  unit       text NOT NULL DEFAULT '',
+  position   integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT mm_diary_metrics_kind_check CHECK (kind IN ('scala', 'numero', 'bool')),
+  CONSTRAINT mm_diary_metrics_scala_check CHECK (
+    kind <> 'scala' OR (min_value IS NOT NULL AND max_value IS NOT NULL AND max_value > min_value)
+  )
+);
+ALTER TABLE mm_diary_metrics ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_diary_metrics: utente vede solo le sue" ON mm_diary_metrics;
+CREATE POLICY "mm_diary_metrics: utente vede solo le sue" ON mm_diary_metrics
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE INDEX IF NOT EXISTS mm_diary_metrics_card ON mm_diary_metrics(card_id, position);
+
+-- 7. Le registrazioni
+--    measures è { "<id della misura>": numero|booleano }: le misure
+--    sono righe vere, i valori no — si leggono e si scrivono sempre
+--    tutti insieme. Una misura non registrata NON compare come zero:
+--    la sua chiave non c'è proprio.
+CREATE TABLE IF NOT EXISTS mm_diary_entries (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  entry_date date NOT NULL DEFAULT current_date,
+  note       text NOT NULL DEFAULT '',
+  measures   jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE mm_diary_entries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_diary_entries: utente vede solo le sue" ON mm_diary_entries;
+CREATE POLICY "mm_diary_entries: utente vede solo le sue" ON mm_diary_entries
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE INDEX IF NOT EXISTS mm_diary_entries_card
+  ON mm_diary_entries(card_id, entry_date DESC);
+
+-- 8. Storage bucket (eseguire come service_role o nella dashboard)
 -- INSERT INTO storage.buckets (id, name, public)
 --   VALUES ('mm-images', 'mm-images', false)
 --   ON CONFLICT (id) DO NOTHING;
@@ -1908,7 +3158,7 @@ CREATE POLICY "mm_images: utente vede solo le sue" ON mm_images
 -- CREATE POLICY "mm-images delete" ON storage.objects FOR DELETE
 --   USING (bucket_id = 'mm-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
--- 5. Registro app in AppSphere
+-- 9. Registro app in AppSphere
 INSERT INTO cm_apps (title, description, html_file, score_query, active)
 VALUES (
   'Memorandum',
