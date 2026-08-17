@@ -237,13 +237,16 @@ fun MemoScreen(
                             text = if (stato.ricerca.isBlank()) stato.tipo?.icona ?: "📌" else "🔍",
                             fontSize = 40.sp,
                         )
+                        // `stato` è una proprietà delegata: `stato.tipo` non si
+                        // smart-casta, va letto in una variabile.
+                        val tipoAperto = stato.tipo
                         Text(
                             text = when {
                                 stato.ricerca.isNotBlank() ->
                                     "Nessun risultato per «${stato.ricerca}»"
                                 stato.soloRiservate -> "Nessuna scheda riservata."
-                                stato.tipo == null -> "Nessuna scheda in evidenza."
-                                else -> "Nessuna ${stato.tipo.etichetta.lowercase()}. " +
+                                tipoAperto == null -> "Nessuna scheda in evidenza."
+                                else -> "Nessuna ${tipoAperto.etichetta.lowercase()}. " +
                                     "Creane una col +"
                             },
                             color = Palette.muted,
