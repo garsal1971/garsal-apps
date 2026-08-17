@@ -1522,6 +1522,17 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   **sua**. Le regole nate prima della colonna sono `'bank'`, che è quello che sono davvero: non
   sono state copiate nel set `'excel'` di proposito, perché contengono pezzi di testo che in un
   foglio non compaiono e riempirebbero l'elenco nuovo di regole inerti.
+- ⚠️ **La regola si scrive quando si associa, in un popup, e non più di nascosto.** Assegnare una
+  categoria a un movimento apre `openRegolaDaMovimento`, che mostra la descrizione per intero,
+  propone la chiave (la descrizione normalizzata) e la lascia **accorciare col conteggio dal
+  vivo** di quanti movimenti aggancerebbe; *Solo questo movimento* non scrive niente.
+  `setTxCategory` ora **assegna e basta**. Prima imparava da sé con la descrizione intera, che è
+  esattamente la regola che non aggancerà mai più niente — la banca infila in ogni acquisto un
+  riferimento diverso — e la si scopriva inerte settimane dopo, andandola a cercare. Il popup non
+  si apre quando una regola manda già quella descrizione in quella categoria (non c'è niente da
+  imparare) né quando si toglie la categoria. ⚠️ **Nell'anteprima di import resta l'apprendimento
+  silenzioso** a conferma (`confirmImport`): lì si categorizza a blocchi e una finestra per riga
+  sarebbe inservibile.
 - La pagina **🧠 Attribuzione** (`renderRegole`) è dove le regole si leggono e si tarano: la
   spiegazione in sei passi di come si sceglie la categoria, un **banco di prova** che su una
   descrizione incollata mostra chiave, regole che agganciano e quale vince senza toccare niente, e
