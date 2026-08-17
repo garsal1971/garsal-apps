@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.5</title>
+  <title>Spese Personali v1.0.6</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -217,8 +217,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.5';
-var BUILD_TIME  = '2026-08-17T16:00:00Z';
+var APP_VERSION = 'v1.0.6';
+var BUILD_TIME  = '2026-08-17T18:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -236,7 +236,7 @@ const S = {
   transactions: [], categories: [], supers: [], merchants: [],
   charts: {}, selectedYear: null,
   filters: { mese: '', categoria: '', tipo: '', testo: '' },
-  ruleFilter: '',
+  ruleFilter: '', ruleSource: 'bank',
 };
 
 /* ── Supabase REST ──────────────────────────────────────────── */
@@ -411,19 +411,32 @@ const normalizeMerchant = desc => merchantText(desc).toUpperCase().replace(/[*#]
 // Fra più regole che agganciano vince la PIÙ LUNGA, cioè la più specifica: senza questa
 // precedenza una regola corta imparata prima ("FARMACIA") si prenderebbe anche i movimenti di
 // "FARMACIA S.ANNA" a cui era stata data un'altra categoria.
-const merchantRule = desc => {
+//
+// ⚠️ Le regole sono DUE ELENCHI SEPARATI, uno per fonte, e un movimento consulta solo quello
+// della sua. Non è una raffinatezza: la stessa spesa arriva scritta in due modi diversi — il
+// sync cuce nella descrizione il nome della controparte («… BAR CENTRALE ROMA · BAR CENTRALE
+// SRL»), il foglio Excel porta la sola colonna descrizione («… BAR CENTRALE ROMA») — quindi una
+// chiave imparata su una fonte non dice niente sull'altra, e tenerle insieme voleva dire che
+// ogni correzione fatta da una parte sballava l'altra. La fonte di un movimento è già in
+// import_source: chi non ce l'ha è arrivato dalla banca, che era l'unica strada.
+const SOURCES = [['bank', '🏦 dal conto'], ['excel', '📊 da Excel']];
+const sourceOf = t => (t?.import_source === 'excel' ? 'excel' : 'bank');
+const labelSource = s => (SOURCES.find(([v]) => v === s) || SOURCES[0])[1];
+
+const merchantRule = (desc, source = 'bank') => {
   const hay = normalizeMerchant(desc);
   if (!hay) return null;
   return S.merchants
-    .filter(x => x.merchant_key && hay.includes(x.merchant_key))
+    .filter(x => x.merchant_key && (x.source || 'bank') === source && hay.includes(x.merchant_key))
     .sort((a, b) => b.merchant_key.length - a.merchant_key.length)[0] || null;
 };
-const merchantCategory = desc => merchantRule(desc)?.category_id || null;
+const merchantCategory = (desc, source = 'bank') => merchantRule(desc, source)?.category_id || null;
 // Quanti movimenti in archivio aggancerebbe una regola: si vede mentre la si accorcia, così non
-// è un tiro al buio.
-const merchantMatchCount = key => {
+// è un tiro al buio. Si contano i soli movimenti della fonte della regola — gli altri quella
+// regola non li vedrà mai, e contarli darebbe un numero che non si avvera.
+const merchantMatchCount = (key, source = 'bank') => {
   const k = (key || '').trim().toUpperCase();
-  return k ? S.transactions.filter(t => normalizeMerchant(t.description).includes(k)).length : 0;
+  return k ? S.transactions.filter(t => sourceOf(t) === source && normalizeMerchant(t.description).includes(k)).length : 0;
 };
 // La regola nasce con TUTTA la descrizione normalizzata: è il default prudente, perché una
 // chiave corta inventata in automatico aggancerebbe cose che non c'entrano. Accorciarla al solo
@@ -432,27 +445,28 @@ const merchantMatchCount = key => {
 // Scrittura della regola, con la chiave già decisa dal chiamante. Qui gli errori risalgono: chi
 // la regola l'ha scritta a mano deve sapere se non è stata salvata. learnMerchant, che impara di
 // nascosto mentre si fa altro, se li tiene invece per sé (vedi sotto).
-async function saveMerchantRule(key, categoryId) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/sal_merchant_map?on_conflict=user_id,merchant_key`, {
+async function saveMerchantRule(key, categoryId, source = 'bank') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/sal_merchant_map?on_conflict=user_id,source,merchant_key`, {
     method: 'POST',
     headers: sbH({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
-    body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ user_id: S.session.user.id, merchant_key: key, category_id: categoryId, source, updated_at: new Date().toISOString() }),
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
   S.merchants = await sbQ('sal_merchant_map', 'select=*');
-  return S.merchants.find(x => x.merchant_key === key) || null;
+  return S.merchants.find(x => x.merchant_key === key && (x.source || 'bank') === source) || null;
 }
 
-async function learnMerchant(desc, categoryId) {
+async function learnMerchant(desc, categoryId, source = 'bank') {
   const key = normalizeMerchant(desc);
   if (!key) return null;
   try {
     if (categoryId) {
-      return await saveMerchantRule(key, categoryId);
+      return await saveMerchantRule(key, categoryId, source);
     } else {
       // Per id, non per chiave: un merchant_key con virgole o spazi va citato nei filtri
       // PostgREST, e sbagliare la citazione qui vorrebbe dire cancellare la regola sbagliata.
-      const row = S.merchants.find(x => x.merchant_key === key);
+      // La stessa chiave può esistere nei due elenchi, quindi conta anche la fonte.
+      const row = S.merchants.find(x => x.merchant_key === key && (x.source || 'bank') === source);
       if (!row) return null;
       await sbDel('sal_merchant_map', `id=eq.${row.id}`);
       S.merchants = await sbQ('sal_merchant_map', 'select=*');
@@ -475,7 +489,9 @@ async function applyLearnedMerchants(onlyRuleId = null) {
   const perCategoria = new Map();
   S.transactions.forEach(t => {
     if (t.category_id) return;
-    const rule = merchantRule(t.description);
+    // Ogni movimento contro le regole della SUA fonte: un movimento entrato da Excel non lo
+    // tocca una regola imparata dal sync, nemmeno se la chiave per caso ci starebbe dentro.
+    const rule = merchantRule(t.description, sourceOf(t));
     if (!rule) return;
     if (onlyRuleId && rule.id !== onlyRuleId) return;
     if (!perCategoria.has(rule.category_id)) perCategoria.set(rule.category_id, []);
@@ -503,8 +519,10 @@ async function setTxCategory(tx, categoryId, { learn = true } = {}) {
   // impara, senza una schermata di regole da compilare.
   // Si impara solo se una regola non dava già quella categoria: correggere a mano una riga
   // che era già giusta non deve creare una seconda regola identica nel risultato.
-  if (learn && categoryId && merchantCategory(tx.description) !== categoryId) {
-    const rule = await learnMerchant(tx.description, categoryId);
+  // La regola nasce nell'elenco della fonte del movimento: è da lì che quella descrizione viene,
+  // ed è lì che tornerà a presentarsi scritta allo stesso modo.
+  if (learn && categoryId && merchantCategory(tx.description, sourceOf(tx)) !== categoryId) {
+    const rule = await learnMerchant(tx.description, categoryId, sourceOf(tx));
     // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
     // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
     // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
@@ -888,9 +906,10 @@ function renderCategorie() {
 // può agganciare cento movimenti e non prenderne nemmeno uno, perché su tutti c'è una regola più
 // lunga che la scavalca. Senza questa distinzione una regola coperta sembra funzionante.
 function regolaStats(m) {
-  const vinti = S.transactions.filter(t => merchantRule(t.description)?.id === m.id);
+  const fonte = m.source || 'bank';
+  const vinti = S.transactions.filter(t => sourceOf(t) === fonte && merchantRule(t.description, fonte)?.id === m.id);
   return {
-    aggancia: merchantMatchCount(m.merchant_key),
+    aggancia: merchantMatchCount(m.merchant_key, fonte),
     vince: vinti.length,
     senzaCat: vinti.filter(t => !t.category_id).length,
     conflitti: vinti.filter(t => t.category_id && t.category_id !== m.category_id),
@@ -907,6 +926,7 @@ const REGOLE_FILTRI = [
 
 function regoleFiltrate() {
   return S.merchants.slice()
+    .filter(m => (m.source || 'bank') === S.ruleSource)
     .map(m => ({ m, st: regolaStats(m) }))
     .filter(({ st }) => {
       switch (S.ruleFilter) {
@@ -923,9 +943,9 @@ function regoleFiltrate() {
 function renderRegoleTabella() {
   const righe = regoleFiltrate();
   setHtml('regole-tabella', righe.length === 0
-    ? `<div class="empty-state"><div class="empty-icon">🧠</div><p>${S.merchants.length
+    ? `<div class="empty-state"><div class="empty-icon">🧠</div><p>${S.merchants.some(m => (m.source || 'bank') === S.ruleSource)
         ? 'Nessuna regola con questo filtro.'
-        : 'Nessuna regola ancora. Si scrivono da sole appena dai una categoria a un movimento.'}</p></div>`
+        : `Nessuna regola <strong>${labelSource(S.ruleSource)}</strong>. Si scrivono da sole appena dai una categoria a un movimento arrivato da questa fonte.`}</p></div>`
     : `<div class="table-wrap"><table class="table">
         <thead><tr>
           <th>Se la descrizione contiene…</th><th>Categoria</th>
@@ -950,7 +970,8 @@ function renderRegoleTabella() {
           </td>
         </tr>`).join('')}</tbody>
       </table></div>`);
-  setHtml('regole-conteggio', `${righe.length} di ${S.merchants.length} regole`);
+  const totFonte = S.merchants.filter(m => (m.source || 'bank') === S.ruleSource).length;
+  setHtml('regole-conteggio', `${righe.length} di ${totFonte} ${labelSource(S.ruleSource)}`);
 }
 
 // Banco di prova: si incolla una descrizione e si vede COSA SUCCEDEREBBE, senza toccare niente.
@@ -960,10 +981,12 @@ function renderProva(desc) {
   const out = $('prova-out');
   if (!out) return;
   const testo = (desc || '').trim();
-  if (!testo) { out.innerHTML = '<p class="import-note">Incolla la descrizione di un movimento per vedere che categoria prenderebbe.</p>'; return; }
+  if (!testo) { out.innerHTML = `<p class="import-note">Incolla la descrizione di un movimento per vedere che categoria prenderebbe fra le regole <strong>${labelSource(S.ruleSource)}</strong>.</p>`; return; }
   const chiave = normalizeMerchant(testo);
+  // Si prova contro l'elenco della fonte aperta: le regole dell'altra fonte non vedranno mai
+  // questa descrizione, e mostrarle qui direbbe che aggancia qualcosa che non aggancerà.
   const agganciano = S.merchants
-    .filter(x => x.merchant_key && chiave.includes(x.merchant_key))
+    .filter(x => x.merchant_key && (x.source || 'bank') === S.ruleSource && chiave.includes(x.merchant_key))
     .sort((a, b) => b.merchant_key.length - a.merchant_key.length);
   const vincente = agganciano[0] || null;
   out.innerHTML = `
@@ -973,19 +996,21 @@ function renderProva(desc) {
     ${agganciano.length > 1 ? `<p class="import-note mt-8">${agganciano.length} regole agganciano, vince la più lunga:</p>
       <ul class="text-sm" style="padding-left:20px;margin-top:6px">${agganciano.map((x, i) => `<li class="${i ? 'text-muted' : 'fw-600'}">
         <span class="mono">${esc(x.merchant_key)}</span> (${x.merchant_key.length}) → ${catById(x.category_id)?.name || '—'}${i ? ' — scavalcata' : ' — vince'}</li>`).join('')}</ul>` : ''}
-    ${!agganciano.length ? `<p class="import-note mt-8">Nessuna regola aggancia questa descrizione: il movimento resterebbe senza categoria,
-      e assegnandogliela a mano nascerebbe una regola con la chiave qui sopra.</p>` : ''}`;
+    ${!agganciano.length ? `<p class="import-note mt-8">Nessuna regola <strong>${labelSource(S.ruleSource)}</strong> aggancia questa descrizione:
+      il movimento resterebbe senza categoria, e assegnandogliela a mano nascerebbe una regola con la chiave qui sopra,
+      in questo stesso elenco.</p>` : ''}`;
 }
 
 function renderRegole() {
   if (S.ruleFilter === undefined) S.ruleFilter = '';
   const senzaCat = S.transactions.filter(t => !t.category_id);
-  const recuperabili = senzaCat.filter(t => merchantCategory(t.description)).length;
+  const recuperabili = senzaCat.filter(t => merchantCategory(t.description, sourceOf(t))).length;
+  const perFonte = s => S.merchants.filter(m => (m.source || 'bank') === s).length;
 
   setHtml('view-regole', `
     <div class="view-header">
       <div><h2 class="page-title">Attribuzione delle categorie</h2>
-        <p class="page-sub">${S.merchants.length} regole · ${senzaCat.length} movimenti ancora senza categoria</p></div>
+        <p class="page-sub">${SOURCES.map(([v, l]) => `${perFonte(v)} regole ${l}`).join(' · ')} · ${senzaCat.length} movimenti ancora senza categoria</p></div>
       ${recuperabili ? '<button class="btn btn-primary btn-sm" data-action="apply-rules">✨ Applica le regole (' + recuperabili + ')</button>' : ''}
     </div>
 
@@ -1009,6 +1034,11 @@ function renderRegole() {
           non c'entrano. Accorciarla al nome del negozio si fa qui sotto con ✎, vedendo dal vivo quanti movimenti aggancia.</li>
         <li><strong>Una regola non sovrascrive mai una categoria già messa.</strong> Agisce solo sui movimenti che ne sono
           privi — all'import, subito dopo un'assegnazione a mano, e col pulsante ✨. Quello che hai deciso tu resta.</li>
+        <li><strong>Gli elenchi sono due, uno per fonte, e non si parlano.</strong> Un movimento arrivato dal conto consulta
+          solo le regole <em>dal conto</em>, uno arrivato da un foglio solo quelle <em>da Excel</em>. Le due fonti scrivono
+          la stessa spesa in modo diverso — il sync cuce nella descrizione il nome della controparte, il foglio no — quindi
+          una chiave imparata di qua non vale di là. Lo stesso negozio va insegnato due volte, una per elenco: sono due
+          scritture, non un doppione.</li>
       </ol>
     </div>
 
@@ -1021,6 +1051,10 @@ function renderRegole() {
     </div>
 
     <div class="card">
+      <div class="hstack gap-8 wrap mb-16">
+        ${SOURCES.map(([v, l]) => `<button class="btn btn-sm ${S.ruleSource === v ? 'btn-primary' : 'btn-outline'}"
+          data-action="rule-source" data-source="${v}">${l} <span class="${S.ruleSource === v ? '' : 'text-muted'}">· ${perFonte(v)}</span></button>`).join('')}
+      </div>
       <div class="card-header-row">
         <div class="card-title">Le regole <span class="text-muted text-sm" id="regole-conteggio"></span></div>
         <div class="hstack gap-8 wrap">
@@ -1142,11 +1176,16 @@ function openMerchantModal(id = null) {
   // dal vivo. È l'unico modo per scrivere una regola prima di avere il movimento che la insegna.
   const rule = id ? S.merchants.find(m => m.id === id) : null;
   if (id && !rule) return;
-  openModal(rule ? 'Modifica regola' : 'Nuova regola', `
+  // Una regola non cambia elenco: quello di una che esiste è il suo, quello di una nuova è
+  // l'elenco aperto. Spostarla vorrebbe dire una chiave scritta per una fonte messa a valere
+  // su descrizioni fatte in un altro modo, cioè una regola che non aggancia più niente.
+  const fonte = rule ? (rule.source || 'bank') : S.ruleSource;
+  openModal(rule ? 'Modifica regola' : `Nuova regola ${labelSource(fonte)}`, `
     <form id="modal-form">
       <div class="form-group">
         <label class="form-label">Se la descrizione contiene… *</label>
         <input name="key" id="rule-key" class="form-input mono" required value="${esc(rule?.merchant_key || '')}" placeholder="es. ESSELUNGA" />
+        <p class="import-note mt-8">Elenco <strong>${labelSource(fonte)}</strong>: vale solo sui movimenti arrivati da questa fonte.</p>
         <p class="import-note mt-8" id="rule-count"></p>
       </div>
       <div class="form-group">
@@ -1166,9 +1205,9 @@ function openMerchantModal(id = null) {
   const refresh = () => {
     const k = input.value.trim().toUpperCase();
     if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
-    const n = merchantMatchCount(k);
-    const senzaCat = S.transactions.filter(t => !t.category_id && normalizeMerchant(t.description).includes(k)).length;
-    info.textContent = `Aggancia ${n} movimenti in archivio${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
+    const n = merchantMatchCount(k, fonte);
+    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === fonte && normalizeMerchant(t.description).includes(k)).length;
+    info.textContent = `Aggancia ${n} movimenti ${labelSource(fonte)}${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
   };
   input.addEventListener('input', refresh);
   refresh();
@@ -1184,7 +1223,7 @@ function openMerchantModal(id = null) {
       if (rule) {
         await sbUpd('sal_merchant_map', `id=eq.${rule.id}`, { merchant_key: key, category_id: d.category_id, updated_at: new Date().toISOString() });
       } else {
-        id = (await saveMerchantRule(key, d.category_id))?.id;
+        id = (await saveMerchantRule(key, d.category_id, fonte))?.id;
       }
       closeModal();
       await loadData();
@@ -1193,7 +1232,7 @@ function openMerchantModal(id = null) {
       render();
     } catch (err) {
       alert(/duplicate|uq_sal_merchant_map/i.test(err.message)
-        ? `Esiste già una regola «${key}». Modifica quella, o cancella questa.`
+        ? `Esiste già una regola «${key}» nell'elenco ${labelSource(fonte)}. Modifica quella, o cancella questa.`
         : 'Errore: ' + err.message);
     }
   });
@@ -1206,7 +1245,7 @@ function openMerchantModal(id = null) {
 // tornare sul movimento significa scrivere la regola a memoria, o non scriverla affatto.
 // La chiave è quella che si imparerebbe da sola (la descrizione intera normalizzata), ma qui è
 // modificabile subito — con il conteggio di quanti movimenti aggancia, come in Modifica regola.
-function nuovaVoceFormHtml(descrizione) {
+function nuovaVoceFormHtml(descrizione, source = 'bank') {
   return `
     <form id="newcat-form">
       <p class="import-note">Movimento: <strong>${esc(merchantText(descrizione))}</strong></p>
@@ -1225,7 +1264,7 @@ function nuovaVoceFormHtml(descrizione) {
         </div>
       </div>
       <div class="form-group">
-        <label class="hstack gap-8 text-sm"><input type="checkbox" id="newcat-with-rule" checked /> Impara anche la regola: se la descrizione contiene…</label>
+        <label class="hstack gap-8 text-sm"><input type="checkbox" id="newcat-with-rule" checked /> Impara anche la regola (elenco <strong>${labelSource(source)}</strong>): se la descrizione contiene…</label>
         <input id="newcat-key" class="form-input mono mt-8" value="${esc(normalizeMerchant(descrizione))}" />
         <p class="import-note mt-8" id="newcat-count"></p>
       </div>
@@ -1239,7 +1278,7 @@ function nuovaVoceFormHtml(descrizione) {
 
 // onDone riceve la voce creata e la regola scritta (null se la spunta era tolta): cosa farne
 // cambia fra la lista movimenti e l'anteprima di import, ed è il chiamante a saperlo.
-function wireNuovaVoceForm({ onDone, onCancel }) {
+function wireNuovaVoceForm({ onDone, onCancel, source = 'bank' }) {
   const form = $('newcat-form');
   const keyInput = $('newcat-key');
   const chk = $('newcat-with-rule');
@@ -1250,9 +1289,9 @@ function wireNuovaVoceForm({ onDone, onCancel }) {
     if (!chk.checked) { info.textContent = 'Senza regola: la voce vale solo per questo movimento.'; return; }
     const k = keyInput.value.trim().toUpperCase();
     if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
-    const n = merchantMatchCount(k);
-    const senzaCat = S.transactions.filter(t => !t.category_id && normalizeMerchant(t.description).includes(k)).length;
-    info.textContent = `Aggancia ${n} movimenti in archivio${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
+    const n = merchantMatchCount(k, source);
+    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === source && normalizeMerchant(t.description).includes(k)).length;
+    info.textContent = `Aggancia ${n} movimenti ${labelSource(source)}${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
   };
   keyInput.addEventListener('input', refresh);
   chk.addEventListener('change', refresh);
@@ -1269,7 +1308,7 @@ function wireNuovaVoceForm({ onDone, onCancel }) {
     if (chk.checked && key.length < 3) { alert('La regola deve avere almeno 3 caratteri, oppure togli la spunta.'); return; }
     // Stessa chiave di una regola che c'è già: il salvataggio la riscriverebbe in silenzio sulla
     // voce nuova. Si può fare — è quello che uno vuole quando corregge — ma va detto prima.
-    const esistente = key && S.merchants.find(x => x.merchant_key === key);
+    const esistente = key && S.merchants.find(x => x.merchant_key === key && (x.source || 'bank') === source);
     if (esistente && !confirm(`Esiste già una regola «${key}», che manda a «${catById(esistente.category_id)?.name || '—'}».\n\nLa faccio puntare alla voce nuova?`)) return;
     const submit = form.querySelector('button[type="submit"]');
     submit.disabled = true;
@@ -1281,7 +1320,7 @@ function wireNuovaVoceForm({ onDone, onCancel }) {
         super_id: d.super_id || null,
       });
       S.categories = await sbQ('sal_categories', 'select=*&order=name.asc');
-      const rule = key ? await saveMerchantRule(key, cat.id) : null;
+      const rule = key ? await saveMerchantRule(key, cat.id, source) : null;
       await onDone(cat, rule);
     } catch (err) {
       submit.disabled = false;
@@ -1294,8 +1333,9 @@ function wireNuovaVoceForm({ onDone, onCancel }) {
 
 // Dalla lista movimenti: modale a sé, il movimento è già in archivio.
 function openNuovaVoceModal(tx) {
-  openModal('Nuova voce', nuovaVoceFormHtml(tx.description));
+  openModal('Nuova voce', nuovaVoceFormHtml(tx.description, sourceOf(tx)));
   wireNuovaVoceForm({
+    source: sourceOf(tx),
     onCancel: closeModal,
     onDone: async (cat, rule) => {
       closeModal();
@@ -1323,14 +1363,15 @@ function openNuovaVoceImport(idx) {
     renderImportList(_import.cardFilter);
   };
   $('modal-title').textContent = 'Nuova voce';
-  $('modal-body').innerHTML = nuovaVoceFormHtml(it.descrizione);
+  $('modal-body').innerHTML = nuovaVoceFormHtml(it.descrizione, _import.source || 'bank');
   wireNuovaVoceForm({
+    source: _import.source || 'bank',
     onCancel: indietro,
     onDone: async (cat, rule) => {
       it.categoryId = cat.id;
       // La regola vale anche per le altre righe dell'anteprima rimaste senza categoria: è lo
       // stesso negozio, e farsele una per una sarebbe assurdo avendo appena scritto la regola.
-      if (rule) _import.items.forEach(x => { if (!x.categoryId) x.categoryId = merchantCategory(x.descrizione); });
+      if (rule) _import.items.forEach(x => { if (!x.categoryId) x.categoryId = merchantCategory(x.descrizione, _import.source || 'bank'); });
       indietro();
       showToast(`✅ Voce «${cat.name}» creata`);
     },
@@ -1594,7 +1635,7 @@ async function readMovements() {
         externalId: t.externalId || null,
         card: t.card?.identification || cardFromDescription(t.description) || null,
         type: t.bankTransactionCode || null,
-        categoryId: merchantCategory(descrizione),
+        categoryId: merchantCategory(descrizione, 'bank'),
         gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile, dupGiorni: dup.giorni,
         raw: t,
       };
@@ -1730,7 +1771,8 @@ async function confirmImport() {
     // Quello che l'utente ha categorizzato a mano in anteprima diventa una regola: la prossima
     // volta quel negozio si riconosce da solo.
     for (const it of scelti) {
-      if (it.categoryId && merchantCategory(it.descrizione) !== it.categoryId) await learnMerchant(it.descrizione, it.categoryId);
+      const fonte = _import.source || 'bank';
+      if (it.categoryId && merchantCategory(it.descrizione, fonte) !== it.categoryId) await learnMerchant(it.descrizione, it.categoryId, fonte);
     }
     closeModal();
     alert(`✅ Importazione completata\n\nMovimenti caricati: ${inserted.length}` +
@@ -1910,7 +1952,7 @@ function righeAMovimenti({ rows, cols, name }, { soloUscite = false, fileName = 
       externalId: null,
       card: cardFromDescription(descrizione),
       type: causale || null,
-      categoryId: merchantCategory(descrizione),
+      categoryId: merchantCategory(descrizione, 'excel'),
       gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile, dupGiorni: dup.giorni,
       raw: { source: 'excel', file: fileName, sheet: name, row },
     });
@@ -2090,6 +2132,9 @@ document.addEventListener('click', async e => {
     catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'edit-merchant') {
     openMerchantModal(btn.dataset.id);
+  } else if (action === 'rule-source') {
+    S.ruleSource = btn.dataset.source;
+    renderRegole();
   } else if (action === 'new-merchant') {
     openMerchantModal();
   } else if (action === 'apply-merchant') {
