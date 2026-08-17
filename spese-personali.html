@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.2</title>
+  <title>Spese Personali v1.0.3</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -177,7 +177,7 @@
     </main>
   </div>
   <footer class="version-bar">
-    Spese Personali · <span class="mono">v1.0.1</span>
+    Spese Personali · <span class="mono" id="footer-version"></span>
     <span class="topbar-spacer"></span>
     <span id="footer-info"></span>
   </footer>
@@ -212,8 +212,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.2';
-var BUILD_TIME  = '2026-08-14T11:00:00Z';
+var APP_VERSION = 'v1.0.3';
+var BUILD_TIME  = '2026-08-17T10:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -593,6 +593,7 @@ function renderDashboard() {
         <select class="form-input form-select" data-action="year-filter" style="width:auto">
           ${anni.map(a => `<option value="${a}" ${a === anno ? 'selected' : ''}>${a}</option>`).join('')}
         </select>
+        <button class="btn btn-outline btn-sm" data-action="import-excel">📊 Importa da Excel</button>
         <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
       </div>
     </div>
@@ -606,7 +607,8 @@ function renderDashboard() {
     </div>
     ${txs.length === 0
       ? `<div class="card"><div class="empty-state"><div class="empty-icon">💳</div>
-          <p>Nessun movimento per il ${anno}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca.</p></div></div>`
+          <p>Nessun movimento per il ${anno}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca,
+          oppure <strong>📊 Importa da Excel</strong> per l'estratto conto scaricato dal sito.</p></div></div>`
       : `${spese.length ? `<div class="grid-2">
           <div class="card">
             <div class="card-title">Uscite per super-categoria</div>
@@ -739,6 +741,7 @@ function renderTransazioni() {
       <div class="hstack gap-8 wrap">
         ${S.transactions.some(t => !t.category_id) && S.merchants.length
           ? '<button class="btn btn-outline btn-sm" data-action="apply-rules">✨ Applica i negozi imparati</button>' : ''}
+        <button class="btn btn-outline btn-sm" data-action="import-excel">📊 Importa da Excel</button>
         <button class="btn btn-primary btn-sm" data-action="import">🏦 Importa dal conto</button>
       </div>
     </div>
@@ -1148,7 +1151,7 @@ function openNuovaVoceImport(idx) {
   const it = _import.items[idx];
   if (!it) return;
   const indietro = () => {
-    $('modal-title').textContent = 'Importa dal conto';
+    $('modal-title').textContent = _import.source === 'excel' ? 'Importa da Excel' : 'Importa dal conto';
     renderImportList(_import.cardFilter);
   };
   $('modal-title').textContent = 'Nuova voce';
@@ -1299,7 +1302,7 @@ async function readMovements() {
       };
     }).sort((a, b) => a.data.localeCompare(b.data));
 
-    _import = { items, bankConnectionId, account: res.account, carte, truncated: !!res.truncated };
+    _import = { source: 'bank', items, bankConnectionId, account: res.account, carte, truncated: !!res.truncated };
     renderImportList(cardFilter && carte.includes(cardFilter) ? cardFilter : '');
   } catch (e) {
     $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
@@ -1332,11 +1335,17 @@ function renderImportList(cardFilter) {
   const nuovi = visibili.filter(({ it }) => !it.gia).length;
   const senzaCarta = items.filter(it => !it.card).length;
 
+  // Da dove arrivano le righe cambia solo questa riga di testo: da lì in giù l'anteprima è la
+  // stessa, perché quello che si fa dopo averle lette — spuntare, categorizzare, filtrare per
+  // carta — non dipende da come sono entrate.
+  const provenienza = _import.source === 'excel' ? (_import.fileName || 'file') : (account?.aspspName || 'banca');
+
   $('modal-body').innerHTML = `
     <p class="import-note">
-      ${visibili.length} movimenti da <strong>${esc(account?.aspspName || 'banca')}</strong> —
+      ${visibili.length} movimenti da <strong>${esc(provenienza)}</strong> —
       ${nuovi} nuovi, ${visibili.length - nuovi} già importati (deselezionati).
       ${_import.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo.' : ''}
+      ${_import.scartate ? `<br/>${_import.scartate} righe del foglio saltate: senza una data valida o senza importo.` : ''}
     </p>
     ${carte.length ? `
       <div class="form-group mt-12">
@@ -1394,7 +1403,7 @@ async function confirmImport() {
 
   const rows = scelti.map(it => ({
     user_id: S.session.user.id,
-    bank_connection_id: _import.bankConnectionId,
+    bank_connection_id: _import.bankConnectionId || null,
     external_id: it.externalId,
     date: it.data,
     amount: it.importo,
@@ -1403,7 +1412,7 @@ async function confirmImport() {
     category_id: it.categoryId,
     card_identification: it.card,
     type: it.type,
-    import_source: 'bank',
+    import_source: _import.source || 'bank',
     raw: it.raw,
   }));
   try {
@@ -1433,6 +1442,252 @@ async function confirmImport() {
   } catch (e) {
     $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
       <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+  }
+}
+
+/* ── Import da file Excel ───────────────────────────────────────
+   La banca via PSD2 espone solo gli ultimi mesi: per lo storico più vecchio l'unica strada è
+   l'estratto conto scaricato dal sito (.xlsx, .xls o .csv). Il file entra nella STESSA anteprima
+   dell'import dal conto — spunte, doppioni, categorie, «➕ Nuova voce…», filtro per carta —
+   perché quello che si fa dopo aver letto le righe non cambia a seconda di dove sono nate.
+   Cambia solo come si leggono, ed è tutto quello che sta qui sotto.
+
+   ⚠️ Un foglio non porta l'external_id, cioè la chiave con cui la banca identifica la riga:
+   l'indice unico (bank_connection_id, external_id) quindi non protegge — in Postgres due NULL
+   sono distinti — e i doppioni si riconoscono per data + importo + descrizione, come già si fa
+   per i movimenti della banca che quella chiave non ce l'hanno. Rileggere due volte lo stesso
+   file è la normalità, non l'eccezione.  */
+
+// SheetJS pesa quasi un mega e serve solo a chi apre questa finestra: si carica al primo uso,
+// non all'apertura della pagina.
+let _xlsxPromise = null;
+function loadXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (!_xlsxPromise) {
+    _xlsxPromise = new Promise((ok, ko) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload = () => ok(window.XLSX);
+      // Al fallimento si azzera la promessa, altrimenti un buco di rete di un secondo
+      // renderebbe l'import impossibile fino al ricarico della pagina.
+      s.onerror = () => { _xlsxPromise = null; ko(new Error('Non riesco a caricare il lettore di file Excel: serve la rete.')); };
+      document.head.appendChild(s);
+    });
+  }
+  return _xlsxPromise;
+}
+
+const normHdr = s => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+// Un CSV scaricato dalla banca non è quasi mai in UTF-8: UniCredit lo scrive in Windows-1252, e
+// letto come UTF-8 «CAFFÈ» diventa illeggibile — il che vuol dire anche una chiave diversa per lo
+// stesso negozio. Si prova prima l'UTF-8 in modo severo: se il file non lo è, la decodifica
+// fallisce invece di produrre caratteri sbagliati, e si ripiega su Windows-1252.
+async function testoDelFile(file) {
+  const buf = await file.arrayBuffer();
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { return new TextDecoder('windows-1252').decode(buf); }
+}
+
+// L'importo può arrivare come numero (cella numerica) o come testo, e in due notazioni:
+// «1.234,56» all'italiana e «1,234.56» all'inglese. A decidere è l'ULTIMO separatore che
+// compare — quello è il decimale — invece di dare per scontata la lingua del foglio.
+function parseImporto(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : NaN;
+  let s = String(v ?? '').replace(/[€\s ]/g, '').trim();
+  if (!s) return NaN;
+  let neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }        // (1.234,56) = negativo
+  if (s.startsWith('-')) { neg = true; s = s.slice(1); }
+  else if (s.startsWith('+')) s = s.slice(1);
+  const c = s.lastIndexOf(','), p = s.lastIndexOf('.');
+  if (c > p) s = s.replace(/\./g, '').replace(',', '.');
+  else if (p > c) s = s.replace(/,/g, '');
+  const n = parseFloat(s);
+  if (isNaN(n)) return NaN;
+  return neg ? -n : n;
+}
+
+// La data è un numero seriale Excel, una Date o una stringa gg/mm/aaaa (o già ISO). Il seriale
+// si tronca al giorno prima di convertirlo: con l'ora dentro, un arrotondamento in avanti
+// sposterebbe di un giorno i movimenti registrati a fine giornata.
+function parseDataCella(v) {
+  if (v instanceof Date && !isNaN(v)) {
+    return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+  }
+  // 20000 è il 1954: sotto quella soglia non è una data ma un numero finito lì per sbaglio (un
+  // progressivo, un contatore), e convertirlo darebbe un movimento datato 1899 — una riga che
+  // nella dashboard si porta dietro un anno intero che non esiste.
+  if (typeof v === 'number' && isFinite(v) && v >= 20000) {
+    return new Date(Math.floor(v - 25569) * 86400000).toISOString().slice(0, 10);
+  }
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  const it = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
+  if (!it) return null;
+  const anno = it[3].length === 2 ? '20' + it[3] : it[3];
+  return `${anno}-${it[2].padStart(2, '0')}-${it[1].padStart(2, '0')}`;
+}
+
+// Le intestazioni non sono nella prima riga: l'estratto conto di UniCredit apre con una decina
+// di righe di preambolo (intestatario, IBAN, saldi). Si cerca la riga che porta insieme una data,
+// una descrizione e un importo — o la coppia entrate/uscite, che alcune banche usano al posto
+// dell'importo con segno.
+function trovaIntestazioni(rows) {
+  for (let i = 0; i < Math.min(rows.length, 60); i++) {
+    const h = (rows[i] || []).map(normHdr);
+    if (!h.length) continue;
+    const trova = (...test) => h.findIndex(c => c && test.some(t => t(c)));
+    const cols = {
+      rowIdx: i,
+      data: trova(c => /^data (registrazione|contabile|operazione|movimento)/.test(c)),
+      descrizione: trova(c => c.includes('descrizione'), c => c.includes('dettagli'), c => c === 'operazione'),
+      importo:  trova(c => c.includes('importo')),
+      entrate:  trova(c => c.includes('entrate'), c => c.includes('accrediti'), c => c === 'avere'),
+      uscite:   trova(c => c.includes('uscite'),  c => c.includes('addebiti'),  c => c === 'dare'),
+      causale:  trova(c => c.includes('causale')),
+      divisa:   trova(c => c.includes('divisa'), c => c === 'valuta'),
+    };
+    // Ripiego sulla data valuta solo se non c'è una data di registrazione: sono due date
+    // diverse, e quella che conta per l'estratto conto è la prima.
+    if (cols.data === -1) cols.data = h.findIndex(c => c.includes('data'));
+    const impCol = cols.importo !== -1 ? cols.importo : (cols.entrate !== -1 ? cols.entrate : cols.uscite);
+    // Le tre colonne devono anche essere tre colonne DIVERSE. Un CSV col separatore sbagliato
+    // finisce tutto in una cella sola, e quella cella contiene per forza «data», «descrizione» e
+    // «importo»: senza questo controllo passerebbe per un'intestazione buona e l'import
+    // proseguirebbe leggendo spezzoni di riga come importi — plausibili e falsi.
+    if (cols.data !== -1 && cols.descrizione !== -1 && impCol !== -1
+        && new Set([cols.data, cols.descrizione, impCol]).size === 3) return cols;
+  }
+  return null;
+}
+
+// Dalle righe del foglio ai movimenti dell'anteprima. Sta fuori dalla funzione che disegna il
+// modale perché è l'unica parte che può sbagliare in silenzio — una data letta male sposta un
+// movimento di un giorno e non se ne accorge nessuno — e così si può provare da sola.
+function righeAMovimenti({ rows, cols, name }, { soloUscite = false, fileName = '' } = {}) {
+  // Stesso riconoscimento dei doppioni usato per i movimenti della banca senza external_id.
+  const giaSenzaId = new Set(S.transactions.map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
+  const cella = (row, i) => (i === -1 ? '' : row[i]);
+  const items = [];
+  let scartate = 0;
+
+  for (let r = cols.rowIdx + 1; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const data = parseDataCella(cella(row, cols.data));
+    // Righe senza una data valida: preamboli, totali in fondo, righe vuote. Si contano e basta —
+    // dirlo è utile, fermarsi no: un totale in coda non deve far fallire l'import.
+    if (!data) { if (row.some(c => String(c ?? '').trim())) scartate++; continue; }
+
+    let importo;
+    if (cols.importo !== -1) {
+      importo = parseImporto(cella(row, cols.importo));
+    } else {
+      // Colonne separate: quello che sta in «uscite» è un'uscita anche se scritto senza segno.
+      const e = parseImporto(cella(row, cols.entrate));
+      const u = parseImporto(cella(row, cols.uscite));
+      importo = !isNaN(e) && e !== 0 ? Math.abs(e) : (!isNaN(u) && u !== 0 ? -Math.abs(u) : NaN);
+    }
+    if (isNaN(importo) || importo === 0) { scartate++; continue; }
+    if (soloUscite && importo > 0) continue;
+
+    const causale = String(cella(row, cols.causale) ?? '').replace(/\s+/g, ' ').trim();
+    // La descrizione si tiene com'è, senza cucirci davanti la causale: è quella che i negozi
+    // imparati leggono, e cambiandola normalizeMerchant darebbe una chiave diversa da quella
+    // delle righe entrate dalla banca — lo stesso negozio verrebbe imparato due volte.
+    const descrizione = String(cella(row, cols.descrizione) ?? '').replace(/\s+/g, ' ').trim() || causale;
+    if (!descrizione) { scartate++; continue; }
+
+    items.push({
+      data, descrizione, importo,
+      currency: String(cella(row, cols.divisa) ?? '').trim() || null,
+      externalId: null,
+      card: cardFromDescription(descrizione),
+      type: causale || null,
+      categoryId: merchantCategory(descrizione),
+      gia: giaSenzaId.has(`${data}|${importo.toFixed(2)}|${descrizione.toLowerCase()}`),
+      raw: { source: 'excel', file: fileName, sheet: name, row },
+    });
+  }
+
+  items.sort((a, b) => a.data.localeCompare(b.data));
+  return { items, scartate };
+}
+
+function openExcelImport() {
+  openModal('Importa da Excel', `
+    <p class="import-note">Legge l'estratto conto scaricato dal sito della banca — <strong>.xlsx</strong>,
+    <strong>.xls</strong> o <strong>.csv</strong> — e propone le righe nella stessa anteprima dell'import dal conto.
+    Niente viene salvato finché non confermi.</p>
+    <div class="form-group mt-12">
+      <label class="form-label">File</label>
+      <input type="file" id="imp-file" class="form-input" accept=".xlsx,.xls,.csv" />
+      <p class="import-note mt-8">Servono le colonne <strong>data</strong>, <strong>descrizione</strong> e
+      <strong>importo</strong> (oppure due colonne entrate/uscite). Le righe di intestazione del foglio —
+      intestatario, IBAN, saldi — vengono saltate da sole.</p>
+    </div>
+    <label class="hstack gap-8 text-sm"><input type="checkbox" id="imp-solo-uscite" /> Solo le uscite (lascia fuori gli accrediti)</label>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button class="btn btn-primary" data-action="imp-read-file">Leggi il file</button>
+    </div>`, true);
+}
+
+async function readExcelFile() {
+  const file = $('imp-file')?.files?.[0];
+  if (!file) { alert('Scegli prima un file.'); return; }
+  const soloUscite = $('imp-solo-uscite').checked;
+  $('modal-body').innerHTML = '<p class="import-note">Leggo il file…</p>';
+  try {
+    const XLSXlib = await loadXLSX();
+    // ⚠️ Il CSV va letto diversamente dall'xlsx, e non è un dettaglio: leggendo un CSV SheetJS
+    // prova a interpretare i numeri all'americana, e «-12,90» diventa -1290 mentre «1.850,00»
+    // diventa 1,85 — importi plausibili e sbagliati, che nessuno vedrebbe in anteprima.
+    // raw:true glielo impedisce: i valori restano testo, e a leggerli è parseImporto, che la
+    // notazione italiana la conosce. In un xlsx il numero è già un numero e il problema non c'è.
+    const wb = /\.(csv|txt)$/i.test(file.name)
+      ? XLSXlib.read(await testoDelFile(file), { type: 'string', raw: true })
+      : XLSXlib.read(await file.arrayBuffer());
+
+    // Il foglio giusto non è per forza il primo: si prende il primo che ha delle intestazioni
+    // riconoscibili, invece di fallire su un foglio di riepilogo messo davanti.
+    let foglio = null;
+    for (const name of wb.SheetNames) {
+      const rows = XLSXlib.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', blankrows: false });
+      const cols = trovaIntestazioni(rows);
+      if (cols) { foglio = { rows, cols, name }; break; }
+    }
+    if (!foglio) {
+      $('modal-body').innerHTML = `
+        <p class="text-sm">Non ho trovato le intestazioni in nessun foglio di <strong>${esc(file.name)}</strong>.</p>
+        <p class="import-note mt-8">Cerco una riga che porti insieme una colonna <strong>data</strong>, una
+        <strong>descrizione</strong> e un <strong>importo</strong> (o due colonne entrate/uscite). Se il file è stato
+        rimaneggiato, rimetti quella riga e riprova.</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="import-excel">Indietro</button></div>`;
+      return;
+    }
+
+    const { items, scartate } = righeAMovimenti(foglio, { soloUscite, fileName: file.name });
+
+    if (!items.length) {
+      $('modal-body').innerHTML = `
+        <p class="text-sm">Nessun movimento utilizzabile in <strong>${esc(file.name)}</strong>${soloUscite ? ' fra le sole uscite' : ''}.</p>
+        ${scartate ? `<p class="import-note mt-8">${scartate} righe saltate: senza una data valida o senza importo.</p>` : ''}
+        <div class="modal-footer"><button class="btn btn-outline" data-action="import-excel">Indietro</button></div>`;
+      return;
+    }
+
+    const carte = [...new Set(items.map(it => it.card).filter(Boolean))].sort();
+    const cardFilter = localStorage.getItem(CARD_FILTER_KEY) || '';
+    _import = { source: 'excel', items, bankConnectionId: null, fileName: file.name, carte, truncated: false, scartate };
+    $('modal-title').textContent = 'Importa da Excel';
+    renderImportList(cardFilter && carte.includes(cardFilter) ? cardFilter : '');
+  } catch (e) {
+    console.error('Import Excel:', e);
+    $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="import-excel">Indietro</button></div>`;
   }
 }
 
@@ -1479,6 +1734,9 @@ function render() {
     case 'categorie': renderCategorie(); break;
     case 'impostazioni': renderImpostazioni(); break;
   }
+  // La versione nella barra in fondo la scrive APP_VERSION e non l'HTML: scritta a mano restava
+  // indietro di una release senza che si vedesse da nessuna parte.
+  $('footer-version').textContent = APP_VERSION;
   $('footer-info').textContent = `${S.transactions.length} movimenti · ${S.supers.length} super · ${S.categories.length} voci`;
 }
 
@@ -1495,7 +1753,9 @@ document.addEventListener('click', async e => {
   if (action === 'nav') navigate(btn.dataset.view);
   else if (action === 'close-modal') closeModal();
   else if (action === 'import') openImport();
+  else if (action === 'import-excel') openExcelImport();
   else if (action === 'imp-read') readMovements();
+  else if (action === 'imp-read-file') readExcelFile();
   else if (action === 'imp-confirm') confirmImport();
   else if (action === 'imp-all' || action === 'imp-none') {
     document.querySelectorAll('#modal-body input[data-imp-idx]').forEach(cb => { cb.checked = action === 'imp-all'; });

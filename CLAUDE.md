@@ -1451,7 +1451,7 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Il conto personale di Salvatore: import dal conto, categorie a due livelli, negozi imparati e
   dashboard. Si apre dal collegamento *💳 Spese Personali* nella sidebar di `finanza.html`
   (sezione **Salvatore**).
-- **Gemello di `spese-ada.html`**, a meno di tre cose — se modifichi una delle due, guarda anche
+- **Gemello di `spese-ada.html`**, a meno di quattro cose — se modifichi una delle due, guarda anche
   l'altra:
   1. **tabelle `sal_*`** invece di `ada_*` (`20260809120000_sal_spese_personali_tables.sql`),
      separate dalle `ca_*` per la stessa ragione: le spese personali non devono entrare nei
@@ -1465,7 +1465,36 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   3. il filtro per carta lascia comunque passare i **movimenti senza carta** (bonifici,
      accrediti, addebiti). Su Ada si cerca una carta e basta; qui quei movimenti sono
      esattamente le entrate che servono per il saldo, e nasconderli col filtro attivo
-     falserebbe il totale.
+     falserebbe il totale;
+  4. **c'è anche l'import da file** (📊 Importa da Excel), che su Ada non c'è: la banca via PSD2
+     espone solo gli ultimi mesi, e lo storico più vecchio sta solo nell'estratto conto
+     scaricato dal sito.
+- L'import da file **sbocca nella stessa anteprima** dell'import dal conto — spunte, doppioni,
+  categorie, «➕ Nuova voce…», filtro per carta — perché quel che si fa dopo aver letto le righe
+  non cambia a seconda di dove sono nate. `_import.source` (`'bank'` \| `'excel'`) decide solo la
+  riga di intestazione dell'anteprima e cosa finisce in `sal_transactions.import_source`;
+  `bank_connection_id` ed `external_id` restano **NULL** per le righe da file.
+  Tre cose che sono la ragione per cui il codice è fatto così:
+  - ⚠️ **un foglio non porta l'external_id**, quindi l'indice unico
+    `(bank_connection_id, external_id)` non protegge — in Postgres due NULL sono distinti — e i
+    doppioni si riconoscono per **data + importo + descrizione**, come già si fa per i movimenti
+    della banca che quella chiave non ce l'hanno. Rileggere due volte lo stesso file è la
+    normalità, e le righe già in archivio arrivano in anteprima **deselezionate**;
+  - ⚠️ **un CSV si legge diversamente da un xlsx**: leggendo un CSV SheetJS interpreta i numeri
+    all'americana e «-12,90» diventa **-1290**, «1.850,00» diventa **1,85** — importi plausibili
+    e falsi, che in anteprima non si notano. `raw: true` glielo impedisce e a leggerli è
+    `parseImporto`, che riconosce la notazione dall'ultimo separatore invece di dare per scontata
+    la lingua. Il testo passa da `testoDelFile()`, che prova UTF-8 in modo severo e ripiega su
+    **Windows-1252** (in cui UniCredit scrive i suoi CSV) invece di storpiare gli accenti — e con
+    loro la chiave del negozio;
+  - la **descrizione si archivia com'è**, senza cucirci davanti la causale: è quella che i negozi
+    imparati leggono, e cambiandola `normalizeMerchant` darebbe una chiave diversa da quella
+    delle righe entrate dalla banca — lo stesso negozio verrebbe imparato due volte.
+  Le intestazioni non sono nella prima riga (preambolo con intestatario, IBAN e saldi):
+  `trovaIntestazioni()` cerca nei primi 60 righe di ogni foglio una riga che porti insieme data,
+  descrizione e importo — o la coppia entrate/uscite — **su tre colonne diverse**, perché un CSV
+  spezzato male finisce tutto in una cella sola che quelle tre parole le contiene per forza.
+  SheetJS si carica dal CDN **al primo uso** e non all'apertura della pagina.
 - Il conto è quello spuntato come `'spese_sal'` in `cm_bank_connections.uses` — uso a sé e non
   `'spese_ada'` riusato, altrimenti le due pagine si troverebbero ciascuna il conto dell'altra
   nella tendina dell'import. Il conto UniCredit personale è già collegato: basta spuntare
