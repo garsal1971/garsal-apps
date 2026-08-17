@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.6</title>
+  <title>Spese Personali v1.0.7</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -217,8 +217,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.6';
-var BUILD_TIME  = '2026-08-17T18:00:00Z';
+var APP_VERSION = 'v1.0.7';
+var BUILD_TIME  = '2026-08-17T21:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -509,26 +509,99 @@ async function applyLearnedMerchants(onlyRuleId = null) {
 }
 
 // Assegnazione della categoria a un movimento già in archivio.
-// learn:false quando la regola è già stata scritta a mano (voce creata al volo dalla tendina):
-// lì la chiave l'ha decisa l'utente, e impararne una seconda con la descrizione intera
-// aggiungerebbe una regola che nessuno ha chiesto.
-async function setTxCategory(tx, categoryId, { learn = true } = {}) {
+//
+// ⚠️ Qui si assegna e basta: la regola NON si impara di nascosto. Prima succedeva, con la
+// descrizione intera, e quella è esattamente la regola che non aggancerà mai più niente — la
+// banca infila in ogni acquisto un riferimento diverso, quindi una chiave lunga vale per quel
+// movimento solo. La si scriveva senza vederla e la si scopriva inerte settimane dopo. Adesso
+// la scrittura passa dal popup di openRegolaDaMovimento, dove la chiave si vede e si accorcia.
+async function setTxCategory(tx, categoryId) {
   await sbUpd('sal_transactions', `id=eq.${tx.id}`, { category_id: categoryId });
   tx.category_id = categoryId;
-  // Assegnare a mano una categoria insegna il negozio: è il modo in cui questa pagina
-  // impara, senza una schermata di regole da compilare.
-  // Si impara solo se una regola non dava già quella categoria: correggere a mano una riga
-  // che era già giusta non deve creare una seconda regola identica nel risultato.
-  // La regola nasce nell'elenco della fonte del movimento: è da lì che quella descrizione viene,
-  // ed è lì che tornerà a presentarsi scritta allo stesso modo.
-  if (learn && categoryId && merchantCategory(tx.description, sourceOf(tx)) !== categoryId) {
-    const rule = await learnMerchant(tx.description, categoryId, sourceOf(tx));
-    // La regola appena imparata vale subito anche per gli altri movimenti dello stesso
-    // negozio rimasti senza categoria: è quello che uno si aspetta da "imparato".
-    // tx ha già la sua categoria (riga sopra), quindi il conteggio sono solo gli altri.
-    const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
-    if (altri) showToast(`✨ Categorizzati altri ${altri} movimenti dello stesso negozio`);
-  }
+}
+
+/* ── La regola si scrive quando si associa ───────────────────────
+   Associare una categoria a un movimento è il momento in cui si sa qual è il negozio: è lì che
+   la regola va scritta, ed è lì che va guardata. Il popup mostra la descrizione per intero,
+   propone la chiave che si ricaverebbe da sola — la descrizione normalizzata, il default
+   prudente — e la lascia accorciare col conteggio dal vivo di quanti movimenti aggancia. Senza
+   quel numero accorciare è un tiro al buio: «AMAZON.IT *MK7HG2LO3» → «AMAZON.IT» è utile solo
+   se si vede che passa da 1 a 14, e che non sta prendendo mezzo estratto conto.  */
+function openRegolaDaMovimento(tx, categoryId) {
+  const fonte = sourceOf(tx);
+  const cat = catById(categoryId);
+  const proposta = normalizeMerchant(tx.description);
+  openModal('Impara la regola', `
+    <p class="import-note">Il movimento è già in <strong>${esc(cat?.name || '—')}</strong>. Vuoi che d'ora in poi ci
+    vadano da soli anche gli altri movimenti di questo negozio?</p>
+    <div class="card mt-12" style="box-shadow:none;margin-bottom:0">
+      <div class="text-muted text-sm">Descrizione del movimento</div>
+      <div class="mono text-sm mt-8" style="word-break:break-word">${esc(tx.description) || '—'}</div>
+      <div class="text-muted text-sm mt-12">Esercente riconosciuto</div>
+      <div class="mono text-sm mt-8">${esc(merchantText(tx.description)) || '—'}</div>
+    </div>
+    <form id="modal-form" class="mt-12">
+      <div class="form-group">
+        <label class="form-label">Regola: se la descrizione contiene…</label>
+        <input id="rule-key" class="form-input mono" value="${esc(proposta)}" autocomplete="off" />
+        <p class="import-note mt-8" id="rule-count"></p>
+      </div>
+      <p class="import-note"><strong>Accorciala al solo nome del negozio.</strong> Così com'è arriva dalla descrizione
+      intera, che contiene data, numero di carta e il riferimento dell'operazione: agganciarebbe solo questo movimento.
+      Finisce nell'elenco <strong>${labelSource(fonte)}</strong> e vale solo per i movimenti arrivati da lì.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Solo questo movimento</button>
+        <button type="submit" class="btn btn-primary" id="rule-go">Crea la regola</button>
+      </div>
+    </form>
+  `);
+
+  const input = $('rule-key'), info = $('rule-count'), go = $('rule-go');
+  const refresh = () => {
+    const k = input.value.trim().toUpperCase();
+    if (k.length < 3) {
+      info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>';
+      go.disabled = true;
+      return;
+    }
+    go.disabled = false;
+    const n = merchantMatchCount(k, fonte);
+    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === fonte && normalizeMerchant(t.description).includes(k)).length;
+    // La chiave che si sta scrivendo può essere di una regola che c'è già: dirlo prima, perché
+    // salvando la si fa puntare altrove — è quello che si vuole quando si corregge, ma non è
+    // una cosa da scoprire dopo.
+    const esistente = S.merchants.find(x => x.merchant_key === k && (x.source || 'bank') === fonte);
+    info.innerHTML = `Aggancia <strong>${n}</strong> movimenti ${labelSource(fonte)}`
+      + (senzaCat ? ` (${senzaCat} ancora senza categoria, che verrebbero categorizzati subito)` : '')
+      + '.'
+      + (esistente && esistente.category_id !== categoryId
+        ? `<br/><span style="color:var(--c-warning)">⚠️ Esiste già una regola «${esc(k)}» che manda a «${esc(catById(esistente.category_id)?.name || '—')}»: salvando la farai puntare a «${esc(cat?.name || '—')}».</span>`
+        : '');
+  };
+  input.addEventListener('input', refresh);
+  refresh();
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const key = input.value.trim().toUpperCase();
+    if (key.length < 3) return;
+    go.disabled = true;
+    try {
+      const rule = await saveMerchantRule(key, categoryId, fonte);
+      // La regola appena scritta vale subito per gli altri movimenti dello stesso negozio
+      // rimasti senza categoria: è quello che uno si aspetta da «imparato». tx la sua categoria
+      // ce l'ha già, quindi il conteggio sono solo gli altri.
+      const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
+      closeModal();
+      showToast(altri ? `✨ Regola creata · categorizzati altri ${altri} movimenti` : '✨ Regola creata');
+      render();
+    } catch (err) {
+      go.disabled = false;
+      alert('Errore: ' + err.message);
+    }
+  });
 }
 
 function showToast(msg) {
@@ -1029,9 +1102,12 @@ function renderRegole() {
         <li><strong>Se agganciano in più, vince la più lunga</strong>, cioè la più specifica: senza questa precedenza
           <span class="mono">FARMACIA</span>, imparata prima, si prenderebbe anche i movimenti di
           <span class="mono">FARMACIA S.ANNA</span>.</li>
-        <li><strong>Le regole si scrivono da sole.</strong> Dare a mano una categoria a un movimento impara la sua
-          descrizione intera: è il default prudente, perché una chiave corta inventata in automatico aggancerebbe cose che
-          non c'entrano. Accorciarla al nome del negozio si fa qui sotto con ✎, vedendo dal vivo quanti movimenti aggancia.</li>
+        <li><strong>La regola si scrive quando associ.</strong> Dare una categoria a un movimento apre un popup con la
+          descrizione per intero e la chiave che se ne ricava: lì la <strong>accorci al nome del negozio</strong> vedendo
+          dal vivo quanti movimenti aggancerebbe, oppure scegli <em>Solo questo movimento</em> e nessuna regola nasce.
+          La chiave proposta è la descrizione intera — il default prudente — ma è proprio quella che non aggancia
+          nient'altro, perché la banca infila in ogni acquisto un riferimento diverso: è per questo che il popup te la
+          fa vedere invece di impararla di nascosto.</li>
         <li><strong>Una regola non sovrascrive mai una categoria già messa.</strong> Agisce solo sui movimenti che ne sono
           privi — all'import, subito dopo un'assegnazione a mano, e col pulsante ✨. Quello che hai deciso tu resta.</li>
         <li><strong>Gli elenchi sono due, uno per fonte, e non si parlano.</strong> Un movimento arrivato dal conto consulta
@@ -1339,8 +1415,8 @@ function openNuovaVoceModal(tx) {
     onCancel: closeModal,
     onDone: async (cat, rule) => {
       closeModal();
-      // learn:false — la regola l'ha appena scritta l'utente qui sopra.
-      await setTxCategory(tx, cat.id, { learn: false });
+      // Niente popup della regola: l'ha appena scritta l'utente nel form qui sopra.
+      await setTxCategory(tx, cat.id);
       const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
       showToast(altri
         ? `✅ Voce «${cat.name}» creata · ✨ categorizzati altri ${altri} movimenti`
@@ -2202,6 +2278,11 @@ document.addEventListener('change', async e => {
     try {
       await setTxCategory(tx, el.value || null);
       render();
+      // Il popup si apre solo se c'è davvero una regola da scrivere: se una regola manda già
+      // questa descrizione in questa categoria non c'è niente da imparare, e chiederlo sarebbe
+      // una finestra che si apre per dire «va tutto bene». Togliere la categoria non ne apre
+      // nessuna: «senza categoria» non è una regola.
+      if (el.value && merchantCategory(tx.description, sourceOf(tx)) !== el.value) openRegolaDaMovimento(tx, el.value);
     } catch (err) { alert('Errore: ' + err.message); }
   } else if (el.matches('[data-imp-cat]')) {
     const it = _import?.items[parseInt(el.dataset.impCat, 10)];
