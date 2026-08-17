@@ -269,15 +269,30 @@ sotto *Patrimonio*: quelli sono quello che c'è, il reddito è quello che è pas
 
 La pagina è in **due sezioni**, una tabella ciascuna: redditi (`lavoro`, `pensione`,
 `altri_lordi`, `altri_netti`) e liquidazione della dichiarazione (`liq_imponibile`,
-`liq_imposta_lorda`, `liq_imposta_netta`, `liq_reddito_netto`). Il ✎ e il ✕ agiscono **sulla
-singola sezione** di un anno, non sull'anno intero: le due tabelle vengono da documenti diversi.
+`liq_imposta_lorda`, `liq_imposta_netta`). Il ✎ e il ✕ agiscono **sulla singola sezione** di un
+anno, non sull'anno intero: le due tabelle vengono da documenti diversi.
 
-⚠️ **Si mostra solo quello che è archiviato: nessuna colonna calcolata, nessun riquadro
-calcolato**, e per questo non esiste nessun `INCOME_CALC`. Netto in busta (lordo − ritenute),
-totale lavoro dipendente (lordo + pensione) e totale trattenuto c'erano e sono stati **tolti di
-proposito**: erano esatti — verificati su tutti i 730 disponibili — ma qui si vuole leggere
-quello che è scritto sui documenti e basta. Le formule sono nella storia di git
-(`e78fd62` e precedenti) se un giorno servissero.
+⚠️ **Due colonne della liquidazione sono calcolate** e vivono in `INCOME_CALC`, non in
+`fnz_income`:
+
+| Colonna | Formula |
+|---|---|
+| Detrazioni | `liq_imposta_lorda − liq_imposta_netta` |
+| Reddito netto | `liq_imponibile − liq_imposta_netta` |
+
+Si riconoscono dal **«(calc.)» in intestazione**, non compaiono nel form e non si archiviano: una
+grandezza calcolata *e* archiviata sono due verità sullo stesso numero, che divergono il giorno
+che una delle due cambia. Tornano `null` — non zero — se manca un ingrediente, quindi il reddito
+netto del 2017 resta un trattino (manca l'imponibile). Le detrazioni tornano **esatte su tutti e
+sette gli anni**, verificate contro il vecchio `liq_detrazioni` archiviato.
+
+⚠️ Il **reddito netto così calcolato non toglie le addizionali** regionale e comunale, che sul 730
+stanno fuori dall'imposta netta: è il reddito al netto della sola IRPEF, non l'accredito in banca.
+
+`liq_reddito_netto` **non è più un kind** — la colonna era stata aperta il 16 agosto e mai
+compilata. Netto in busta (lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale
+trattenuto erano calcolati pure loro e restano fuori: le formule sono nella storia di git
+(`e78fd62` e precedenti).
 
 ⚠️ **I kind usciti dalle tabelle sono stati cancellati dal database**, su richiesta esplicita:
 `20260816110000_fnz_income_cancella_kind_ritirati.sql` ha tolto 86 righe su 112 in 19 kind —
@@ -291,17 +306,14 @@ produzione. Togliere una voce da `INCOME_SECTIONS` resta reversibile in sé, ma 
 riaperta è vuota** finché una migration non ne ricopia gli importi da lì: è quello che
 `20260817100000_fnz_income_ripristina_imposta_netta.sql` fa per `liq_imposta_netta`, rimessa in
 tabella coi suoi sette anni (2017, 2019-2022, 2024-2025). Le altre quattro voci della
-liquidazione restano fuori e restano cancellate.
+liquidazione restano cancellate: `liq_detrazioni` è tornata a vedersi **come colonna calcolata**,
+quindi senza rimettere in piedi la sua riga, e acconti, esito e reddito di riferimento restano
+fuori del tutto.
 
-⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
-(lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730
-disponibili tornano esatte, quindi archiviarle vorrebbe dire tenere due verità sullo stesso
-numero. Tornano `null` — non zero — se manca un ingrediente: il totale lav. dip. del 2017 resta
-vuoto perché la pensione di quell'anno non compare, e sommare solo quel che c'è darebbe un
-totale più basso del vero senza dirlo. Il **reddito complessivo invece si archivia**: è la cifra
-scritta sul 730 e per l'ultimo anno non è ricavabile (mancano fabbricati e abitazione
-principale). Per la stessa ragione il KPI in cima mostra la variazione **solo fra anni misurati
-allo stesso modo** — complessivo contro complessivo.
+I **due riquadri in cima** (UniCredit lordo, Reddito netto) passano dalla stessa `incomeCell()`
+delle celle della tabella, calcolate comprese: il riquadro non può mostrare un numero diverso da
+quello che si legge nella riga sotto. Mostrano l'ultimo anno che ha quella colonna, e la
+variazione **solo se ce l'ha anche l'anno prima** — cioè fra due cifre ricavate allo stesso modo.
 
 La tabella arriva **fino all'anno scorso** e non a quello in corso: un anno incompleto messo in
 colonna accanto agli altri sembrerebbe un crollo del reddito. Gli anni senza dati restano
