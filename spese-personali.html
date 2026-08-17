@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.4</title>
+  <title>Spese Personali v1.0.5</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -217,8 +217,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.4';
-var BUILD_TIME  = '2026-08-17T14:00:00Z';
+var APP_VERSION = 'v1.0.5';
+var BUILD_TIME  = '2026-08-17T16:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1370,6 +1370,22 @@ async function renderImpostazioni() {
            personale — che è già collegato — e spunta quella casella: gli usi si sommano, quindi il conto
            continua a servire anche agli altri moduli.</p>`}
     </div>
+    <div class="card">
+      <div class="card-title">Riconoscimento dei doppioni</div>
+      <p class="text-sm">Lo stesso movimento può entrare due volte, dal conto e da un foglio Excel. Le due fonti però lo
+      <strong>scrivono in modo diverso</strong> — la banca cuce nella descrizione il nome della controparte, il foglio no —
+      quindi il confronto si fa su <strong>importo esatto</strong> e <strong>vicinanza nel tempo</strong>, non sul testo.
+      La data balla perché il foglio porta la registrazione e la banca la contabile: qui decidi di quanto.</p>
+      <div class="form-group mt-12" style="max-width:280px">
+        <label class="form-label">Margine sulle date</label>
+        <select class="form-input form-select" data-action="dup-margin">
+          ${[0, 1, 2, 3, 5, 7, 10, 15].map(n => `<option value="${n}" ${dupMargine() === n ? 'selected' : ''}>${n === 0 ? 'solo lo stesso giorno' : `± ${n} giorni`}</option>`).join('')}
+        </select>
+      </div>
+      <p class="import-note">Più largo il margine, più righe vengono segnalate come sospette — e una sospetta arriva
+      deselezionata, quindi va guardata o si perde. Più stretto, più facile che un doppione passi. ${DUP_MARGIN_DEFAULT} giorni
+      è il compromesso di partenza. La scelta resta in questo browser.</p>
+    </div>
     <div class="card card-danger">
       <div class="card-title neg">⚠️ Zona pericolosa</div>
       <p class="text-sm">Cancella <strong>tutti i ${S.transactions.length} movimenti</strong> di Spese Personali, di ogni anno.
@@ -1444,32 +1460,60 @@ let _import = null;
    Tre reti, dalla più stretta alla più larga:
      external_id              → la stessa riga della stessa banca. Certezza.
      data + importo + descrizione → la stessa riga arrivata dall'altra strada con lo stesso testo.
-     data + importo           → quasi sempre la stessa spesa scritta con parole diverse dalle due
-                                fonti. Non è una certezza — due caffè uguali lo stesso giorno
-                                esistono — quindi si SEGNALA come sospetta invece di nasconderla,
-                                mostrando accanto il movimento in archivio che le somiglia.
-   In tutt'e tre i casi la riga arriva DESELEZIONATA: qui un doppione raddoppia una spesa, e
-   ricontrollare due righe costa infinitamente meno che accorgersene fra sei mesi in un totale. */
+     importo + data vicina    → ⚠️ QUI IL TESTO NON ENTRA AFFATTO, ed è voluto: la descrizione è
+                                proprio la cosa che le due strade scrivono in modo diverso — la
+                                banca ci cuce accanto il nome della controparte, il foglio no —
+                                quindi confrontarla non aggiungerebbe niente e toglierebbe
+                                aggancio. Restano l'importo, che la stessa spesa ha identico, e la
+                                data, che invece balla: il foglio porta la data di registrazione,
+                                la banca quella contabile, e su una carta le due si scostano di
+                                qualche giorno. Da qui il MARGINE (dupMargine(), 3 giorni di
+                                default, si cambia in Impostazioni).
+   L'ultima non è una certezza — due spese uguali a pochi giorni di distanza esistono — quindi si
+   SEGNALA come sospetta invece di nasconderla, mostrando accanto il movimento in archivio che le
+   somiglia e di quanti giorni si scosta: il confronto delle descrizioni lo fa l'occhio, che è
+   l'unico che può farlo. In tutt'e tre i casi la riga arriva DESELEZIONATA: qui un doppione
+   raddoppia una spesa, e ricontrollare due righe costa meno che accorgersene fra sei mesi. */
 const chiaveEsatta = (data, importo, desc) =>
   `${data}|${(+importo).toFixed(2)}|${(desc || '').replace(/\s+/g, ' ').trim().toLowerCase()}`;
 
+// Il margine è una preferenza di lettura, non un dato della contabilità: sta nel browser, come
+// il filtro per carta. 0 = solo lo stesso giorno.
+const DUP_MARGIN_KEY = 'sal_dup_margin';
+const DUP_MARGIN_DEFAULT = 3;
+function dupMargine() {
+  const n = parseInt(localStorage.getItem(DUP_MARGIN_KEY), 10);
+  return isNaN(n) ? DUP_MARGIN_DEFAULT : Math.max(0, Math.min(15, n));
+}
+// Giorno assoluto, per differenze in giorni che non inciampano nei fusi né nell'ora legale.
+const numeroGiorno = d => Math.round(new Date(`${(d || '').slice(0, 10)}T00:00:00Z`).getTime() / 86400000);
+
 function indiceDoppioni() {
+  const margine = dupMargine();
   const perExternal = new Set();
   const esatti = new Set();
-  const perDataImporto = new Map();
+  const perImporto = new Map();
   S.transactions.forEach(t => {
     if (t.external_id) perExternal.add(t.external_id);
     const d = (t.date || '').slice(0, 10);
     esatti.add(chiaveEsatta(d, t.amount, t.description));
-    const k = `${d}|${(+t.amount).toFixed(2)}`;
-    if (!perDataImporto.has(k)) perDataImporto.set(k, []);
-    perDataImporto.get(k).push(t);
+    const k = (+t.amount).toFixed(2);
+    if (!perImporto.has(k)) perImporto.set(k, []);
+    perImporto.get(k).push(t);
   });
   return (data, importo, descrizione, externalId = null) => {
-    if (externalId && perExternal.has(externalId)) return { livello: 'esatto', simile: null };
-    if (esatti.has(chiaveEsatta(data, importo, descrizione))) return { livello: 'esatto', simile: null };
-    const stessi = perDataImporto.get(`${data}|${(+importo).toFixed(2)}`) || [];
-    return stessi.length ? { livello: 'sospetto', simile: stessi[0] } : { livello: null, simile: null };
+    if (externalId && perExternal.has(externalId)) return { livello: 'esatto', simile: null, giorni: 0 };
+    if (esatti.has(chiaveEsatta(data, importo, descrizione))) return { livello: 'esatto', simile: null, giorni: 0 };
+    const g = numeroGiorno(data);
+    // Fra più candidati vince il più vicino nel tempo: è quello che ha più probabilità di essere
+    // la stessa spesa, ed è quello che ha senso mostrare accanto alla riga.
+    const vicini = (perImporto.get((+importo).toFixed(2)) || [])
+      .map(t => ({ t, scarto: Math.abs(numeroGiorno(t.date) - g) }))
+      .filter(x => x.scarto <= margine)
+      .sort((a, b) => a.scarto - b.scarto);
+    return vicini.length
+      ? { livello: 'sospetto', simile: vicini[0].t, giorni: vicini[0].scarto }
+      : { livello: null, simile: null, giorni: 0 };
   };
 }
 
@@ -1551,7 +1595,7 @@ async function readMovements() {
         card: t.card?.identification || cardFromDescription(t.description) || null,
         type: t.bankTransactionCode || null,
         categoryId: merchantCategory(descrizione),
-        gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile,
+        gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile, dupGiorni: dup.giorni,
         raw: t,
       };
     }).sort((a, b) => a.data.localeCompare(b.data));
@@ -1600,7 +1644,7 @@ function renderImportList(cardFilter) {
     <p class="import-note">
       ${visibili.length} movimenti da <strong>${esc(provenienza)}</strong> —
       <strong>${nuovi} nuovi</strong>${esatti ? `, ${esatti} già importati` : ''}${sospetti ? `, ${sospetti} sospetti` : ''}${esatti || sospetti ? ' (deselezionati)' : ''}.
-      ${sospetti ? '<br/>⚠️ <strong>Sospetto</strong> vuol dire stessa data e stesso importo di un movimento già in archivio, ma scritto con parole diverse: quasi sempre è la stessa spesa entrata dall\'altra strada (foglio o banca). Accanto trovi con chi somiglia — spuntalo solo se è davvero una spesa a parte.' : ''}
+      ${sospetti ? `<br/>⚠️ <strong>Sospetto</strong> vuol dire <strong>stesso importo entro ${dupMargine()} giorni</strong> da un movimento già in archivio. La descrizione non entra nel confronto — è proprio quella che le due strade scrivono in modo diverso — quindi accanto trovi con chi somiglia e di quanto si scosta: guardala, e spunta la riga solo se è davvero una spesa a parte. Il margine si cambia in ⚙️ Impostazioni.` : ''}
       ${_import.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo.' : ''}
       ${_import.scartate ? `<br/>${_import.scartate} righe del foglio saltate: senza una data valida o senza importo.` : ''}
     </p>
@@ -1628,7 +1672,7 @@ function renderImportList(cardFilter) {
             <td title="${esc(it.descrizione)}">${esc(merchantText(it.descrizione))}
               ${it.card ? `<span class="text-muted"> · 💳 ${esc(it.card)}</span>` : ''}
               ${it.dupLivello === 'esatto' ? '<span class="text-muted"> · già importato</span>' : ''}
-              ${it.dupLivello === 'sospetto' ? `<span class="dup-warn"> · ⚠️ forse già in archivio come «${esc(merchantText(it.dupSimile?.description || '') || '—')}»</span>` : ''}</td>
+              ${it.dupLivello === 'sospetto' ? `<span class="dup-warn"> · ⚠️ stesso importo di «${esc(merchantText(it.dupSimile?.description || '') || '—')}» del ${fmtDate((it.dupSimile?.date || '').slice(0, 10))}${it.dupGiorni ? ` (${it.dupGiorni} giorn${it.dupGiorni === 1 ? 'o' : 'i'} di scarto)` : ' (stesso giorno)'}</span>` : ''}</td>
             <td class="mono text-right" style="white-space:nowrap;color:${it.importo < 0 ? 'var(--c-danger)' : 'var(--c-success)'}">${fmtEUR(it.importo)}</td>
             <td><select class="form-input form-select" data-imp-cat="${i}" style="padding:3px 6px;font-size:.78rem">${catOptions(it.categoryId, undefined, true)}</select></td>
           </tr>`).join('')}</tbody>
@@ -1867,7 +1911,7 @@ function righeAMovimenti({ rows, cols, name }, { soloUscite = false, fileName = 
       card: cardFromDescription(descrizione),
       type: causale || null,
       categoryId: merchantCategory(descrizione),
-      gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile,
+      gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile, dupGiorni: dup.giorni,
       raw: { source: 'excel', file: fileName, sheet: name, row },
     });
   }
@@ -2089,6 +2133,9 @@ document.addEventListener('change', async e => {
   if (el.matches('[data-action="year-filter"]')) {
     S.selectedYear = parseInt(el.value, 10);
     render();
+  } else if (el.matches('[data-action="dup-margin"]')) {
+    localStorage.setItem(DUP_MARGIN_KEY, el.value);
+    showToast(el.value === '0' ? '📅 Doppioni: solo lo stesso giorno' : `📅 Doppioni: ± ${el.value} giorni`);
   } else if (el.matches('[data-filter]')) {
     S.filters[el.dataset.filter] = el.value;
     renderTransazioni();

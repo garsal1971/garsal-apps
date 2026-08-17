@@ -1566,9 +1566,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   banca gli mette accanto l'`external_id` e cuce nella descrizione il nome della controparte, il
   foglio nessuna delle due cose. `indiceDoppioni()` è quindi **una sola rete a tre maglie**, usata
   da entrambi gli import: `external_id` (certezza), `data + importo + descrizione` (stessa riga
-  dall'altra strada, stesso testo), `data + importo` (**sospetto**: quasi sempre la stessa spesa
-  scritta con parole diverse — due caffè uguali lo stesso giorno però esistono, quindi si segnala
-  mostrando accanto il movimento che le somiglia, invece di nasconderla). Tutti e tre i casi
+  dall'altra strada, stesso testo) e — quella che prende davvero il caso incrociato —
+  **`importo` esatto + data entro un margine**. ⚠️ In quest'ultima **il testo non entra affatto**,
+  ed è la scelta che regge tutto: la descrizione è proprio ciò che le due strade scrivono in modo
+  diverso, quindi confrontarla non aggiunge nulla e toglie aggancio. La **data invece balla** —
+  il foglio porta la registrazione, la banca la contabile, e su una carta si scostano di qualche
+  giorno — da cui il margine (`dupMargine()`, 3 giorni di default, si cambia in Impostazioni e
+  vive in `localStorage` come il filtro per carta). Non essendo una certezza, la riga si **segnala
+  come sospetta** mostrando accanto il movimento più vicino e di quanti giorni si scosta: il
+  confronto delle descrizioni lo fa l'occhio, che è l'unico che può farlo. Tutti e tre i casi
   arrivano **deselezionati**. Fino alla v1.0.3 la rete era una sola per fonte e un movimento
   entrato da Excel tornava dal sync col suo `external_id`, che nessuno aveva mai visto: la spesa
   entrava **due volte**, e in un totale non si vedeva.
