@@ -251,7 +251,7 @@ Rosa vede le voci in `situazione-rosa.html` (via `cm_guest_access`), **non i mov
 |---|---|
 | `fnz_income` | Reddito percepito, **una riga per anno e per tipo**: `year`, `kind`, `amount`, `notes` |
 
-Si compila a mano da `finanza.html` → 💶 **Reddito** (menù *Patrimonio*): è l'unico dato di
+Si compila a mano da `finanza.html` → 💶 **Reddito** (voce di menù propria): è l'unico dato di
 Finanza che non viene da nessuna banca. **Non entra in nessun totale del patrimonio** — il
 patrimonio è quello che c'è, il reddito è quello che è passato — quindi né lo snapshot né la
 dashboard lo guardano.
@@ -264,10 +264,13 @@ anno raddoppierebbe il totale in silenzio. Una casella lasciata vuota **cancella
 invece di salvare zero: «dato assente» e «zero euro» sono due cose diverse, e un importo tolto
 che restasse scritto continuerebbe a fare totale.
 
+Nella sidebar è una **voce di menù a sé** (sottotitolo *Reddito*), non più insieme a 💎 Asset
+sotto *Patrimonio*: quelli sono quello che c'è, il reddito è quello che è passato.
+
 La pagina è in **due sezioni**, una tabella ciascuna: redditi (`lavoro`, `pensione`,
 `altri_lordi`, `altri_netti`) e liquidazione della dichiarazione (`liq_imponibile`,
-`liq_imposta_lorda`, `liq_reddito_netto`). Il ✎ e il ✕ agiscono **sulla singola sezione** di un
-anno, non sull'anno intero: le due tabelle vengono da documenti diversi.
+`liq_imposta_lorda`, `liq_imposta_netta`, `liq_reddito_netto`). Il ✎ e il ✕ agiscono **sulla
+singola sezione** di un anno, non sull'anno intero: le due tabelle vengono da documenti diversi.
 
 ⚠️ **Si mostra solo quello che è archiviato: nessuna colonna calcolata, nessun riquadro
 calcolato**, e per questo non esiste nessun `INCOME_CALC`. Netto in busta (lordo − ritenute),
@@ -283,9 +286,12 @@ ritenute in busta paga (`rit_*`), contributi previdenziali (`prev_*`), premi/wel
 `liq_acconti`, `liq_esito`, `liq_reddito_rif`) e tre dei redditi (`fabbricati`,
 `abitazione_principale`, `reddito_complessivo`). In `fnz_income` restano solo i kind mostrati.
 **La via di recupero è la migration dei dati storici**, dove gli importi sono scritti in chiaro:
-le due migration girano in ordine anche su un database nuovo, prima l'insert e poi la
-cancellazione, quindi il risultato coincide con la produzione. Togliere una voce da
-`INCOME_SECTIONS` resta reversibile in sé, ma da qui in poi la colonna riaperta è vuota.
+le migration girano in ordine anche su un database nuovo, quindi il risultato coincide con la
+produzione. Togliere una voce da `INCOME_SECTIONS` resta reversibile in sé, ma **la colonna
+riaperta è vuota** finché una migration non ne ricopia gli importi da lì: è quello che
+`20260817100000_fnz_income_ripristina_imposta_netta.sql` fa per `liq_imposta_netta`, rimessa in
+tabella coi suoi sette anni (2017, 2019-2022, 2024-2025). Le altre quattro voci della
+liquidazione restano fuori e restano cancellate.
 
 ⚠️ **Tre grandezze non si archiviano, si ricalcolano** (`INCOME_CALC`): netto in busta
 (lordo − ritenute), totale lavoro dipendente (lordo + pensione) e totale trattenuto. Sui 730
