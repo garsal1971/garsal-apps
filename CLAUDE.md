@@ -395,7 +395,7 @@ filtrarla.
 | `sal_super_categories` | Super-categorie: **l'unico livello che porta il `color`** |
 | `sal_categories` | Voci di spesa (nome unico per utente, `icon`, `super_id`) |
 | `sal_transactions` | Movimenti del conto personale: `amount` **con segno** (entrate comprese), **una sola** `category_id`, `card_identification`, `external_id` (unico per `bank_connection_id`) |
-| `sal_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria |
+| `sal_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria, **per fonte** (`source` `'bank'`\|`'excel'`, unico su `(user_id, source, merchant_key)`) |
 
 Stesso schema delle `ada_*` e stessa ragione per cui è separato dalle `ca_*`: le spese del conto
 personale di Salvatore non devono entrare nei totali di Spese Famiglia. **L'unica differenza è
@@ -1578,10 +1578,25 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   arrivano **deselezionati**. Fino alla v1.0.3 la rete era una sola per fonte e un movimento
   entrato da Excel tornava dal sync col suo `external_id`, che nessuno aveva mai visto: la spesa
   entrava **due volte**, e in un totale non si vedeva.
+- ⚠️ **Le regole di attribuzione sono due elenchi separati, uno per fonte, e non si parlano**
+  (`20260817160000_sal_merchant_map_source.sql`): un movimento consulta solo le regole della
+  propria `sal_transactions.import_source`. È la conseguenza diretta del punto qui sopra — le due
+  fonti scrivono la stessa spesa in modo diverso — quindi una chiave imparata di qua non vale di
+  là, e tenerle insieme voleva dire che ogni correzione fatta da una parte sballava l'altra. Lo
+  stesso negozio si insegna **due volte, una per elenco**: sono due scritture, non un doppione.
+  `merchantRule`, `merchantCategory`, `merchantMatchCount`, `learnMerchant` e `saveMerchantRule`
+  vogliono tutte la fonte, e `applyLearnedMerchants` confronta ogni movimento con l'elenco della
+  **sua**. Le regole nate prima della colonna sono `'bank'`, che è quello che sono davvero: non
+  sono state copiate nel set `'excel'` di proposito, perché contengono pezzi di testo che in un
+  foglio non compaiono e riempirebbero l'elenco nuovo di regole inerti.
 - La pagina **🧠 Attribuzione** (`renderRegole`) è dove le regole si leggono e si tarano: la
-  spiegazione in cinque passi di come si sceglie la categoria, un **banco di prova** che su una
+  spiegazione in sei passi di come si sceglie la categoria, un **banco di prova** che su una
   descrizione incollata mostra chiave, regole che agganciano e quale vince senza toccare niente, e
-  l'elenco delle regole con quello che ciascuna fa davvero all'archivio. Due colonne che non vanno
+  l'elenco delle regole con quello che ciascuna fa davvero all'archivio. I due elenchi si aprono
+  con le linguette 🏦/📊 (`S.ruleSource`), e **tutto quello che c'è nella pagina segue la linguetta
+  aperta**: conteggi, banco di prova, filtri e la regola creata con *+ Nuova regola*. Una regola
+  però **non cambia mai elenco**, nemmeno modificandola: una chiave scritta per una fonte, messa a
+  valere su descrizioni fatte in un altro modo, è una regola che non aggancia più niente. Due colonne che non vanno
   confuse: **aggancia** sono i movimenti la cui descrizione contiene la chiave, **vince** quelli
   che la regola si prende davvero — una regola che aggancia e non vince mai è *coperta* da una più
   specifica, e senza la distinzione sembrerebbe funzionante. **In conflitto** sono i movimenti che
