@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.3</title>
+  <title>Spese Personali v1.0.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -113,6 +113,7 @@
     #modal-close:hover { background: var(--c-bg); color: var(--c-text); }
     #modal-body { padding: 18px 22px 22px; }
     .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
+    .card-danger { border-color: #fecaca; background: #fff8f8; }
     .empty-state { text-align: center; padding: 48px 24px; color: var(--c-muted); }
     .empty-icon { font-size: 2.4rem; margin-bottom: 12px; }
     .empty-state p { font-size: .88rem; line-height: 1.6; }
@@ -122,6 +123,8 @@
     .import-table th { text-align: left; color: var(--c-muted); font-weight: 600; padding: 4px 6px; white-space: nowrap; }
     .import-table td { padding: 5px 6px; border-top: 1px solid var(--c-border); vertical-align: top; }
     .import-table tr.is-dup td { opacity: .5; }
+    .import-table tr.is-maybe td { background: #fffbeb; }
+    .dup-warn { color: var(--c-warning); }
     .import-note { font-size: .78rem; color: var(--c-muted); }
     .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
     #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(120%); background: var(--c-text); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: .85rem; box-shadow: var(--shadow); z-index: 4000; transition: transform .22s ease; max-width: 90vw; text-align: center; }
@@ -165,6 +168,7 @@
       <button class="nav-item" data-action="nav" data-view="transazioni">🧾 Movimenti</button>
       <div class="nav-label">Gestione</div>
       <button class="nav-item" data-action="nav" data-view="categorie">🏷️ Categorie</button>
+      <button class="nav-item" data-action="nav" data-view="regole">🧠 Attribuzione</button>
       <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
       <div class="nav-sep"></div>
       <a class="nav-item" href="finanza.html" style="text-decoration:none">← Torna a 💰 Finanza</a>
@@ -173,6 +177,7 @@
       <div id="view-dashboard" class="view active"></div>
       <div id="view-transazioni" class="view"></div>
       <div id="view-categorie" class="view"></div>
+      <div id="view-regole" class="view"></div>
       <div id="view-impostazioni" class="view"></div>
     </main>
   </div>
@@ -212,8 +217,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.3';
-var BUILD_TIME  = '2026-08-17T10:00:00Z';
+var APP_VERSION = 'v1.0.4';
+var BUILD_TIME  = '2026-08-17T14:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -231,6 +236,7 @@ const S = {
   transactions: [], categories: [], supers: [], merchants: [],
   charts: {}, selectedYear: null,
   filters: { mese: '', categoria: '', tipo: '', testo: '' },
+  ruleFilter: '',
 };
 
 /* ── Supabase REST ──────────────────────────────────────────── */
@@ -863,27 +869,180 @@ function renderCategorie() {
           </table></div>`}
     </div>
     <div class="card">
-      <div class="card-header-row">
-        <div class="card-title">Negozi imparati</div>
-        <span class="text-muted text-sm">${S.merchants.length} regole</span>
-      </div>
-      <p class="text-muted text-sm">Quando dai una categoria a un movimento, la descrizione resta imparata e da lì in poi
-      i movimenti che la <strong>contengono</strong> si categorizzano da soli. La regola nasce con la descrizione intera:
-      <strong>accorciala al solo nome del negozio</strong> perché agganci anche gli acquisti futuri, che la banca
-      scrive con un riferimento diverso ogni volta. Fra più regole che agganciano vince la più lunga.</p>
-      ${S.merchants.length === 0 ? '' : `<div class="table-wrap mt-12"><table class="table">
-        <thead><tr><th>Se la descrizione contiene…</th><th>Categoria</th><th class="text-right">Aggancia</th><th></th></tr></thead>
-        <tbody>${S.merchants.slice().sort((a, b) => a.merchant_key.localeCompare(b.merchant_key)).map(m => `<tr>
-          <td class="mono text-sm">${esc(m.merchant_key)}</td>
+      <div class="card-title">Come vengono attribuite</div>
+      <p class="text-muted text-sm">La categoria di un movimento non si sceglie a mano ogni volta: la decidono le regole
+      dei negozi imparati. Sono ${S.merchants.length} e si guardano — e si correggono — in
+      <button class="btn btn-outline btn-sm" data-action="nav" data-view="regole">🧠 Attribuzione</button></p>
+    </div>
+  `);
+}
+
+/* ── Attribuzione: le regole, spiegate e modificabili ────────────
+   Le regole si scrivono da sole mentre si categorizza, e fino alla v1.0.3 l'unico posto dove si
+   vedevano era una tabella in fondo a Categorie: si sapeva che una regola c'era solo quando
+   sbagliava. Qui c'è tutto in un posto — come funziona l'attribuzione, un banco di prova per
+   provarla su una descrizione senza toccare niente, e l'elenco con quello che ogni regola fa
+   davvero all'archivio.  */
+
+// Quello che una regola combina davvero. «Aggancia» e «vince» sono due cose diverse: una regola
+// può agganciare cento movimenti e non prenderne nemmeno uno, perché su tutti c'è una regola più
+// lunga che la scavalca. Senza questa distinzione una regola coperta sembra funzionante.
+function regolaStats(m) {
+  const vinti = S.transactions.filter(t => merchantRule(t.description)?.id === m.id);
+  return {
+    aggancia: merchantMatchCount(m.merchant_key),
+    vince: vinti.length,
+    senzaCat: vinti.filter(t => !t.category_id).length,
+    conflitti: vinti.filter(t => t.category_id && t.category_id !== m.category_id),
+  };
+}
+
+const REGOLE_FILTRI = [
+  ['', 'tutte'],
+  ['nocat', 'da applicare'],
+  ['conflict', 'in conflitto'],
+  ['covered', 'coperte da una più specifica'],
+  ['unused', 'mai usate'],
+];
+
+function regoleFiltrate() {
+  return S.merchants.slice()
+    .map(m => ({ m, st: regolaStats(m) }))
+    .filter(({ st }) => {
+      switch (S.ruleFilter) {
+        case 'nocat': return st.senzaCat > 0;
+        case 'conflict': return st.conflitti.length > 0;
+        case 'covered': return st.aggancia > 0 && st.vince === 0;
+        case 'unused': return st.aggancia === 0;
+        default: return true;
+      }
+    })
+    .sort((a, b) => a.m.merchant_key.localeCompare(b.m.merchant_key));
+}
+
+function renderRegoleTabella() {
+  const righe = regoleFiltrate();
+  setHtml('regole-tabella', righe.length === 0
+    ? `<div class="empty-state"><div class="empty-icon">🧠</div><p>${S.merchants.length
+        ? 'Nessuna regola con questo filtro.'
+        : 'Nessuna regola ancora. Si scrivono da sole appena dai una categoria a un movimento.'}</p></div>`
+    : `<div class="table-wrap"><table class="table">
+        <thead><tr>
+          <th>Se la descrizione contiene…</th><th>Categoria</th>
+          <th class="text-right" title="Movimenti in archivio la cui descrizione contiene questa chiave">Aggancia</th>
+          <th class="text-right" title="Di quelli, quanti li prende davvero: sugli altri vince una regola più lunga">Vince</th>
+          <th class="text-right" title="Movimenti che questa regola prenderebbe e sono ancora senza categoria">Da applicare</th>
+          <th class="text-right" title="Movimenti che questa regola vince ma che hanno un'altra categoria, messa a mano">In conflitto</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${righe.map(({ m, st }) => `<tr>
+          <td class="mono text-sm">${esc(m.merchant_key)}<span class="text-muted"> · ${m.merchant_key.length}</span></td>
           <td>${catChip(m.category_id)}</td>
-          <td class="text-right mono text-muted">${merchantMatchCount(m.merchant_key)}</td>
+          <td class="text-right mono text-muted">${st.aggancia}</td>
+          <td class="text-right mono ${st.aggancia && !st.vince ? 'text-muted' : 'fw-600'}">${st.aggancia && !st.vince ? 'coperta' : st.vince}</td>
+          <td class="text-right mono ${st.senzaCat ? 'fw-600' : 'text-muted'}">${st.senzaCat || '—'}</td>
+          <td class="text-right mono ${st.conflitti.length ? 'neg fw-600' : 'text-muted'}">${st.conflitti.length || '—'}</td>
           <td class="text-right nowrap">
+            ${st.senzaCat ? `<button class="btn-icon" data-action="apply-merchant" data-id="${m.id}" title="Applica ai ${st.senzaCat} movimenti senza categoria">🔁</button>` : ''}
+            ${st.conflitti.length ? `<button class="btn-icon" data-action="align-merchant" data-id="${m.id}" title="Riallinea i ${st.conflitti.length} movimenti in conflitto">⚖️</button>` : ''}
             <button class="btn-icon" data-action="edit-merchant" data-id="${m.id}" title="Modifica">✎</button>
             <button class="btn-icon btn-icon-danger" data-action="del-merchant" data-id="${m.id}" title="Dimentica">✕</button>
           </td>
-        </tr>`).join('')}</tbody></table></div>`}
+        </tr>`).join('')}</tbody>
+      </table></div>`);
+  setHtml('regole-conteggio', `${righe.length} di ${S.merchants.length} regole`);
+}
+
+// Banco di prova: si incolla una descrizione e si vede COSA SUCCEDEREBBE, senza toccare niente.
+// È il pezzo che rende le regole modulabili invece che indovinate — mostra la chiave che si
+// ricava, tutte le regole che agganciano e quale vince, che è l'unica domanda che conta.
+function renderProva(desc) {
+  const out = $('prova-out');
+  if (!out) return;
+  const testo = (desc || '').trim();
+  if (!testo) { out.innerHTML = '<p class="import-note">Incolla la descrizione di un movimento per vedere che categoria prenderebbe.</p>'; return; }
+  const chiave = normalizeMerchant(testo);
+  const agganciano = S.merchants
+    .filter(x => x.merchant_key && chiave.includes(x.merchant_key))
+    .sort((a, b) => b.merchant_key.length - a.merchant_key.length);
+  const vincente = agganciano[0] || null;
+  out.innerHTML = `
+    <div class="summary-row"><span>Esercente riconosciuto</span><strong class="mono text-sm">${esc(merchantText(testo))}</strong></div>
+    <div class="summary-row"><span>Chiave su cui si confronta</span><strong class="mono text-sm">${esc(chiave) || '—'}</strong></div>
+    <div class="summary-row"><span>Categoria che prenderebbe</span><strong>${vincente ? catChip(vincente.category_id) : '<span class="badge badge-none">senza categoria</span>'}</strong></div>
+    ${agganciano.length > 1 ? `<p class="import-note mt-8">${agganciano.length} regole agganciano, vince la più lunga:</p>
+      <ul class="text-sm" style="padding-left:20px;margin-top:6px">${agganciano.map((x, i) => `<li class="${i ? 'text-muted' : 'fw-600'}">
+        <span class="mono">${esc(x.merchant_key)}</span> (${x.merchant_key.length}) → ${catById(x.category_id)?.name || '—'}${i ? ' — scavalcata' : ' — vince'}</li>`).join('')}</ul>` : ''}
+    ${!agganciano.length ? `<p class="import-note mt-8">Nessuna regola aggancia questa descrizione: il movimento resterebbe senza categoria,
+      e assegnandogliela a mano nascerebbe una regola con la chiave qui sopra.</p>` : ''}`;
+}
+
+function renderRegole() {
+  if (S.ruleFilter === undefined) S.ruleFilter = '';
+  const senzaCat = S.transactions.filter(t => !t.category_id);
+  const recuperabili = senzaCat.filter(t => merchantCategory(t.description)).length;
+
+  setHtml('view-regole', `
+    <div class="view-header">
+      <div><h2 class="page-title">Attribuzione delle categorie</h2>
+        <p class="page-sub">${S.merchants.length} regole · ${senzaCat.length} movimenti ancora senza categoria</p></div>
+      ${recuperabili ? '<button class="btn btn-primary btn-sm" data-action="apply-rules">✨ Applica le regole (' + recuperabili + ')</button>' : ''}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Come viene scelta la categoria</div>
+      <ol class="text-sm" style="padding-left:20px;line-height:1.7">
+        <li><strong>Della descrizione si guarda solo l'esercente.</strong> La banca scrive
+          <span class="mono text-sm">PAGAMENTO POS … del 15/07/2026 CARTA 31342819 DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA</span>:
+          tutto quello che precede l'importo — modalità, data, numero di carta, importo — cambia a ogni movimento e non dice
+          dove hai speso. Si tiene <strong>quello che viene dopo l'importo</strong>, in maiuscolo e senza il codice numerico
+          finale che alcune banche appiccicano: è la <em>chiave</em>. Se quel pezzo non c'è (bonifici, addebiti, accrediti)
+          si tiene la descrizione intera.</li>
+        <li><strong>Una regola aggancia se la sua chiave è <em>contenuta</em> nella chiave del movimento</strong>, non se è
+          uguale. È per questo che una regola va <strong>accorciata</strong> al solo nome del negozio: la banca infila in
+          ogni acquisto un riferimento diverso, e una chiave lunga aggancia solo quel movimento lì.</li>
+        <li><strong>Se agganciano in più, vince la più lunga</strong>, cioè la più specifica: senza questa precedenza
+          <span class="mono">FARMACIA</span>, imparata prima, si prenderebbe anche i movimenti di
+          <span class="mono">FARMACIA S.ANNA</span>.</li>
+        <li><strong>Le regole si scrivono da sole.</strong> Dare a mano una categoria a un movimento impara la sua
+          descrizione intera: è il default prudente, perché una chiave corta inventata in automatico aggancerebbe cose che
+          non c'entrano. Accorciarla al nome del negozio si fa qui sotto con ✎, vedendo dal vivo quanti movimenti aggancia.</li>
+        <li><strong>Una regola non sovrascrive mai una categoria già messa.</strong> Agisce solo sui movimenti che ne sono
+          privi — all'import, subito dopo un'assegnazione a mano, e col pulsante ✨. Quello che hai deciso tu resta.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Prova una descrizione</div>
+      <p class="text-muted text-sm">Non tocca niente: dice solo che categoria prenderebbe un movimento scritto così,
+      e quale regola vincerebbe. Serve per accorciare una regola sapendo cosa si sta facendo.</p>
+      <textarea id="prova-desc" class="form-input mt-12" rows="2" placeholder="PAGAMENTO POS … DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA"></textarea>
+      <div id="prova-out" class="mt-12"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">Le regole <span class="text-muted text-sm" id="regole-conteggio"></span></div>
+        <div class="hstack gap-8 wrap">
+          <select class="form-input form-select" data-filter-rules style="width:auto">
+            ${REGOLE_FILTRI.map(([v, l]) => `<option value="${v}" ${S.ruleFilter === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary btn-sm" data-action="new-merchant">+ Nuova regola</button>
+        </div>
+      </div>
+      <div id="regole-tabella"></div>
+      <p class="import-note mt-12"><strong>Aggancia</strong> conta i movimenti la cui descrizione contiene la chiave;
+      <strong>vince</strong> quelli che la regola si prende davvero. Una regola che aggancia e non vince mai è
+      <em>coperta</em> da una più specifica: non è rotta, semplicemente non serve più.
+      <strong>In conflitto</strong> sono i movimenti che la regola vince ma a cui hai dato un'altra categoria a mano —
+      restano come li hai messi, e ⚖️ li riallinea alla regola solo se glielo chiedi.</p>
     </div>
   `);
+
+  renderRegoleTabella();
+  renderProva('');
+  const prova = $('prova-desc');
+  if (prova) prova.addEventListener('input', () => renderProva(prova.value));
 }
 
 // Voce di spesa: niente colore, lo eredita dalla super-categoria a cui la si appende.
@@ -978,23 +1137,27 @@ function openSuperModal(editId = null) {
 // Modifica di una regola. Il campo mostra in tempo reale quanti movimenti in archivio
 // aggancerebbe: accorciare "AMAZON.IT *MK7HG2LO3" a "AMAZON.IT" è utile solo se si vede subito
 // che passa da 1 a 14, e che non sta agganciando mezzo estratto conto.
-function openMerchantModal(id) {
-  const rule = S.merchants.find(m => m.id === id);
-  if (!rule) return;
-  openModal('Modifica regola', `
+function openMerchantModal(id = null) {
+  // Senza id è una regola nuova, scritta a mano da Attribuzione: stesso form, stesso conteggio
+  // dal vivo. È l'unico modo per scrivere una regola prima di avere il movimento che la insegna.
+  const rule = id ? S.merchants.find(m => m.id === id) : null;
+  if (id && !rule) return;
+  openModal(rule ? 'Modifica regola' : 'Nuova regola', `
     <form id="modal-form">
       <div class="form-group">
         <label class="form-label">Se la descrizione contiene… *</label>
-        <input name="key" id="rule-key" class="form-input mono" required value="${esc(rule.merchant_key)}" />
+        <input name="key" id="rule-key" class="form-input mono" required value="${esc(rule?.merchant_key || '')}" placeholder="es. ESSELUNGA" />
         <p class="import-note mt-8" id="rule-count"></p>
       </div>
       <div class="form-group">
         <label class="form-label">Categoria *</label>
-        <select name="category_id" class="form-input form-select" required>${catOptions(rule.category_id, '— scegli —')}</select>
+        <select name="category_id" class="form-input form-select" required>${catOptions(rule?.category_id || '', '— scegli —')}</select>
       </div>
+      <p class="import-note">La regola vale sui movimenti <strong>senza categoria</strong>: quelli che hai già categorizzato
+      a mano restano come sono.</p>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
-        <button type="submit" class="btn btn-primary">Salva</button>
+        <button type="submit" class="btn btn-primary">${rule ? 'Salva' : 'Crea'}</button>
       </div>
     </form>
   `);
@@ -1017,11 +1180,16 @@ function openMerchantModal(id) {
     if (key.length < 3) { alert('La regola deve avere almeno 3 caratteri.'); return; }
     if (!d.category_id) { alert('Scegli una categoria.'); return; }
     try {
-      await sbUpd('sal_merchant_map', `id=eq.${rule.id}`, { merchant_key: key, category_id: d.category_id, updated_at: new Date().toISOString() });
+      let id = rule?.id;
+      if (rule) {
+        await sbUpd('sal_merchant_map', `id=eq.${rule.id}`, { merchant_key: key, category_id: d.category_id, updated_at: new Date().toISOString() });
+      } else {
+        id = (await saveMerchantRule(key, d.category_id))?.id;
+      }
       closeModal();
       await loadData();
-      const n = await applyLearnedMerchants(rule.id);
-      if (n) showToast(`✨ Categorizzati ${n} movimenti con la regola aggiornata`);
+      const n = id ? await applyLearnedMerchants(id) : 0;
+      if (n) showToast(`✨ Categorizzati ${n} movimenti con la regola ${rule ? 'aggiornata' : 'nuova'}`);
       render();
     } catch (err) {
       alert(/duplicate|uq_sal_merchant_map/i.test(err.message)
@@ -1202,7 +1370,59 @@ async function renderImpostazioni() {
            personale — che è già collegato — e spunta quella casella: gli usi si sommano, quindi il conto
            continua a servire anche agli altri moduli.</p>`}
     </div>
+    <div class="card card-danger">
+      <div class="card-title neg">⚠️ Zona pericolosa</div>
+      <p class="text-sm">Cancella <strong>tutti i ${S.transactions.length} movimenti</strong> di Spese Personali, di ogni anno.
+      Categorie, super-categorie e regole di attribuzione <strong>restano</strong>: si svuota l'archivio, non la
+      configurazione.</p>
+      <p class="import-note mt-8">Non c'è modo di annullare: i movimenti importati dalla banca si rileggono solo per il
+      periodo che la banca espone ancora, il resto va ricaricato dai fogli Excel.</p>
+      <div class="mt-12"><button class="btn btn-danger" data-action="wipe-tx" ${S.transactions.length ? '' : 'disabled'}>🗑️ Cancella tutti i movimenti</button></div>
+    </div>
   `);
+}
+
+// Cancellazione dell'archivio. Si fa scrivere CANCELLA invece di un confirm() con l'OK a portata
+// di clic: qui non si torna indietro, e la differenza fra i due pulsanti dev'essere un gesto
+// deliberato e non un riflesso.
+function openWipeModal() {
+  const n = S.transactions.length;
+  const anni = getAnni().filter(a => S.transactions.some(t => annoDi(t) === a));
+  openModal('Cancella tutti i movimenti', `
+    <p class="text-sm">Stai per cancellare <strong>${n} movimenti</strong>${anni.length ? ` (${anni.slice().sort().join(', ')})` : ''}.
+    Categorie, super-categorie e regole restano.</p>
+    <p class="import-note mt-8">L'operazione non si può annullare.</p>
+    <form id="modal-form" class="mt-12">
+      <div class="form-group">
+        <label class="form-label">Scrivi CANCELLA per confermare</label>
+        <input name="conferma" id="wipe-word" class="form-input mono" autocomplete="off" placeholder="CANCELLA" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-danger" id="wipe-go" disabled>🗑️ Cancella i ${n} movimenti</button>
+      </div>
+    </form>
+  `);
+  const parola = $('wipe-word'), go = $('wipe-go');
+  parola.addEventListener('input', () => { go.disabled = parola.value.trim().toUpperCase() !== 'CANCELLA'; });
+  parola.focus();
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (parola.value.trim().toUpperCase() !== 'CANCELLA') return;
+    go.disabled = true;
+    $('modal-body').innerHTML = '<p class="import-note">Cancello…</p>';
+    try {
+      // Il filtro sull'utente non è una misura di sicurezza — a quella pensa la RLS — ma una
+      // rete contro una DELETE senza filtro, che PostgREST accetterebbe volentieri.
+      await sbDel('sal_transactions', `user_id=eq.${S.session.user.id}`);
+      closeModal();
+      showToast(`🗑️ Cancellati ${n} movimenti`);
+      await reload();
+    } catch (err) {
+      $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(err.message)}</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+    }
+  });
 }
 
 /* ── Import dal conto ───────────────────────────────────────────
@@ -1213,6 +1433,45 @@ async function renderImpostazioni() {
    dopo è già impostata.  */
 const CARD_FILTER_KEY = 'sal_card_filter';
 let _import = null;
+
+/* ── Doppioni ───────────────────────────────────────────────────
+   Lo stesso movimento può entrare da due strade — il conto e il foglio Excel — e le due strade
+   non lo scrivono uguale: la banca gli mette accanto l'external_id e cuce nella descrizione il
+   nome della controparte, il foglio nessuna delle due cose. Una rete sola non basta, e fino alla
+   v1.0.3 non bastava davvero: un movimento già entrato da Excel (external_id NULL) tornava dal
+   sync col suo external_id, il controllo guardava solo quello, e la spesa entrava due volte.
+
+   Tre reti, dalla più stretta alla più larga:
+     external_id              → la stessa riga della stessa banca. Certezza.
+     data + importo + descrizione → la stessa riga arrivata dall'altra strada con lo stesso testo.
+     data + importo           → quasi sempre la stessa spesa scritta con parole diverse dalle due
+                                fonti. Non è una certezza — due caffè uguali lo stesso giorno
+                                esistono — quindi si SEGNALA come sospetta invece di nasconderla,
+                                mostrando accanto il movimento in archivio che le somiglia.
+   In tutt'e tre i casi la riga arriva DESELEZIONATA: qui un doppione raddoppia una spesa, e
+   ricontrollare due righe costa infinitamente meno che accorgersene fra sei mesi in un totale. */
+const chiaveEsatta = (data, importo, desc) =>
+  `${data}|${(+importo).toFixed(2)}|${(desc || '').replace(/\s+/g, ' ').trim().toLowerCase()}`;
+
+function indiceDoppioni() {
+  const perExternal = new Set();
+  const esatti = new Set();
+  const perDataImporto = new Map();
+  S.transactions.forEach(t => {
+    if (t.external_id) perExternal.add(t.external_id);
+    const d = (t.date || '').slice(0, 10);
+    esatti.add(chiaveEsatta(d, t.amount, t.description));
+    const k = `${d}|${(+t.amount).toFixed(2)}`;
+    if (!perDataImporto.has(k)) perDataImporto.set(k, []);
+    perDataImporto.get(k).push(t);
+  });
+  return (data, importo, descrizione, externalId = null) => {
+    if (externalId && perExternal.has(externalId)) return { livello: 'esatto', simile: null };
+    if (esatti.has(chiaveEsatta(data, importo, descrizione))) return { livello: 'esatto', simile: null };
+    const stessi = perDataImporto.get(`${data}|${(+importo).toFixed(2)}`) || [];
+    return stessi.length ? { livello: 'sospetto', simile: stessi[0] } : { livello: null, simile: null };
+  };
+}
 
 async function openImport() {
   openModal('Importa dal conto', '<p class="import-note">Cerco i conti collegati…</p>', true);
@@ -1272,13 +1531,9 @@ async function readMovements() {
         <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
       return;
     }
-    // Già importati: si riconoscono dall'external_id, la chiave con cui la banca identifica la
-    // riga. Rileggere un periodo già letto è la normalità, non l'eccezione.
-    const gia = new Set(S.transactions.map(t => t.external_id).filter(Boolean));
-    // Se la banca non manda un external_id, l'indice unico non protegge (in Postgres due NULL
-    // sono distinti) e il doppione entrerebbe a ogni rilettura: per quelle righe si ripiega su
-    // data + importo + descrizione, che qui identificano il movimento abbastanza bene.
-    const giaSenzaId = new Set(S.transactions.map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
+    // Rileggere un periodo già letto è la normalità, non l'eccezione — e il periodo può essere
+    // già entrato da un foglio Excel, non solo da un sync precedente: vedi indiceDoppioni().
+    const doppione = indiceDoppioni();
     const carte = [...new Set(movimenti.map(t => t.card?.identification || cardFromDescription(t.description)).filter(Boolean))].sort();
     const cardFilter = localStorage.getItem(CARD_FILTER_KEY) || '';
 
@@ -1287,6 +1542,7 @@ async function readMovements() {
       const descrizione = [t.description, t.counterpartyName].map(s => (s || '').trim()).filter(Boolean)
         .filter((p, i, arr) => !arr.slice(0, i).some(q => q.toLowerCase().includes(p.toLowerCase())))
         .join(' · ') || t.bankTransactionCode || 'Movimento';
+      const dup = doppione(data, t.amount, descrizione, t.externalId);
       return {
         data, descrizione,
         importo: t.amount,
@@ -1295,9 +1551,7 @@ async function readMovements() {
         card: t.card?.identification || cardFromDescription(t.description) || null,
         type: t.bankTransactionCode || null,
         categoryId: merchantCategory(descrizione),
-        gia: t.externalId
-          ? gia.has(t.externalId)
-          : giaSenzaId.has(`${data}|${(+t.amount).toFixed(2)}|${descrizione.trim().toLowerCase()}`),
+        gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile,
         raw: t,
       };
     }).sort((a, b) => a.data.localeCompare(b.data));
@@ -1332,7 +1586,9 @@ function renderImportList(cardFilter) {
   // addebiti): non sono di un'altra carta, semplicemente non ne hanno una — e sono proprio le
   // entrate che qui servono per il saldo.
   const visibili = items.map((it, i) => ({ it, i })).filter(({ it }) => !cardFilter || it.card === cardFilter || !it.card);
-  const nuovi = visibili.filter(({ it }) => !it.gia).length;
+  const nuovi    = visibili.filter(({ it }) => !it.gia).length;
+  const esatti   = visibili.filter(({ it }) => it.dupLivello === 'esatto').length;
+  const sospetti = visibili.filter(({ it }) => it.dupLivello === 'sospetto').length;
   const senzaCarta = items.filter(it => !it.card).length;
 
   // Da dove arrivano le righe cambia solo questa riga di testo: da lì in giù l'anteprima è la
@@ -1343,7 +1599,8 @@ function renderImportList(cardFilter) {
   $('modal-body').innerHTML = `
     <p class="import-note">
       ${visibili.length} movimenti da <strong>${esc(provenienza)}</strong> —
-      ${nuovi} nuovi, ${visibili.length - nuovi} già importati (deselezionati).
+      <strong>${nuovi} nuovi</strong>${esatti ? `, ${esatti} già importati` : ''}${sospetti ? `, ${sospetti} sospetti` : ''}${esatti || sospetti ? ' (deselezionati)' : ''}.
+      ${sospetti ? '<br/>⚠️ <strong>Sospetto</strong> vuol dire stessa data e stesso importo di un movimento già in archivio, ma scritto con parole diverse: quasi sempre è la stessa spesa entrata dall\'altra strada (foglio o banca). Accanto trovi con chi somiglia — spuntalo solo se è davvero una spesa a parte.' : ''}
       ${_import.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo.' : ''}
       ${_import.scartate ? `<br/>${_import.scartate} righe del foglio saltate: senza una data valida o senza importo.` : ''}
     </p>
@@ -1365,12 +1622,13 @@ function renderImportList(cardFilter) {
       <table class="import-table">
         <thead><tr><th></th><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th><th>Categoria</th></tr></thead>
         <tbody>${visibili.map(({ it, i }) => `
-          <tr class="${it.gia ? 'is-dup' : ''}">
+          <tr class="${it.dupLivello === 'esatto' ? 'is-dup' : ''}${it.dupLivello === 'sospetto' ? 'is-maybe' : ''}">
             <td><input type="checkbox" data-imp-idx="${i}" ${(it.checked === undefined ? !it.gia : it.checked) ? 'checked' : ''} /></td>
             <td class="mono" style="white-space:nowrap">${fmtDate(it.data)}</td>
             <td title="${esc(it.descrizione)}">${esc(merchantText(it.descrizione))}
               ${it.card ? `<span class="text-muted"> · 💳 ${esc(it.card)}</span>` : ''}
-              ${it.gia ? '<span class="text-muted"> · già importato</span>' : ''}</td>
+              ${it.dupLivello === 'esatto' ? '<span class="text-muted"> · già importato</span>' : ''}
+              ${it.dupLivello === 'sospetto' ? `<span class="dup-warn"> · ⚠️ forse già in archivio come «${esc(merchantText(it.dupSimile?.description || '') || '—')}»</span>` : ''}</td>
             <td class="mono text-right" style="white-space:nowrap;color:${it.importo < 0 ? 'var(--c-danger)' : 'var(--c-success)'}">${fmtEUR(it.importo)}</td>
             <td><select class="form-input form-select" data-imp-cat="${i}" style="padding:3px 6px;font-size:.78rem">${catOptions(it.categoryId, undefined, true)}</select></td>
           </tr>`).join('')}</tbody>
@@ -1568,8 +1826,9 @@ function trovaIntestazioni(rows) {
 // modale perché è l'unica parte che può sbagliare in silenzio — una data letta male sposta un
 // movimento di un giorno e non se ne accorge nessuno — e così si può provare da sola.
 function righeAMovimenti({ rows, cols, name }, { soloUscite = false, fileName = '' } = {}) {
-  // Stesso riconoscimento dei doppioni usato per i movimenti della banca senza external_id.
-  const giaSenzaId = new Set(S.transactions.map(t => `${t.date}|${(+t.amount).toFixed(2)}|${(t.description || '').trim().toLowerCase()}`));
+  // Stesso riconoscimento dei doppioni dell'import dal conto: un foglio riletto due volte, ma
+  // anche un movimento già entrato dal sync della banca, che qui arriva scritto altrimenti.
+  const doppione = indiceDoppioni();
   const cella = (row, i) => (i === -1 ? '' : row[i]);
   const items = [];
   let scartate = 0;
@@ -1600,6 +1859,7 @@ function righeAMovimenti({ rows, cols, name }, { soloUscite = false, fileName = 
     const descrizione = String(cella(row, cols.descrizione) ?? '').replace(/\s+/g, ' ').trim() || causale;
     if (!descrizione) { scartate++; continue; }
 
+    const dup = doppione(data, importo, descrizione);
     items.push({
       data, descrizione, importo,
       currency: String(cella(row, cols.divisa) ?? '').trim() || null,
@@ -1607,7 +1867,7 @@ function righeAMovimenti({ rows, cols, name }, { soloUscite = false, fileName = 
       card: cardFromDescription(descrizione),
       type: causale || null,
       categoryId: merchantCategory(descrizione),
-      gia: giaSenzaId.has(`${data}|${importo.toFixed(2)}|${descrizione.toLowerCase()}`),
+      gia: !!dup.livello, dupLivello: dup.livello, dupSimile: dup.simile,
       raw: { source: 'excel', file: fileName, sheet: name, row },
     });
   }
@@ -1732,6 +1992,7 @@ function render() {
     case 'dashboard': renderDashboard(); break;
     case 'transazioni': renderTransazioni(); break;
     case 'categorie': renderCategorie(); break;
+    case 'regole': renderRegole(); break;
     case 'impostazioni': renderImpostazioni(); break;
   }
   // La versione nella barra in fondo la scrive APP_VERSION e non l'HTML: scritta a mano restava
@@ -1785,9 +2046,37 @@ document.addEventListener('click', async e => {
     catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'edit-merchant') {
     openMerchantModal(btn.dataset.id);
+  } else if (action === 'new-merchant') {
+    openMerchantModal();
+  } else if (action === 'apply-merchant') {
+    try {
+      const n = await applyLearnedMerchants(btn.dataset.id);
+      showToast(n ? `✨ Categorizzati ${n} movimenti` : 'Nessun movimento senza categoria per questa regola');
+      render();
+    } catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'align-merchant') {
+    // Riallineare tocca movimenti già categorizzati, che le regole non toccano mai da sole:
+    // è un'eccezione chiesta a mano, quindi si dice esattamente quanti e verso dove.
+    const rule = S.merchants.find(m => m.id === btn.dataset.id);
+    if (!rule) return;
+    const { conflitti } = regolaStats(rule);
+    if (!conflitti.length) return;
+    if (!confirm(`${conflitti.length} movimenti che questa regola vince hanno un'altra categoria, messa a mano.\n\n`
+      + `Li sposto tutti su «${catById(rule.category_id)?.name || '—'}»?`)) return;
+    try {
+      await sbUpd('sal_transactions', `id=in.(${conflitti.map(t => t.id).join(',')})`, { category_id: rule.category_id });
+      showToast(`⚖️ Riallineati ${conflitti.length} movimenti`);
+      await reload();
+    } catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'del-merchant') {
+    const rule = S.merchants.find(m => m.id === btn.dataset.id);
+    const st = rule ? regolaStats(rule) : null;
+    if (!confirm(`Dimenticare la regola «${rule?.merchant_key}»?`
+      + (st?.vince ? `\n\n${st.vince} movimenti la stanno usando: quelli già categorizzati restano come sono, ma i prossimi movimenti di questo negozio arriveranno senza categoria.` : ''))) return;
     try { await sbDel('sal_merchant_map', `id=eq.${btn.dataset.id}`); await reload(); }
     catch (err) { alert('Errore: ' + err.message); }
+  } else if (action === 'wipe-tx') {
+    openWipeModal();
   } else if (action === 'del-tx') {
     if (!confirm('Eliminare questo movimento?')) return;
     try { await sbDel('sal_transactions', `id=eq.${btn.dataset.id}`); await reload(); }
@@ -1803,6 +2092,11 @@ document.addEventListener('change', async e => {
   } else if (el.matches('[data-filter]')) {
     S.filters[el.dataset.filter] = el.value;
     renderTransazioni();
+  } else if (el.matches('[data-filter-rules]')) {
+    // Si ridisegna la sola tabella: ridisegnare la pagina svuoterebbe il banco di prova, che è
+    // esattamente quello che si sta usando mentre si spulciano le regole.
+    S.ruleFilter = el.value;
+    renderRegoleTabella();
   } else if (el.matches('[data-set-cat]')) {
     const tx = S.transactions.find(t => t.id === el.dataset.setCat);
     if (!tx) return;

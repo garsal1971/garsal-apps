@@ -1476,10 +1476,10 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   `bank_connection_id` ed `external_id` restano **NULL** per le righe da file.
   Tre cose che sono la ragione per cui il codice è fatto così:
   - ⚠️ **un foglio non porta l'external_id**, quindi l'indice unico
-    `(bank_connection_id, external_id)` non protegge — in Postgres due NULL sono distinti — e i
-    doppioni si riconoscono per **data + importo + descrizione**, come già si fa per i movimenti
-    della banca che quella chiave non ce l'hanno. Rileggere due volte lo stesso file è la
-    normalità, e le righe già in archivio arrivano in anteprima **deselezionate**;
+    `(bank_connection_id, external_id)` non protegge — in Postgres due NULL sono distinti — e il
+    controllo dei doppioni sta tutto nella pagina (`indiceDoppioni()`, vedi sotto). Rileggere due
+    volte lo stesso file è la normalità, e le righe già in archivio arrivano in anteprima
+    **deselezionate**;
   - ⚠️ **un CSV si legge diversamente da un xlsx**: leggendo un CSV SheetJS interpreta i numeri
     all'americana e «-12,90» diventa **-1290**, «1.850,00» diventa **1,85** — importi plausibili
     e falsi, che in anteprima non si notano. `raw: true` glielo impedisce e a leggerli è
@@ -1495,6 +1495,29 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   descrizione e importo — o la coppia entrate/uscite — **su tre colonne diverse**, perché un CSV
   spezzato male finisce tutto in una cella sola che quelle tre parole le contiene per forza.
   SheetJS si carica dal CDN **al primo uso** e non all'apertura della pagina.
+- ⚠️ **Lo stesso movimento può entrare da due strade, e le due strade non lo scrivono uguale**: la
+  banca gli mette accanto l'`external_id` e cuce nella descrizione il nome della controparte, il
+  foglio nessuna delle due cose. `indiceDoppioni()` è quindi **una sola rete a tre maglie**, usata
+  da entrambi gli import: `external_id` (certezza), `data + importo + descrizione` (stessa riga
+  dall'altra strada, stesso testo), `data + importo` (**sospetto**: quasi sempre la stessa spesa
+  scritta con parole diverse — due caffè uguali lo stesso giorno però esistono, quindi si segnala
+  mostrando accanto il movimento che le somiglia, invece di nasconderla). Tutti e tre i casi
+  arrivano **deselezionati**. Fino alla v1.0.3 la rete era una sola per fonte e un movimento
+  entrato da Excel tornava dal sync col suo `external_id`, che nessuno aveva mai visto: la spesa
+  entrava **due volte**, e in un totale non si vedeva.
+- La pagina **🧠 Attribuzione** (`renderRegole`) è dove le regole si leggono e si tarano: la
+  spiegazione in cinque passi di come si sceglie la categoria, un **banco di prova** che su una
+  descrizione incollata mostra chiave, regole che agganciano e quale vince senza toccare niente, e
+  l'elenco delle regole con quello che ciascuna fa davvero all'archivio. Due colonne che non vanno
+  confuse: **aggancia** sono i movimenti la cui descrizione contiene la chiave, **vince** quelli
+  che la regola si prende davvero — una regola che aggancia e non vince mai è *coperta* da una più
+  specifica, e senza la distinzione sembrerebbe funzionante. **In conflitto** sono i movimenti che
+  la regola vince ma a cui è stata data un'altra categoria a mano: restano come sono — le regole
+  non sovrascrivono mai — e ⚖️ li riallinea **solo su richiesta esplicita**, con la conferma che
+  dice quanti e verso quale voce.
+- La **zona pericolosa** in Impostazioni cancella *tutti* i movimenti (categorie, super-categorie e
+  regole restano). Si fa scrivere `CANCELLA` invece di un `confirm()` con l'OK a portata di clic:
+  di qui non si torna indietro, e la banca ripropone solo il periodo che espone ancora.
 - Il conto è quello spuntato come `'spese_sal'` in `cm_bank_connections.uses` — uso a sé e non
   `'spese_ada'` riusato, altrimenti le due pagine si troverebbero ciascuna il conto dell'altra
   nella tendina dell'import. Il conto UniCredit personale è già collegato: basta spuntare
