@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -118,15 +119,7 @@ fun HomeScreen(
                         tint = Palette.light,
                         modifier = Modifier
                             .size(26.dp * scala)
-                            // Tocco = ricarica; pressione lunga = modalità
-                            // nascosta, come sul web dove è un gesto discreto
-                            // e non un pulsante etichettato.
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = { vm.ricarica() },
-                                    onLongPress = { vm.cambiaModalitaNascosta() },
-                                )
-                            },
+                            .clickable { vm.ricarica() },
                     )
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -182,7 +175,10 @@ fun HomeScreen(
                     CampoBolle(
                         bolle = stato.bolle,
                         ingombroPannello = ingombroPannello,
+                        inCattura = stato.inCattura,
                         onApri = onApriApp,
+                        onCatturaColore = vm::catturaColore,
+                        onPressioneLunga = vm::apriCattura,
                     )
                 }
 
@@ -194,6 +190,23 @@ fun HomeScreen(
                         .onSizeChanged { ingombroPannello = it },
                     onClick = { mostraPremi = true },
                 )
+
+                // Il widget del codice: si vede mentre si digita e, a modalità
+                // accesa, resta lì con l'occhio — che è l'unico segno che la
+                // modalità è su, oltre al punto nel titolo.
+                if (stato.inCattura || stato.modalitaNascosta) {
+                    WidgetCodice(
+                        caselle = stato.caselle,
+                        colori = stato.coloriCatturati,
+                        inCattura = stato.inCattura,
+                        modalitaNascosta = stato.modalitaNascosta,
+                        onVerifica = { vm.verificaCodice() },
+                        onSpegni = { vm.spegniModalitaNascosta() },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(MARGINE_PANNELLO),
+                    )
+                }
             }
         }
     }
@@ -209,17 +222,35 @@ fun HomeScreen(
  *
  * `ingombroPannello` è quanto misura il riquadro del totale, che sta in basso
  * a sinistra sopra quest'area: serve a ricavarne il rettangolo da scansare.
+ *
+ * Con `inCattura` acceso le bolle **non si aprono più**: il tocco registra il
+ * loro colore nel codice. È la stessa scelta del web, dove `onDown` esce prima
+ * di armare `onUp` e `launchApp` non scatta mai — senza, ogni cifra del codice
+ * aprirebbe un'app.
  */
 @Composable
 private fun CampoBolle(
     bolle: List<Bolla>,
     ingombroPannello: IntSize,
+    inCattura: Boolean,
     onApri: (String) -> Unit,
+    onCatturaColore: (String) -> Unit,
+    onPressioneLunga: () -> Unit,
 ) {
     val densita = LocalDensity.current.density
     val marginePx = with(LocalDensity.current) { MARGINE_PANNELLO.toPx() }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            // La pressione lunga sullo sfondo apre il widget, come sul `#field`
+            // del web. Sta sul campo e non su un pulsante: un pulsante
+            // etichettato «modalità nascosta» sarebbe una modalità nascosta
+            // annunciata.
+            .pointerInput(Unit) {
+                detectTapGestures(onLongPress = { onPressioneLunga() })
+            }
+    ) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
 
@@ -264,7 +295,10 @@ private fun CampoBolle(
                 bolla = bolla,
                 raggio = r,
                 centro = centro,
-                onApri = { onApri(bolla.route) },
+                inCattura = inCattura,
+                onApri = {
+                    if (inCattura) onCatturaColore(bolla.colore) else onApri(bolla.route)
+                },
                 onTrascina = { spostamento ->
                     val nodi = posizioni.mapIndexed { j, p ->
                         BubbleLayout.Nodo(j, p.x, p.y, raggi[j])
@@ -286,6 +320,7 @@ private fun BollaCerchio(
     bolla: Bolla,
     raggio: Float,
     centro: Offset,
+    inCattura: Boolean,
     onApri: () -> Unit,
     onTrascina: (Offset) -> Unit,
 ) {
@@ -314,7 +349,11 @@ private fun BollaCerchio(
             // Il bordo nero del web (`border: 4px solid #111`), che stacca le
             // bolle scure dallo sfondo bianco e quelle chiare fra loro.
             .border(BORDO_BOLLA, NeroBordo, CircleShape)
-            .pointerInput(bolla.htmlFile) {
+            // A codice aperto le bolle non si trascinano: il gesto serve tutto
+            // a toccarle una per una, e una bolla che scivola sotto il dito
+            // mentre si digita il codice fa perdere la cifra.
+            .pointerInput(bolla.htmlFile, inCattura) {
+                if (inCattura) return@pointerInput
                 detectDragGestures { cambiamento, spostamento ->
                     cambiamento.consume()
                     onTrascina(spostamento)
@@ -348,6 +387,74 @@ private fun BollaCerchio(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Il widget del codice a colori — il `#code-entry` del web: una casella per
+ * colore da indovinare, la freccia che verifica e l'occhio che spegne.
+ *
+ * Le caselle si riempiono toccando le bolle: **è la bolla a dare il colore**,
+ * quindi il codice non si può leggere da nessuna parte nell'app, e cambia da
+ * sé se un giorno cambiano i colori delle app. Toccare una casella già piena
+ * verifica, come sul web, dove serve a chi ha finito di digitare senza dover
+ * centrare la freccia.
+ */
+@Composable
+private fun WidgetCodice(
+    caselle: Int,
+    colori: List<String>,
+    inCattura: Boolean,
+    modalitaNascosta: Boolean,
+    onVerifica: () -> Unit,
+    onSpegni: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xF2FFFFFF))
+            .border(2.dp, NeroBordo, RoundedCornerShape(24.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (inCattura) {
+            repeat(caselle) { i ->
+                val colore = colori.getOrNull(i)
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colore?.let { coloreDaHex(it) } ?: Palette.inputBg)
+                        .border(2.dp, NeroBordo, RoundedCornerShape(6.dp))
+                        .clickable(enabled = colori.isNotEmpty()) { onVerifica() },
+                )
+            }
+            Text(
+                text = "›",
+                color = Palette.dark,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onVerifica() }
+                    .padding(horizontal = 8.dp),
+            )
+        }
+
+        if (modalitaNascosta) {
+            // L'occhio compare solo a modalità accesa: è insieme il segno che
+            // è accesa e il modo per spegnerla senza rifare il codice.
+            Text(
+                text = "👁",
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onSpegni() }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
         }
     }
 }

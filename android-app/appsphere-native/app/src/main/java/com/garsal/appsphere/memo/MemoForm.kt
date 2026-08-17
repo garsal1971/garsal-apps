@@ -21,12 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +54,50 @@ import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.coloreDaHex
 import kotlinx.coroutines.launch
 
+/** Una voce di lista mentre la si scrive: senza `id` è nuova. */
+data class VoceInModifica(
+    val id: String? = null,
+    val testo: String = "",
+    val fatta: Boolean = false,
+    val fattaIl: String? = null,
+)
+
+/** Una misura di diario mentre la si scrive: senza `id` è nuova. */
+data class MisuraInModifica(
+    val id: String? = null,
+    val nome: String = "",
+    val tipo: TipoMisura = TipoMisura.SCALA,
+    val minimo: Double? = 1.0,
+    val massimo: Double? = 10.0,
+    val unita: String = "",
+    val opzioni: List<MmOpzione> = emptyList(),
+    val nota: String = "",
+) {
+    companion object {
+        fun da(m: MmMisura) = MisuraInModifica(
+            id = m.id,
+            nome = m.nome,
+            tipo = m.tipo,
+            minimo = m.minimo,
+            massimo = m.massimo,
+            unita = m.unita,
+            opzioni = m.opzioni,
+            nota = m.nota,
+        )
+    }
+}
+
+/**
+ * L'id di un'opzione di combo: stabile, perché la registrazione archivia
+ * **quello** e non l'etichetta. Rinominare un'opzione deve rileggere anche lo
+ * storico col nome nuovo, mentre archiviando la parola una rinomina
+ * spaccherebbe la stessa origine in due categorie che ai conteggi sembrano
+ * diverse. È `optionId()` del web.
+ */
+internal fun nuovoIdOpzione(): String =
+    "o" + System.currentTimeMillis().toString(36) +
+        (100_000..999_999).random().toString(36)
+
 /**
  * La scheda che si sta scrivendo. `testo` è nei **marcatori** di [MemoHtml],
  * non in HTML: la conversione avviene aprendo il form e salvando.
@@ -59,20 +105,68 @@ import kotlinx.coroutines.launch
 data class BozzaScheda(
     val titolo: String = "",
     val testo: String = "",
+    val tipo: TipoScheda = TipoScheda.NOTA,
+    val riservato: Boolean = false,
     val fissata: Boolean = false,
     val colore: String = MmScheda.BIANCO,
     val categorie: List<String> = emptyList(),
+    val voci: List<VoceInModifica> = emptyList(),
+    val vociTolte: List<String> = emptyList(),
+    val misure: List<MisuraInModifica> = emptyList(),
+    val misureTolte: List<String> = emptyList(),
 ) {
-    /** Come `saveCard()`: basta il titolo **oppure** il contenuto. */
-    val valida: Boolean get() = titolo.isNotBlank() || testo.isNotBlank()
+    /**
+     * Come `saveCard()`: basta il titolo **oppure** il contenuto — e per una
+     * lista o un diario bastano anche le sole voci o le sole misure, perché lì
+     * il contenuto è facoltativo.
+     */
+    val valida: Boolean
+        get() = titolo.isNotBlank() || testo.isNotBlank() ||
+            (tipo == TipoScheda.LISTA && voci.isNotEmpty()) ||
+            (tipo == TipoScheda.DIARIO && misure.isNotEmpty())
+
+    /**
+     * Che cosa impedisce di salvare un diario, o `null` se va bene: gli stessi
+     * tre controlli di `saveCard()`.
+     */
+    val problema: String?
+        get() = when {
+            tipo != TipoScheda.DIARIO -> null
+            misure.any { it.nome.isBlank() } -> "Dai un nome a ogni misura."
+            misure.any {
+                it.tipo == TipoMisura.SCALA &&
+                    (it.minimo == null || it.massimo == null || it.massimo <= it.minimo)
+            } -> "Ogni scala vuole un massimo maggiore del minimo."
+            misure.any {
+                it.tipo == TipoMisura.SCELTA && it.opzioni.none { o -> o.etichetta.isNotBlank() }
+            } -> "Una misura a scelta vuole almeno un'opzione."
+            else -> null
+        }
+
+    /** Le opzioni lasciate in bianco si scartano da sé al salvataggio. */
+    fun ripulita(): BozzaScheda = copy(
+        misure = misure.map { m ->
+            if (m.tipo == TipoMisura.SCELTA)
+                m.copy(opzioni = m.opzioni.filter { it.etichetta.isNotBlank() })
+            else m
+        }
+    )
 
     companion object {
-        fun da(scheda: MmScheda) = BozzaScheda(
+        fun da(
+            scheda: MmScheda,
+            voci: List<MmVoce> = emptyList(),
+            misure: List<MmMisura> = emptyList(),
+        ) = BozzaScheda(
             titolo = scheda.titolo,
             testo = MemoHtml.aMarcatori(scheda.contenuto),
+            tipo = scheda.tipo,
+            riservato = scheda.riservato,
             fissata = scheda.fissata,
             colore = scheda.colore,
             categorie = scheda.categorie,
+            voci = voci.map { VoceInModifica(it.id, it.testo, it.fatta, it.fattaIl) },
+            misure = misure.map { MisuraInModifica.da(it) },
         )
     }
 }
@@ -157,10 +251,12 @@ fun MemoForm(
     Scaffold(
         topBar = {
             GarsalTopBar(
-                titolo = if (id == null) "📝 Nuova scheda" else "✏️ Modifica scheda",
+                titolo = if (id == null) "📝 ${b.tipo.nuova}"
+                else "✏️ Modifica ${b.tipo.etichetta.lowercase()}",
                 onIndietro = onAnnulla,
                 azioni = {
-                    val pronta = b.copy(testo = testo.text).valida
+                    val compilata = b.copy(testo = testo.text)
+                    val pronta = compilata.valida
                     Text(
                         text = "Salva",
                         color = if (pronta) Palette.light else Palette.light.copy(alpha = 0.4f),
@@ -168,7 +264,17 @@ fun MemoForm(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable(enabled = pronta) {
-                                onSalva(b.copy(testo = testo.text), nuove, daTogliere)
+                                val pulita = compilata.ripulita()
+                                val problema = pulita.problema
+                                if (problema != null) {
+                                    // Le opzioni scartate vanno mostrate: chi ha
+                                    // lasciato una combo in bianco deve vedere
+                                    // perché il salvataggio non parte.
+                                    b = pulita
+                                    avviso = problema
+                                } else {
+                                    onSalva(pulita, nuove, daTogliere)
+                                }
                             }
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                     )
@@ -184,6 +290,20 @@ fun MemoForm(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            avviso?.let { messaggio ->
+                Text(
+                    text = messaggio,
+                    color = Palette.dark,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Palette.inputBg)
+                        .clickable { avviso = null }
+                        .padding(10.dp),
+                )
+            }
+
             OutlinedTextField(
                 value = b.titolo,
                 onValueChange = { b = b.copy(titolo = it) },
@@ -232,10 +352,65 @@ fun MemoForm(
                 OutlinedTextField(
                     value = testo,
                     onValueChange = { testo = it },
-                    label = { Text("Contenuto") },
+                    // Per un diario il «contenuto» è lo **scopo**, ed è quello
+                    // che verrà rimostrato a ogni registrazione: l'etichetta lo
+                    // dice, come `applyEditorKind()`.
+                    label = {
+                        Text(
+                            when (b.tipo) {
+                                TipoScheda.DIARIO -> "Scopo del diario"
+                                TipoScheda.LISTA -> "Nota della lista"
+                                TipoScheda.NOTA -> "Contenuto"
+                            }
+                        )
+                    },
                     // Niente altezza fissa: è un minimo, e col testo lungo o coi
                     // caratteri di sistema grandi il campo cresce.
                     modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp),
+                )
+                when (b.tipo) {
+                    TipoScheda.DIARIO -> Text(
+                        text = "Perché stai misurando, e come vanno lette le misure. " +
+                            "Te lo rimostro a ogni registrazione.",
+                        color = Palette.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TipoScheda.LISTA -> Text(
+                        text = "Facoltativa: a cosa serve questa lista.",
+                        color = Palette.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TipoScheda.NOTA -> Unit
+                }
+            }
+
+            // ── Voci della lista / misure del diario ────────────────────
+            if (b.tipo == TipoScheda.LISTA) {
+                SezioneVoci(
+                    voci = b.voci,
+                    onCambia = { b = b.copy(voci = it) },
+                    onTogli = { i ->
+                        val voce = b.voci.getOrNull(i) ?: return@SezioneVoci
+                        b = b.copy(
+                            voci = b.voci.filterIndexed { j, _ -> j != i },
+                            vociTolte = if (voce.id != null) b.vociTolte + voce.id else b.vociTolte,
+                        )
+                    },
+                )
+            }
+
+            if (b.tipo == TipoScheda.DIARIO) {
+                SezioneMisure(
+                    misure = b.misure,
+                    onCambia = { b = b.copy(misure = it) },
+                    onTogli = { i ->
+                        val misura = b.misure.getOrNull(i) ?: return@SezioneMisure
+                        b = b.copy(
+                            misure = b.misure.filterIndexed { j, _ -> j != i },
+                            misureTolte = if (misura.id != null) b.misureTolte + misura.id
+                            else b.misureTolte,
+                        )
+                    },
                 )
             }
 
@@ -310,6 +485,36 @@ fun MemoForm(
                 )
             }
 
+            // ── Riservato ───────────────────────────────────────────────
+            //
+            // ⚠️ La spunta si vede **solo sui diari**, come sul web: sulle note
+            // e sulle liste il campo non c'è, e il salvataggio manda `false`.
+            // La colonna è però su `mm_cards` e il filtro vale per tutti i
+            // tipi, quindi estenderla è una riga.
+            if (b.tipo == TipoScheda.DIARIO) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Checkbox(
+                        checked = b.riservato,
+                        onCheckedChange = { b = b.copy(riservato = it) },
+                    )
+                    Column(Modifier.padding(top = 12.dp)) {
+                        Text(
+                            text = "🙈 Riservato",
+                            color = Palette.dark,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { b = b.copy(riservato = !b.riservato) },
+                        )
+                        Text(
+                            text = "Si vede solo a modalità nascosta accesa. Fuori di lì la " +
+                                "scheda non viene proprio letta — non è nascosta a schermo, " +
+                                "è assente.",
+                            color = Palette.muted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+
             // ── Foto ────────────────────────────────────────────────────
             Text("Foto", color = Palette.muted, style = MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -334,15 +539,6 @@ fun MemoForm(
                 }
             }
 
-            avviso?.let { messaggio ->
-                Text(
-                    text = messaggio,
-                    color = Palette.muted,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.clickable { avviso = null },
-                )
-            }
-
             val rimaste = immaginiEsistenti.filterNot { it in daTogliere }
             if (rimaste.isNotEmpty() || nuove.isNotEmpty()) {
                 FlowRow(
@@ -365,6 +561,279 @@ fun MemoForm(
                 }
             }
         }
+    }
+}
+
+/**
+ * Le voci di una lista nell'editor: si scrivono, si spuntano e si tolgono.
+ *
+ * Una voce **tolta qui non si cancella subito**: finisce in `vociTolte` e sparisce
+ * al salvataggio, come `deletedItemIds` nel web. Chi cambia idea esce senza
+ * salvare e la ritrova.
+ */
+@Composable
+private fun SezioneVoci(
+    voci: List<VoceInModifica>,
+    onCambia: (List<VoceInModifica>) -> Unit,
+    onTogli: (Int) -> Unit,
+) {
+    var nuova by remember { mutableStateOf("") }
+
+    Text("☑️ Voci", color = Palette.muted, style = MaterialTheme.typography.bodyMedium)
+
+    if (voci.isEmpty()) {
+        Text(
+            text = "Nessuna voce. Scrivila qui sotto e premi ➕.",
+            color = Palette.muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+
+    voci.forEachIndexed { i, voce ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = voce.fatta,
+                onCheckedChange = { fatta ->
+                    onCambia(voci.mapIndexed { j, v ->
+                        if (j == i) v.copy(
+                            fatta = fatta,
+                            fattaIl = if (fatta) java.time.Instant.now().toString() else null,
+                        ) else v
+                    })
+                },
+            )
+            OutlinedTextField(
+                value = voce.testo,
+                onValueChange = { testo ->
+                    onCambia(voci.mapIndexed { j, v -> if (j == i) v.copy(testo = testo) else v })
+                },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Tasto("✕", "Togli la voce") { onTogli(i) }
+        }
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = nuova,
+            onValueChange = { nuova = it },
+            label = { Text("Nuova voce") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        Tasto("➕", "Aggiungi la voce") {
+            if (nuova.isNotBlank()) {
+                onCambia(voci + VoceInModifica(testo = nuova.trim()))
+                nuova = ""
+            }
+        }
+    }
+}
+
+/** I fondo scala già pronti della scala, come `METRIC_PRESETS`. */
+private val SCALE_PRONTE = listOf(1.0 to 5.0, 1.0 to 10.0, 1.0 to 20.0, 0.0 to 100.0, 1.0 to 100.0)
+
+/**
+ * Le misure di un diario nell'editor.
+ *
+ * ⚠️ Togliere una misura **non cancella le registrazioni**: i valori restano
+ * scritti in `measures` con una chiave che non ha più una riga, e la vista li
+ * mostra come *misura tolta*. L'avviso qui sotto lo dice prima, non dopo.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SezioneMisure(
+    misure: List<MisuraInModifica>,
+    onCambia: (List<MisuraInModifica>) -> Unit,
+    onTogli: (Int) -> Unit,
+) {
+    var daTogliere by remember { mutableStateOf<Int?>(null) }
+
+    fun aggiorna(i: Int, cambio: (MisuraInModifica) -> MisuraInModifica) {
+        onCambia(misure.mapIndexed { j, m -> if (j == i) cambio(m) else m })
+    }
+
+    Text("📊 Misure", color = Palette.muted, style = MaterialTheme.typography.bodyMedium)
+
+    if (misure.isEmpty()) {
+        Text(
+            text = "Nessuna misura: aggiungine almeno una, altrimenti una registrazione " +
+                "non raccoglie niente.",
+            color = Palette.muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+
+    misure.forEachIndexed { i, m ->
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Palette.inputBg)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = m.nome,
+                    onValueChange = { nome -> aggiorna(i) { it.copy(nome = nome) } },
+                    label = { Text("Cosa misuri") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                Tasto("✕", "Togli la misura") {
+                    // Su una misura già salvata si chiede prima: le
+                    // registrazioni che la citano restano, ma senza nome.
+                    if (m.id != null) daTogliere = i else onTogli(i)
+                }
+            }
+
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TipoMisura.entries.forEach { tipo ->
+                    Tasto(tipo.etichetta, "Misura ${tipo.etichetta}", attivo = m.tipo == tipo) {
+                        aggiorna(i) { misura ->
+                            misura.copy(
+                                tipo = tipo,
+                                minimo = if (tipo == TipoMisura.SCALA) misura.minimo ?: 1.0 else null,
+                                massimo = if (tipo == TipoMisura.SCALA) misura.massimo ?: 10.0 else null,
+                                unita = if (tipo == TipoMisura.NUMERO) misura.unita else "",
+                                // Le opzioni non si buttano passando a un altro
+                                // tipo e tornando indietro: sono la cosa più
+                                // lunga da riscrivere di tutta la misura.
+                                opzioni = if (tipo == TipoMisura.SCELTA && misura.opzioni.isEmpty())
+                                    listOf(
+                                        MmOpzione(nuovoIdOpzione(), ""),
+                                        MmOpzione(nuovoIdOpzione(), ""),
+                                    )
+                                else misura.opzioni,
+                            )
+                        }
+                    }
+                }
+            }
+
+            when (m.tipo) {
+                TipoMisura.SCALA -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = m.minimo?.let { numero(it) } ?: "",
+                            onValueChange = { v ->
+                                aggiorna(i) { it.copy(minimo = v.toDoubleOrNull()) }
+                            },
+                            label = { Text("da") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = m.massimo?.let { numero(it) } ?: "",
+                            onValueChange = { v ->
+                                aggiorna(i) { it.copy(massimo = v.toDoubleOrNull()) }
+                            },
+                            label = { Text("a") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SCALE_PRONTE.forEach { (da, a) ->
+                            Tasto("${numero(da)}-${numero(a)}", "Scala da $da a $a") {
+                                aggiorna(i) { it.copy(minimo = da, massimo = a) }
+                            }
+                        }
+                    }
+                }
+
+                TipoMisura.NUMERO -> OutlinedTextField(
+                    value = m.unita,
+                    onValueChange = { u -> aggiorna(i) { it.copy(unita = u) } },
+                    label = { Text("Unità (kg, km, €, min…)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                TipoMisura.BOOL -> Text(
+                    text = "sì / no — vale 1 o 0 nei riepiloghi",
+                    color = Palette.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+
+                TipoMisura.SCELTA -> {
+                    m.opzioni.forEachIndexed { j, o ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${j + 1}.",
+                                color = Palette.muted,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                            OutlinedTextField(
+                                value = o.etichetta,
+                                onValueChange = { etichetta ->
+                                    aggiorna(i) { misura ->
+                                        misura.copy(
+                                            opzioni = misura.opzioni.mapIndexed { k, op ->
+                                                // L'id non si tocca mai: è quello
+                                                // che le registrazioni citano.
+                                                if (k == j) op.copy(etichetta = etichetta) else op
+                                            }
+                                        )
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Tasto("✕", "Togli l'opzione") {
+                                aggiorna(i) { misura ->
+                                    misura.copy(
+                                        opzioni = misura.opzioni.filterIndexed { k, _ -> k != j }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Tasto("➕ Aggiungi opzione", "Aggiungi un'opzione") {
+                        aggiorna(i) { it.copy(opzioni = it.opzioni + MmOpzione(nuovoIdOpzione(), "")) }
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = m.nota,
+                onValueChange = { testo -> aggiorna(i) { it.copy(nota = testo) } },
+                label = { Text("Cosa vuol dire il punteggio") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    Tasto("➕ Aggiungi misura", "Aggiungi una misura") {
+        onCambia(misure + MisuraInModifica())
+    }
+
+    daTogliere?.let { i ->
+        val m = misure.getOrNull(i)
+        AlertDialog(
+            onDismissRequest = { daTogliere = null },
+            title = { Text("Togliere la misura?") },
+            text = {
+                Text(
+                    "«${m?.nome?.ifBlank { "senza nome" } ?: "senza nome"}» sparisce dalle " +
+                        "prossime registrazioni. Quelle già fatte restano, ma il valore di " +
+                        "questa misura non si vedrà più."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { daTogliere = null; onTogli(i) }) {
+                    Text("Togli", color = Palette.danger, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { daTogliere = null }) { Text("Annulla", color = Palette.muted) }
+            },
+        )
     }
 }
 

@@ -12,7 +12,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -26,6 +29,9 @@ data class CmApp(
     val color: String? = null,
     val riservato: Boolean? = null,
 )
+
+@Serializable
+private data class CmSetting(val value: String? = null)
 
 /** Una bolla pronta da disegnare: il dato del DB più la rotta del registro. */
 data class Bolla(
@@ -72,6 +78,34 @@ private data class SfSfidaAvviso(
 object HomeRepository {
 
     private const val TAG = "AppSphereHome"
+
+    /**
+     * La sequenza di colori che accende la modalità nascosta, dalla stessa riga
+     * di `cm_settings` che legge `loadHiddenSequence()` nel launcher: `value` è
+     * un array JSON di colori esadecimali, uno per bolla da toccare.
+     *
+     * Torna vuota se la riga non c'è o non si legge — e con la sequenza vuota
+     * il codice non si può indovinare, esattamente come sul web, dove
+     * `checkSequence()` esce subito se non l'ha caricata.
+     */
+    suspend fun sequenzaNascosta(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val righe = Supabase.client().postgrest
+                .from("cm_settings")
+                .select(Columns.raw("value")) {
+                    filter { eq("key", "hidden_mode_sequence") }
+                    limit(1)
+                }
+                .decodeList<CmSetting>()
+            val grezzo = righe.firstOrNull()?.value ?: return@withContext emptyList()
+            Json.parseToJsonElement(grezzo).jsonArray.mapNotNull {
+                (it as? JsonPrimitive)?.content?.trim()?.takeIf { c -> c.isNotBlank() }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "sequenza della modalità nascosta non disponibile: ${e.message}")
+            emptyList()
+        }
+    }
 
     /**
      * Le app da mostrare, con il punteggio, e il totale lordo.

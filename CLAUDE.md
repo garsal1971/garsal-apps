@@ -972,12 +972,20 @@ class una colonna del tipo inatteso non darebbe un campo storto ma la schermata 
 
 ### ⚠️ Memo nativo: il contenuto è HTML, e il giro deve chiudersi
 
-`memo/` porta in nativo le schede di `memo.html`: elenco con **ricerca su titolo e testo**, filtro
-per categoria, ordinamento (ultime modificate / ultime create / titolo), il filtro 📌 *In evidenza*
-che sul web è una pagina a sé, il **dettaglio in lettura** e la **modifica** con foto e OCR. Le
-tabelle sono le stesse (`mm_cards`, `mm_card_categories`, `mm_images`) più le categorie condivise
+`memo/` porta in nativo le schede di `memo.html` — **note, liste e diari**: le **quattro Tab** del
+web (📄 Note, ☑️ Liste, 📊 Diari, 📌 Fissa), ricerca su titolo e testo, filtro per categoria,
+ordinamento (ultime modificate / ultime create / titolo), il **dettaglio in lettura** e la
+**modifica** con foto e OCR. Le tabelle sono le stesse (`mm_cards`, `mm_card_categories`,
+`mm_images`, `mm_list_items`, `mm_diary_metrics`, `mm_diary_entries`) più le categorie condivise
 `cm_categories`, e si leggono come `JsonObject`: non stanno in nessuna migration — nascono dal SQL
 che la pagina mostra in Impostazioni — quindi vale la stessa scelta di `ts_tasks`.
+
+Come sul web, **una nota si apre in modifica e una lista o un diario no**: hanno una vista propria
+(`MemoListaView`, `MemoDiarioView`), perché la cosa che si fa più spesso su di loro — spuntare una
+voce, aggiungere una registrazione — non è modificare la scheda. All'editor si arriva da lì col ✏️,
+e il **+ crea una scheda del tipo della Tab** invece di chiedere quale. **📌 Fissa è l'unica Tab che
+attraversa i tre tipi**, ed è la ragione per cui il segno del tipo resta sulla scheda anche ora che
+ogni Tab ne mostra uno solo.
 
 **Il punto delicato è `content`, che è HTML** scritto da un `contenteditable` con `execCommand`. Qui
 un contenteditable non c'è, e il giro è in due tempi (`MemoHtml`): l'HTML diventa **testo con
@@ -1022,26 +1030,55 @@ testo.
 Restano su `memo.html` la tavolozza del colore personalizzato (qui ci sono i sette campioni) e la
 scala dei caratteri delle schede, che su Android la decide già il sistema.
 
-#### ⚠️ Liste e diari: il nativo non li conosce ancora
+#### ⚠️ `riservato`: il filtro sta nella query, non nel disegno
 
-`mm_cards.kind`, `mm_list_items`, `mm_diary_metrics` e `mm_diary_entries` esistono **solo nel web**.
-Sul nativo una lista e un diario compaiono nell'elenco come **note qualunque**: si vede il titolo e
-il contenuto — che per un diario è lo scopo — ma non le voci, non le misure e non le registrazioni.
+La spunta 🙈 **Riservato** (`mm_cards.riservato`) si vede **solo nella definizione di un diario**,
+come sul web: su una nota o una lista il campo non c'è e il salvataggio manda `false`. La colonna è
+però su `mm_cards` e il filtro vale per tutti i tipi, quindi estenderla è una riga di Compose.
 
-Il dato però **non si rovina**, ed è la ragione per cui la cosa si può lasciare così finché serve:
-`MemoRepository.salva()` fa un `update` dei soli campi che conosce (`title`, `content`, `pinned`,
-`color`, `updated_at`, `user_id`), quindi `kind` sopravvive a una modifica fatta dal telefono, e le
-righe figlie non le tocca nessuno. Le due cose da non fare senza portare anche il nativo:
+⚠️ Fuori dalla modalità nascosta **la riga non viene proprio letta**: il filtro è nella `select` di
+`MemoRepository.schede()`, non nel rendering. Nasconderla solo a schermo la lascerebbe in chiaro a
+chiunque guardi il traffico o la memoria dell'app, che è esattamente ciò da cui la modalità
+protegge. Gli stessi tre stati del web: spenta si vedono solo le schede normali, accesa si vede
+tutto, accesa col 👁 si vedono **solo** le riservate — e il pulsante 🙈/👁 compare solo a modalità
+già accesa, perché a modalità spenta non c'è niente da alzare.
 
-- **non far scrivere `kind` al nativo** con un `update` di riga intera: azzererebbe il tipo di una
-  scheda e lista e diario diventerebbero note, con le loro righe figlie ancora lì e più nessuno che
-  le mostri;
-- **una scheda creata dal nativo nasce `'nota'`** per via del `DEFAULT`, che è il comportamento
-  giusto — ma vuol dire che da lì una lista non si può creare, non che il tipo sia opzionale.
+Una differenza dal web, e vale la pena saperla: là il ramo dei NULL (`riservato.is.null`) è scritto
+per prudenza, qui c'è la sola uguaglianza. La colonna nasce `NOT NULL DEFAULT false`, quindi una
+riga senza valore non può esistere e i due filtri dicono la stessa cosa.
 
-Portarle vorrebbe dire tre schermate (voci spuntabili, misure, raccolta delle misure) e le stesse
-regole di qua: la spunta ottimistica con rollback, le misure aggiornate riga per riga e mai
-ricreate, e la misura non toccata che **non** finisce in `measures`.
+#### ⚠️ Liste e diari: le stesse tre regole di qua
+
+Le tre cose che **sono** la funzionalità, e che vanno cambiate nelle due implementazioni insieme:
+
+- **le spunte di una lista sono ottimistiche con rollback** (`MemoViewModel.spuntaVoce`, come
+  `toggleViewItem()` e come Spuntiamola): la voce cambia subito e torna indietro se il database
+  rifiuta, così non resta a schermo una spunta finta che sparisce al ricarico;
+- **le misure si aggiornano riga per riga e non si cancellano per ricrearle**
+  (`MemoRepository.salvaMisure`, come `syncDiaryMetrics()`): le registrazioni le citano per id
+  dentro `measures`, e ricreandole tutto lo storico resterebbe senza nome. Per la stessa ragione
+  **le opzioni di una combo tengono il loro id** mentre se ne cambia l'etichetta, e la
+  registrazione archivia l'**id**, mai l'etichetta;
+- ⚠️ **una misura non toccata non finisce in `measures`**, e non ci finisce come zero: «non l'ho
+  misurata» e «vale zero» sono due cose diverse, e uno slider lasciato a metà scriverebbe la
+  seconda al posto della prima. Una misura non registrata mostra `—`, e *Non l'ho misurata* la
+  toglie anche a posteriori.
+
+Ne discendono le stesse conseguenze del web, già in codice: una **misura tolta** non cancella le
+registrazioni (i valori restano con una chiave che non ha più una riga, e si mostrano come *misura
+tolta*), un'**opzione tolta** si dice invece di far sparire il valore, e una **scelta non ha un
+numero** — `MmMisura.numerico()` torna `null` — quindi nel riepilogo al posto dello storico in
+miniatura c'è la **distribuzione**, che è la domanda che una combo pone davvero.
+
+Due differenze di forma, volute, entrambe per i caratteri di sistema grandi: le **opzioni di una
+combo sono pulsanti e non una tendina** (una tendina taglia le etichette proprio dove la scelta si
+fa), e lo storico in miniatura è disegnato con dei `Box` invece che con le `.spark` del CSS —
+questa schermata non carica nessuna libreria di grafici, come la pagina.
+
+Il **titolo della registrazione è obbligatorio nell'app, non nel database**, esattamente come sul
+web: `mm_diary_entries.title` resta `NOT NULL DEFAULT ''` perché le registrazioni fatte prima della
+colonna un titolo non ce l'hanno, e un vincolo che le rifiutasse renderebbe impossibile perfino
+aprirle per correggerle.
 
 ### ⚠️ Abituati nativo: le regole stanno nel database, non in Kotlin
 
@@ -1123,6 +1160,36 @@ due regole che **sono** la funzionalità, da cambiare nelle due implementazioni 
   premio segnato come ritirato senza che nessun punto sia stato speso;
 - **una tantum e ripetibile finiscono diversamente**: il primo esce dal catalogo (`is_redeemed`),
   il secondo resta e **rincara** di `points_per_use` a ogni uso, contandoli in `use_count`.
+
+### ⚠️ Modalità nascosta: si accende col codice a colori, e vive in memoria
+
+La modalità nascosta è **una sola per l'app** (`core/ModalitaNascosta`, l'equivalente di
+`sessionStorage.hidden_mode`): l'accende la home, e le altre schermate la leggono — oggi Memo, che
+quando è accesa mostra il proprio 🙈/👁.
+
+⚠️ **Sta in memoria e basta, di proposito.** Sul web muore con la scheda del browser, qui col
+processo. Scriverla nelle preferenze la farebbe ritrovare accesa al risveglio dell'app — cioè le
+schede riservate a schermo senza che nessuno abbia rifatto il codice, che è esattamente ciò che la
+modalità esiste per impedire.
+
+Si accende con lo stesso gesto del launcher, in quattro passi: **pressione lunga sul campo delle
+bolle** apre il widget delle caselle, si **toccano le bolle** e ognuna mette **il proprio colore**
+nella casella successiva, la **freccia ›** (o una casella già piena) confronta, e l'occhio 👁 —
+che compare solo a modalità accesa — la rispegne senza rifare il codice. Un confronto che torna
+**inverte** la modalità, come `checkSequence()`; uno sbagliato non dice niente e chiude il widget.
+Il widget si richiude da sé dopo **15 secondi** di inattività, e ogni tocco rimanda la chiusura.
+
+Tre cose che sono il motivo per cui il codice funziona:
+
+- **il codice non è scritto da nessuna parte nell'app**: sta in `cm_settings`, riga
+  `hidden_mode_sequence`, la stessa che legge `loadHiddenSequence()` nel launcher. Senza quella
+  riga il confronto esce subito e non apre niente — come sul web. Fino alla v1.0.20 bastava invece
+  una pressione lunga sull'icona ↻, che era una modalità nascosta con la chiave sotto lo zerbino;
+- **è la bolla a dare il colore**, quindi il codice cambia da sé se un giorno cambiano i colori
+  delle app, e non c'è una tastiera da guardare mentre si digita;
+- **a widget aperto le bolle non si aprono e non si trascinano**: il tocco vale solo come cifra. È
+  la stessa scelta del web, dove `onDown` esce prima di armare `onUp` e `launchApp` non scatta mai
+  — senza, ogni cifra del codice aprirebbe un'app.
 
 Gli avvisi in home hanno per ora **due fonti, Spuntiamola e Ta Firi?**: le altre quattro del web
 (decisioni, task urgenti, totale portafogli, abitudini) porterebbero a schermate che qui non
@@ -1242,13 +1309,13 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   ricostruiti e contati lo stesso, confronto peso/target **a un decimale**, `target_weight`
   congelato nella riga. Il nativo porta solo pesata, tabella e grafico: obiettivi, statistiche,
   dieta, sync e premi restano di là. Dettagli nella sezione qui sopra.
-- **Memo** — ⚠️ **liste e diari esistono solo nel web**: sul nativo compaiono come note qualunque,
-  senza voci né misure né registrazioni. Il tipo sopravvive comunque a una modifica dal telefono,
-  perché il nativo aggiorna i soli campi che conosce. Il contenuto è **HTML**: il nativo lo
-  converte in marcatori per modificarlo e lo
-  riconverte salvando (`MemoHtml`), quindi ogni voce della barra del web deve avere il suo
-  marcatore di qua. Categorie riscritte da capo a ogni salvataggio, file del bucket cancellati
-  prima della riga. Dettagli nella sezione qui sopra.
+- **Memo** — note, liste e diari esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
+  converte in marcatori per modificarlo e lo riconverte salvando (`MemoHtml`), quindi ogni voce
+  della barra del web deve avere il suo marcatore di qua. Le altre regole da tenere allineate:
+  spunte ottimistiche con rollback, misure aggiornate riga per riga e mai ricreate, opzioni di una
+  combo archiviate per **id**, misura non toccata che **non** finisce in `measures`, categorie
+  riscritte da capo a ogni salvataggio, file del bucket cancellati prima della riga. Il filtro
+  `riservato` sta nella query da tutt'e due le parti. Dettagli nella sezione qui sopra.
 - **Abituati** — è l'unica dove le regole **non** sono duplicate: streak, jolly, giorni mancati e
   chiusura degli stack stanno nelle RPC `hb_*`, che il nativo chiama già e la pagina web deve
   ancora cominciare a chiamare. Dettagli nella sezione qui sopra.

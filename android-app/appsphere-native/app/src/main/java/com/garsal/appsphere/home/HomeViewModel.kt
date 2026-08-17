@@ -5,7 +5,10 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.garsal.appsphere.core.ModalitaNascosta
 import com.garsal.appsphere.premi.PremiRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +37,12 @@ data class HomeState(
     val errore: String? = null,
     val modalitaNascosta: Boolean = false,
     val avvisiChiusi: Boolean = false,
+    /** La sequenza da indovinare, letta da `cm_settings`. Vuota = codice spento. */
+    val sequenza: List<String> = emptyList(),
+    /** Il widget del codice è aperto e le bolle si toccano per il colore. */
+    val inCattura: Boolean = false,
+    /** I colori toccati finora, uno per casella. */
+    val coloriCatturati: List<String> = emptyList(),
     /** Punti guadagnati: la somma dei punteggi di **tutte** le app attive. */
     val totaleLordo: Int = 0,
     /** Punti già spesi in premi (`cm_rewards_log`). */
@@ -46,6 +55,13 @@ data class HomeState(
      * da una parte non lo è dall'altra.
      */
     val totaleNetto: Int get() = max(0, totaleLordo - puntiSpesi)
+
+    /**
+     * Quante caselle disegnare. Le tre del web (`hiddenSeqLength || 3`) sono il
+     * ripiego: finché la sequenza non è arrivata il widget si apre lo stesso,
+     * ma il confronto lo farà su una sequenza vuota e non aprirà niente.
+     */
+    val caselle: Int get() = sequenza.size.takeIf { it > 0 } ?: 3
 }
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -56,12 +72,34 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("appsphere", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Chiude il widget del codice se nessuno lo tocca più: i 15 s del web. */
+    private var chiusuraCattura: Job? = null
+
     init {
         // Le bolle in cache si disegnano subito, prima ancora di parlare col
         // database: all'avvio si vede la home popolata invece di una rotella.
         // Poi i dati veri le sostituiscono.
         leggiCache()
         ricarica()
+        caricaSequenza()
+
+        // La modalità nascosta vive fuori dal ViewModel — la leggono anche le
+        // altre schermate — ma la home deve ridisegnarsi quando cambia.
+        viewModelScope.launch {
+            ModalitaNascosta.attiva.collect { attiva ->
+                if (attiva != _state.value.modalitaNascosta) {
+                    _state.value = _state.value.copy(modalitaNascosta = attiva)
+                    ricarica()
+                }
+            }
+        }
+    }
+
+    private fun caricaSequenza() {
+        viewModelScope.launch {
+            val seq = HomeRepository.sequenzaNascosta()
+            _state.value = _state.value.copy(sequenza = seq)
+        }
     }
 
     fun ricarica() {
@@ -91,10 +129,71 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Come sul web: vale per la sessione, non si ricorda al prossimo avvio. */
-    fun cambiaModalitaNascosta() {
-        _state.value = _state.value.copy(modalitaNascosta = !_state.value.modalitaNascosta)
-        ricarica()
+    // ── Codice a colori ─────────────────────────────────────────────────────
+    //
+    // Gli stessi quattro passaggi del launcher: pressione lunga sullo sfondo →
+    // si toccano le bolle e ognuna mette il **suo colore** nella casella
+    // successiva → la freccia confronta. Il codice non è scritto da nessuna
+    // parte nell'app: sta in `cm_settings`, e senza quella riga non si apre.
+
+    /** Pressione lunga sul campo delle bolle: apre il widget del codice. */
+    fun apriCattura() {
+        _state.value = _state.value.copy(inCattura = true, coloriCatturati = emptyList())
+        chiusuraCattura?.cancel()
+        chiusuraCattura = viewModelScope.launch {
+            delay(ATTESA_CATTURA)
+            chiudiCattura()
+        }
+    }
+
+    fun chiudiCattura() {
+        chiusuraCattura?.cancel()
+        chiusuraCattura = null
+        _state.value = _state.value.copy(inCattura = false, coloriCatturati = emptyList())
+    }
+
+    /**
+     * Una bolla toccata a widget aperto: il suo colore entra nella casella
+     * successiva. Piene tutte le caselle, il tocco dopo **ricomincia da capo**
+     * invece di ignorare — sbagliando il primo colore, altrimenti, si sarebbe
+     * costretti a chiudere e riaprire.
+     */
+    fun catturaColore(colore: String) {
+        val stato = _state.value
+        val presi = if (stato.coloriCatturati.size >= stato.caselle) emptyList()
+        else stato.coloriCatturati
+        _state.value = stato.copy(coloriCatturati = presi + colore)
+        // Ogni tocco rimanda la chiusura: il tempo serve a chi sta digitando,
+        // non a chi ha aperto il widget per sbaglio.
+        chiusuraCattura?.cancel()
+        chiusuraCattura = viewModelScope.launch {
+            delay(ATTESA_CATTURA)
+            chiudiCattura()
+        }
+    }
+
+    /**
+     * Confronta e, se torna, **inverte** la modalità nascosta — il codice la
+     * accende e la rispegne, come `checkSequence()`. Un confronto sbagliato non
+     * dice niente: chiude il widget e basta.
+     */
+    fun verificaCodice() {
+        val stato = _state.value
+        val colori = stato.coloriCatturati
+        chiudiCattura()
+        if (stato.sequenza.isEmpty()) {
+            Log.w("AppSphereHome", "nessuna sequenza in cm_settings: il codice non può aprire niente")
+            return
+        }
+        val torna = colori.size == stato.sequenza.size &&
+            colori.zip(stato.sequenza).all { (a, b) -> a.equals(b, ignoreCase = true) }
+        if (torna) ModalitaNascosta.cambia()
+    }
+
+    /** L'occhio: spegne la modalità nascosta senza rifare il codice. */
+    fun spegniModalitaNascosta() {
+        chiudiCattura()
+        ModalitaNascosta.spegni()
     }
 
     fun chiudiAvvisi() {
@@ -160,5 +259,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         const val CHIAVE_CACHE = "bolle_cache"
         const val CHIAVE_LORDO = "totale_lordo"
         const val CHIAVE_SPESI = "punti_spesi"
+
+        /** I 15 secondi di inattività dopo cui il widget si richiude (web: `captureTimeout`). */
+        const val ATTESA_CATTURA = 15_000L
     }
 }
