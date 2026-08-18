@@ -1547,9 +1547,13 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   la regola vince ma a cui è stata data un'altra categoria a mano: restano come sono — le regole
   non sovrascrivono mai — e ⚖️ li riallinea **solo su richiesta esplicita**, con la conferma che
   dice quanti e verso quale voce.
-- La **zona pericolosa** in Impostazioni cancella *tutti* i movimenti (categorie, super-categorie e
-  regole restano). Si fa scrivere `CANCELLA` invece di un `confirm()` con l'OK a portata di clic:
-  di qui non si torna indietro, e la banca ripropone solo il periodo che espone ancora.
+- La **zona pericolosa** in Impostazioni ha **due comandi distinti**, che passano dalla stessa
+  finestra di conferma (`openCancellazione`): *cancella tutti i movimenti* — categorie,
+  super-categorie e regole restano — e *cancella tutte le regole*, **tutt'e due gli elenchi
+  insieme**, che invece non tocca i movimenti: le categorie già assegnate restano dove sono,
+  perché le regole valgono sui movimenti che una categoria non ce l'hanno. Si fa scrivere
+  `CANCELLA` invece di un `confirm()` con l'OK a portata di clic: di qui non si torna indietro, e
+  la banca ripropone solo il periodo che espone ancora.
 - Il conto è quello spuntato come `'spese_sal'` in `cm_bank_connections.uses` — uso a sé e non
   `'spese_ada'` riusato, altrimenti le due pagine si troverebbero ciascuna il conto dell'altra
   nella tendina dell'import. Il conto UniCredit personale è già collegato: basta spuntare

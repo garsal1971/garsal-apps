@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.7</title>
+  <title>Spese Personali v1.0.8</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -114,6 +114,7 @@
     #modal-body { padding: 18px 22px 22px; }
     .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
     .card-danger { border-color: #fecaca; background: #fff8f8; }
+    .hr-danger { border: none; border-top: 1px solid #fecaca; margin: 18px 0; }
     .empty-state { text-align: center; padding: 48px 24px; color: var(--c-muted); }
     .empty-icon { font-size: 2.4rem; margin-bottom: 12px; }
     .empty-state p { font-size: .88rem; line-height: 1.6; }
@@ -217,8 +218,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.7';
-var BUILD_TIME  = '2026-08-17T21:00:00Z';
+var APP_VERSION = 'v1.0.8';
+var BUILD_TIME  = '2026-08-17T22:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -305,6 +306,9 @@ async function refreshSession(session) {
 /* ── Formattazione ──────────────────────────────────────────── */
 const fmtEUR = n => (n == null || isNaN(n)) ? '—' : (+n).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('it-IT') : '—';
+// Il singolare non si ottiene con una «i» fra parentesi: queste etichette dicono un numero, e
+// «Cancella i 1 movimenti» fa sembrare rotta la finestra proprio dove bisogna fidarsi.
+const plur = (n, uno, molti) => (n === 1 ? uno : molti.replace('{n}', n));
 const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 const $ = id => document.getElementById(id);
 const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
@@ -1457,6 +1461,7 @@ function openNuovaVoceImport(idx) {
 /* ── Impostazioni ───────────────────────────────────────────── */
 async function renderImpostazioni() {
   const u = S.session.user;
+  const regoleDi = f => S.merchants.filter(m => (m.source || 'bank') === f).length;
   let conti = [];
   try {
     conti = (await sbQ('cm_bank_connections', 'select=*&order=created_at.desc')).filter(c => (c.uses || []).includes(BANK_USE));
@@ -1505,56 +1510,94 @@ async function renderImpostazioni() {
     </div>
     <div class="card card-danger">
       <div class="card-title neg">⚠️ Zona pericolosa</div>
-      <p class="text-sm">Cancella <strong>tutti i ${S.transactions.length} movimenti</strong> di Spese Personali, di ogni anno.
+      <p class="text-sm">Cancella <strong>${plur(S.transactions.length, 'il solo movimento', 'tutti i {n} movimenti')}</strong> di Spese Personali, di ogni anno.
       Categorie, super-categorie e regole di attribuzione <strong>restano</strong>: si svuota l'archivio, non la
       configurazione.</p>
       <p class="import-note mt-8">Non c'è modo di annullare: i movimenti importati dalla banca si rileggono solo per il
       periodo che la banca espone ancora, il resto va ricaricato dai fogli Excel.</p>
       <div class="mt-12"><button class="btn btn-danger" data-action="wipe-tx" ${S.transactions.length ? '' : 'disabled'}>🗑️ Cancella tutti i movimenti</button></div>
+      <hr class="hr-danger" />
+      <p class="text-sm">Cancella <strong>${plur(S.merchants.length, 'la sola regola', 'tutte le {n} regole')}</strong> di attribuzione — ${regoleDi('bank')} ${labelSource('bank')}
+      e ${regoleDi('excel')} ${labelSource('excel')} — <strong>tutt'e due gli elenchi insieme</strong>.</p>
+      <p class="import-note mt-8">I movimenti non si toccano e le categorie già assegnate restano dove sono: le regole
+      decidono i movimenti che una categoria non ce l'hanno, non riscrivono l'archivio. Quello che si perde è
+      l'automatismo — da qui in poi i movimenti nuovi arrivano senza categoria, e i negozi vanno reinsegnati associando.</p>
+      <div class="mt-12"><button class="btn btn-danger" data-action="wipe-rules" ${S.merchants.length ? '' : 'disabled'}>🗑️ Cancella tutte le regole</button></div>
     </div>
   `);
 }
 
-// Cancellazione dell'archivio. Si fa scrivere CANCELLA invece di un confirm() con l'OK a portata
-// di clic: qui non si torna indietro, e la differenza fra i due pulsanti dev'essere un gesto
+// Le due cancellazioni della zona pericolosa passano dalla stessa finestra: cambia cosa si
+// cancella, non il modo in cui lo si conferma. Si fa scrivere CANCELLA invece di un confirm()
+// con l'OK a portata di clic: qui non si torna indietro, e premere dev'essere un gesto
 // deliberato e non un riflesso.
-function openWipeModal() {
-  const n = S.transactions.length;
-  const anni = getAnni().filter(a => S.transactions.some(t => annoDi(t) === a));
-  openModal('Cancella tutti i movimenti', `
-    <p class="text-sm">Stai per cancellare <strong>${n} movimenti</strong>${anni.length ? ` (${anni.slice().sort().join(', ')})` : ''}.
-    Categorie, super-categorie e regole restano.</p>
+function openCancellazione({ titolo, riepilogo, etichetta, esegui, fatto }) {
+  openModal(titolo, `
+    ${riepilogo}
     <p class="import-note mt-8">L'operazione non si può annullare.</p>
     <form id="modal-form" class="mt-12">
       <div class="form-group">
         <label class="form-label">Scrivi CANCELLA per confermare</label>
-        <input name="conferma" id="wipe-word" class="form-input mono" autocomplete="off" placeholder="CANCELLA" />
+        <input id="wipe-word" class="form-input mono" autocomplete="off" placeholder="CANCELLA" />
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
-        <button type="submit" class="btn btn-danger" id="wipe-go" disabled>🗑️ Cancella i ${n} movimenti</button>
+        <button type="submit" class="btn btn-danger" id="wipe-go" disabled>${etichetta}</button>
       </div>
     </form>
   `);
   const parola = $('wipe-word'), go = $('wipe-go');
-  parola.addEventListener('input', () => { go.disabled = parola.value.trim().toUpperCase() !== 'CANCELLA'; });
+  const giusta = () => parola.value.trim().toUpperCase() === 'CANCELLA';
+  parola.addEventListener('input', () => { go.disabled = !giusta(); });
   parola.focus();
   $('modal-form').addEventListener('submit', async e => {
     e.preventDefault();
-    if (parola.value.trim().toUpperCase() !== 'CANCELLA') return;
+    if (!giusta()) return;
     go.disabled = true;
     $('modal-body').innerHTML = '<p class="import-note">Cancello…</p>';
     try {
-      // Il filtro sull'utente non è una misura di sicurezza — a quella pensa la RLS — ma una
-      // rete contro una DELETE senza filtro, che PostgREST accetterebbe volentieri.
-      await sbDel('sal_transactions', `user_id=eq.${S.session.user.id}`);
+      await esegui();
       closeModal();
-      showToast(`🗑️ Cancellati ${n} movimenti`);
+      showToast(fatto);
       await reload();
     } catch (err) {
       $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(err.message)}</p>
         <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
     }
+  });
+}
+
+// ⚠️ Il filtro sull'utente non è una misura di sicurezza — a quella pensa la RLS — ma una rete
+// contro una DELETE senza filtro, che PostgREST accetterebbe volentieri. Vale per tutt'e due.
+function openWipeModal() {
+  const n = S.transactions.length;
+  const anni = getAnni().filter(a => S.transactions.some(t => annoDi(t) === a));
+  openCancellazione({
+    titolo: 'Cancella tutti i movimenti',
+    riepilogo: `<p class="text-sm">Stai per cancellare <strong>${plur(n, '1 movimento', '{n} movimenti')}</strong>${anni.length ? ` (${anni.slice().sort().join(', ')})` : ''}.
+      Categorie, super-categorie e regole restano.</p>`,
+    etichetta: plur(n, '🗑️ Cancella il movimento', '🗑️ Cancella i {n} movimenti'),
+    esegui: () => sbDel('sal_transactions', `user_id=eq.${S.session.user.id}`),
+    fatto: plur(n, '🗑️ Cancellato 1 movimento', '🗑️ Cancellati {n} movimenti'),
+  });
+}
+
+// Le regole, tutt'e due gli elenchi in un colpo solo. La cosa che uno teme premendo è di
+// ritrovarsi i movimenti scategorizzati: non succede, e la finestra lo dice prima invece di
+// lasciarlo scoprire dopo — le regole valgono sui movimenti senza categoria, non riscrivono
+// quello che è già stato deciso.
+function openWipeRulesModal() {
+  const n = S.merchants.length;
+  const regoleDi = f => S.merchants.filter(m => (m.source || 'bank') === f).length;
+  openCancellazione({
+    titolo: 'Cancella tutte le regole',
+    riepilogo: `<p class="text-sm">Stai per cancellare <strong>${plur(n, '1 regola', '{n} regole')}</strong> di attribuzione:
+      ${SOURCES.map(([v, l]) => `<strong>${regoleDi(v)}</strong> ${l}`).join(' e ')}.</p>
+      <p class="text-sm mt-8">I <strong>movimenti restano dove sono</strong> e le categorie già assegnate non si toccano.
+      Si perde l'automatismo: i movimenti nuovi arriveranno senza categoria finché non reinsegni i negozi associando.</p>`,
+    etichetta: plur(n, '🗑️ Cancella la regola', '🗑️ Cancella le {n} regole'),
+    esegui: () => sbDel('sal_merchant_map', `user_id=eq.${S.session.user.id}`),
+    fatto: plur(n, '🗑️ Cancellata 1 regola', '🗑️ Cancellate {n} regole'),
   });
 }
 
@@ -2242,6 +2285,8 @@ document.addEventListener('click', async e => {
     catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'wipe-tx') {
     openWipeModal();
+  } else if (action === 'wipe-rules') {
+    openWipeRulesModal();
   } else if (action === 'del-tx') {
     if (!confirm('Eliminare questo movimento?')) return;
     try { await sbDel('sal_transactions', `id=eq.${btn.dataset.id}`); await reload(); }
