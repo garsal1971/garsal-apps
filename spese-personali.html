@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.8</title>
+  <title>Spese Personali v1.0.9</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -218,8 +218,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.8';
-var BUILD_TIME  = '2026-08-17T22:00:00Z';
+var APP_VERSION = 'v1.0.9';
+var BUILD_TIME  = '2026-08-17T23:30:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -427,12 +427,49 @@ const SOURCES = [['bank', '🏦 dal conto'], ['excel', '📊 da Excel']];
 const sourceOf = t => (t?.import_source === 'excel' ? 'excel' : 'bank');
 const labelSource = s => (SOURCES.find(([v]) => v === s) || SOURCES[0])[1];
 
+//
+// La chiave si cerca DENTRO la descrizione, e «%» è il jolly: sta per «qualsiasi cosa, anche
+// niente», come il LIKE di SQL. «AMAZON%IT» prende AMAZON.IT, AMAZON IT e AMAZON EU IT con una
+// regola sola. Il confronto resta «contiene» e non «è uguale a», quindi i «%» che si scrivono
+// per abitudine agli estremi — «%COOP%» — funzionano da sé senza voler dire niente di diverso
+// da «COOP».
+//
+// ⚠️ Il jolly è «%» e NON «*», di proposito: l'asterisco compare per davvero nelle causali
+// («AMAZON.IT *MK7HG2LO3», «ESSELUNGA *12345»), quindi prenderlo come jolly spaccherebbe di
+// colpo tutte le regole che quel carattere ce l'hanno dentro sul serio. La percentuale in una
+// causale bancaria non si vede mai.
+const RE_SPECIALI = /[.*+?^${}()|[\]\\]/g;
+const _matcher = new Map();
+// Il matcher si costruisce una volta per chiave e resta in cache: merchantRule gira su ogni
+// movimento per ogni regola, e ricompilare lì dentro una regexp si sente.
+function matcherRegola(key) {
+  const k = (key || '').trim().toUpperCase();
+  if (!k) return null;
+  let m = _matcher.get(k);
+  if (!m) {
+    if (k.includes('%')) {
+      const re = new RegExp(k.split('%').map(p => p.replace(RE_SPECIALI, '\\$&')).join('.*'));
+      m = hay => re.test(hay);
+    } else {
+      m = hay => hay.includes(k);   // niente jolly: esattamente come prima
+    }
+    _matcher.set(k, m);
+  }
+  return m;
+}
+const regolaAggancia = (key, hay) => { const m = matcherRegola(key); return !!m && m(hay); };
+// Fra più regole che agganciano vince la più specifica — e «specifica» non è più «lunga»: in una
+// chiave col jolly i caratteri che chiedono davvero qualcosa sono quelli veri, e «%A%» è lunga
+// tre e non chiede quasi niente. Si pesa il testo al netto dei jolly. Per una chiave senza «%»
+// il peso è la sua lunghezza, quindi le regole di prima si ordinano esattamente come prima.
+const pesoRegola = key => (key || '').replace(/%/g, '').length;
+
 const merchantRule = (desc, source = 'bank') => {
   const hay = normalizeMerchant(desc);
   if (!hay) return null;
   return S.merchants
-    .filter(x => x.merchant_key && (x.source || 'bank') === source && hay.includes(x.merchant_key))
-    .sort((a, b) => b.merchant_key.length - a.merchant_key.length)[0] || null;
+    .filter(x => x.merchant_key && (x.source || 'bank') === source && regolaAggancia(x.merchant_key, hay))
+    .sort((a, b) => pesoRegola(b.merchant_key) - pesoRegola(a.merchant_key) || b.merchant_key.length - a.merchant_key.length)[0] || null;
 };
 const merchantCategory = (desc, source = 'bank') => merchantRule(desc, source)?.category_id || null;
 // Quanti movimenti in archivio aggancerebbe una regola: si vede mentre la si accorcia, così non
@@ -440,7 +477,7 @@ const merchantCategory = (desc, source = 'bank') => merchantRule(desc, source)?.
 // regola non li vedrà mai, e contarli darebbe un numero che non si avvera.
 const merchantMatchCount = (key, source = 'bank') => {
   const k = (key || '').trim().toUpperCase();
-  return k ? S.transactions.filter(t => sourceOf(t) === source && normalizeMerchant(t.description).includes(k)).length : 0;
+  return k ? S.transactions.filter(t => sourceOf(t) === source && regolaAggancia(k, normalizeMerchant(t.description))).length : 0;
 };
 // La regola nasce con TUTTA la descrizione normalizzata: è il default prudente, perché una
 // chiave corta inventata in automatico aggancerebbe cose che non c'entrano. Accorciarla al solo
@@ -551,8 +588,10 @@ function openRegolaDaMovimento(tx, categoryId) {
         <p class="import-note mt-8" id="rule-count"></p>
       </div>
       <p class="import-note"><strong>Accorciala al solo nome del negozio.</strong> Così com'è arriva dalla descrizione
-      intera, che contiene data, numero di carta e il riferimento dell'operazione: agganciarebbe solo questo movimento.
-      Finisce nell'elenco <strong>${labelSource(fonte)}</strong> e vale solo per i movimenti arrivati da lì.</p>
+      intera, che contiene data, numero di carta e il riferimento dell'operazione: aggancerebbe solo questo movimento.
+      Puoi usare <span class="mono">%</span> come jolly — <span class="mono">AMAZON%IT</span> prende sia
+      <em>AMAZON.IT</em> sia <em>AMAZON EU IT</em>. Finisce nell'elenco <strong>${labelSource(fonte)}</strong> e vale
+      solo per i movimenti arrivati da lì.</p>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" data-action="close-modal">Solo questo movimento</button>
         <button type="submit" class="btn btn-primary" id="rule-go">Crea la regola</button>
@@ -563,14 +602,14 @@ function openRegolaDaMovimento(tx, categoryId) {
   const input = $('rule-key'), info = $('rule-count'), go = $('rule-go');
   const refresh = () => {
     const k = input.value.trim().toUpperCase();
-    if (k.length < 3) {
-      info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>';
+    if (pesoRegola(k) < 3) {
+      info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Servono almeno 3 caratteri veri (il jolly % non conta): una regola più corta aggancia troppo.</span>';
       go.disabled = true;
       return;
     }
     go.disabled = false;
     const n = merchantMatchCount(k, fonte);
-    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === fonte && normalizeMerchant(t.description).includes(k)).length;
+    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === fonte && regolaAggancia(k, normalizeMerchant(t.description))).length;
     // La chiave che si sta scrivendo può essere di una regola che c'è già: dirlo prima, perché
     // salvando la si fa puntare altrove — è quello che si vuole quando si corregge, ma non è
     // una cosa da scoprire dopo.
@@ -590,7 +629,7 @@ function openRegolaDaMovimento(tx, categoryId) {
   $('modal-form').addEventListener('submit', async e => {
     e.preventDefault();
     const key = input.value.trim().toUpperCase();
-    if (key.length < 3) return;
+    if (pesoRegola(key) < 3) return;
     go.disabled = true;
     try {
       const rule = await saveMerchantRule(key, categoryId, fonte);
@@ -1033,7 +1072,7 @@ function renderRegoleTabella() {
           <th></th>
         </tr></thead>
         <tbody>${righe.map(({ m, st }) => `<tr>
-          <td class="mono text-sm">${esc(m.merchant_key)}<span class="text-muted"> · ${m.merchant_key.length}</span></td>
+          <td class="mono text-sm">${esc(m.merchant_key)}<span class="text-muted"> · ${pesoRegola(m.merchant_key)}</span></td>
           <td>${catChip(m.category_id)}</td>
           <td class="text-right mono text-muted">${st.aggancia}</td>
           <td class="text-right mono ${st.aggancia && !st.vince ? 'text-muted' : 'fw-600'}">${st.aggancia && !st.vince ? 'coperta' : st.vince}</td>
@@ -1063,8 +1102,8 @@ function renderProva(desc) {
   // Si prova contro l'elenco della fonte aperta: le regole dell'altra fonte non vedranno mai
   // questa descrizione, e mostrarle qui direbbe che aggancia qualcosa che non aggancerà.
   const agganciano = S.merchants
-    .filter(x => x.merchant_key && (x.source || 'bank') === S.ruleSource && chiave.includes(x.merchant_key))
-    .sort((a, b) => b.merchant_key.length - a.merchant_key.length);
+    .filter(x => x.merchant_key && (x.source || 'bank') === S.ruleSource && regolaAggancia(x.merchant_key, chiave))
+    .sort((a, b) => pesoRegola(b.merchant_key) - pesoRegola(a.merchant_key) || b.merchant_key.length - a.merchant_key.length);
   const vincente = agganciano[0] || null;
   out.innerHTML = `
     <div class="summary-row"><span>Esercente riconosciuto</span><strong class="mono text-sm">${esc(merchantText(testo))}</strong></div>
@@ -1072,7 +1111,7 @@ function renderProva(desc) {
     <div class="summary-row"><span>Categoria che prenderebbe</span><strong>${vincente ? catChip(vincente.category_id) : '<span class="badge badge-none">senza categoria</span>'}</strong></div>
     ${agganciano.length > 1 ? `<p class="import-note mt-8">${agganciano.length} regole agganciano, vince la più lunga:</p>
       <ul class="text-sm" style="padding-left:20px;margin-top:6px">${agganciano.map((x, i) => `<li class="${i ? 'text-muted' : 'fw-600'}">
-        <span class="mono">${esc(x.merchant_key)}</span> (${x.merchant_key.length}) → ${catById(x.category_id)?.name || '—'}${i ? ' — scavalcata' : ' — vince'}</li>`).join('')}</ul>` : ''}
+        <span class="mono">${esc(x.merchant_key)}</span> (peso ${pesoRegola(x.merchant_key)}) → ${catById(x.category_id)?.name || '—'}${i ? ' — scavalcata' : ' — vince'}</li>`).join('')}</ul>` : ''}
     ${!agganciano.length ? `<p class="import-note mt-8">Nessuna regola <strong>${labelSource(S.ruleSource)}</strong> aggancia questa descrizione:
       il movimento resterebbe senza categoria, e assegnandogliela a mano nascerebbe una regola con la chiave qui sopra,
       in questo stesso elenco.</p>` : ''}`;
@@ -1103,6 +1142,14 @@ function renderRegole() {
         <li><strong>Una regola aggancia se la sua chiave è <em>contenuta</em> nella chiave del movimento</strong>, non se è
           uguale. È per questo che una regola va <strong>accorciata</strong> al solo nome del negozio: la banca infila in
           ogni acquisto un riferimento diverso, e una chiave lunga aggancia solo quel movimento lì.</li>
+        <li><strong>Il jolly è <span class="mono">%</span></strong> e sta per «qualsiasi cosa, anche niente», come il
+          <span class="mono">LIKE</span> di SQL: <span class="mono">AMAZON%IT</span> prende <em>AMAZON.IT</em>,
+          <em>AMAZON IT</em> e <em>AMAZON EU IT</em> con una regola sola. Serve quando il nome del negozio è scritto in
+          modi diversi, o quando fra due pezzi fissi c'è del testo che cambia ogni volta. Siccome il confronto è già
+          «contiene», i <span class="mono">%</span> agli estremi non servono: <span class="mono">%COOP%</span> e
+          <span class="mono">COOP</span> fanno la stessa cosa. Il jolly <strong>non è l'asterisco</strong>: quello
+          compare per davvero nelle causali (<span class="mono">AMAZON.IT *MK7HG2LO3</span>) e resta un carattere
+          normale.</li>
         <li><strong>Se agganciano in più, vince la più lunga</strong>, cioè la più specifica: senza questa precedenza
           <span class="mono">FARMACIA</span>, imparata prima, si prenderebbe anche i movimenti di
           <span class="mono">FARMACIA S.ANNA</span>.</li>
@@ -1145,7 +1192,9 @@ function renderRegole() {
         </div>
       </div>
       <div id="regole-tabella"></div>
-      <p class="import-note mt-12"><strong>Aggancia</strong> conta i movimenti la cui descrizione contiene la chiave;
+      <p class="import-note mt-12">Nella colonna della chiave il numero accanto è il <strong>peso</strong>: i caratteri
+      veri, jolly esclusi. È quello che decide chi vince fra due regole che agganciano lo stesso movimento.<br/>
+      <strong>Aggancia</strong> conta i movimenti la cui descrizione contiene la chiave;
       <strong>vince</strong> quelli che la regola si prende davvero. Una regola che aggancia e non vince mai è
       <em>coperta</em> da una più specifica: non è rotta, semplicemente non serve più.
       <strong>In conflitto</strong> sono i movimenti che la regola vince ma a cui hai dato un'altra categoria a mano —
@@ -1265,7 +1314,8 @@ function openMerchantModal(id = null) {
       <div class="form-group">
         <label class="form-label">Se la descrizione contiene… *</label>
         <input name="key" id="rule-key" class="form-input mono" required value="${esc(rule?.merchant_key || '')}" placeholder="es. ESSELUNGA" />
-        <p class="import-note mt-8">Elenco <strong>${labelSource(fonte)}</strong>: vale solo sui movimenti arrivati da questa fonte.</p>
+        <p class="import-note mt-8">Elenco <strong>${labelSource(fonte)}</strong>: vale solo sui movimenti arrivati da questa fonte.
+        Jolly <span class="mono">%</span> = qualsiasi cosa, come nel <span class="mono">LIKE</span> di SQL.</p>
         <p class="import-note mt-8" id="rule-count"></p>
       </div>
       <div class="form-group">
@@ -1284,9 +1334,9 @@ function openMerchantModal(id = null) {
   const info = $('rule-count');
   const refresh = () => {
     const k = input.value.trim().toUpperCase();
-    if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
+    if (pesoRegola(k) < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Servono almeno 3 caratteri veri (il jolly % non conta): una regola più corta aggancia troppo.</span>'; return; }
     const n = merchantMatchCount(k, fonte);
-    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === fonte && normalizeMerchant(t.description).includes(k)).length;
+    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === fonte && regolaAggancia(k, normalizeMerchant(t.description))).length;
     info.textContent = `Aggancia ${n} movimenti ${labelSource(fonte)}${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
   };
   input.addEventListener('input', refresh);
@@ -1296,7 +1346,7 @@ function openMerchantModal(id = null) {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
     const key = (d.key || '').trim().toUpperCase();
-    if (key.length < 3) { alert('La regola deve avere almeno 3 caratteri.'); return; }
+    if (pesoRegola(key) < 3) { alert('La regola deve avere almeno 3 caratteri veri: il jolly % non conta.'); return; }
     if (!d.category_id) { alert('Scegli una categoria.'); return; }
     try {
       let id = rule?.id;
@@ -1346,6 +1396,7 @@ function nuovaVoceFormHtml(descrizione, source = 'bank') {
       <div class="form-group">
         <label class="hstack gap-8 text-sm"><input type="checkbox" id="newcat-with-rule" checked /> Impara anche la regola (elenco <strong>${labelSource(source)}</strong>): se la descrizione contiene…</label>
         <input id="newcat-key" class="form-input mono mt-8" value="${esc(normalizeMerchant(descrizione))}" />
+        <p class="import-note mt-8">Accorciala al nome del negozio; <span class="mono">%</span> è il jolly.</p>
         <p class="import-note mt-8" id="newcat-count"></p>
       </div>
       <p class="import-note">Il colore della voce è quello della sua super-categoria.</p>
@@ -1368,9 +1419,9 @@ function wireNuovaVoceForm({ onDone, onCancel, source = 'bank' }) {
     keyInput.disabled = !chk.checked;
     if (!chk.checked) { info.textContent = 'Senza regola: la voce vale solo per questo movimento.'; return; }
     const k = keyInput.value.trim().toUpperCase();
-    if (k.length < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Serve almeno 3 caratteri: una regola più corta aggancia troppo.</span>'; return; }
+    if (pesoRegola(k) < 3) { info.innerHTML = '<span style="color:var(--c-warning)">⚠️ Servono almeno 3 caratteri veri (il jolly % non conta): una regola più corta aggancia troppo.</span>'; return; }
     const n = merchantMatchCount(k, source);
-    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === source && normalizeMerchant(t.description).includes(k)).length;
+    const senzaCat = S.transactions.filter(t => !t.category_id && sourceOf(t) === source && regolaAggancia(k, normalizeMerchant(t.description))).length;
     info.textContent = `Aggancia ${n} movimenti ${labelSource(source)}${senzaCat ? ` (${senzaCat} ancora senza categoria)` : ''}.`;
   };
   keyInput.addEventListener('input', refresh);
@@ -1385,7 +1436,7 @@ function wireNuovaVoceForm({ onDone, onCancel, source = 'bank' }) {
     const name = (d.name || '').trim();
     if (!name) return;
     const key = chk.checked ? keyInput.value.trim().toUpperCase() : '';
-    if (chk.checked && key.length < 3) { alert('La regola deve avere almeno 3 caratteri, oppure togli la spunta.'); return; }
+    if (chk.checked && key.length < 3) { alert('La regola deve avere almeno 3 caratteri veri (il jolly % non conta), oppure togli la spunta.'); return; }
     // Stessa chiave di una regola che c'è già: il salvataggio la riscriverebbe in silenzio sulla
     // voce nuova. Si può fare — è quello che uno vuole quando corregge — ma va detto prima.
     const esistente = key && S.merchants.find(x => x.merchant_key === key && (x.source || 'bank') === source);
@@ -1517,12 +1568,16 @@ async function renderImpostazioni() {
       periodo che la banca espone ancora, il resto va ricaricato dai fogli Excel.</p>
       <div class="mt-12"><button class="btn btn-danger" data-action="wipe-tx" ${S.transactions.length ? '' : 'disabled'}>🗑️ Cancella tutti i movimenti</button></div>
       <hr class="hr-danger" />
-      <p class="text-sm">Cancella <strong>${plur(S.merchants.length, 'la sola regola', 'tutte le {n} regole')}</strong> di attribuzione — ${regoleDi('bank')} ${labelSource('bank')}
-      e ${regoleDi('excel')} ${labelSource('excel')} — <strong>tutt'e due gli elenchi insieme</strong>.</p>
+      <p class="text-sm">Cancella le regole di attribuzione, <strong>un elenco per volta</strong>: sono due contabilità
+      di regole distinte e si svuotano una senza toccare l'altra — rifare quelle da Excel non deve far ricominciare
+      da capo anche il conto.</p>
       <p class="import-note mt-8">I movimenti non si toccano e le categorie già assegnate restano dove sono: le regole
       decidono i movimenti che una categoria non ce l'hanno, non riscrivono l'archivio. Quello che si perde è
-      l'automatismo — da qui in poi i movimenti nuovi arrivano senza categoria, e i negozi vanno reinsegnati associando.</p>
-      <div class="mt-12"><button class="btn btn-danger" data-action="wipe-rules" ${S.merchants.length ? '' : 'disabled'}>🗑️ Cancella tutte le regole</button></div>
+      l'automatismo — da qui in poi i movimenti nuovi di quella fonte arrivano senza categoria, e i negozi vanno
+      reinsegnati associando.</p>
+      <div class="hstack gap-8 wrap mt-12">
+        ${SOURCES.map(([v, l]) => `<button class="btn btn-danger" data-action="wipe-rules" data-source="${v}" ${regoleDi(v) ? '' : 'disabled'}>🗑️ Regole ${l} (${regoleDi(v)})</button>`).join('')}
+      </div>
     </div>
   `);
 }
@@ -1586,17 +1641,21 @@ function openWipeModal() {
 // ritrovarsi i movimenti scategorizzati: non succede, e la finestra lo dice prima invece di
 // lasciarlo scoprire dopo — le regole valgono sui movimenti senza categoria, non riscrivono
 // quello che è già stato deciso.
-function openWipeRulesModal() {
-  const n = S.merchants.length;
-  const regoleDi = f => S.merchants.filter(m => (m.source || 'bank') === f).length;
+function openWipeRulesModal(fonte) {
+  const n = S.merchants.filter(m => (m.source || 'bank') === fonte).length;
+  const altre = S.merchants.length - n;
   openCancellazione({
-    titolo: 'Cancella tutte le regole',
-    riepilogo: `<p class="text-sm">Stai per cancellare <strong>${plur(n, '1 regola', '{n} regole')}</strong> di attribuzione:
-      ${SOURCES.map(([v, l]) => `<strong>${regoleDi(v)}</strong> ${l}`).join(' e ')}.</p>
+    titolo: `Cancella le regole ${labelSource(fonte)}`,
+    riepilogo: `<p class="text-sm">Stai per cancellare <strong>${plur(n, '1 regola', '{n} regole')}</strong> dell'elenco
+      <strong>${labelSource(fonte)}</strong>.${altre ? plur(altre, " L'unica regola dell'altro elenco resta dov'è.", ' Le {n} regole dell\'altro elenco restano dove sono.') : ''}</p>
       <p class="text-sm mt-8">I <strong>movimenti restano dove sono</strong> e le categorie già assegnate non si toccano.
-      Si perde l'automatismo: i movimenti nuovi arriveranno senza categoria finché non reinsegni i negozi associando.</p>`,
+      Si perde l'automatismo su questa fonte: i movimenti nuovi arriveranno senza categoria finché non reinsegni i
+      negozi associando.</p>`,
     etichetta: plur(n, '🗑️ Cancella la regola', '🗑️ Cancella le {n} regole'),
-    esegui: () => sbDel('sal_merchant_map', `user_id=eq.${S.session.user.id}`),
+    // ⚠️ Il filtro sulla fonte è quello che tiene separate le due cancellazioni. Le regole nate
+    // prima della colonna hanno source 'bank' per DEFAULT, quindi rientrano nel loro elenco e
+    // non sfuggono al filtro.
+    esegui: () => sbDel('sal_merchant_map', `user_id=eq.${S.session.user.id}&source=eq.${fonte}`),
     fatto: plur(n, '🗑️ Cancellata 1 regola', '🗑️ Cancellate {n} regole'),
   });
 }
@@ -2286,7 +2345,7 @@ document.addEventListener('click', async e => {
   } else if (action === 'wipe-tx') {
     openWipeModal();
   } else if (action === 'wipe-rules') {
-    openWipeRulesModal();
+    openWipeRulesModal(btn.dataset.source);
   } else if (action === 'del-tx') {
     if (!confirm('Eliminare questo movimento?')) return;
     try { await sbDel('sal_transactions', `id=eq.${btn.dataset.id}`); await reload(); }

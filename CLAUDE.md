@@ -1586,7 +1586,9 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   stesso negozio si insegna **due volte, una per elenco**: sono due scritture, non un doppione.
   `merchantRule`, `merchantCategory`, `merchantMatchCount`, `learnMerchant` e `saveMerchantRule`
   vogliono tutte la fonte, e `applyLearnedMerchants` confronta ogni movimento con l'elenco della
-  **sua**. Le regole nate prima della colonna sono `'bank'`, che è quello che sono davvero: non
+  **sua**. In Impostazioni le due cancellazioni sono **indipendenti**, una per elenco
+  (`source=eq.<fonte>` nella DELETE): rifare le regole da Excel non deve far ricominciare da capo
+  anche quelle del conto. Le regole nate prima della colonna sono `'bank'`, che è quello che sono davvero: non
   sono state copiate nel set `'excel'` di proposito, perché contengono pezzi di testo che in un
   foglio non compaiono e riempirebbero l'elenco nuovo di regole inerti.
 - ⚠️ **La regola si scrive quando si associa, in un popup, e non più di nascosto.** Assegnare una
@@ -1600,6 +1602,16 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   imparare) né quando si toglie la categoria. ⚠️ **Nell'anteprima di import resta l'apprendimento
   silenzioso** a conferma (`confirmImport`): lì si categorizza a blocchi e una finestra per riga
   sarebbe inservibile.
+- ⚠️ **`%` è il jolly della chiave**, come nel `LIKE` di SQL: `AMAZON%IT` prende *AMAZON.IT*,
+  *AMAZON EU IT* e *AMAZON DE ... IT* con una regola sola (`matcherRegola`, con cache per chiave —
+  `merchantRule` gira su ogni movimento per ogni regola). Il confronto di base resta «contiene»,
+  quindi i `%` agli estremi non aggiungono niente. **Il jolly non è `*`**: l'asterisco compare per
+  davvero nelle causali (`AMAZON.IT *MK7HG2LO3`, `ESSELUNGA *12345`) e prenderlo come jolly
+  spaccherebbe di colpo ogni regola che ce l'ha dentro sul serio; `%` in una causale non si vede
+  mai. Ne discende che **la precedenza non è più la lunghezza ma il peso** (`pesoRegola`: i
+  caratteri al netto dei jolly), o `%A%` scavalcherebbe `ABC` pur non chiedendo quasi niente — per
+  una chiave senza jolly peso e lunghezza coincidono, quindi le regole vecchie si ordinano come
+  prima. La soglia minima di 3 caratteri è sul peso.
 - La pagina **🧠 Attribuzione** (`renderRegole`) è dove le regole si leggono e si tarano: la
   spiegazione in sei passi di come si sceglie la categoria, un **banco di prova** che su una
   descrizione incollata mostra chiave, regole che agganciano e quale vince senza toccare niente, e
@@ -1614,10 +1626,10 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   la regola vince ma a cui è stata data un'altra categoria a mano: restano come sono — le regole
   non sovrascrivono mai — e ⚖️ li riallinea **solo su richiesta esplicita**, con la conferma che
   dice quanti e verso quale voce.
-- La **zona pericolosa** in Impostazioni ha **due comandi distinti**, che passano dalla stessa
+- La **zona pericolosa** in Impostazioni ha **tre comandi distinti**, che passano dalla stessa
   finestra di conferma (`openCancellazione`): *cancella tutti i movimenti* — categorie,
-  super-categorie e regole restano — e *cancella tutte le regole*, **tutt'e due gli elenchi
-  insieme**, che invece non tocca i movimenti: le categorie già assegnate restano dove sono,
+  super-categorie e regole restano — e **una cancellazione per elenco di regole**, indipendenti
+  fra loro, che invece non toccano i movimenti: le categorie già assegnate restano dove sono,
   perché le regole valgono sui movimenti che una categoria non ce l'hanno. Si fa scrivere
   `CANCELLA` invece di un `confirm()` con l'OK a portata di clic: di qui non si torna indietro, e
   la banca ripropone solo il periodo che espone ancora.
