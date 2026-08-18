@@ -1560,11 +1560,22 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   non sovrascrivono mai — e ⚖️ li riallinea **solo su richiesta esplicita**, con la conferma che
   dice quanti e verso quale voce.
 - Nei **Movimenti** l'anno è un **filtro a sé** (`S.filters.anno`) e non `S.selectedYear` della
-  dashboard: qui vale anche **«tutti gli anni»**, che lassù non vorrebbe dire niente — il grafico
-  mensile ha dodici colonne, e con più anni dentro sommerebbe i luglio di anni diversi nella stessa
-  barra. I due filtri sono indipendenti di proposito: si guarda tutto l'archivio nell'elenco
-  tenendo la dashboard sull'anno in corso. Alla prima apertura parte dall'anno più recente, com'era
-  prima che «tutti» esistesse.
+  dashboard: i due sono indipendenti di proposito, così si guarda tutto l'archivio nell'elenco
+  tenendo la dashboard sull'anno in corso. Tutt'e due ammettono **«tutti gli anni»** (`''`;
+  `null` = mai impostato, e allora si parte dall'anno più recente).
+- ⚠️ Con «tutti gli anni» la dashboard **cambia grafico**: *Andamento mensile* diventa *Andamento
+  per anno*, una colonna per annata invece di dodici mesi. Le dodici colonne sommerebbero il luglio
+  2024 e il luglio 2026 nella stessa barra — un numero che non vuol dire niente e che a guardarlo
+  sembra vero. Il resto (KPI, ciambelle, tabelle) attraversa gli anni senza bisogno di niente, e
+  *uscita media mensile* resta giusta perché `mesiConDati` conta i mesi distinti, non dodici.
+- **🏷️ Assegna i N senza categoria** nei Movimenti dà la stessa categoria a tutti i movimenti
+  senza categoria **fra quelli che i filtri stanno mostrando** — il filtro è la selezione. ⚠️ **Non
+  è una regola e non ne scrive nessuna**: tocca quelle righe una volta sola, e i movimenti futuri
+  degli stessi negozi continueranno ad arrivare senza categoria. Sistemare un arretrato e insegnare
+  un negozio sono due operazioni diverse, e la seconda passa dal popup di `openRegolaDaMovimento`.
+  La scrittura va in blocchi da 100 (`patchCategorie`, usata anche da `applyLearnedMerchants`): gli
+  id sono uuid da 36 caratteri e PostgREST li vuole nell'URL con `in.(…)`, che oltre qualche
+  centinaio di righe sfonda la lunghezza massima e fa fallire tutto il giro.
 - La **zona pericolosa** in Impostazioni ha **tre comandi distinti**, che passano dalla stessa
   finestra di conferma (`openCancellazione`): *cancella tutti i movimenti* — categorie,
   super-categorie e regole restano — e **una cancellazione per elenco di regole**, indipendenti
