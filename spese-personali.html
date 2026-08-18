@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.10</title>
+  <title>Spese Personali v1.0.11</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -218,8 +218,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.10';
-var BUILD_TIME  = '2026-08-18T09:00:00Z';
+var APP_VERSION = 'v1.0.11';
+var BUILD_TIME  = '2026-08-18T11:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -544,11 +544,9 @@ async function applyLearnedMerchants(onlyRuleId = null) {
   });
   let n = 0;
   for (const [categoryId, txs] of perCategoria) {
-    const ids = txs.map(t => t.id);
-    // Un solo UPDATE per categoria invece di uno per riga: PostgREST filtra con in.(...).
-    await sbUpd('sal_transactions', `id=in.(${ids.join(',')})`, { category_id: categoryId });
+    // Un solo UPDATE per categoria invece di uno per riga (a blocchi, vedi patchCategorie).
+    n += await patchCategorie(txs.map(t => t.id), categoryId);
     txs.forEach(t => { t.category_id = categoryId; });
-    n += ids.length;
   }
   return n;
 }
@@ -685,9 +683,13 @@ function drawChart(id, config) {
 /* ── Dashboard ──────────────────────────────────────────────── */
 function renderDashboard() {
   const anni = getAnni();
-  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
+  // null = prima apertura (si parte dall'anno più recente), '' = tutti gli anni, altrimenti l'anno.
+  if (S.selectedYear === null) S.selectedYear = anni[0];
+  if (S.selectedYear !== '' && !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
   const anno = S.selectedYear;
-  const txs = S.transactions.filter(t => annoDi(t) === anno);
+  const tuttiGliAnni = anno === '';
+  const periodo = tuttiGliAnni ? 'tutti gli anni' : String(anno);
+  const txs = tuttiGliAnni ? S.transactions.slice() : S.transactions.filter(t => annoDi(t) === anno);
   const spese   = txs.filter(isUscita);
   const entrate = txs.filter(t => !isUscita(t));
   const totUscite  = spese.reduce((s, t) => s + uscitaDi(t), 0);
@@ -722,19 +724,27 @@ function renderDashboard() {
   const entrateRows = [...perCatEntrate.entries()].sort((a, b) => b[1] - a[1]);
 
   // Per mese, due serie affiancate.
-  const usciteMese  = Array.from({ length: 12 }, () => 0);
-  const entrateMese = Array.from({ length: 12 }, () => 0);
+  // ⚠️ Con «tutti gli anni» le dodici colonne dei mesi non vanno bene: sommerebbero il luglio
+  // 2024 e il luglio 2026 nella stessa barra, dando un numero che non vuol dire niente e che a
+  // guardarlo sembra vero. Il grafico diventa allora una colonna per anno, con le stesse due
+  // serie — che è poi la domanda che uno si fa guardando tutto insieme.
+  const gruppi = tuttiGliAnni ? anni.slice().sort() : MESI.map((_, i) => i);
+  const chiaveDi = t => (tuttiGliAnni ? annoDi(t) : parseInt(t.date.slice(5, 7), 10) - 1);
+  const usciteSerie  = gruppi.map(() => 0);
+  const entrateSerie = gruppi.map(() => 0);
   txs.forEach(t => {
-    const i = parseInt(t.date.slice(5, 7), 10) - 1;
-    usciteMese[i]  += uscitaDi(t);
-    entrateMese[i] += entrataDi(t);
+    const i = gruppi.indexOf(chiaveDi(t));
+    if (i === -1) return;
+    usciteSerie[i]  += uscitaDi(t);
+    entrateSerie[i] += entrataDi(t);
   });
 
   setHtml('view-dashboard', `
     <div class="view-header">
-      <div><h2 class="page-title">Dashboard</h2><p class="page-sub">Conto personale — ${anno}</p></div>
+      <div><h2 class="page-title">Dashboard</h2><p class="page-sub">Conto personale — ${periodo}</p></div>
       <div class="hstack gap-8 wrap">
         <select class="form-input form-select" data-action="year-filter" style="width:auto">
+          <option value="" ${tuttiGliAnni ? 'selected' : ''}>tutti gli anni</option>
           ${anni.map(a => `<option value="${a}" ${a === anno ? 'selected' : ''}>${a}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-sm" data-action="import-excel">📊 Importa da Excel</button>
@@ -751,7 +761,7 @@ function renderDashboard() {
     </div>
     ${txs.length === 0
       ? `<div class="card"><div class="empty-state"><div class="empty-icon">💳</div>
-          <p>Nessun movimento per il ${anno}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca,
+          <p>Nessun movimento ${tuttiGliAnni ? 'in archivio' : `per il ${anno}`}.<br/>Usa <strong>🏦 Importa dal conto</strong> per leggere i movimenti dalla banca,
           oppure <strong>📊 Importa da Excel</strong> per l'estratto conto scaricato dal sito.</p></div></div>`
       : `${spese.length ? `<div class="grid-2">
           <div class="card">
@@ -764,7 +774,7 @@ function renderDashboard() {
           </div>
         </div>` : ''}
         <div class="card">
-          <div class="card-title">Andamento mensile</div>
+          <div class="card-title">Andamento ${tuttiGliAnni ? 'per anno' : 'mensile'}</div>
           <div class="chart-wrap"><canvas id="chart-mese"></canvas></div>
         </div>
         ${spese.length ? `<div class="card">
@@ -836,10 +846,10 @@ function renderDashboard() {
   drawChart('chart-mese', {
     type: 'bar',
     data: {
-      labels: MESI.map(m => m.slice(0, 3)),
+      labels: tuttiGliAnni ? gruppi.map(String) : MESI.map(m => m.slice(0, 3)),
       datasets: [
-        { label: 'Uscite',  data: usciteMese.map(v => Math.round(v * 100) / 100),  backgroundColor: '#dc262680', borderColor: '#dc2626', borderWidth: 2 },
-        { label: 'Entrate', data: entrateMese.map(v => Math.round(v * 100) / 100), backgroundColor: '#16a34a80', borderColor: '#16a34a', borderWidth: 2 },
+        { label: 'Uscite',  data: usciteSerie.map(v => Math.round(v * 100) / 100),  backgroundColor: '#dc262680', borderColor: '#dc2626', borderWidth: 2 },
+        { label: 'Entrate', data: entrateSerie.map(v => Math.round(v * 100) / 100), backgroundColor: '#16a34a80', borderColor: '#16a34a', borderWidth: 2 },
       ],
     },
     options: {
@@ -876,6 +886,9 @@ function renderTransazioni() {
   // una scelta, non un default.
   if (S.filters.anno === null) S.filters.anno = String(anni[0]);
   const txs = filteredTransactions();
+  // Quelli che il pulsante di assegnazione in blocco toccherebbe: i senza categoria FRA QUELLI
+  // CHE SI STANNO GUARDANDO. Il filtro è la selezione — è così che si sceglie cosa assegnare.
+  const daAssegnare = txs.filter(t => !t.category_id);
   const uscite  = txs.reduce((s, t) => s + uscitaDi(t), 0);
   const entrate = txs.reduce((s, t) => s + entrataDi(t), 0);
 
@@ -885,6 +898,8 @@ function renderTransazioni() {
         <p class="page-sub">${plur(txs.length, '1 movimento', '{n} movimenti')} · <span class="neg">${fmtEUR(uscite)}</span> di uscite ·
         <span class="pos">${fmtEUR(entrate)}</span> di entrate · saldo <strong class="${entrate - uscite < 0 ? 'neg' : 'pos'}">${fmtEUR(entrate - uscite)}</strong></p></div>
       <div class="hstack gap-8 wrap">
+        ${daAssegnare.length
+          ? `<button class="btn btn-outline btn-sm" data-action="assegna-massa">🏷️ Assegna i ${daAssegnare.length} senza categoria</button>` : ''}
         ${S.transactions.some(t => !t.category_id) && S.merchants.length
           ? '<button class="btn btn-outline btn-sm" data-action="apply-rules">✨ Applica i negozi imparati</button>' : ''}
         <button class="btn btn-outline btn-sm" data-action="import-excel">📊 Importa da Excel</button>
@@ -947,6 +962,78 @@ function renderTransazioni() {
           </table></div>`}
     </div>
   `);
+}
+
+/* ── Assegnazione in blocco ──────────────────────────────────────
+   Prende i movimenti senza categoria fra quelli che i filtri stanno mostrando e li manda tutti
+   nella stessa voce. ⚠️ NON è una regola e non ne scrive nessuna: tocca queste righe qui e basta,
+   una volta sola. I movimenti futuri dello stesso negozio continueranno ad arrivare senza
+   categoria — è la differenza fra sistemare un arretrato e insegnare qualcosa, e sono due
+   operazioni diverse di proposito. Chi vuole la regola la scrive associando un movimento solo.  */
+async function patchCategorie(ids, categoryId) {
+  // A blocchi: gli id sono uuid da 36 caratteri e PostgREST li vuole nell'URL con in.(…), che
+  // oltre qualche centinaio di righe sfonda la lunghezza massima e fa fallire tutto il giro.
+  let n = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const blocco = ids.slice(i, i + 100);
+    await sbUpd('sal_transactions', `id=in.(${blocco.join(',')})`, { category_id: categoryId });
+    n += blocco.length;
+  }
+  return n;
+}
+
+function openAssegnaMassa() {
+  const txs = filteredTransactions().filter(t => !t.category_id);
+  if (!txs.length) { showToast('Nessun movimento senza categoria con questi filtri'); return; }
+  const uscite  = txs.reduce((a, t) => a + uscitaDi(t), 0);
+  const entrate = txs.reduce((a, t) => a + entrataDi(t), 0);
+  openModal(`Assegna ${plur(txs.length, '1 movimento', '{n} movimenti')}`, `
+    <p class="text-sm">Stai per dare la stessa categoria a <strong>${plur(txs.length, 'il movimento', 'tutti i {n} movimenti')}</strong>
+    senza categoria fra quelli che stai guardando${S.filters.anno || S.filters.mese || S.filters.tipo || S.filters.testo ? ' <strong>con i filtri correnti</strong>' : ''}
+    — ${fmtEUR(uscite)} di uscite e ${fmtEUR(entrate)} di entrate.</p>
+    <form id="modal-form" class="mt-12">
+      <div class="form-group">
+        <label class="form-label">Categoria *</label>
+        <select id="massa-cat" class="form-input form-select" required>${catOptions('', '— scegli —')}</select>
+      </div>
+      <p class="import-note"><strong>Non crea nessuna regola.</strong> Assegna queste righe qui, una volta sola: i
+      movimenti futuri di questi negozi continueranno ad arrivare senza categoria. Per insegnare un negozio, associa
+      un movimento solo e scrivi la regola nel popup.</p>
+      <div class="mt-12" style="max-height:34vh;overflow-y:auto">
+        <table class="import-table">
+          <thead><tr><th>Data</th><th>Descrizione</th><th class="text-right">Importo</th></tr></thead>
+          <tbody>${txs.map(t => `<tr>
+            <td class="mono" style="white-space:nowrap">${fmtDate(t.date)}</td>
+            <td title="${esc(t.description)}">${esc(merchantText(t.description)) || '—'}</td>
+            <td class="mono text-right" style="white-space:nowrap;color:${isUscita(t) ? 'var(--c-danger)' : 'var(--c-success)'}">${fmtEUR(t.amount)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary" id="massa-go" disabled>🏷️ Assegna ${plur(txs.length, 'il movimento', 'i {n} movimenti')}</button>
+      </div>
+    </form>
+  `, true);
+
+  const sel = $('massa-cat'), go = $('massa-go');
+  sel.addEventListener('change', () => { go.disabled = !sel.value; });
+  $('modal-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!sel.value) return;
+    go.disabled = true;
+    $('modal-body').innerHTML = '<p class="import-note">Assegno…</p>';
+    try {
+      const n = await patchCategorie(txs.map(t => t.id), sel.value);
+      txs.forEach(t => { t.category_id = sel.value; });
+      closeModal();
+      showToast(`🏷️ ${plur(n, 'Assegnato 1 movimento', 'Assegnati {n} movimenti')} a «${catById(sel.value)?.name || '—'}»`);
+      render();
+    } catch (err) {
+      $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(err.message)}</p>
+        <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`;
+    }
+  });
 }
 
 /* ── Categorie ──────────────────────────────────────────────── */
@@ -2285,6 +2372,7 @@ document.addEventListener('click', async e => {
   if (action === 'nav') navigate(btn.dataset.view);
   else if (action === 'close-modal') closeModal();
   else if (action === 'import') openImport();
+  else if (action === 'assegna-massa') openAssegnaMassa();
   else if (action === 'import-excel') openExcelImport();
   else if (action === 'imp-read') readMovements();
   else if (action === 'imp-read-file') readExcelFile();
@@ -2363,7 +2451,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', async e => {
   const el = e.target;
   if (el.matches('[data-action="year-filter"]')) {
-    S.selectedYear = parseInt(el.value, 10);
+    S.selectedYear = el.value === '' ? '' : parseInt(el.value, 10);
     render();
   } else if (el.matches('[data-action="dup-margin"]')) {
     localStorage.setItem(DUP_MARGIN_KEY, el.value);
