@@ -640,7 +640,7 @@ function openRegolaDaMovimento(tx, categoryId) {
       // ce l'ha già, quindi il conteggio sono solo gli altri.
       const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
       closeModal();
-      showToast(altri ? `✨ Regola creata · categorizzati altri ${altri} movimenti` : '✨ Regola creata');
+      showToast(altri ? `✨ Regola creata · ${plur(altri, 'categorizzato un altro movimento', 'categorizzati altri {n} movimenti')}` : '✨ Regola creata');
       render();
     } catch (err) {
       go.disabled = false;
@@ -1452,7 +1452,7 @@ function openMerchantModal(id = null) {
       closeModal();
       await loadData();
       const n = id ? await applyLearnedMerchants(id) : 0;
-      if (n) showToast(`✨ Categorizzati ${n} movimenti con la regola ${rule ? 'aggiornata' : 'nuova'}`);
+      if (n) showToast(`✨ ${plur(n, 'Categorizzato 1 movimento', 'Categorizzati {n} movimenti')} con la regola ${rule ? 'aggiornata' : 'nuova'}`);
       render();
     } catch (err) {
       alert(/duplicate|uq_sal_merchant_map/i.test(err.message)
@@ -1568,7 +1568,7 @@ function openNuovaVoceModal(tx) {
       await setTxCategory(tx, cat.id);
       const altri = rule ? await applyLearnedMerchants(rule.id) : 0;
       showToast(altri
-        ? `✅ Voce «${cat.name}» creata · ✨ categorizzati altri ${altri} movimenti`
+        ? `✅ Voce «${cat.name}» creata · ✨ ${plur(altri, 'categorizzato un altro movimento', 'categorizzati altri {n} movimenti')}`
         : `✅ Voce «${cat.name}» creata e assegnata`);
       render();
     },
@@ -2053,7 +2053,7 @@ async function confirmImport() {
     // I negozi imparati durante questo import valgono anche per le righe entrate prima che li
     // imparassimo, dentro lo stesso giro.
     const auto = await applyLearnedMerchants();
-    if (auto) showToast(`✨ Categorizzati ${auto} movimenti con i negozi imparati`);
+    if (auto) showToast(`✨ ${plur(auto, 'Categorizzato 1 movimento', 'Categorizzati {n} movimenti')} con i negozi imparati`);
     render();
   } catch (e) {
     $('modal-body').innerHTML = `<p class="text-sm neg">Errore: ${esc(e.message)}</p>
@@ -2382,7 +2382,7 @@ document.addEventListener('click', async e => {
   } else if (action === 'apply-rules') {
     try {
       const n = await applyLearnedMerchants();
-      showToast(n ? `✨ Categorizzati ${n} movimenti` : 'Nessun movimento da categorizzare con i negozi imparati');
+      showToast(n ? `✨ ${plur(n, 'Categorizzato 1 movimento', 'Categorizzati {n} movimenti')}` : 'Nessun movimento da categorizzare con i negozi imparati');
       render();
     } catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'new-cat') openCatModal();
@@ -2413,7 +2413,7 @@ document.addEventListener('click', async e => {
   } else if (action === 'apply-merchant') {
     try {
       const n = await applyLearnedMerchants(btn.dataset.id);
-      showToast(n ? `✨ Categorizzati ${n} movimenti` : 'Nessun movimento senza categoria per questa regola');
+      showToast(n ? `✨ ${plur(n, 'Categorizzato 1 movimento', 'Categorizzati {n} movimenti')}` : 'Nessun movimento senza categoria per questa regola');
       render();
     } catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'align-merchant') {
@@ -2427,7 +2427,7 @@ document.addEventListener('click', async e => {
       + `Li sposto tutti su «${catById(rule.category_id)?.name || '—'}»?`)) return;
     try {
       await sbUpd('sal_transactions', `id=in.(${conflitti.map(t => t.id).join(',')})`, { category_id: rule.category_id });
-      showToast(`⚖️ Riallineati ${conflitti.length} movimenti`);
+      showToast(`⚖️ ${plur(conflitti.length, 'Riallineato 1 movimento', 'Riallineati {n} movimenti')}`);
       await reload();
     } catch (err) { alert('Errore: ' + err.message); }
   } else if (action === 'del-merchant') {
