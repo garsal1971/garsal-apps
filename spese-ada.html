@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Ada v1.2.0</title>
+  <title>Spese Ada v1.2.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -91,6 +91,8 @@
     .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); }
     .table td.nowrap { white-space: nowrap; }
     .table tbody tr:hover td { background: #fafbfd; }
+    .cell-link { background: none; border: none; padding: 0; font: inherit; color: var(--c-primary); cursor: pointer; text-align: left; }
+    .cell-link:hover { text-decoration: underline; }
     .cat-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
     .badge-none { background: #fef3c7; color: #92400e; }
@@ -212,8 +214,8 @@
    (che legge e basta: filtro, doppioni e categorie stanno qui).
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.2.0';
-var BUILD_TIME  = '2026-08-18T13:00:00Z';
+var APP_VERSION = 'v1.2.1';
+var BUILD_TIME  = '2026-08-18T15:00:00Z';
 console.log('%c SPESE ADA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -918,7 +920,7 @@ function renderCategorie() {
   const rigaVoce = c => {
     const uso = usoDi(c.id);
     return `<tr>
-      <td style="padding-left:22px">${c.icon || ''} ${esc(c.name)}</td>
+      <td style="padding-left:22px"><button class="cell-link" data-action="stat-cat" data-id="${c.id}" title="Statistica di questa voce">${c.icon || ''} ${esc(c.name)}</button></td>
       <td class="text-right mono text-muted">${uso.length}</td>
       <td class="text-right mono">${fmtEUR(uso.reduce((s, t) => s + spesaDi(t), 0))}</td>
       <td class="nowrap text-right">
@@ -930,7 +932,8 @@ function renderCategorie() {
 
   setHtml('view-categorie', `
     <div class="view-header">
-      <div><h2 class="page-title">Categorie</h2><p class="page-sub">Due livelli: la super-categoria porta il colore, le voci lo ereditano</p></div>
+      <div><h2 class="page-title">Categorie</h2><p class="page-sub">Due livelli: la super-categoria porta il colore, le voci lo ereditano ·
+        <strong>clicca un nome</strong> per la statistica nel tempo</p></div>
       <div class="hstack gap-8 wrap">
         <button class="btn btn-outline btn-sm" data-action="new-super">+ Super-categoria</button>
         <button class="btn btn-primary btn-sm" data-action="new-cat">+ Voce</button>
@@ -950,7 +953,9 @@ function renderCategorie() {
               const tot = g.voci.reduce((s, c) => s + usoDi(c.id).reduce((a, t) => a + spesaDi(t), 0), 0);
               const nMov = g.voci.reduce((s, c) => s + usoDi(c.id).length, 0);
               return `<tr style="background:#fafbfd">
-                  <td class="fw-600">${superChip(g.sup?.id || null)}</td>
+                  <td class="fw-600">${g.sup
+                    ? `<button class="cell-link" data-action="stat-cat" data-tipo="super" data-id="${g.sup.id}" title="Statistica di tutta la super-categoria">${superChip(g.sup.id)}</button>`
+                    : superChip(null)}</td>
                   <td class="text-right mono text-muted">${nMov}</td>
                   <td class="text-right mono fw-600">${fmtEUR(tot)}</td>
                   <td class="nowrap text-right">${g.sup ? `
@@ -2525,6 +2530,121 @@ async function readExcelFile() {
   }
 }
 
+/* ── Statistica di una categoria ─────────────────────────────────
+   Si apre cliccando il nome di una voce (o di una super-categoria) in Categorie. Risponde alla
+   domanda che una tabella di totali non risponde: non «quanto ho speso qui», ma «come è andata
+   nel tempo» — se una voce sta crescendo, se è stagionale, se è ferma da mesi.
+
+   Due tagli, come si guardano davvero: per ANNO, che dice la tendenza, e per MESE-ANNO, che dice
+   quando. Non un taglio per «mese» qualunque: gennaio 2024 e gennaio 2026 sommati sarebbero lo
+   stesso errore delle dodici colonne della dashboard con «tutti gli anni» selezionato.
+
+   ⚠️ Questo blocco è identico in spese-ada.html e spese-personali.html — gli importi si leggono
+   con due helper locali invece che con quelli della pagina, che nelle due app hanno nomi diversi.
+   Se lo modifichi in una, riportalo nell'altra.  */
+function openStatCategoria(id, tipo = 'voce') {
+  const isSuper = tipo === 'super';
+  const nome = isSuper ? (superById(id)?.name || '—') : (catById(id)?.name || '—');
+  const icona = (isSuper ? superById(id)?.icon : catById(id)?.icon) || '';
+  const colore = isSuper ? (superById(id)?.color || NO_SUPER_COLOR) : colorOfCat(id);
+  const txs = S.transactions.filter(t => (isSuper ? catById(t.category_id)?.super_id === id : t.category_id === id));
+
+  const usc = t => (+t.amount < 0 ? -(+t.amount) : 0);
+  const ent = t => (+t.amount > 0 ? +t.amount : 0);
+  const totU = txs.reduce((s, t) => s + usc(t), 0);
+  const totE = txs.reduce((s, t) => s + ent(t), 0);
+
+  if (!txs.length) {
+    openModal(`${icona} ${nome}`, `
+      <div class="empty-state"><div class="empty-icon">📊</div><p>Nessun movimento in questa ${isSuper ? 'super-categoria' : 'voce'}.</p></div>
+      <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>`);
+    return;
+  }
+
+  // Un raggruppamento solo, usato due volte: cambia la chiave, non il conto.
+  const raggruppa = chiave => {
+    const m = new Map();
+    txs.forEach(t => {
+      const k = chiave(t);
+      if (!m.has(k)) m.set(k, { u: 0, e: 0, n: 0 });
+      const r = m.get(k);
+      r.u += usc(t); r.e += ent(t); r.n++;
+    });
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  };
+  const perAnno = raggruppa(t => (t.date || '').slice(0, 4));
+  const perMese = raggruppa(t => (t.date || '').slice(0, 7));
+
+  const date = txs.map(t => t.date).filter(Boolean).sort();
+  const conEntrate = totE > 0;
+  // Una voce di sole entrate (uno stipendio, un rimborso) esiste: graficarne la spesa vorrebbe
+  // dire disegnare una fila di zeri e chiamarla statistica. In quel caso la serie diventa quella
+  // delle entrate — dichiarata nell'etichetta, non scambiata di nascosto.
+  const soloEntrate = totU === 0 && conEntrate;
+  const valore = v => (soloEntrate ? v.e : v.u);
+  const totSerie = soloEntrate ? totE : totU;
+  const etichettaSerie = soloEntrate ? 'Entrate' : 'Spesa';
+  const media = totSerie / (perMese.length || 1);
+  const nomeMese = k => `${MESI[parseInt(k.slice(5, 7), 10) - 1]} ${k.slice(0, 4)}`;
+
+  openModal(`${icona} ${nome}`, `
+    <div class="kpi-grid">
+      ${soloEntrate ? '' : `<div class="kpi-card"><div class="kpi-label">Spesa totale</div><div class="kpi-value mono neg">${fmtEUR(totU)}</div></div>`}
+      ${conEntrate ? `<div class="kpi-card"><div class="kpi-label">Entrate</div><div class="kpi-value mono pos">${fmtEUR(totE)}</div></div>` : ''}
+      <div class="kpi-card"><div class="kpi-label">Movimenti</div><div class="kpi-value mono">${txs.length}</div></div>
+      <div class="kpi-card"><div class="kpi-label">${soloEntrate ? 'Entrata media' : 'Media al mese'}</div><div class="kpi-value mono">${fmtEUR(media)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Ultimo</div><div class="kpi-value mono" style="font-size:1rem">${fmtDate(date[date.length - 1])}</div></div>
+    </div>
+    <p class="import-note">Dal ${fmtDate(date[0])} a oggi, su ${plur(perMese.length, '1 mese', '{n} mesi')} con movimenti.
+    La media al mese conta i soli mesi in cui questa ${isSuper ? 'super-categoria' : 'voce'} è comparsa, non tutti quelli del calendario.</p>
+
+    <div class="card mt-12" style="box-shadow:none">
+      <div class="card-title">Per anno</div>
+      <div class="chart-wrap"><canvas id="stat-anni"></canvas></div>
+      <div class="table-wrap mt-12"><table class="table">
+        <thead><tr><th>Anno</th><th class="text-right">Movimenti</th>${soloEntrate ? '' : '<th class="text-right">Spesa</th>'}${conEntrate ? '<th class="text-right">Entrate</th>' : ''}<th class="text-right">% del totale</th></tr></thead>
+        <tbody>${perAnno.map(([k, v]) => `<tr>
+          <td class="mono">${k}</td>
+          <td class="text-right mono text-muted">${v.n}</td>
+          ${soloEntrate ? '' : `<td class="text-right mono fw-600">${fmtEUR(v.u)}</td>`}
+          ${conEntrate ? `<td class="text-right mono pos">${v.e ? fmtEUR(v.e) : '—'}</td>` : ''}
+          <td class="text-right mono text-muted">${totSerie ? Math.round(valore(v) / totSerie * 100) : 0}%</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+
+    <div class="card" style="box-shadow:none">
+      <div class="card-title">Per mese</div>
+      <div class="chart-wrap"><canvas id="stat-mesi"></canvas></div>
+      <div class="table-wrap mt-12" style="max-height:34vh;overflow-y:auto"><table class="table">
+        <thead><tr><th>Mese</th><th class="text-right">Movimenti</th>${soloEntrate ? '' : '<th class="text-right">Spesa</th>'}${conEntrate ? '<th class="text-right">Entrate</th>' : ''}</tr></thead>
+        <tbody>${perMese.slice().reverse().map(([k, v]) => `<tr>
+          <td>${nomeMese(k)}</td>
+          <td class="text-right mono text-muted">${v.n}</td>
+          ${soloEntrate ? '' : `<td class="text-right mono fw-600">${fmtEUR(v.u)}</td>`}
+          ${conEntrate ? `<td class="text-right mono pos">${v.e ? fmtEUR(v.e) : '—'}</td>` : ''}
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <p class="import-note mt-8">I mesi senza nemmeno un movimento non compaiono: qui si guarda quando si è speso,
+      e una fila di zeri direbbe soltanto che il calendario ha dodici mesi.</p>
+    </div>
+
+    <div class="modal-footer"><button class="btn btn-outline" data-action="close-modal">Chiudi</button></div>
+  `, true);
+
+  const barre = (id, etichette, valori) => drawChart(id, {
+    type: 'bar',
+    data: { labels: etichette, datasets: [{ label: etichettaSerie, data: valori.map(v => Math.round(v * 100) / 100), backgroundColor: colore + 'b0', borderColor: colore, borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { ticks: { callback: v => '€' + v.toLocaleString('it-IT') } } },
+    },
+  });
+  barre('stat-anni', perAnno.map(([k]) => k), perAnno.map(([, v]) => valore(v)));
+  barre('stat-mesi', perMese.map(([k]) => nomeMese(k)), perMese.map(([, v]) => valore(v)));
+}
+
 /* ── Modale ─────────────────────────────────────────────────── */
 function openModal(title, bodyHtml, wide = false) {
   $('modal-title').textContent = title;
@@ -2590,6 +2710,7 @@ document.addEventListener('click', async e => {
   else if (action === 'import') openImport();
   else if (action === 'import-excel') openExcelImport();
   else if (action === 'assegna-massa') openAssegnaMassa();
+  else if (action === 'stat-cat') openStatCategoria(btn.dataset.id, btn.dataset.tipo || 'voce');
   else if (action === 'imp-read') readMovements();
   else if (action === 'imp-read-file') readExcelFile();
   else if (action === 'imp-confirm') confirmImport();
