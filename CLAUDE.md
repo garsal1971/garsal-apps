@@ -1604,6 +1604,17 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   anche quelle del conto. Le regole nate prima della colonna sono `'bank'`, che è quello che sono davvero: non
   sono state copiate nel set `'excel'` di proposito, perché contengono pezzi di testo che in un
   foglio non compaiono e riempirebbero l'elenco nuovo di regole inerti.
+- In **Categorie** il nome di una voce (e di una super-categoria) è **cliccabile** e apre la
+  statistica nel tempo: KPI, *per anno* e *per mese-anno*, ciascuno con grafico e tabella. I due
+  tagli sono quelli — **non un taglio per «mese» qualunque**: gennaio 2024 e gennaio 2026 sommati
+  sarebbero lo stesso errore delle dodici colonne della dashboard con «tutti gli anni». I mesi
+  senza movimenti non compaiono (una fila di zeri direbbe solo che il calendario ha dodici mesi) e
+  la *media al mese* divide per i soli mesi in cui la voce è comparsa. ⚠️ Una voce di **sole
+  entrate** (uno stipendio, un rimborso) grafica le entrate invece della spesa, con l'etichetta
+  che lo dice: disegnarne la spesa vorrebbe dire una fila di zeri chiamata statistica.
+  Il blocco `openStatCategoria` è **identico nelle due app** — gli importi si leggono con due
+  helper locali invece che con quelli della pagina, che lì hanno nomi diversi (`uscitaDi`/
+  `entrataDi` contro `spesaDi`): se lo modifichi in una, riportalo nell'altra.
 - ⚠️ **La regola si scrive quando si associa, in un popup, e non più di nascosto.** Assegnare una
   categoria a un movimento apre `openRegolaDaMovimento`, che mostra la descrizione per intero,
   propone la chiave (la descrizione normalizzata) e la lascia **accorciare col conteggio dal
