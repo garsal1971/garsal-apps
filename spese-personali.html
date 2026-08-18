@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spese Personali v1.0.9</title>
+  <title>Spese Personali v1.0.10</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -218,8 +218,8 @@
    cambia solo cosa si propone all'import e cosa si somma.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.9';
-var BUILD_TIME  = '2026-08-17T23:30:00Z';
+var APP_VERSION = 'v1.0.10';
+var BUILD_TIME  = '2026-08-18T09:00:00Z';
 console.log('%c SPESE PERSONALI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#4f46e5;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -236,7 +236,11 @@ const S = {
   session: null, view: 'dashboard',
   transactions: [], categories: [], supers: [], merchants: [],
   charts: {}, selectedYear: null,
-  filters: { mese: '', categoria: '', tipo: '', testo: '' },
+  // ⚠️ L'anno dei Movimenti è un filtro a sé e non è S.selectedYear della dashboard: qui può
+  // valere «tutti», che lassù non vuol dire niente — il grafico mensile ha dodici colonne, e con
+  // più anni dentro sommerebbe i luglio di anni diversi nella stessa barra. null = mai impostato
+  // (al primo disegno prende l'anno più recente, come faceva prima), '' = tutti gli anni.
+  filters: { anno: null, mese: '', categoria: '', tipo: '', testo: '' },
   ruleFilter: '', ruleSource: 'bank',
 };
 
@@ -848,11 +852,10 @@ function renderDashboard() {
 
 /* ── Movimenti ──────────────────────────────────────────────── */
 function filteredTransactions() {
-  const anno = S.selectedYear;
-  const { mese, categoria, tipo, testo } = S.filters;
+  const { anno, mese, categoria, tipo, testo } = S.filters;
   const q = (testo || '').trim().toLowerCase();
   return S.transactions.filter(t => {
-    if (annoDi(t) !== anno) return false;
+    if (anno && String(annoDi(t)) !== anno) return false;
     if (mese && t.date.slice(5, 7) !== mese) return false;
     if (tipo === 'uscite' && !isUscita(t)) return false;
     if (tipo === 'entrate' && isUscita(t)) return false;
@@ -868,7 +871,10 @@ function filteredTransactions() {
 
 function renderTransazioni() {
   const anni = getAnni();
-  if (!S.selectedYear || !anni.includes(S.selectedYear)) S.selectedYear = anni[0];
+  // Alla prima apertura si parte dall'anno più recente, com'era prima che «tutti» esistesse: chi
+  // apre i Movimenti cerca quasi sempre qualcosa di recente, e tutto l'archivio in una tabella è
+  // una scelta, non un default.
+  if (S.filters.anno === null) S.filters.anno = String(anni[0]);
   const txs = filteredTransactions();
   const uscite  = txs.reduce((s, t) => s + uscitaDi(t), 0);
   const entrate = txs.reduce((s, t) => s + entrataDi(t), 0);
@@ -876,7 +882,7 @@ function renderTransazioni() {
   setHtml('view-transazioni', `
     <div class="view-header">
       <div><h2 class="page-title">Movimenti</h2>
-        <p class="page-sub">${txs.length} movimenti · <span class="neg">${fmtEUR(uscite)}</span> di uscite ·
+        <p class="page-sub">${plur(txs.length, '1 movimento', '{n} movimenti')} · <span class="neg">${fmtEUR(uscite)}</span> di uscite ·
         <span class="pos">${fmtEUR(entrate)}</span> di entrate · saldo <strong class="${entrate - uscite < 0 ? 'neg' : 'pos'}">${fmtEUR(entrate - uscite)}</strong></p></div>
       <div class="hstack gap-8 wrap">
         ${S.transactions.some(t => !t.category_id) && S.merchants.length
@@ -889,8 +895,9 @@ function renderTransazioni() {
       <div class="filters">
         <div>
           <label class="form-label">Anno</label>
-          <select class="form-input form-select" data-action="year-filter">
-            ${anni.map(a => `<option value="${a}" ${a === S.selectedYear ? 'selected' : ''}>${a}</option>`).join('')}
+          <select class="form-input form-select" data-filter="anno">
+            <option value="" ${S.filters.anno === '' ? 'selected' : ''}>tutti gli anni</option>
+            ${anni.map(a => `<option value="${a}" ${S.filters.anno === String(a) ? 'selected' : ''}>${a}</option>`).join('')}
           </select>
         </div>
         <div>
@@ -1861,7 +1868,7 @@ function renderImportList(cardFilter) {
 
   $('modal-body').innerHTML = `
     <p class="import-note">
-      ${visibili.length} movimenti da <strong>${esc(provenienza)}</strong> —
+      ${plur(visibili.length, '1 movimento', '{n} movimenti')} da <strong>${esc(provenienza)}</strong> —
       <strong>${nuovi} nuovi</strong>${esatti ? `, ${esatti} già importati` : ''}${sospetti ? `, ${sospetti} sospetti` : ''}${esatti || sospetti ? ' (deselezionati)' : ''}.
       ${sospetti ? `<br/>⚠️ <strong>Sospetto</strong> vuol dire <strong>stesso importo entro ${dupMargine()} giorni</strong> da un movimento già in archivio. La descrizione non entra nel confronto — è proprio quella che le due strade scrivono in modo diverso — quindi accanto trovi con chi somiglia e di quanto si scosta: guardala, e spunta la riga solo se è davvero una spesa a parte. Il margine si cambia in ⚙️ Impostazioni.` : ''}
       ${_import.truncated ? '<br/>⚠️ Elenco troncato: restringi il periodo.' : ''}

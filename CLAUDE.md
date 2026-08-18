@@ -1559,6 +1559,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   la regola vince ma a cui è stata data un'altra categoria a mano: restano come sono — le regole
   non sovrascrivono mai — e ⚖️ li riallinea **solo su richiesta esplicita**, con la conferma che
   dice quanti e verso quale voce.
+- Nei **Movimenti** l'anno è un **filtro a sé** (`S.filters.anno`) e non `S.selectedYear` della
+  dashboard: qui vale anche **«tutti gli anni»**, che lassù non vorrebbe dire niente — il grafico
+  mensile ha dodici colonne, e con più anni dentro sommerebbe i luglio di anni diversi nella stessa
+  barra. I due filtri sono indipendenti di proposito: si guarda tutto l'archivio nell'elenco
+  tenendo la dashboard sull'anno in corso. Alla prima apertura parte dall'anno più recente, com'era
+  prima che «tutti» esistesse.
 - La **zona pericolosa** in Impostazioni ha **tre comandi distinti**, che passano dalla stessa
   finestra di conferma (`openCancellazione`): *cancella tutti i movimenti* — categorie,
   super-categorie e regole restano — e **una cancellazione per elenco di regole**, indipendenti
