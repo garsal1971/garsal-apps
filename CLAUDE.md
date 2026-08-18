@@ -383,7 +383,7 @@ quante volte è uscita ciascuna opzione — che è la domanda che una combo pone
 | `ada_super_categories` | Super-categorie: **l'unico livello che porta il `color`** |
 | `ada_categories` | Voci di spesa (nome unico per utente, `icon`, `super_id`); `color` non è più usato |
 | `ada_transactions` | Movimenti importati dal conto: `amount` **con segno**, **una sola** `category_id`, `card_identification`, `external_id` (unico per `bank_connection_id`) |
-| `ada_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria |
+| `ada_merchant_map` | Negozi imparati: `merchant_key` normalizzato → categoria, **per fonte** (`source` `'bank'`\|`'excel'`, unico su `(user_id, source, merchant_key)`) |
 
 Sono volutamente **separate dalle `ca_*`**: le spese di Ada non devono entrare nei totali di
 Spese Famiglia, e una separazione per campo sarebbe retta solo finché ogni query si ricorda di
@@ -1482,10 +1482,18 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   `enable-banking-transactions`: solo le **uscite**, con un **filtro per carta** (la funzione
   restituisce `card.identification` quando la banca la espone) per isolare le spese di Ada su un
   conto con più carte. La carta scelta resta in `localStorage` (`ada_card_filter`).
-- Non c'è una schermata dove si scrivono regole: dare una categoria a un movimento **impara la
-  descrizione** in `ada_merchant_map`. La regola vale in tre momenti — sulle righe proposte in
-  anteprima, sugli altri movimenti già in archivio (`applyLearnedMerchants`, subito dopo
-  l'assegnazione manuale e dopo ogni import) e col pulsante *✨ Applica i negozi imparati*.
+- ⚠️ **Da agosto 2026 Spese Ada è allineata a `spese-personali.html`**: import da Excel/CSV,
+  riconoscimento dei doppioni fra le due fonti, pagina 🧠 **Attribuzione**, jolly `%`, popup della
+  regola quando si associa, «tutti gli anni», assegnazione in blocco e zona pericolosa **sono le
+  stesse e vanno lette nella sezione di Spese Personali qui sotto** — il codice è lo stesso a meno
+  dei nomi delle tabelle. Le differenze che restano sono tre: qui si archiviano **le sole spese**
+  (le entrate entrano solo spuntando *Mostra anche le entrate*, e la casella vale sia per l'import
+  dal conto sia per quello da file), il **filtro per carta non lascia passare i movimenti senza
+  carta** (là sono le entrate che servono al saldo, qui si cerca una carta e basta), e non c'è
+  nessun saldo del periodo.
+- Le regole si scrivono associando una categoria a un movimento, e da lì in poi valgono in tre
+  momenti — sulle righe proposte in anteprima, sugli altri movimenti già in archivio
+  (`applyLearnedMerchants`) e col pulsante *✨ Applica i negozi imparati*.
   **Tocca solo i movimenti senza categoria**: quello che è già classificato non si sovrascrive.
 - Quando la voce giusta non c'è ancora, la tendina del movimento chiude con **«➕ Nuova voce…»**:
   si crea la voce e **nella stessa finestra si scrive la regola**, con il conteggio dal vivo di
@@ -1497,19 +1505,25 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   Vale sia sui movimenti in archivio sia sull'anteprima di import; lì il form **prende il posto
   dell'elenco** invece di aprire un secondo modale (`#modal-body` è uno solo) e le spunte già
   fatte vengono prima messe al sicuro in `_import.items` da `syncImportSelections()`.
-- Il confronto è **«la descrizione contiene la chiave»**, non un'uguaglianza, e la chiave si
-  ricava da **quello che UniCredit scrive dopo l'importo**, che è l'esercente:
+- Il confronto è **«la descrizione contiene la chiave»** (con `%` come jolly, vedi Spese
+  Personali), non un'uguaglianza, e la chiave si ricava da **quello che UniCredit scrive dopo
+  l'importo**, che è l'esercente:
   `PAGAMENTO POS … del 15/07/2026 CARTA 31342819 DI EUR 1,50 SAN DONATO ALIMENTARI. BOLOGNA`
   → chiave `SAN DONATO ALIMENTARI. BOLOGNA` (`POS_MERCHANT_RE` in `merchantText()`). Tutto quello
   che precede l'importo — modalità di pagamento, data, numero di carta, importo — cambia a ogni
   movimento. Se il pezzo non c'è (addebiti, bonifici, altre banche) si tiene la descrizione
   intera e la regola si **accorcia a mano** da Categorie → Negozi imparati, dove il campo mostra
   in tempo reale quanti movimenti aggancerebbe.
-  Fra più regole che agganciano **vince la più lunga**, cioè la più specifica: senza quella
-  precedenza una regola corta imparata prima si prenderebbe i movimenti di una più specifica.
+  Fra più regole che agganciano **vince la più pesante**, cioè la più specifica (i caratteri al
+  netto dei jolly): senza quella precedenza una regola corta imparata prima si prenderebbe i
+  movimenti di una più specifica.
 - La stessa causale porta il numero di carta (`CARTA 31342819`): `cardFromDescription()` lo usa
   come ripiego quando l'API non espone la carta nei campi strutturati, altrimenti il filtro per
   carta — l'unico modo per isolare le spese di Ada su un conto condiviso — resterebbe vuoto.
+- L'import da file (📊 Importa da Excel) è arrivato con la v1.2.0: la banca via PSD2 espone solo
+  gli ultimi mesi, e lo storico più vecchio sta solo nell'estratto conto scaricato dal sito. Da lì
+  discende `ada_merchant_map.source` (`20260818120000_ada_merchant_map_source.sql`): **due elenchi
+  di regole separati**, perché le due fonti scrivono la stessa spesa in modo diverso.
 - **Nessuna categorizzazione da MCC**: `enable-banking-transactions` non restituisce il
   `merchant_category_code` (lo estrae solo `enable-banking-sync`, per Spese Famiglia). Qui
   l'automatismo è tutto nei negozi imparati.
@@ -1518,8 +1532,10 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Il conto personale di Salvatore: import dal conto, categorie a due livelli, negozi imparati e
   dashboard. Si apre dal collegamento *💳 Spese Personali* nella sidebar di `finanza.html`
   (sezione **Salvatore**).
-- **Gemello di `spese-ada.html`**, a meno di quattro cose — se modifichi una delle due, guarda anche
-  l'altra:
+- **Gemello di `spese-ada.html`**, che dall'agosto 2026 ha le stesse funzioni (import da file,
+  Attribuzione, jolly, popup della regola, «tutti gli anni», assegnazione in blocco, zona
+  pericolosa) — ⚠️ **se modifichi una delle due, guarda anche l'altra**. Restano diverse per tre
+  cose:
   1. **tabelle `sal_*`** invece di `ada_*` (`20260809120000_sal_spese_personali_tables.sql`),
      separate dalle `ca_*` per la stessa ragione: le spese personali non devono entrare nei
      totali di Spese Famiglia;
@@ -1532,10 +1548,7 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   3. il filtro per carta lascia comunque passare i **movimenti senza carta** (bonifici,
      accrediti, addebiti). Su Ada si cerca una carta e basta; qui quei movimenti sono
      esattamente le entrate che servono per il saldo, e nasconderli col filtro attivo
-     falserebbe il totale;
-  4. **c'è anche l'import da file** (📊 Importa da Excel), che su Ada non c'è: la banca via PSD2
-     espone solo gli ultimi mesi, e lo storico più vecchio sta solo nell'estratto conto
-     scaricato dal sito.
+     falserebbe il totale.
 - L'import da file **sbocca nella stessa anteprima** dell'import dal conto — spunte, doppioni,
   categorie, «➕ Nuova voce…», filtro per carta — perché quel che si fa dopo aver letto le righe
   non cambia a seconda di dove sono nate. `_import.source` (`'bank'` \| `'excel'`) decide solo la
