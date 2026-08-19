@@ -68,13 +68,13 @@ private enum class Vista(val etichetta: String) {
  * «Ti pisasti?» — il peso, in nativo.
  *
  * ⚠️ Gemella di `weight-quest.html`, sulle stesse tabelle `ps_*`. Qui ci sono
- * le tre cose che si fanno col telefono in mano: **segnare la pesata**,
- * guardare **com'è andata** giorno per giorno e vedere **la curva**. Restano
- * sulla pagina web, che è dove si fanno da seduti: creare e modificare gli
- * obiettivi e i traguardi, le statistiche, «genera dieta», la sincronizzazione
- * con Google Fit e la bilancia, e il gratta e vinci dei premi (che vive in
- * `localStorage` ed è per dispositivo, quindi non avrebbe niente da mostrare
- * qui).
+ * le cose che si fanno col telefono in mano: **segnare la pesata**, guardare
+ * **com'è andata** giorno per giorno, vedere **la curva** e, da «✏️ Gestisci»
+ * ([GestioneObiettivoScreen]), creare/modificare/chiudere/cancellare un
+ * obiettivo. Restano sulla pagina web, che è dove si fa da seduti: le
+ * statistiche, «genera dieta», la sincronizzazione con Google Fit e la
+ * bilancia, e il gratta e vinci dei premi (che vive in `localStorage` ed è
+ * per dispositivo, quindi non avrebbe niente da mostrare qui).
  *
  * Le regole di calcolo non sono riscritte a occhio: stanno in [PesoRegole],
  * ricalcate una per una dalla pagina.
@@ -88,6 +88,18 @@ fun PesoScreen(
     var vista by remember { mutableStateOf(Vista.OGGI) }
     var pesataDaFare by remember { mutableStateOf<LocalDate?>(null) }
     var giornoAperto by remember { mutableStateOf<String?>(null) }
+    // Come in Ta Firi?: la Gestione Obiettivo sta qui, sostituisce lo schermo
+    // intero finché è aperta, e non è un dialogo — i campi sono troppi.
+    var gestioneAperta by remember { mutableStateOf(false) }
+
+    if (gestioneAperta) {
+        GestioneObiettivoScreen(
+            stato = stato,
+            vm = vm,
+            onIndietro = { gestioneAperta = false },
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -126,6 +138,7 @@ fun PesoScreen(
                             stato = stato,
                             onScegliObiettivo = { vm.scegliObiettivo(it) },
                             onPesati = { pesataDaFare = LocalDate.now() },
+                            onGestisci = { gestioneAperta = true },
                         )
 
                         Vista.TABELLA -> VistaTabella(
@@ -231,6 +244,7 @@ private fun VistaOggi(
     stato: PesoState,
     onScegliObiettivo: (String) -> Unit,
     onPesati: () -> Unit,
+    onGestisci: () -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(12.dp),
@@ -284,15 +298,26 @@ private fun VistaOggi(
             }
         }
 
-        if (stato.obiettivi.isNotEmpty()) {
-            item {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("🎯 Obiettivo", fontWeight = FontWeight.Bold, color = Palette.dark)
                 Text(
-                    "🎯 Obiettivo",
-                    fontWeight = FontWeight.Bold,
-                    color = Palette.dark,
-                    modifier = Modifier.padding(top = 6.dp),
+                    text = "✏️ Gestisci",
+                    color = Verde,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onGestisci)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                 )
             }
+        }
+        if (stato.obiettivi.isNotEmpty()) {
             item {
                 SelettoreObiettivo(
                     obiettivi = stato.obiettivi,
@@ -303,12 +328,20 @@ private fun VistaOggi(
             stato.obiettivo?.let { obiettivo ->
                 item { DettaglioObiettivo(obiettivo) }
             }
+        } else {
+            item {
+                Text(
+                    "Nessun obiettivo ancora: tocca «Gestisci» per crearne uno.",
+                    color = Palette.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
 
         item {
             Text(
-                text = "Obiettivi, traguardi, statistiche, dieta e sincronizzazione con la " +
-                    "bilancia restano su weight-quest.html.",
+                text = "Statistiche, «genera dieta» e sincronizzazione con la bilancia " +
+                    "restano su weight-quest.html.",
                 color = Palette.muted,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 10.dp, bottom = 60.dp),
@@ -327,10 +360,15 @@ private fun VistaOggi(
  * quello è anche l'ordine con cui compaiono nel menù.
  */
 @Composable
-private fun SelettoreObiettivo(
+internal fun SelettoreObiettivo(
     obiettivi: List<Obiettivo>,
     scelto: Obiettivo?,
     onScegli: (String) -> Unit,
+    // Solo per la Gestione: in cima al menù una voce «✨ Nuovo obiettivo...»,
+    // come il `<select>` del web (`populateObjectiveDropdown`).
+    mostraNuovo: Boolean = false,
+    nuovoScelto: Boolean = false,
+    onNuovo: () -> Unit = {},
 ) {
     var aperto by remember { mutableStateOf(false) }
 
@@ -347,7 +385,8 @@ private fun SelettoreObiettivo(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = scelto?.let { etichettaObiettivo(it) } ?: "Nessun obiettivo",
+                text = if (nuovoScelto) "✨ Nuovo obiettivo..."
+                    else scelto?.let { etichettaObiettivo(it) } ?: "Nessun obiettivo",
                 color = Palette.dark,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
@@ -355,6 +394,12 @@ private fun SelettoreObiettivo(
             Text(if (aperto) "︿" else "⌄", color = Palette.muted)
         }
         DropdownMenu(expanded = aperto, onDismissRequest = { aperto = false }) {
+            if (mostraNuovo) {
+                DropdownMenuItem(
+                    text = { Text("✨ Nuovo obiettivo...") },
+                    onClick = { aperto = false; onNuovo() },
+                )
+            }
             obiettivi.forEach { obiettivo ->
                 DropdownMenuItem(
                     text = { Text(etichettaObiettivo(obiettivo)) },
@@ -369,7 +414,7 @@ private fun SelettoreObiettivo(
 }
 
 /** Icona del tipo + nome, con un marcatore per quelli già chiusi. */
-private fun etichettaObiettivo(obiettivo: Obiettivo): String {
+internal fun etichettaObiettivo(obiettivo: Obiettivo): String {
     val icona = if (obiettivo.tipo == "mantenere") "⚖️" else "📉"
     val chiuso = when (obiettivo.stato) {
         "success" -> " · 🏆"
@@ -424,8 +469,8 @@ private fun DettaglioObiettivo(obiettivo: Obiettivo) {
             )
         } else {
             Text(
-                "Questo obiettivo non ha una curva di traguardi: senza, " +
-                    "target e punti non si possono calcolare. Si aggiungono da weight-quest.html.",
+                "Questo obiettivo non ha una curva di traguardi: senza, target e punti " +
+                    "non si possono calcolare. Si aggiungono da «✏️ Gestisci».",
                 color = Palette.warning,
                 style = MaterialTheme.typography.bodySmall,
             )

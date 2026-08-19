@@ -228,6 +228,26 @@ object PesoRegole {
         return pesate.lastOrNull()?.peso
     }
 
+    /**
+     * Il minimo di **oggi**, `null` se non ci si è pesati oggi — a differenza
+     * di [minimoDiOggi] non ripiega sull'ultima pesata nota. È il controllo
+     * di `closeObjective('success')` per un obiettivo «perdere»: chiudere con
+     * successo vuole una pesata di oggi, non una vecchia.
+     */
+    fun minimoStrettoOggi(pesate: List<Pesata>, oggi: LocalDate = LocalDate.now()): Double? {
+        val diOggi = pesate.filter { it.giorno == oggi.toString() }
+        return if (diOggi.isEmpty()) null else diOggi.minOf { it.peso }
+    }
+
+    /**
+     * Il massimo peso registrato nel periodo `[inizio, fine]`, estremi
+     * compresi — il controllo di `closeObjective('success')` per un
+     * obiettivo «mantenere»: il peggiore del periodo deve stare sotto il
+     * peso stabilito.
+     */
+    fun massimoNelPeriodo(pesate: List<Pesata>, inizio: String, fine: String): Double? =
+        pesate.filter { it.giorno >= inizio && it.giorno <= fine }.maxOfOrNull { it.peso }
+
     fun arrotonda(valore: Double, decimali: Int): Double {
         val fattore = Math.pow(10.0, decimali.toDouble())
         return Math.round(valore * fattore) / fattore

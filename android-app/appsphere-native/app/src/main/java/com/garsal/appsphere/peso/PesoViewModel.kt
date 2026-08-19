@@ -85,6 +85,15 @@ data class PesoState(
         get() = pesate.any { it.giorno == LocalDate.now().toString() }
 }
 
+/**
+ * Cosa risponde [PesoViewModel.preparaChiusura] — `closeObjective()` nel web,
+ * dove è un `alert()` che blocca o un `confirm()` col conto dei punti.
+ */
+sealed class EsitoChiusura {
+    data class Bloccata(val motivo: String) : EsitoChiusura()
+    data class DaConfermare(val puntiGiornalieri: Int, val puntiChiusura: Int, val totale: Int) : EsitoChiusura()
+}
+
 class PesoViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(PesoState())
@@ -205,6 +214,108 @@ class PesoViewModel : ViewModel() {
 
     fun messaggioMostrato() {
         _state.value = _state.value.copy(messaggio = null)
+    }
+
+    // ── Gestione obiettivi ────────────────────────────────────────────────
+
+    /**
+     * Crea o aggiorna un obiettivo — `saveObjective()`. Dopo il salvataggio lo
+     * riseleziona: è quello che si vuole vedere subito, nuovo o appena
+     * modificato che sia.
+     */
+    fun salvaObiettivo(id: String?, bozza: BozzaObiettivo) {
+        viewModelScope.launch {
+            try {
+                val riga = PesoRepository.rigaObiettivo(bozza)
+                val nuovoId = PesoRepository.salvaObiettivo(id, riga)
+                _state.value = _state.value.copy(
+                    obiettivoId = nuovoId,
+                    messaggio = "💾 Obiettivo «${bozza.nome.trim()}» ${if (id == null) "creato" else "aggiornato"}",
+                )
+                carica()
+            } catch (e: Exception) {
+                Log.w(TAG, "obiettivo non salvato", e)
+                _state.value = _state.value.copy(messaggio = "Non salvato: ${e.message ?: "connessione assente"}")
+            }
+        }
+    }
+
+    /**
+     * I controlli di `closeObjective()` prima del `confirm()`: bloccata se
+     * l'obiettivo è già chiuso o, per un successo, se il peso di oggi (o del
+     * periodo, per «mantenere») non è ancora sceso sotto il target. Pura e
+     * non sospesa: la chiama la UI a ogni tocco di Successo/Fallito, prima di
+     * mostrare la conferma.
+     */
+    fun preparaChiusura(obiettivo: Obiettivo, nuovoStato: String): EsitoChiusura {
+        if (!obiettivo.attivo) return EsitoChiusura.Bloccata("Questo obiettivo è già chiuso!")
+
+        if (nuovoStato == "success") {
+            val endW = obiettivo.pesoFinale
+                ?: return EsitoChiusura.Bloccata(
+                    "Obiettivo senza peso target valido: impossibile chiudere con SUCCESSO."
+                )
+            if (obiettivo.tipo == "mantenere") {
+                val massimo = PesoRegole.massimoNelPeriodo(_state.value.pesate, obiettivo.inizio, obiettivo.fine)
+                    ?: return EsitoChiusura.Bloccata(
+                        "Non puoi chiudere con SUCCESSO: nessun peso registrato nel periodo " +
+                            "(${dataItaliana(obiettivo.inizio)} → ${dataItaliana(obiettivo.fine)})."
+                    )
+                if (massimo > endW) {
+                    return EsitoChiusura.Bloccata(
+                        "Non puoi chiudere con SUCCESSO: il massimo del periodo (${kg(massimo)} kg) " +
+                            "supera il peso stabilito (${kg(endW)} kg)."
+                    )
+                }
+            } else {
+                val minimoOggi = PesoRegole.minimoStrettoOggi(_state.value.pesate)
+                    ?: return EsitoChiusura.Bloccata("Non puoi chiudere con SUCCESSO: nessun peso registrato oggi.")
+                if (minimoOggi > endW) {
+                    return EsitoChiusura.Bloccata(
+                        "Non puoi chiudere con SUCCESSO: il minimo di oggi (${kg(minimoOggi)} kg) " +
+                            "supera l'obiettivo (${kg(endW)} kg)."
+                    )
+                }
+            }
+        }
+
+        val puntiGiornalieri = _state.value.puntiOggi ?: 0
+        val puntiChiusura = if (nuovoStato == "success") obiettivo.bonusFinale else -obiettivo.malusFinale
+        return EsitoChiusura.DaConfermare(puntiGiornalieri, puntiChiusura, puntiGiornalieri + puntiChiusura)
+    }
+
+    /** Chiude l'obiettivo col punteggio già confermato dall'utente. */
+    fun chiudiObiettivo(obiettivo: Obiettivo, nuovoStato: String, punteggioFinale: Int) {
+        viewModelScope.launch {
+            try {
+                PesoRepository.chiudiObiettivo(obiettivo.id, nuovoStato, punteggioFinale)
+                _state.value = _state.value.copy(messaggio = "Obiettivo chiuso! Punteggio finale: $punteggioFinale")
+                carica()
+            } catch (e: Exception) {
+                Log.w(TAG, "chiusura non riuscita", e)
+                _state.value = _state.value.copy(messaggio = "Non chiuso: ${e.message ?: "connessione assente"}")
+            }
+        }
+    }
+
+    /**
+     * Cancella un obiettivo — sempre permesso, anche chiuso: `deleteObjective()`
+     * non lo blocca mai, a differenza di Salva/Successo/Fallito.
+     */
+    fun eliminaObiettivo(obiettivo: Obiettivo) {
+        viewModelScope.launch {
+            try {
+                PesoRepository.eliminaObiettivo(obiettivo.id)
+                _state.value = _state.value.copy(
+                    obiettivoId = _state.value.obiettivoId.takeUnless { it == obiettivo.id },
+                    messaggio = "🗑 Obiettivo «${obiettivo.nome}» eliminato",
+                )
+                carica()
+            } catch (e: Exception) {
+                Log.w(TAG, "eliminazione obiettivo non riuscita", e)
+                _state.value = _state.value.copy(messaggio = "Non eliminato: ${e.message ?: "connessione assente"}")
+            }
+        }
     }
 
     private companion object {
