@@ -453,6 +453,7 @@
       <div class="nav-sublabel">Reddito</div>
       <div class="nav-group">
         <button class="nav-item"        data-action="nav" data-view="reddito">💶 Reddito</button>
+        <button class="nav-item"        data-action="nav" data-view="previdenza">🏛️ Previdenza</button>
       </div>
 
       <div class="nav-sublabel">Debiti</div>
@@ -522,6 +523,7 @@
       <div id="view-loan-detail"        class="view"></div>
       <div id="view-other-assets"       class="view"></div>
       <div id="view-reddito"            class="view"></div>
+      <div id="view-previdenza"         class="view"></div>
       <div id="view-danaro-rosa"        class="view"></div>
       <div id="view-conto-risparmio"    class="view"></div>
       <div id="view-prodotti"           class="view"></div>
@@ -567,8 +569,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.18';
-const APP_BUILD   = '2026-08-17T12:00:00Z';
+const APP_VERSION = 'v1.3.19';
+const APP_BUILD   = '2026-08-19T16:50:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -589,6 +591,9 @@ const S = {
   // Reddito anno per anno: stessa scelta di rosaTx (null = mai letto). Si compila una volta
   // l'anno e non entra in nessun calcolo del patrimonio, quindi non pesa su ogni avvio.
   income: null,
+  // Previdenza: stessa scelta di rosaTx/income (null = mai letta). Previsione INPS e storico
+  // contributivo si aggiornano di rado e non entrano in nessun calcolo del patrimonio.
+  pensionForecast: null, pensionContrib: null,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -3445,6 +3450,236 @@ async function deleteIncomeYear(year, sectionKey) {
   render();
 }
 
+/* ══════════════ PREVIDENZA ══════════════════════════════════════
+   Due fonti, entrambe dai documenti INPS: la simulazione "La mia Pensione" (previsione per i
+   lavoratori) e l'estratto conto contributivo. Sotto Reddito nella sidebar e non dentro, perché
+   sono documenti diversi con un ciclo di vita diverso — la previsione è un solo scatto che si
+   sovrascrive rifacendo la simulazione, l'estratto conto è uno storico che cresce di un periodo
+   all'anno.
+
+   fnz_pension_forecast: una riga per scenario (vecchiaia, anticipata), upsert su
+   (user_id, scenario) — rifare la simulazione riscrive, non duplica.
+   fnz_pension_contributions: una riga per periodo e tipo di contribuzione, senza vincolo di
+   unicità (il documento stesso ha periodi ripetuti con importi diversi, es. tre righe
+   "Mater/pater/congedi" nello stesso anno). Lo storico è stato caricato una volta da migration
+   dati; le righe dei periodi futuri si aggiungono a mano da qui, un anno alla volta. */
+const PENSION_SCENARIOS = [
+  { key: 'vecchiaia',  label: 'Pensione di vecchiaia' },
+  { key: 'anticipata', label: 'Pensione anticipata' },
+];
+async function loadPensionForecast() {
+  S.pensionForecast = await sbQ('fnz_pension_forecast', 'select=*');
+}
+async function loadPensionContributions() {
+  S.pensionContrib = await sbQ('fnz_pension_contributions', 'select=*&order=period_start.desc');
+}
+function pensionForecastByScenario() {
+  const map = {};
+  for (const r of (S.pensionForecast || [])) map[r.scenario] = r;
+  return map;
+}
+
+function renderPrevidenza() {
+  // Primo ingresso nella pagina: si disegna subito con quello che c'è e si ridisegna quando i
+  // dati sono arrivati, come renderReddito e renderDanaroRosa.
+  if (S.pensionForecast === null) {
+    S.pensionForecast = [];
+    loadPensionForecast().then(() => { if (S.view === 'previdenza') renderPrevidenza(); })
+                          .catch(e => console.error('Previdenza (previsione):', e));
+  }
+  if (S.pensionContrib === null) {
+    S.pensionContrib = [];
+    loadPensionContributions().then(() => { if (S.view === 'previdenza') renderPrevidenza(); })
+                               .catch(e => console.error('Previdenza (contributi):', e));
+  }
+  const byScenario = pensionForecastByScenario();
+  const totSettimane = (S.pensionContrib || []).reduce((s, r) => s + (parseFloat(r.weeks_valid) || 0), 0);
+
+  setHtml('view-previdenza', `
+    <div class="view-header">
+      <div>
+        <h2 class="page-title">Previdenza</h2>
+        <p class="page-sub">Previsione pensionistica INPS e storico dei contributi versati</p>
+      </div>
+    </div>
+    <div class="grid-auto">
+      ${PENSION_SCENARIOS.map(sc => renderPensionScenarioCard(sc, byScenario[sc.key])).join('')}
+    </div>
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">📋 Estratto conto contributivo</div>
+        <button class="btn btn-outline btn-sm" data-action="new-pension-contribution">+ Periodo</button>
+      </div>
+      <p class="text-muted text-sm mb-12">${(S.pensionContrib || []).length} periodi registrati · ${totSettimane.toFixed(3).replace('.', ',')} settimane utili in tutto</p>
+      ${renderPensionContribTable(S.pensionContrib || [])}
+    </div>
+  `);
+}
+
+function renderPensionScenarioCard(sc, row) {
+  return `
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">🏛️ ${sc.label}</div>
+        <button class="btn-icon" data-action="edit-pension-forecast" data-scenario="${sc.key}" title="Compila / modifica">✎</button>
+      </div>
+      ${!row ? `<p class="text-muted text-sm">Nessuna simulazione registrata.</p>` : `
+      <div class="portfolio-card-stats">
+        <div>
+          <div class="kpi-label">Data di pensionamento</div>
+          <div class="mono portfolio-card-value">${fmtDate(row.pension_date)}</div>
+        </div>
+      </div>
+      <div class="settings-row text-sm mt-12">
+        Importo pensione lordo: <strong>${fmtEUR(row.gross_amount)}</strong>
+      </div>
+      <div class="settings-row text-sm mt-2">
+        Ultima retribuzione/reddito lorda stimata: ${fmtEUR(row.last_salary)}
+      </div>
+      <div class="settings-row text-sm mt-2">
+        Tasso di sostituzione lordo: ${row.replacement_rate != null ? parseFloat(row.replacement_rate).toFixed(2).replace('.', ',') + ' %' : '—'}
+      </div>
+      ${row.issued_at ? `<div class="settings-row text-muted text-sm mt-4">Simulazione INPS del ${fmtDate(row.issued_at)}</div>` : ''}
+      `}
+    </div>`;
+}
+
+function renderPensionContribTable(rows) {
+  if (!rows.length) {
+    return `<div class="empty-state"><div class="empty-icon">🏛️</div><p>Nessun periodo contributivo registrato.</p></div>`;
+  }
+  return `<div class="table-wrap"><table class="table">
+    <thead><tr>
+      <th>Dal</th><th>Al</th><th>Tipo di contribuzione</th>
+      <th class="text-right">Sett. utili</th><th class="text-right">Retribuzione</th>
+      <th>Azienda</th><th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => `
+      <tr>
+        <td class="mono">${fmtDate(r.period_start)}</td>
+        <td class="mono">${fmtDate(r.period_end)}</td>
+        <td>${r.contribution_type}${r.note ? ` <span class="text-muted" title="${r.note.replace(/"/g, '&quot;')}">ⓘ</span>` : ''}</td>
+        <td class="mono text-right">${parseFloat(r.weeks_valid ?? 0).toFixed(3).replace('.', ',')}</td>
+        <td class="mono text-right">${r.income_amount != null ? fmtEUR(r.income_amount) : '—'}</td>
+        <td class="text-muted">${r.employer || '—'}</td>
+        <td class="text-right"><div class="hstack gap-4" style="justify-content:flex-end">
+          <button class="btn-icon" data-action="edit-pension-contribution" data-id="${r.id}" title="Modifica">✎</button>
+          <button class="btn-icon btn-icon-danger" data-action="del-pension-contribution" data-id="${r.id}" title="Elimina">✕</button>
+        </div></td>
+      </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function openPensionForecastModal(scenario) {
+  const sc  = PENSION_SCENARIOS.find(s => s.key === scenario) || PENSION_SCENARIOS[0];
+  const row = pensionForecastByScenario()[sc.key] || {};
+  openModal(`🏛️ ${sc.label}`, `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Data di pensionamento</label>
+        <input name="pension_date" type="date" class="form-input" value="${row.pension_date || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Importo pensione lordo (€)</label>
+        <input name="gross_amount" type="number" step="any" min="0" class="form-input mono" placeholder="vuoto = dato assente" value="${row.gross_amount ?? ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ultima retribuzione/reddito lorda stimata (€)</label>
+        <input name="last_salary" type="number" step="any" min="0" class="form-input mono" placeholder="vuoto = dato assente" value="${row.last_salary ?? ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tasso di sostituzione lordo (%)</label>
+        <input name="replacement_rate" type="number" step="any" min="0" class="form-input mono" placeholder="vuoto = dato assente" value="${row.replacement_rate ?? ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Simulazione INPS del</label>
+        <input name="issued_at" type="date" class="form-input" value="${row.issued_at || ''}" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    await sbUpsert('fnz_pension_forecast', {
+      user_id: S.session.user.id,
+      scenario: sc.key,
+      pension_date: data.pension_date || null,
+      gross_amount: data.gross_amount === '' ? null : parseFloat(data.gross_amount),
+      last_salary: data.last_salary === '' ? null : parseFloat(data.last_salary),
+      replacement_rate: data.replacement_rate === '' ? null : parseFloat(data.replacement_rate),
+      issued_at: data.issued_at || null,
+      updated_at: new Date().toISOString(),
+    }, 'user_id,scenario');
+    await loadPensionForecast();
+    closeModal();
+    render();
+  });
+}
+
+function openPensionContributionModal(id) {
+  const row = id ? (S.pensionContrib || []).find(r => r.id === id) : null;
+  openModal(row ? '✎ Modifica periodo contributivo' : '+ Nuovo periodo contributivo', `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Dal *</label>
+        <input name="period_start" type="date" class="form-input" required value="${row?.period_start || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Al *</label>
+        <input name="period_end" type="date" class="form-input" required value="${row?.period_end || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo di contribuzione *</label>
+        <input name="contribution_type" type="text" class="form-input" required value="${row?.contribution_type || 'Lavoro dipendente'}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Settimane utili al diritto e al calcolo</label>
+        <input name="weeks_valid" type="number" step="any" min="0" class="form-input mono" placeholder="vuoto = dato assente" value="${row?.weeks_valid ?? ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Retribuzione o reddito (€)</label>
+        <input name="income_amount" type="number" step="any" min="0" class="form-input mono" placeholder="vuoto = dato assente" value="${row?.income_amount ?? ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Azienda</label>
+        <input name="employer" type="text" class="form-input" value="${row?.employer || ''}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input name="note" type="text" class="form-input" value="${row?.note || ''}" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    const body = {
+      user_id: S.session.user.id,
+      period_start: data.period_start,
+      period_end: data.period_end,
+      contribution_type: data.contribution_type.trim(),
+      weeks_valid: data.weeks_valid === '' ? null : parseFloat(data.weeks_valid),
+      income_amount: data.income_amount === '' ? null : parseFloat(data.income_amount),
+      employer: (data.employer || '').trim(),
+      note: (data.note || '').trim(),
+    };
+    if (row) await sbUpd('fnz_pension_contributions', `id=eq.${row.id}`, body);
+    else await sbIns('fnz_pension_contributions', body);
+    await loadPensionContributions();
+    closeModal();
+    render();
+  });
+}
+
+async function deletePensionContribution(id) {
+  if (!confirm('Eliminare questo periodo contributivo?')) return;
+  await sbDel('fnz_pension_contributions', `id=eq.${id}`);
+  await loadPensionContributions();
+  render();
+}
+
 /* ── Movimenti del conto di Rosa ──────────────────────────────
    Il conto si collega come tutti gli altri (Configurazione → 🏦 Banche e Conti) e si spunta
    come «🌹 Danaro di Rosa». Qui i movimenti si leggono e si archiviano in
@@ -6141,6 +6376,7 @@ function render() {
     case 'loan-detail':       renderLoanDetail();         break;
     case 'other-assets':       renderOtherAssets();        break;
     case 'reddito':            renderReddito();            break;
+    case 'previdenza':         renderPrevidenza();         break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
     case 'conto-risparmio':    renderContoRisparmio();     break;
     case 'configurazione':     renderConfigurazione();     break;
@@ -6362,6 +6598,10 @@ document.addEventListener('click', async e => {
       break;
     case 'edit-income':      openIncomeModal(t.dataset.year, t.dataset.section); break;
     case 'del-income':       await deleteIncomeYear(t.dataset.year, t.dataset.section); break;
+    case 'edit-pension-forecast':     openPensionForecastModal(t.dataset.scenario); break;
+    case 'new-pension-contribution':  openPensionContributionModal(null); break;
+    case 'edit-pension-contribution': openPensionContributionModal(t.dataset.id); break;
+    case 'del-pension-contribution':  await deletePensionContribution(t.dataset.id); break;
     case 'rosa-bank-read':    openRosaBankModal(); break;
     case 'rosa-bank-load':    await loadRosaBankMovements(); break;
     case 'rosa-bank-confirm': await confirmRosaBankRead(); break;
