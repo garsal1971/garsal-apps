@@ -13,7 +13,7 @@ import java.time.LocalTime
 data class PesoState(
     val pesate: List<Pesata> = emptyList(),
     val obiettivi: List<Obiettivo> = emptyList(),
-    /** Quello che si sta guardando: di partenza il primo attivo. */
+    /** Quello che si sta guardando: di partenza il più recente. */
     val obiettivoId: String? = null,
     val caricamento: Boolean = true,
     val errore: String? = null,
@@ -98,11 +98,10 @@ class PesoViewModel : ViewModel() {
             try {
                 val obiettivi = PesoRepository.obiettivi()
                 // L'obiettivo scelto si tiene fra un caricamento e l'altro; al
-                // primo giro si parte dal primo aperto, e se non ce n'è
-                // nessuno dal più recente — così la tabella non è mai vuota
-                // per il solo fatto che l'ultimo obiettivo è stato chiuso.
+                // primo giro si parte dal più recente — `obiettivi()` è già
+                // ordinata per `created_at` decrescente, quindi è il primo
+                // della lista, chiuso o no.
                 val scelto = _state.value.obiettivoId?.takeIf { id -> obiettivi.any { it.id == id } }
-                    ?: obiettivi.firstOrNull { it.attivo }?.id
                     ?: obiettivi.firstOrNull()?.id
 
                 _state.value = _state.value.copy(

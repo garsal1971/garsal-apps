@@ -2,6 +2,7 @@ package com.garsal.appsphere.peso
 
 import android.app.TimePickerDialog
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -291,56 +294,14 @@ private fun VistaOggi(
                 )
             }
             item {
-                FlowRow(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    stato.obiettivi.forEach { obiettivo ->
-                        val scelto = obiettivo.id == stato.obiettivoId
-                        Text(
-                            text = obiettivo.nome + if (obiettivo.attivo) "" else " ·",
-                            color = if (scelto) Palette.light else Palette.dark,
-                            fontWeight = if (scelto) FontWeight.SemiBold else FontWeight.Normal,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(if (scelto) Verde else Palette.inputBg)
-                                .clickable { onScegliObiettivo(obiettivo.id) }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                        )
-                    }
-                }
+                SelettoreObiettivo(
+                    obiettivi = stato.obiettivi,
+                    scelto = stato.obiettivo,
+                    onScegli = onScegliObiettivo,
+                )
             }
             stato.obiettivo?.let { obiettivo ->
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "📅 ${dataItaliana(obiettivo.inizio)} → ${dataItaliana(obiettivo.fine)}" +
-                                " · ${kg(obiettivo.pesoIniziale)} → ${kg(obiettivo.pesoFinale)} kg",
-                            color = Palette.muted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = when (obiettivo.stato) {
-                                "success" -> "🏆 Chiuso con successo · ${obiettivo.punteggioFinale ?: 0} punti"
-                                "failed" -> "💀 Chiuso come fallito · ${obiettivo.punteggioFinale ?: 0} punti"
-                                else -> "▶️ In corso · +${obiettivo.bonusGiornaliero} se sei sotto il target, " +
-                                    "−${obiettivo.malusGiornaliero} se sei sopra"
-                            },
-                            color = Palette.muted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (obiettivo.traguardi.size < 2) {
-                            Text(
-                                "Questo obiettivo non ha una curva di traguardi: senza, " +
-                                    "target e punti non si possono calcolare. Si aggiungono da weight-quest.html.",
-                                color = Palette.warning,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
+                item { DettaglioObiettivo(obiettivo) }
             }
         }
 
@@ -351,6 +312,122 @@ private fun VistaOggi(
                 color = Palette.muted,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 10.dp, bottom = 60.dp),
+            )
+        }
+    }
+}
+
+/**
+ * La tendina degli obiettivi. Non `ExposedDropdownMenuBox` — come in
+ * `Gestione.kt` — perché qui non si scrive niente, si sceglie da un elenco
+ * chiuso, e quel componente vorrebbe l'opt-in su un'API sperimentale per un
+ * campo di testo che non serve.
+ *
+ * L'elenco arriva già ordinato dal più recente in giù (`obiettivi()`), e
+ * quello è anche l'ordine con cui compaiono nel menù.
+ */
+@Composable
+private fun SelettoreObiettivo(
+    obiettivi: List<Obiettivo>,
+    scelto: Obiettivo?,
+    onScegli: (String) -> Unit,
+) {
+    var aperto by remember { mutableStateOf(false) }
+
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Palette.inputBg)
+                .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+                .clickable { aperto = true }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = scelto?.let { etichettaObiettivo(it) } ?: "Nessun obiettivo",
+                color = Palette.dark,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(if (aperto) "︿" else "⌄", color = Palette.muted)
+        }
+        DropdownMenu(expanded = aperto, onDismissRequest = { aperto = false }) {
+            obiettivi.forEach { obiettivo ->
+                DropdownMenuItem(
+                    text = { Text(etichettaObiettivo(obiettivo)) },
+                    onClick = {
+                        aperto = false
+                        onScegli(obiettivo.id)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Icona del tipo + nome, con un marcatore per quelli già chiusi. */
+private fun etichettaObiettivo(obiettivo: Obiettivo): String {
+    val icona = if (obiettivo.tipo == "mantenere") "⚖️" else "📉"
+    val chiuso = when (obiettivo.stato) {
+        "success" -> " · 🏆"
+        "failed" -> " · 💀"
+        else -> ""
+    }
+    return "$icona ${obiettivo.nome}$chiuso"
+}
+
+/**
+ * Tutti i dati dell'obiettivo scelto, sotto la tendina: tipo, periodo e peso
+ * di partenza/arrivo, come sta andando (o com'è finito), e la curva su cui si
+ * regge il calcolo — quella che manca è la ragione più comune per cui target
+ * e punti restano vuoti in cima alla pagina.
+ */
+@Composable
+private fun DettaglioObiettivo(obiettivo: Obiettivo) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Palette.inputBg)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = if (obiettivo.tipo == "mantenere") "⚖️ Mantenere il peso" else "📉 Perdere peso",
+            fontWeight = FontWeight.SemiBold,
+            color = Palette.dark,
+        )
+        Text(
+            text = "📅 ${dataItaliana(obiettivo.inizio)} → ${dataItaliana(obiettivo.fine)}" +
+                " · ${kg(obiettivo.pesoIniziale)} → ${kg(obiettivo.pesoFinale)} kg",
+            color = Palette.muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = when (obiettivo.stato) {
+                "success" -> "🏆 Chiuso con successo · ${obiettivo.punteggioFinale ?: 0} punti"
+                "failed" -> "💀 Chiuso come fallito · ${obiettivo.punteggioFinale ?: 0} punti"
+                else -> "▶️ In corso · +${obiettivo.bonusGiornaliero} se sei sotto il target, " +
+                    "−${obiettivo.malusGiornaliero} se sei sopra"
+            },
+            color = Palette.muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (obiettivo.traguardi.size >= 2) {
+            Text(
+                text = "📈 ${obiettivo.traguardi.size} traguardi sulla curva",
+                color = Palette.muted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        } else {
+            Text(
+                "Questo obiettivo non ha una curva di traguardi: senza, " +
+                    "target e punti non si possono calcolare. Si aggiungono da weight-quest.html.",
+                color = Palette.warning,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     }
