@@ -56,6 +56,15 @@
 // anche quando il merchant veniva imparato dopo: un negozio già noto poteva ricomparire su Smart
 // Block indefinitamente. Ora, prima di calcolare uncategorizedIds, si riprova MCC → merchant →
 // regole su TUTTE le transazioni ancora senza categoria (booked o pending, di qualsiasi run).
+// v1.8 — 2026-08-19: i negozi appresi non venivano applicati MAI, e senza un errore da nessuna
+// parte. ca_merchant_map_categories è una tabella ponte senza user_id: sotto service role la RLS
+// non filtra, quindi si leggeva con .in('merchant_map_id', [...tutti gli uuid]) — che PostgREST
+// vuole nell'URL, e con qualche centinaio di negozi imparati sfonda la lunghezza massima. La
+// richiesta falliva, l'errore veniva scartato dalla destrutturazione `const { data }`, l'elenco
+// restava vuoto e ogni transazione scendeva alle regole testo. Per i pagamenti carta Revolut,
+// che arrivano con merchant_category_code null, questo vuol dire che nessuna delle tre strade
+// poteva funzionare. Ora le quattro letture passano da fetchAllRows (pagina e SOLLEVA
+// sull'errore) e il ponte si filtra in memoria; i conteggi finiscono nei log e nella risposta.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -385,22 +394,37 @@ Deno.serve(async (req) => {
       } while (continuationKey && pageCount < MAX_PAGES);
     }
 
-    const { data: mccMap } = await supabase
-      .from('ca_mcc_category_map')
-      .select('mcc, category_id')
-      .eq('user_id', userId);
-    const { data: merchantMap } = await supabase
-      .from('ca_merchant_map')
-      .select('id, merchant_key')
-      .eq('user_id', userId);
-    const merchantMapIds = (merchantMap || []).map((m: any) => m.id);
-    const { data: merchantMapCategories } = merchantMapIds.length
-      ? await supabase.from('ca_merchant_map_categories').select('merchant_map_id, category_id').in('merchant_map_id', merchantMapIds)
-      : { data: [] as any[] };
-    const { data: rules } = await supabase
-      .from('ca_rules')
-      .select('category_id, pattern, priority')
-      .eq('user_id', userId);
+    // Tutte e quattro passano da fetchAllRows: pagina oltre il tetto di 1000 righe di PostgREST
+    // e soprattutto SOLLEVA sull'errore invece di lasciarlo cadere. Prima erano `const { data }`
+    // secchi, che scartano il campo `error`: una lettura fallita diventava un elenco vuoto e la
+    // categorizzazione proseguiva come se quel negozio non fosse mai stato imparato.
+    const mccMap = await fetchAllRows((from, to) =>
+      supabase.from('ca_mcc_category_map').select('mcc, category_id').eq('user_id', userId).range(from, to)
+    );
+    const merchantMap = await fetchAllRows((from, to) =>
+      supabase.from('ca_merchant_map').select('id, merchant_key').eq('user_id', userId).range(from, to)
+    );
+    // ca_merchant_map_categories è una tabella ponte e NON ha user_id: sotto service role la RLS
+    // non filtra niente, quindi il legame con l'utente passa solo per merchant_map_id. Prima si
+    // usava .in('merchant_map_id', [...tutti gli uuid]), che PostgREST vuole nell'URL: con
+    // qualche centinaio di negozi imparati la URL sfonda la lunghezza massima e la richiesta
+    // fallisce — errore scartato, elenco vuoto, e i negozi appresi non venivano applicati MAI.
+    // (Stesso difetto già annotato in CLAUDE.md per patchCategorie.) Si pagina invece l'intera
+    // tabella e si filtra in memoria, come si fa qui sotto per ca_transaction_categories.
+    const merchantIdSet = new Set(merchantMap.map((m: any) => m.id as string));
+    const allMerchantCategories = merchantIdSet.size
+      ? await fetchAllRows((from, to) =>
+          supabase.from('ca_merchant_map_categories').select('merchant_map_id, category_id').range(from, to)
+        )
+      : [];
+    const merchantMapCategories = allMerchantCategories.filter((c: any) => merchantIdSet.has(c.merchant_map_id));
+    const rules = await fetchAllRows((from, to) =>
+      supabase.from('ca_rules').select('category_id, pattern, priority').eq('user_id', userId).range(from, to)
+    );
+    console.log(
+      `[revolut-auto-categorize] regole caricate: ${mccMap.length} MCC, ${merchantMap.length} negozi ` +
+      `(${merchantMapCategories.length} con categoria), ${rules.length} regole testo`
+    );
 
     const rows = rawTransactions.map((tx: any) => {
       const amountRaw = pick(tx, 'transaction_amount', 'transactionAmount') as any;
@@ -577,7 +601,7 @@ Deno.serve(async (req) => {
         ];
         dryRunPreview = preview.map((r) => {
           const { categoryId, source } = categorizeCategory(
-            r.description, r.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
+            r.description, r.mcc, mccMap, merchantMap, merchantMapCategories, rules
           );
           return {
             date: r.date, description: r.description, amount: r.amount, currency: r.currency, mcc: r.mcc,
@@ -630,18 +654,35 @@ Deno.serve(async (req) => {
     const categorizedIds = new Set(allCats.map((c: any) => c.transaction_id));
     const stillUncategorized = allTx.filter((t: any) => !categorizedIds.has(t.id));
 
+    let autoCategorized = 0;
     if (stillUncategorized.length) {
       const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
       for (const t of stillUncategorized) {
         const { categoryId, source } = categorizeCategory(
-          t.description, t.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
+          t.description, t.mcc, mccMap, merchantMap, merchantMapCategories, rules
         );
         if (categoryId && source) categoryRows.push({ transaction_id: t.id, category_id: categoryId, source });
       }
-      if (categoryRows.length) {
-        await supabase.from('ca_transaction_categories').insert(categoryRows);
-        for (const r of categoryRows) categorizedIds.add(r.transaction_id);
+      // A blocchi: l'insert di qualche migliaio di righe in un colpo solo è la stessa trappola
+      // della URL troppo lunga, dall'altro verso.
+      const CHUNK = 200;
+      for (let i = 0; i < categoryRows.length; i += CHUNK) {
+        const chunk = categoryRows.slice(i, i + CHUNK);
+        const { error: catErr } = await supabase.from('ca_transaction_categories').insert(chunk);
+        // Marcare come categorizzate anche le righe che il DB ha rifiutato le toglierebbe dalla
+        // notifica senza che nessuno le abbia davvero categorizzate: l'errore va detto, non
+        // nascosto sotto un conteggio che torna.
+        if (catErr) {
+          console.error('[revolut-auto-categorize] insert categorie fallito:', catErr.message);
+          continue;
+        }
+        for (const r of chunk) categorizedIds.add(r.transaction_id);
+        autoCategorized += chunk.length;
       }
+      console.log(
+        `[revolut-auto-categorize] senza categoria prima: ${stillUncategorized.length}, ` +
+        `categorizzate ora: ${autoCategorized}`
+      );
     }
 
     const uncategorizedIds = allTx.filter((t: any) => !categorizedIds.has(t.id)).map((t: any) => t.id as string);
@@ -867,7 +908,17 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       imported: importedCount,
+      autoCategorized,
       uncategorized: uncategorizedCount,
+      // Quante regole erano effettivamente in mano alla categorizzazione: se i negozi appresi
+      // tornano a zero mentre l'app ne mostra a decine, il difetto è nella lettura, non nelle
+      // chiavi — è esattamente il caso che ha portato alla v1.8.
+      rulesLoaded: {
+        mcc: mccMap.length,
+        merchants: merchantMap.length,
+        merchantsWithCategory: merchantMapCategories.length,
+        textRules: rules.length,
+      },
       totalFetched: rawTransactions.length,
       pages: pageCount,
       account: connection
