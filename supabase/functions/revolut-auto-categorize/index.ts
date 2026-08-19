@@ -50,6 +50,12 @@
 //   · una pending che nessuno consuma non zittisce più tutte le notifiche successive;
 //   · quando non si accoda niente, il perché resta scritto — in cm_sync_log se il sync non
 //     parte proprio, nella risposta e nei log della function per ogni destinatario.
+// v1.7 — 2026-08-19: la categorizzazione deterministica girava solo sulle righe toccate nel
+// singolo run (newTxIds, ora rimosso) — una transazione già BOOK e salvata da un run precedente
+// non rientra mai più in candidatePool (solo unlinked/PDNG), quindi restava orfana per sempre
+// anche quando il merchant veniva imparato dopo: un negozio già noto poteva ricomparire su Smart
+// Block indefinitamente. Ora, prima di calcolare uncategorizedIds, si riprova MCC → merchant →
+// regole su TUTTE le transazioni ancora senza categoria (booked o pending, di qualsiasi run).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -523,8 +529,6 @@ Deno.serve(async (req) => {
           return mapping ? mapping.person_id : nucleoId;
         };
 
-        const newTxIds: string[] = [];
-
         if (toMerge.length) {
           const existingById = new Map([...unlinked, ...pendingSameConnection].map((c) => [c.id, c]));
           for (const { existingId, row } of toMerge) {
@@ -537,8 +541,7 @@ Deno.serve(async (req) => {
             if (!existing?.mcc) update.mcc = row.mcc;
             if (!existing?.type) update.type = row.type;
             if (!existing?.spender_person_id) update.spender_person_id = spenderFor(row);
-            const { error: updErr } = await supabase.from('ca_transactions').update(update).eq('id', existingId);
-            if (!updErr) newTxIds.push(existingId);
+            await supabase.from('ca_transactions').update(update).eq('id', existingId);
           }
         }
 
@@ -564,34 +567,6 @@ Deno.serve(async (req) => {
             .select('id, description, mcc');
           if (insertError) throw new Error(insertError.message);
           importedCount = (insertedRows || []).length;
-          newTxIds.push(...(insertedRows || []).map((t: any) => t.id));
-        }
-
-        // Categorizzazione deterministica (MCC → merchant appreso → regole) per tutte le
-        // transazioni toccate in questo run che non hanno già una categoria.
-        if (newTxIds.length) {
-          const { data: existingCats } = await supabase
-            .from('ca_transaction_categories')
-            .select('transaction_id')
-            .in('transaction_id', newTxIds);
-          const alreadyCategorized = new Set((existingCats || []).map((c: any) => c.transaction_id));
-          const toCategorize = newTxIds.filter((id) => !alreadyCategorized.has(id));
-          if (toCategorize.length) {
-            const { data: txsToCategorize } = await supabase
-              .from('ca_transactions')
-              .select('id, description, mcc')
-              .in('id', toCategorize);
-            const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
-            for (const t of txsToCategorize || []) {
-              const { categoryId, source } = categorizeCategory(
-                t.description, t.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
-              );
-              if (categoryId && source) categoryRows.push({ transaction_id: t.id, category_id: categoryId, source });
-            }
-            if (categoryRows.length) {
-              await supabase.from('ca_transaction_categories').insert(categoryRows);
-            }
-          }
         }
       } else {
         // Dry-run: nessuna scrittura, solo calcolo dell'anteprima (merge/insert + categoria
@@ -639,16 +614,36 @@ Deno.serve(async (req) => {
       }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Conteggio transazioni ancora senza categoria (stessa definizione del contatore
-    // dashboard in cost-analysis.html): tutte le transazioni dell'utente, non solo quelle
-    // toccate in questo run.
+    // Prima di contare chi manda su Smart Block, si riprova la categorizzazione deterministica
+    // (MCC → merchant appreso → regole) su TUTTE le transazioni dell'utente ancora senza
+    // categoria — booked o pending, arrivate in questo run o in uno precedente. Prima questo
+    // passaggio girava solo sulle righe toccate nel singolo run (newTxIds): una transazione già
+    // BOOK e già salvata da un run passato non rientra mai più in candidatePool (che guarda solo
+    // unlinked/PDNG), quindi restava orfana per sempre anche quando il merchant veniva imparato
+    // dopo — un negozio già noto poteva continuare a comparire su Smart Block indefinitamente.
     const allTx = await fetchAllRows((from, to) =>
-      supabase.from('ca_transactions').select('id').eq('user_id', userId).range(from, to)
+      supabase.from('ca_transactions').select('id, description, mcc').eq('user_id', userId).range(from, to)
     );
     const allCats = await fetchAllRows((from, to) =>
       supabase.from('ca_transaction_categories').select('transaction_id').range(from, to)
     );
     const categorizedIds = new Set(allCats.map((c: any) => c.transaction_id));
+    const stillUncategorized = allTx.filter((t: any) => !categorizedIds.has(t.id));
+
+    if (stillUncategorized.length) {
+      const categoryRows: { transaction_id: string; category_id: string; source: string }[] = [];
+      for (const t of stillUncategorized) {
+        const { categoryId, source } = categorizeCategory(
+          t.description, t.mcc, mccMap || [], merchantMap || [], merchantMapCategories || [], rules || []
+        );
+        if (categoryId && source) categoryRows.push({ transaction_id: t.id, category_id: categoryId, source });
+      }
+      if (categoryRows.length) {
+        await supabase.from('ca_transaction_categories').insert(categoryRows);
+        for (const r of categoryRows) categorizedIds.add(r.transaction_id);
+      }
+    }
+
     const uncategorizedIds = allTx.filter((t: any) => !categorizedIds.has(t.id)).map((t: any) => t.id as string);
     const uncategorizedCount = uncategorizedIds.length;
 
