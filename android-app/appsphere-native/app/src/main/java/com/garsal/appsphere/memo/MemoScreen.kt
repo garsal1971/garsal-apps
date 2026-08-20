@@ -457,13 +457,20 @@ private fun SchedaCard(
                 }
 
                 if (scheda.categorie.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Le etichette di categoria sono testo libero: a differenza dei
+                    // pulsanti-azione qui non ha senso una larghezza comune, che
+                    // sprecherebbe spazio sulle etichette corte per far posto alla
+                    // più lunga. Restano larghe quanto il loro testo, ma scorrono
+                    // su una riga sola invece di andare a capo.
+                    RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                         scheda.categorie.forEach { id ->
                             categorie.firstOrNull { it.id == id }?.let { cat ->
                                 Text(
                                     text = cat.etichetta,
                                     color = Palette.light,
                                     style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier
                                         .padding(vertical = 2.dp)
                                         .clip(RoundedCornerShape(20.dp))
