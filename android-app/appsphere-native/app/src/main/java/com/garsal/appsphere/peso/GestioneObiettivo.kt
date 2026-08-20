@@ -1,0 +1,485 @@
+package com.garsal.appsphere.peso
+
+import android.app.DatePickerDialog
+import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.garsal.appsphere.core.GarsalTopBar
+import com.garsal.appsphere.core.Palette
+import java.time.LocalDate
+
+/**
+ * «Gestione Obiettivo» in nativo — lo stesso form di `weight-quest.html`
+ * (creare, modificare, chiudere e cancellare un obiettivo), a tutto schermo
+ * come [com.garsal.appsphere.tafiri.TaFiriForm].
+ *
+ * ⚠️ **Non replica il gratta-e-vinci dei premi** (la barra di stelline con
+ * `⭐ Punti Totali Traguardi Intermedi`): quella è un dato di `localStorage`,
+ * per dispositivo, e da qui non avrebbe niente da mostrare — la stessa scelta
+ * già presa per Weight Quest nativo. Tutto il resto — nome, tipo, punti,
+ * milestone, Salva/Successo/Fallito/Elimina — è lo stesso form, campo per
+ * campo, e le regole di calcolo (validazione di chiusura, punteggio finale)
+ * stanno in [PesoViewModel.preparaChiusura]: se cambiano lì, cambiano anche in
+ * `closeObjective()` nel web.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun GestioneObiettivoScreen(
+    stato: PesoState,
+    vm: PesoViewModel,
+    onIndietro: () -> Unit,
+) {
+    // Come per gli altri form della app: se non c'è ancora nessun obiettivo si
+    // parte già sul foglio bianco, altrimenti su quello selezionato altrove.
+    var nuovo by remember { mutableStateOf(stato.obiettivi.isEmpty()) }
+    val editando = if (nuovo) null else stato.obiettivo
+    // La chiave con cui si resettano i campi di testo del form quando cambia
+    // l'obiettivo selezionato (o si passa a «nuovo») — mai `valore`, che è
+    // anche quello che i campi stessi riscrivono ad ogni cifra digitata.
+    val chiaveForm = editando?.id to nuovo
+
+    var bozza by remember(editando?.id, nuovo) {
+        mutableStateOf(editando?.let { BozzaObiettivo.da(it) } ?: BozzaObiettivo.nuova())
+    }
+    var nuovaData by remember(editando?.id, nuovo) { mutableStateOf<LocalDate?>(null) }
+    var nuovoPeso by remember(editando?.id, nuovo) { mutableStateOf("") }
+
+    var bloccataChiusura by remember { mutableStateOf<String?>(null) }
+    var confermaChiusura by remember { mutableStateOf<Triple<Obiettivo, String, EsitoChiusura.DaConfermare>?>(null) }
+    var daEliminare by remember { mutableStateOf<Obiettivo?>(null) }
+
+    val isClosed = editando?.attivo == false
+    val context = LocalContext.current
+
+    Scaffold(
+        topBar = { GarsalTopBar(titolo = "🎯 Gestione Obiettivo", onIndietro = onIndietro) },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Titoletto("Seleziona Obiettivo")
+                SelettoreObiettivo(
+                    obiettivi = stato.obiettivi,
+                    scelto = stato.obiettivo,
+                    onScegli = { id -> nuovo = false; vm.scegliObiettivo(id) },
+                    mostraNuovo = true,
+                    nuovoScelto = nuovo,
+                    onNuovo = { nuovo = true },
+                )
+
+                if (isClosed) {
+                    val successo = editando?.stato == "success"
+                    Text(
+                        text = if (successo) "🏆 OBIETTIVO CHIUSO CON SUCCESSO" else "💀 OBIETTIVO FALLITO",
+                        color = if (successo) Verde else Palette.danger,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background((if (successo) Verde else Palette.danger).copy(alpha = 0.12f))
+                            .padding(12.dp),
+                    )
+                }
+
+                OutlinedTextField(
+                    value = bozza.nome,
+                    onValueChange = { bozza = bozza.copy(nome = it) },
+                    label = { Text("Nome Obiettivo") },
+                    placeholder = { Text("Es: Dieta Primavera 2026") },
+                    singleLine = true,
+                    enabled = !isClosed,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Titoletto("Tipo Obiettivo")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pillola("📉 Perdere peso", bozza.tipo == "perdere", enabled = !isClosed) {
+                        bozza = bozza.copy(tipo = "perdere")
+                    }
+                    Pillola("⚖️ Mantenere peso", bozza.tipo == "mantenere", enabled = !isClosed) {
+                        bozza = bozza.copy(tipo = "mantenere")
+                    }
+                }
+
+                if (bozza.tipo == "mantenere") {
+                    Titoletto("Data Inizio")
+                    Bottone(dataItaliana(bozza.mantInizio.toString()), enabled = !isClosed) {
+                        scegliData(context, bozza.mantInizio) { bozza = bozza.copy(mantInizio = it) }
+                    }
+                    CampoIntero(bozza.mantSettimane, "Numero Settimane", chiaveForm, enabled = !isClosed) {
+                        bozza = bozza.copy(mantSettimane = it.coerceAtLeast(1))
+                    }
+                    CampoDecimale(bozza.mantPeso, "Peso da Mantenere (kg)", chiaveForm, enabled = !isClosed) {
+                        bozza = bozza.copy(mantPeso = it)
+                    }
+                    Nota("Fine: ${dataItaliana(bozza.mantInizio.plusDays(bozza.mantSettimane * 7L).toString())}")
+                }
+
+                Titoletto("Punti")
+                FlowRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val meta = Modifier.weight(1f)
+                    CampoIntero(bozza.bonusGiornaliero, "Bonus Giornaliero", chiaveForm, meta, !isClosed) {
+                        bozza = bozza.copy(bonusGiornaliero = it)
+                    }
+                    CampoIntero(bozza.malusGiornaliero, "Malus Giornaliero", chiaveForm, meta, !isClosed) {
+                        bozza = bozza.copy(malusGiornaliero = it)
+                    }
+                    CampoIntero(bozza.bonusFinale, "Bonus Finale", chiaveForm, meta, !isClosed) {
+                        bozza = bozza.copy(bonusFinale = it)
+                    }
+                    CampoIntero(bozza.malusFinale, "Malus Finale", chiaveForm, meta, !isClosed) {
+                        bozza = bozza.copy(malusFinale = it)
+                    }
+                }
+
+                if (bozza.tipo == "perdere") {
+                    Titoletto("Milestone Progressive")
+                    if (bozza.traguardi.isEmpty()) {
+                        Nota("Nessuna milestone impostata")
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            bozza.traguardi.forEachIndexed { indice, t ->
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Palette.inputBg)
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "📍 ${dataItaliana(t.giorno)} → ${kg(t.peso)} kg",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Palette.dark,
+                                    )
+                                    if (!isClosed) {
+                                        Text(
+                                            "🗑️",
+                                            modifier = Modifier
+                                                .clickable {
+                                                    bozza = bozza.copy(
+                                                        traguardi = bozza.traguardi.toMutableList()
+                                                            .also { it.removeAt(indice) }
+                                                    )
+                                                }
+                                                .padding(6.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!isClosed) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Bottone(nuovaData?.let { dataItaliana(it.toString()) } ?: "Data") {
+                                scegliData(context, nuovaData ?: LocalDate.now()) { nuovaData = it }
+                            }
+                            OutlinedTextField(
+                                value = nuovoPeso,
+                                onValueChange = { nuovoPeso = it.filter { c -> c.isDigit() || c == ',' || c == '.' }.take(6) },
+                                label = { Text("Peso (kg)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        val pesoNuovo = nuovoPeso.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }
+                        Bottone(
+                            "➕ Aggiungi Milestone",
+                            enabled = nuovaData != null && pesoNuovo != null,
+                        ) {
+                            val data = nuovaData
+                            if (data != null && pesoNuovo != null) {
+                                bozza = bozza.copy(
+                                    traguardi = (bozza.traguardi + Traguardo(data.toString(), pesoNuovo))
+                                        .sortedBy { it.giorno }
+                                )
+                                nuovaData = null
+                                nuovoPeso = ""
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Palette.border)
+
+                FlowRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val meta = Modifier.weight(1f)
+                    Bottone("💾 Salva", meta, Verde, enabled = !isClosed && bozza.valida) {
+                        vm.salvaObiettivo(editando?.id, bozza)
+                    }
+                    Bottone("🏆 Successo", meta, Verde, enabled = !isClosed && editando != null) {
+                        when (val esito = vm.preparaChiusura(editando!!, "success")) {
+                            is EsitoChiusura.Bloccata -> bloccataChiusura = esito.motivo
+                            is EsitoChiusura.DaConfermare -> confermaChiusura = Triple(editando, "success", esito)
+                        }
+                    }
+                    Bottone("💀 Fallito", meta, Palette.danger, enabled = !isClosed && editando != null) {
+                        when (val esito = vm.preparaChiusura(editando!!, "failed")) {
+                            is EsitoChiusura.Bloccata -> bloccataChiusura = esito.motivo
+                            is EsitoChiusura.DaConfermare -> confermaChiusura = Triple(editando, "failed", esito)
+                        }
+                    }
+                    Bottone("🗑️ Elimina", meta, Palette.muted, enabled = editando != null) {
+                        daEliminare = editando
+                    }
+                }
+
+                if (!bozza.valida) {
+                    Nota(
+                        if (bozza.tipo == "mantenere") "Servono nome, settimane e peso da mantenere."
+                        else "Serve un nome e almeno due milestone (inizio e fine)."
+                    )
+                }
+            }
+
+            stato.messaggio?.let { messaggio ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Palette.dark),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                ) {
+                    Row(
+                        Modifier.padding(14.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(messaggio, color = Palette.light)
+                        Text(
+                            "✕",
+                            color = Palette.light,
+                            modifier = Modifier.clickable { vm.messaggioMostrato() },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    bloccataChiusura?.let { motivo ->
+        AlertDialog(
+            onDismissRequest = { bloccataChiusura = null },
+            title = { Text("Non puoi chiudere l'obiettivo") },
+            text = { Text(motivo) },
+            confirmButton = { TextButton(onClick = { bloccataChiusura = null }) { Text("Ho capito") } },
+        )
+    }
+
+    confermaChiusura?.let { (obiettivo, nuovoStato, esito) ->
+        val successo = nuovoStato == "success"
+        AlertDialog(
+            onDismissRequest = { confermaChiusura = null },
+            title = { Text(if (successo) "🏆 Chiudere come SUCCESSO?" else "💀 Chiudere come FALLITO?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Punti giornalieri: ${esito.puntiGiornalieri}")
+                    Text("Punti chiusura: ${if (esito.puntiChiusura >= 0) "+" else ""}${esito.puntiChiusura}")
+                    Text("TOTALE FINALE: ${esito.totale}", fontWeight = FontWeight.Bold)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.chiudiObiettivo(obiettivo, nuovoStato, esito.totale)
+                    confermaChiusura = null
+                }) { Text("Chiudi", color = if (successo) Verde else Palette.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confermaChiusura = null }) { Text("Annulla") } },
+        )
+    }
+
+    daEliminare?.let { obiettivo ->
+        AlertDialog(
+            onDismissRequest = { daEliminare = null },
+            title = { Text("Eliminare l'obiettivo?") },
+            text = {
+                Text("«${obiettivo.nome}» sparisce per sempre. Questa azione è irreversibile.")
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.eliminaObiettivo(obiettivo); daEliminare = null }) {
+                    Text("Elimina", color = Palette.danger)
+                }
+            },
+            dismissButton = { TextButton(onClick = { daEliminare = null }) { Text("Annulla") } },
+        )
+    }
+}
+
+// ── Selettori di sistema ─────────────────────────────────────────────────
+
+private fun scegliData(context: Context, iniziale: LocalDate, poi: (LocalDate) -> Unit) {
+    DatePickerDialog(
+        context,
+        { _, anno, meseZeroBased, giorno -> poi(LocalDate.of(anno, meseZeroBased + 1, giorno)) },
+        iniziale.year,
+        iniziale.monthValue - 1,
+        iniziale.dayOfMonth,
+    ).show()
+}
+
+// ── Pezzi ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun Titoletto(testo: String) {
+    Text(
+        text = testo,
+        fontWeight = FontWeight.Bold,
+        color = Palette.dark,
+        style = MaterialTheme.typography.bodyMedium,
+    )
+}
+
+@Composable
+private fun Nota(testo: String) {
+    Text(text = testo, color = Palette.muted, style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun Bottone(
+    testo: String,
+    modifier: Modifier = Modifier,
+    colore: Color = Verde,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = testo,
+        color = if (enabled) Palette.light else Palette.light.copy(alpha = 0.6f),
+        fontWeight = FontWeight.SemiBold,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (enabled) colore else colore.copy(alpha = 0.5f))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    )
+}
+
+@Composable
+private fun Pillola(testo: String, scelta: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    Text(
+        text = testo,
+        color = if (scelta) Palette.light else Palette.dark,
+        fontWeight = if (scelta) FontWeight.SemiBold else FontWeight.Normal,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (scelta) Verde else Palette.inputBg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    )
+}
+
+/**
+ * Un numero intero, tenuto come testo mentre lo si scrive — come in
+ * `TaFiriForm`. La chiave di reset è [chiave] e non [valore]: `valore` è
+ * anche quello che [onCambia] riscrive ad ogni cifra, e tenerlo come chiave
+ * farebbe ricomparire uno zero appena si prova a svuotare il campo.
+ */
+@Composable
+private fun CampoIntero(
+    valore: Int,
+    etichetta: String,
+    chiave: Any?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onCambia: (Int) -> Unit,
+) {
+    var testo by remember(chiave) { mutableStateOf(valore.toString()) }
+    OutlinedTextField(
+        value = testo,
+        onValueChange = { nuovo ->
+            val pulito = nuovo.filter { it.isDigit() }.take(6)
+            testo = pulito
+            pulito.toIntOrNull()?.let(onCambia)
+        },
+        label = { Text(etichetta) },
+        singleLine = true,
+        enabled = enabled,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Un peso: virgola o punto, come nel campo della pesata di [DialogoPesata].
+ * Stessa ragione di [CampoIntero] per [chiave] invece di [valore]: qui
+ * sarebbe anche peggio, perché [kg] arrotonda a un decimale e riscriverebbe
+ * «75» in «75.0» mentre lo si sta ancora scrivendo.
+ */
+@Composable
+private fun CampoDecimale(
+    valore: Double?,
+    etichetta: String,
+    chiave: Any?,
+    enabled: Boolean = true,
+    onCambia: (Double?) -> Unit,
+) {
+    var testo by remember(chiave) { mutableStateOf(valore?.let { kg(it) } ?: "") }
+    OutlinedTextField(
+        value = testo,
+        onValueChange = { nuovo ->
+            val pulito = nuovo.filter { it.isDigit() || it == ',' || it == '.' }.take(6)
+            testo = pulito
+            onCambia(pulito.replace(',', '.').toDoubleOrNull())
+        },
+        label = { Text(etichetta) },
+        placeholder = { Text("Es: 75.0") },
+        singleLine = true,
+        enabled = enabled,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}

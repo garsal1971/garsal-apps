@@ -1,5 +1,6 @@
 package com.garsal.appsphere.peso
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,11 +14,13 @@ import java.time.LocalTime
 data class PesoState(
     val pesate: List<Pesata> = emptyList(),
     val obiettivi: List<Obiettivo> = emptyList(),
-    /** Quello che si sta guardando: di partenza il primo attivo. */
+    /** Quello che si sta guardando: di partenza il più recente. */
     val obiettivoId: String? = null,
     val caricamento: Boolean = true,
     val errore: String? = null,
     val messaggio: String? = null,
+    /** Un tocco: Health Connect ha rifiutato la lettura, va richiesto il permesso. */
+    val permessiSaluteRichiesti: Boolean = false,
 ) {
     val obiettivo: Obiettivo?
         get() = obiettivi.firstOrNull { it.id == obiettivoId }
@@ -85,6 +88,15 @@ data class PesoState(
         get() = pesate.any { it.giorno == LocalDate.now().toString() }
 }
 
+/**
+ * Cosa risponde [PesoViewModel.preparaChiusura] — `closeObjective()` nel web,
+ * dove è un `alert()` che blocca o un `confirm()` col conto dei punti.
+ */
+sealed class EsitoChiusura {
+    data class Bloccata(val motivo: String) : EsitoChiusura()
+    data class DaConfermare(val puntiGiornalieri: Int, val puntiChiusura: Int, val totale: Int) : EsitoChiusura()
+}
+
 class PesoViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(PesoState())
@@ -98,11 +110,10 @@ class PesoViewModel : ViewModel() {
             try {
                 val obiettivi = PesoRepository.obiettivi()
                 // L'obiettivo scelto si tiene fra un caricamento e l'altro; al
-                // primo giro si parte dal primo aperto, e se non ce n'è
-                // nessuno dal più recente — così la tabella non è mai vuota
-                // per il solo fatto che l'ultimo obiettivo è stato chiuso.
+                // primo giro si parte dal più recente — `obiettivi()` è già
+                // ordinata per `created_at` decrescente, quindi è il primo
+                // della lista, chiuso o no.
                 val scelto = _state.value.obiettivoId?.takeIf { id -> obiettivi.any { it.id == id } }
-                    ?: obiettivi.firstOrNull { it.attivo }?.id
                     ?: obiettivi.firstOrNull()?.id
 
                 _state.value = _state.value.copy(
@@ -206,6 +217,164 @@ class PesoViewModel : ViewModel() {
 
     fun messaggioMostrato() {
         _state.value = _state.value.copy(messaggio = null)
+    }
+
+    // ── Gestione obiettivi ────────────────────────────────────────────────
+
+    /**
+     * Crea o aggiorna un obiettivo — `saveObjective()`. Dopo il salvataggio lo
+     * riseleziona: è quello che si vuole vedere subito, nuovo o appena
+     * modificato che sia.
+     */
+    fun salvaObiettivo(id: String?, bozza: BozzaObiettivo) {
+        viewModelScope.launch {
+            try {
+                val riga = PesoRepository.rigaObiettivo(bozza)
+                val nuovoId = PesoRepository.salvaObiettivo(id, riga)
+                _state.value = _state.value.copy(
+                    obiettivoId = nuovoId,
+                    messaggio = "💾 Obiettivo «${bozza.nome.trim()}» ${if (id == null) "creato" else "aggiornato"}",
+                )
+                carica()
+            } catch (e: Exception) {
+                Log.w(TAG, "obiettivo non salvato", e)
+                _state.value = _state.value.copy(messaggio = "Non salvato: ${e.message ?: "connessione assente"}")
+            }
+        }
+    }
+
+    /**
+     * I controlli di `closeObjective()` prima del `confirm()`: bloccata se
+     * l'obiettivo è già chiuso o, per un successo, se il peso di oggi (o del
+     * periodo, per «mantenere») non è ancora sceso sotto il target. Pura e
+     * non sospesa: la chiama la UI a ogni tocco di Successo/Fallito, prima di
+     * mostrare la conferma.
+     */
+    fun preparaChiusura(obiettivo: Obiettivo, nuovoStato: String): EsitoChiusura {
+        if (!obiettivo.attivo) return EsitoChiusura.Bloccata("Questo obiettivo è già chiuso!")
+
+        if (nuovoStato == "success") {
+            val endW = obiettivo.pesoFinale
+                ?: return EsitoChiusura.Bloccata(
+                    "Obiettivo senza peso target valido: impossibile chiudere con SUCCESSO."
+                )
+            if (obiettivo.tipo == "mantenere") {
+                val massimo = PesoRegole.massimoNelPeriodo(_state.value.pesate, obiettivo.inizio, obiettivo.fine)
+                    ?: return EsitoChiusura.Bloccata(
+                        "Non puoi chiudere con SUCCESSO: nessun peso registrato nel periodo " +
+                            "(${dataItaliana(obiettivo.inizio)} → ${dataItaliana(obiettivo.fine)})."
+                    )
+                if (massimo > endW) {
+                    return EsitoChiusura.Bloccata(
+                        "Non puoi chiudere con SUCCESSO: il massimo del periodo (${kg(massimo)} kg) " +
+                            "supera il peso stabilito (${kg(endW)} kg)."
+                    )
+                }
+            } else {
+                val minimoOggi = PesoRegole.minimoStrettoOggi(_state.value.pesate)
+                    ?: return EsitoChiusura.Bloccata("Non puoi chiudere con SUCCESSO: nessun peso registrato oggi.")
+                if (minimoOggi > endW) {
+                    return EsitoChiusura.Bloccata(
+                        "Non puoi chiudere con SUCCESSO: il minimo di oggi (${kg(minimoOggi)} kg) " +
+                            "supera l'obiettivo (${kg(endW)} kg)."
+                    )
+                }
+            }
+        }
+
+        val puntiGiornalieri = _state.value.puntiOggi ?: 0
+        val puntiChiusura = if (nuovoStato == "success") obiettivo.bonusFinale else -obiettivo.malusFinale
+        return EsitoChiusura.DaConfermare(puntiGiornalieri, puntiChiusura, puntiGiornalieri + puntiChiusura)
+    }
+
+    /** Chiude l'obiettivo col punteggio già confermato dall'utente. */
+    fun chiudiObiettivo(obiettivo: Obiettivo, nuovoStato: String, punteggioFinale: Int) {
+        viewModelScope.launch {
+            try {
+                PesoRepository.chiudiObiettivo(obiettivo.id, nuovoStato, punteggioFinale)
+                _state.value = _state.value.copy(messaggio = "Obiettivo chiuso! Punteggio finale: $punteggioFinale")
+                carica()
+            } catch (e: Exception) {
+                Log.w(TAG, "chiusura non riuscita", e)
+                _state.value = _state.value.copy(messaggio = "Non chiuso: ${e.message ?: "connessione assente"}")
+            }
+        }
+    }
+
+    /**
+     * Cancella un obiettivo — sempre permesso, anche chiuso: `deleteObjective()`
+     * non lo blocca mai, a differenza di Salva/Successo/Fallito.
+     */
+    fun eliminaObiettivo(obiettivo: Obiettivo) {
+        viewModelScope.launch {
+            try {
+                PesoRepository.eliminaObiettivo(obiettivo.id)
+                _state.value = _state.value.copy(
+                    obiettivoId = _state.value.obiettivoId.takeUnless { it == obiettivo.id },
+                    messaggio = "🗑 Obiettivo «${obiettivo.nome}» eliminato",
+                )
+                carica()
+            } catch (e: Exception) {
+                Log.w(TAG, "eliminazione obiettivo non riuscita", e)
+                _state.value = _state.value.copy(messaggio = "Non eliminato: ${e.message ?: "connessione assente"}")
+            }
+        }
+    }
+
+    // ── Sincronizzazione con la bilancia (Health Connect) ──────────────────
+
+    /**
+     * Legge le pesate da Health Connect e le scrive — `syncFitNative()` +
+     * `processWeights()` nel web. Se il permesso non è ancora concesso lo
+     * dice con [PesoState.permessiSaluteRichiesti]: tocca alla schermata
+     * aprire la richiesta di sistema e richiamare questa funzione dopo la
+     * concessione, esattamente come il `retry` del bridge Kotlin nel web.
+     */
+    fun sincronizzaSalute(context: Context) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(messaggio = "🏃 Sincronizzazione con Salute...")
+            when (val esito = SaluteRepository.leggiPeso(context)) {
+                is EsitoSalute.PermessiRichiesti ->
+                    _state.value = _state.value.copy(messaggio = null, permessiSaluteRichiesti = true)
+                is EsitoSalute.Errore ->
+                    _state.value = _state.value.copy(messaggio = "Salute: ${esito.messaggio}")
+                is EsitoSalute.Ok -> salvaPuntiSalute(esito.punti)
+            }
+        }
+    }
+
+    fun permessiSaluteMostrati() {
+        _state.value = _state.value.copy(permessiSaluteRichiesti = false)
+    }
+
+    private suspend fun salvaPuntiSalute(punti: List<PuntoSalute>) {
+        if (punti.isEmpty()) {
+            _state.value = _state.value.copy(
+                messaggio = "Nessuna pesata trovata in Health Connect (ultimi 90 giorni)."
+            )
+            return
+        }
+        // Health Connect non dovrebbe mai duplicare un istante, ma il web si
+        // guarda comunque dai doppioni sullo stesso timestamp.
+        val unici = punti.distinctBy { it.timestamp }.sortedBy { it.timestamp }
+        val obiettivo = _state.value.obiettivo
+        val righe = unici.map { PesoRepository.rigaPuntoSalute(it, obiettivo) }
+
+        // Le pesate manuali degli stessi giorni diventano ridondanti appena
+        // arriva il dato vero dalla bilancia — si tolgono prima di scrivere.
+        val giorniSincronizzati = unici.mapTo(mutableSetOf()) { it.giorno() }
+        val manualiDaRimuovere = _state.value.pesate
+            .filter { it.manuale && it.giorno in giorniSincronizzati }
+            .map { it.timestamp }
+
+        try {
+            PesoRepository.sincronizzaPunti(righe, manualiDaRimuovere)
+            _state.value = _state.value.copy(messaggio = "✅ ${unici.size} pesate sincronizzate da Salute")
+            carica()
+        } catch (e: Exception) {
+            Log.w(TAG, "sincronizzazione Salute non riuscita", e)
+            _state.value = _state.value.copy(messaggio = "Non sincronizzato: ${e.message ?: "connessione assente"}")
+        }
     }
 
     private companion object {

@@ -11,8 +11,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -69,6 +72,8 @@ data class Obiettivo(
     val pesoFinale: Double?,
     val bonusGiornaliero: Int,
     val malusGiornaliero: Int,
+    val bonusFinale: Int,
+    val malusFinale: Int,
     val stato: String,
     val punteggioFinale: Int?,
     val traguardi: List<Traguardo>,
@@ -89,6 +94,8 @@ data class Obiettivo(
                 // Gli stessi ripieghi del web: `obj.daily_bonus || 10`.
                 bonusGiornaliero = intero(o, "daily_bonus")?.toInt()?.takeIf { it != 0 } ?: 10,
                 malusGiornaliero = intero(o, "daily_malus")?.toInt()?.takeIf { it != 0 } ?: 5,
+                bonusFinale = intero(o, "final_bonus")?.toInt()?.takeIf { it != 0 } ?: 100,
+                malusFinale = intero(o, "final_malus")?.toInt()?.takeIf { it != 0 } ?: 50,
                 stato = testo(o, "status") ?: "active",
                 punteggioFinale = intero(o, "total_score")?.toInt(),
                 traguardi = traguardiDa(o["milestones"]),
@@ -116,6 +123,61 @@ data class Obiettivo(
                 val peso = decimale(o, "weight") ?: return@mapNotNull null
                 Traguardo(giorno, peso)
             }.sortedBy { it.giorno }
+        }
+    }
+}
+
+/**
+ * Quello che compila il form di Gestione Obiettivo — i campi di
+ * `weight-quest.html`, comuni ai due tipi più quelli specifici di
+ * «mantenere peso».
+ *
+ * ⚠️ Non è un dettaglio di forma: `valida` e [PesoRepository.rigaObiettivo]
+ * ricalcano `doSaveMilestones()` / `saveMaintainObjective()` — cambiando una
+ * regola qui va cambiata anche là.
+ */
+data class BozzaObiettivo(
+    val nome: String = "",
+    /** `"perdere"` o `"mantenere"`. */
+    val tipo: String = "perdere",
+    val bonusGiornaliero: Int = 10,
+    val malusGiornaliero: Int = 5,
+    val bonusFinale: Int = 100,
+    val malusFinale: Int = 50,
+    /** Milestone progressive — solo per `"perdere"`. */
+    val traguardi: List<Traguardo> = emptyList(),
+    /** Campi specifici di `"mantenere"`: N settimane a peso piatto. */
+    val mantInizio: LocalDate = LocalDate.now(),
+    val mantSettimane: Int = 4,
+    val mantPeso: Double? = null,
+) {
+    val validaPerdere: Boolean get() = nome.isNotBlank() && traguardi.size >= 2
+    val validaMantenere: Boolean get() = nome.isNotBlank() && mantSettimane >= 1 && (mantPeso ?: 0.0) > 0.0
+    val valida: Boolean get() = if (tipo == "mantenere") validaMantenere else validaPerdere
+
+    companion object {
+        fun nuova() = BozzaObiettivo()
+
+        /** Ricostruita da un obiettivo esistente, per modificarlo. */
+        fun da(o: Obiettivo): BozzaObiettivo {
+            val inizio = PesoRegole.giornoDa(o.inizio) ?: LocalDate.now()
+            // Le settimane non stanno in colonna: si ricavano dal periodo,
+            // come fa `loadObjectiveById()` nel web.
+            val settimane = PesoRegole.giornoDa(o.fine)?.let { fine ->
+                maxOf(1, Math.round((fine.toEpochDay() - inizio.toEpochDay()) / 7.0).toInt())
+            } ?: 4
+            return BozzaObiettivo(
+                nome = o.nome,
+                tipo = o.tipo,
+                bonusGiornaliero = o.bonusGiornaliero,
+                malusGiornaliero = o.malusGiornaliero,
+                bonusFinale = o.bonusFinale,
+                malusFinale = o.malusFinale,
+                traguardi = o.traguardi,
+                mantInizio = inizio,
+                mantSettimane = settimane,
+                mantPeso = o.pesoIniziale,
+            )
         }
     }
 }
@@ -195,4 +257,125 @@ object PesoRepository {
         db.from("ps_weight_tracking").delete { filter { eq("timestamp", timestamp) } }
         Unit
     }
+
+    // ── Gestione obiettivi ──────────────────────────────────────────────
+
+    /**
+     * La riga da scrivere per un obiettivo, ricalcata da `doSaveMilestones()`
+     * / `saveMaintainObjective()`: per «mantenere» le milestone sono due
+     * punti allo stesso peso (target piatto per N settimane), per «perdere»
+     * sono quelle compilate a mano — la prima e l'ultima decidono
+     * `start_date`/`start_weight`/`end_date`/`end_weight`.
+     */
+    fun rigaObiettivo(bozza: BozzaObiettivo): JsonObject {
+        val traguardi = if (bozza.tipo == "mantenere") {
+            val peso = bozza.mantPeso ?: 0.0
+            val fine = bozza.mantInizio.plusDays(bozza.mantSettimane * 7L)
+            listOf(Traguardo(bozza.mantInizio.toString(), peso), Traguardo(fine.toString(), peso))
+        } else {
+            bozza.traguardi.sortedBy { it.giorno }
+        }
+        val primo = traguardi.first()
+        val ultimo = traguardi.last()
+
+        return buildJsonObject {
+            put("objective_name", bozza.nome.trim())
+            put("objective_type", bozza.tipo)
+            put("start_date", primo.giorno)
+            put("start_weight", primo.peso)
+            put("end_date", ultimo.giorno)
+            put("end_weight", ultimo.peso)
+            put("daily_bonus", bozza.bonusGiornaliero)
+            put("daily_malus", bozza.malusGiornaliero)
+            put("final_bonus", bozza.bonusFinale)
+            put("final_malus", bozza.malusFinale)
+            put("milestones", milestoniJson(traguardi))
+            put("status", "active")
+        }
+    }
+
+    private fun milestoniJson(traguardi: List<Traguardo>): String {
+        val array = buildJsonArray {
+            traguardi.forEach { t ->
+                add(buildJsonObject {
+                    put("date", t.giorno)
+                    put("weight", t.peso)
+                })
+            }
+        }
+        return array.toString()
+    }
+
+    /**
+     * Crea (`id == null`) o aggiorna un obiettivo — `persistObjective()`.
+     * Torna l'id, nuovo o quello passato, perché il chiamante possa
+     * riselezionarlo dopo il ricaricamento.
+     */
+    suspend fun salvaObiettivo(id: String?, riga: JsonObject): String = withContext(Dispatchers.IO) {
+        if (id == null) {
+            db.from("ps_objectives").insert(riga) { select(Columns.raw("id")) }
+                .decodeList<JsonObject>()
+                .firstOrNull()
+                ?.let { testo(it, "id") }
+                ?: error("L'obiettivo non ha restituito un id.")
+        } else {
+            db.from("ps_objectives").update(riga) { filter { eq("id", id) } }
+            id
+        }
+    }
+
+    /** Chiude un obiettivo con lo stato e il punteggio finale — `closeObjective()`. */
+    suspend fun chiudiObiettivo(id: String, stato: String, punteggioFinale: Int) = withContext(Dispatchers.IO) {
+        db.from("ps_objectives").update(
+            buildJsonObject {
+                put("status", stato)
+                put("total_score", punteggioFinale)
+            }
+        ) { filter { eq("id", id) } }
+        Unit
+    }
+
+    suspend fun eliminaObiettivo(id: String) = withContext(Dispatchers.IO) {
+        db.from("ps_objectives").delete { filter { eq("id", id) } }
+        Unit
+    }
+
+    // ── Sincronizzazione con la bilancia (Health Connect) ────────────────
+
+    /**
+     * La riga da scrivere per una pesata letta da Health Connect —
+     * `processWeights()` nel web: data e ora locali dell'istante, **peso
+     * troncato a un decimale** (non arrotondato — `Math.floor`, come là) e il
+     * target interpolato sull'obiettivo che si sta guardando in quel momento.
+     */
+    fun rigaPuntoSalute(punto: PuntoSalute, obiettivo: Obiettivo?): JsonObject {
+        val locale = Instant.ofEpochMilli(punto.timestamp).atZone(ZoneId.systemDefault())
+        val giorno = punto.giorno()
+        val ora = "%02d:%02d".format(locale.hour, locale.minute)
+        val peso = Math.floor(punto.pesoKg * 10.0) / 10.0
+        return buildJsonObject {
+            put("date", giorno)
+            put("time", ora)
+            put("timestamp", punto.timestamp)
+            put("weight", peso)
+            put("target_weight", obiettivo?.let { PesoRegole.targetInterpolato(it.traguardi, giorno) })
+        }
+    }
+
+    /**
+     * Scrive le pesate sincronizzate e toglie le pesate manuali che
+     * diventano ridondanti — `processWeights()`: prima elimina, poi
+     * scrive, così una pesata manuale del giorno non resta a fare da
+     * doppione quando arriva quella vera dalla bilancia.
+     */
+    suspend fun sincronizzaPunti(righe: List<JsonObject>, manualiDaRimuovere: List<Long>) =
+        withContext(Dispatchers.IO) {
+            if (manualiDaRimuovere.isNotEmpty()) {
+                db.from("ps_weight_tracking").delete { filter { isIn("timestamp", manualiDaRimuovere) } }
+            }
+            if (righe.isNotEmpty()) {
+                db.from("ps_weight_tracking").upsert(righe) { onConflict = "timestamp" }
+            }
+            Unit
+        }
 }

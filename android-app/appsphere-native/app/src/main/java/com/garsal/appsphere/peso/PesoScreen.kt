@@ -1,7 +1,9 @@
 package com.garsal.appsphere.peso
 
 import android.app.TimePickerDialog
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -31,6 +35,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +51,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
@@ -65,13 +75,14 @@ private enum class Vista(val etichetta: String) {
  * «Ti pisasti?» — il peso, in nativo.
  *
  * ⚠️ Gemella di `weight-quest.html`, sulle stesse tabelle `ps_*`. Qui ci sono
- * le tre cose che si fanno col telefono in mano: **segnare la pesata**,
- * guardare **com'è andata** giorno per giorno e vedere **la curva**. Restano
- * sulla pagina web, che è dove si fanno da seduti: creare e modificare gli
- * obiettivi e i traguardi, le statistiche, «genera dieta», la sincronizzazione
- * con Google Fit e la bilancia, e il gratta e vinci dei premi (che vive in
- * `localStorage` ed è per dispositivo, quindi non avrebbe niente da mostrare
- * qui).
+ * le cose che si fanno col telefono in mano: **segnare la pesata**, guardare
+ * **com'è andata** giorno per giorno, vedere **la curva**, da «✏️ Gestisci»
+ * ([GestioneObiettivoScreen]) creare/modificare/chiudere/cancellare un
+ * obiettivo e, da «⚖️ Salute», aprire la bilancia Renpho e — al ritorno —
+ * sincronizzare le pesate lette da Health Connect ([SaluteRepository]). Restano sulla
+ * pagina web, che è dove si fa da seduti: le statistiche, «genera dieta» e il
+ * gratta e vinci dei premi, che vive in `localStorage` ed è per dispositivo,
+ * quindi non avrebbe niente da mostrare qui.
  *
  * Le regole di calcolo non sono riscritte a occhio: stanno in [PesoRegole],
  * ricalcate una per una dalla pagina.
@@ -85,6 +96,51 @@ fun PesoScreen(
     var vista by remember { mutableStateOf(Vista.OGGI) }
     var pesataDaFare by remember { mutableStateOf<LocalDate?>(null) }
     var giornoAperto by remember { mutableStateOf<String?>(null) }
+    // Come in Ta Firi?: la Gestione Obiettivo sta qui, sostituisce lo schermo
+    // intero finché è aperta, e non è un dialogo — i campi sono troppi.
+    var gestioneAperta by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    // Il permesso Health Connect si chiede col contratto ufficiale, come nel
+    // bridge Kotlin dell'APK WebView: è l'unico modo per cui HC sblocchi le
+    // letture successive. `sincronizzaSalute` torna a chiamarsi da sola dopo
+    // la concessione, invece di lasciare l'utente a ripremere il pulsante.
+    val richiediPermessiSalute = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract(),
+    ) { vm.sincronizzaSalute(context) }
+
+    LaunchedEffect(stato.permessiSaluteRichiesti) {
+        if (stato.permessiSaluteRichiesti) {
+            vm.permessiSaluteMostrati()
+            richiediPermessiSalute.launch(PERMESSI_SALUTE)
+        }
+    }
+
+    // «Tornato da Renpho»: lo stesso `renphoLaunched` del bridge Kotlin
+    // dell'APK WebView. Senza questa guardia ogni ritorno in primo piano
+    // dell'app — per qualunque motivo — lancerebbe una sincronizzazione.
+    var tornatoDaRenpho by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val osservatore = LifecycleEventObserver { _, evento ->
+            if (evento == Lifecycle.Event.ON_RESUME && tornatoDaRenpho) {
+                tornatoDaRenpho = false
+                vm.sincronizzaSalute(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(osservatore)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(osservatore) }
+    }
+
+    if (gestioneAperta) {
+        GestioneObiettivoScreen(
+            stato = stato,
+            vm = vm,
+            onIndietro = { gestioneAperta = false },
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -92,6 +148,18 @@ fun PesoScreen(
                 titolo = "Ti pisasti?",
                 onIndietro = onIndietro,
                 azioni = {
+                    Text(
+                        text = "⚖️ Salute",
+                        color = Palette.light,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                tornatoDaRenpho = true
+                                SaluteRepository.apriRenpho(context)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
                     Text(
                         text = "${stato.punteggio} pt",
                         color = Palette.light,
@@ -123,6 +191,7 @@ fun PesoScreen(
                             stato = stato,
                             onScegliObiettivo = { vm.scegliObiettivo(it) },
                             onPesati = { pesataDaFare = LocalDate.now() },
+                            onGestisci = { gestioneAperta = true },
                         )
 
                         Vista.TABELLA -> VistaTabella(
@@ -228,6 +297,7 @@ private fun VistaOggi(
     stato: PesoState,
     onScegliObiettivo: (String) -> Unit,
     onPesati: () -> Unit,
+    onGestisci: () -> Unit,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(12.dp),
@@ -281,76 +351,181 @@ private fun VistaOggi(
             }
         }
 
-        if (stato.obiettivi.isNotEmpty()) {
-            item {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("🎯 Obiettivo", fontWeight = FontWeight.Bold, color = Palette.dark)
                 Text(
-                    "🎯 Obiettivo",
-                    fontWeight = FontWeight.Bold,
-                    color = Palette.dark,
-                    modifier = Modifier.padding(top = 6.dp),
+                    text = "✏️ Gestisci",
+                    color = Verde,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onGestisci)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                 )
             }
+        }
+        if (stato.obiettivi.isNotEmpty()) {
             item {
-                FlowRow(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    stato.obiettivi.forEach { obiettivo ->
-                        val scelto = obiettivo.id == stato.obiettivoId
-                        Text(
-                            text = obiettivo.nome + if (obiettivo.attivo) "" else " ·",
-                            color = if (scelto) Palette.light else Palette.dark,
-                            fontWeight = if (scelto) FontWeight.SemiBold else FontWeight.Normal,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .padding(bottom = 8.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(if (scelto) Verde else Palette.inputBg)
-                                .clickable { onScegliObiettivo(obiettivo.id) }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                        )
-                    }
-                }
+                SelettoreObiettivo(
+                    obiettivi = stato.obiettivi,
+                    scelto = stato.obiettivo,
+                    onScegli = onScegliObiettivo,
+                )
             }
             stato.obiettivo?.let { obiettivo ->
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "📅 ${dataItaliana(obiettivo.inizio)} → ${dataItaliana(obiettivo.fine)}" +
-                                " · ${kg(obiettivo.pesoIniziale)} → ${kg(obiettivo.pesoFinale)} kg",
-                            color = Palette.muted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = when (obiettivo.stato) {
-                                "success" -> "🏆 Chiuso con successo · ${obiettivo.punteggioFinale ?: 0} punti"
-                                "failed" -> "💀 Chiuso come fallito · ${obiettivo.punteggioFinale ?: 0} punti"
-                                else -> "▶️ In corso · +${obiettivo.bonusGiornaliero} se sei sotto il target, " +
-                                    "−${obiettivo.malusGiornaliero} se sei sopra"
-                            },
-                            color = Palette.muted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (obiettivo.traguardi.size < 2) {
-                            Text(
-                                "Questo obiettivo non ha una curva di traguardi: senza, " +
-                                    "target e punti non si possono calcolare. Si aggiungono da weight-quest.html.",
-                                color = Palette.warning,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
+                item { DettaglioObiettivo(obiettivo) }
+            }
+        } else {
+            item {
+                Text(
+                    "Nessun obiettivo ancora: tocca «Gestisci» per crearne uno.",
+                    color = Palette.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
 
         item {
             Text(
-                text = "Obiettivi, traguardi, statistiche, dieta e sincronizzazione con la " +
-                    "bilancia restano su weight-quest.html.",
+                text = "Statistiche, «genera dieta» e sincronizzazione con la bilancia " +
+                    "restano su weight-quest.html.",
                 color = Palette.muted,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 10.dp, bottom = 60.dp),
+            )
+        }
+    }
+}
+
+/**
+ * La tendina degli obiettivi. Non `ExposedDropdownMenuBox` — come in
+ * `Gestione.kt` — perché qui non si scrive niente, si sceglie da un elenco
+ * chiuso, e quel componente vorrebbe l'opt-in su un'API sperimentale per un
+ * campo di testo che non serve.
+ *
+ * L'elenco arriva già ordinato dal più recente in giù (`obiettivi()`), e
+ * quello è anche l'ordine con cui compaiono nel menù.
+ */
+@Composable
+internal fun SelettoreObiettivo(
+    obiettivi: List<Obiettivo>,
+    scelto: Obiettivo?,
+    onScegli: (String) -> Unit,
+    // Solo per la Gestione: in cima al menù una voce «✨ Nuovo obiettivo...»,
+    // come il `<select>` del web (`populateObjectiveDropdown`).
+    mostraNuovo: Boolean = false,
+    nuovoScelto: Boolean = false,
+    onNuovo: () -> Unit = {},
+) {
+    var aperto by remember { mutableStateOf(false) }
+
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Palette.inputBg)
+                .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+                .clickable { aperto = true }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = if (nuovoScelto) "✨ Nuovo obiettivo..."
+                    else scelto?.let { etichettaObiettivo(it) } ?: "Nessun obiettivo",
+                color = Palette.dark,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(if (aperto) "︿" else "⌄", color = Palette.muted)
+        }
+        DropdownMenu(expanded = aperto, onDismissRequest = { aperto = false }) {
+            if (mostraNuovo) {
+                DropdownMenuItem(
+                    text = { Text("✨ Nuovo obiettivo...") },
+                    onClick = { aperto = false; onNuovo() },
+                )
+            }
+            obiettivi.forEach { obiettivo ->
+                DropdownMenuItem(
+                    text = { Text(etichettaObiettivo(obiettivo)) },
+                    onClick = {
+                        aperto = false
+                        onScegli(obiettivo.id)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Icona del tipo + nome, con un marcatore per quelli già chiusi. */
+internal fun etichettaObiettivo(obiettivo: Obiettivo): String {
+    val icona = if (obiettivo.tipo == "mantenere") "⚖️" else "📉"
+    val chiuso = when (obiettivo.stato) {
+        "success" -> " · 🏆"
+        "failed" -> " · 💀"
+        else -> ""
+    }
+    return "$icona ${obiettivo.nome}$chiuso"
+}
+
+/**
+ * Tutti i dati dell'obiettivo scelto, sotto la tendina: tipo, periodo e peso
+ * di partenza/arrivo, come sta andando (o com'è finito), e la curva su cui si
+ * regge il calcolo — quella che manca è la ragione più comune per cui target
+ * e punti restano vuoti in cima alla pagina.
+ */
+@Composable
+private fun DettaglioObiettivo(obiettivo: Obiettivo) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Palette.inputBg)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = if (obiettivo.tipo == "mantenere") "⚖️ Mantenere il peso" else "📉 Perdere peso",
+            fontWeight = FontWeight.SemiBold,
+            color = Palette.dark,
+        )
+        Text(
+            text = "📅 ${dataItaliana(obiettivo.inizio)} → ${dataItaliana(obiettivo.fine)}" +
+                " · ${kg(obiettivo.pesoIniziale)} → ${kg(obiettivo.pesoFinale)} kg",
+            color = Palette.muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            text = when (obiettivo.stato) {
+                "success" -> "🏆 Chiuso con successo · ${obiettivo.punteggioFinale ?: 0} punti"
+                "failed" -> "💀 Chiuso come fallito · ${obiettivo.punteggioFinale ?: 0} punti"
+                else -> "▶️ In corso · +${obiettivo.bonusGiornaliero} se sei sotto il target, " +
+                    "−${obiettivo.malusGiornaliero} se sei sopra"
+            },
+            color = Palette.muted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (obiettivo.traguardi.size >= 2) {
+            Text(
+                text = "📈 ${obiettivo.traguardi.size} traguardi sulla curva",
+                color = Palette.muted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        } else {
+            Text(
+                "Questo obiettivo non ha una curva di traguardi: senza, target e punti " +
+                    "non si possono calcolare. Si aggiungono da «✏️ Gestisci».",
+                color = Palette.warning,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     }
