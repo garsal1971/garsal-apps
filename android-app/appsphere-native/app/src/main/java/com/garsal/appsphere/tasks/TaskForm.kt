@@ -7,12 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,10 +30,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.Tendina
+import com.garsal.appsphere.core.TendinaFacoltativa
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.core.larghezzaPulsanti
 import java.time.LocalDate
 
 /**
@@ -52,7 +57,6 @@ import java.time.LocalDate
  * completarli, saltarli e farli fallire funziona anche da qui, perché quella
  * parte la fa la RPC.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaskForm(
     bozzaIniziale: BozzaTask,
@@ -107,20 +111,16 @@ fun TaskForm(
             )
 
             // ── Tipo ────────────────────────────────────────────────────
-            Titoletto("Tipo")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TsTask.TIPI.forEach { (valore, etichetta) ->
-                    // I `workflow` non passano da qui, e il tipo di un task
-                    // che esiste già non si tocca: vedi il commento in cima.
-                    val disponibile = valore != "workflow" && (id == null || valore == b.tipo)
-                    Pillola(
-                        testo = etichetta,
-                        scelta = b.tipo == valore,
-                        attiva = disponibile,
-                        colore = Palette.topBar,
-                    ) { b = b.copy(tipo = valore) }
-                }
-            }
+            // I `workflow` non passano da qui, e il tipo di un task che
+            // esiste già non si tocca: vedi il commento in cima — la tendina
+            // resta quindi disabilitata (mostra solo il tipo attuale) quando
+            // si sta modificando un task esistente.
+            Tendina(
+                etichetta = "Tipo",
+                scelto = TsTask.etichettaTipo(b.tipo),
+                voci = TsTask.TIPI.filter { it.first != "workflow" },
+                abilitata = id == null,
+            ) { scelta -> b = b.copy(tipo = scelta) }
             if (id != null) {
                 Nota("Il tipo di un task che esiste già non si cambia da qui.")
             }
@@ -158,14 +158,11 @@ fun TaskForm(
                 }
 
                 "recurring" -> {
-                    Titoletto("Frequenza")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FREQUENZE.forEach { (valore, etichetta) ->
-                            Pillola(etichetta, b.frequenza == valore, true, Palette.secondary) {
-                                b = b.copy(frequenza = valore)
-                            }
-                        }
-                    }
+                    Tendina(
+                        etichetta = "Frequenza",
+                        scelto = FREQUENZE.first { it.first == b.frequenza }.second,
+                        voci = FREQUENZE,
+                    ) { scelta -> b = b.copy(frequenza = scelta) }
                     CampoNumero(b.intervallo, "Ogni quante volte") {
                         b = b.copy(intervallo = it.coerceAtLeast(1))
                     }
@@ -173,18 +170,20 @@ fun TaskForm(
                     when (b.frequenza) {
                         "weekly" -> {
                             Titoletto("Giorni della settimana")
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                // Mostrati da lunedì, che è come si legge una
-                                // settimana qui; salvati con la numerazione di
-                                // Postgres (`extract(dow)`, 0 = domenica), che
-                                // è quella che `task_next_recurring_date`
-                                // confronta.
+                            // Mostrati da lunedì, che è come si legge una
+                            // settimana qui; salvati con la numerazione di
+                            // Postgres (`extract(dow)`, 0 = domenica), che
+                            // è quella che `task_next_recurring_date`
+                            // confronta.
+                            val larghezzaGiorni = larghezzaPulsanti(GIORNI_SETTIMANA.map { it.second })
+                            RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                                 GIORNI_SETTIMANA.forEach { (numero, etichetta) ->
                                     Pillola(
                                         testo = etichetta,
                                         scelta = numero in b.giorniSettimana,
                                         attiva = true,
                                         colore = Palette.secondary,
+                                        larghezza = larghezzaGiorni,
                                     ) {
                                         b = b.copy(
                                             giorniSettimana = b.giorniSettimana.alterna(numero)
@@ -196,13 +195,15 @@ fun TaskForm(
 
                         "monthly" -> {
                             Titoletto("Giorni del mese")
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val larghezzaGiorni = larghezzaPulsanti((1..31).map { "$it" })
+                            RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                                 (1..31).forEach { giorno ->
                                     Pillola(
                                         testo = "$giorno",
                                         scelta = giorno in b.giorniMese,
                                         attiva = true,
                                         colore = Palette.secondary,
+                                        larghezza = larghezzaGiorni,
                                     ) { b = b.copy(giorniMese = b.giorniMese.alterna(giorno)) }
                                 }
                             }
@@ -259,30 +260,27 @@ fun TaskForm(
 
             // ── Priorità e categorie ────────────────────────────────────
             if (priorita.isNotEmpty()) {
-                Titoletto("Priorità")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    priorita.forEach { p ->
-                        Pillola(
-                            testo = p.nome,
-                            scelta = b.prioritaId == p.id,
-                            attiva = true,
-                            colore = coloreDaHex(p.colore) ?: Palette.secondary,
-                        ) {
-                            b = b.copy(prioritaId = if (b.prioritaId == p.id) null else p.id)
-                        }
-                    }
-                }
+                TendinaFacoltativa(
+                    etichetta = "Priorità",
+                    tutte = "Nessuna priorità",
+                    scelto = b.prioritaId,
+                    voci = priorita.map { it.id to it.nome },
+                ) { scelta -> b = b.copy(prioritaId = scelta) }
             }
 
             if (categorie.isNotEmpty()) {
                 Titoletto("Categorie")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val larghezzaCategorie = larghezzaPulsanti(
+                    categorie.map { "${it.icona.orEmpty()} ${it.nome}".trim() }
+                )
+                RigaScorrevole(Arrangement.spacedBy(8.dp)) {
                     categorie.forEach { c ->
                         Pillola(
                             testo = "${c.icona.orEmpty()} ${c.nome}".trim(),
                             scelta = c.id in b.categorie,
                             attiva = true,
                             colore = coloreDaHex(c.colore) ?: Palette.accent,
+                            larghezza = larghezzaCategorie,
                         ) { b = b.copy(categorie = b.categorie.alterna(c.id)) }
                     }
                 }
@@ -438,6 +436,7 @@ private fun Pillola(
     scelta: Boolean,
     attiva: Boolean,
     colore: androidx.compose.ui.graphics.Color,
+    larghezza: Dp? = null,
     onClick: () -> Unit,
 ) {
     Text(
@@ -449,11 +448,14 @@ private fun Pillola(
         },
         fontWeight = if (scelta) FontWeight.SemiBold else FontWeight.Normal,
         style = MaterialTheme.typography.bodyMedium,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
         modifier = Modifier
+            .then(larghezza?.let { Modifier.width(it) } ?: Modifier)
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(if (scelta) colore else Palette.inputBg)
             .clickable(enabled = attiva, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = if (larghezza == null) 14.dp else 0.dp, vertical = 10.dp),
     )
 }

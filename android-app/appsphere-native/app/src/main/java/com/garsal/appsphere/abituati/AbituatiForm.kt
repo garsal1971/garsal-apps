@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,9 +31,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.Tendina
+import com.garsal.appsphere.core.TendinaFacoltativa
+import com.garsal.appsphere.core.larghezzaPulsanti
 import java.time.LocalDate
 
 /** L'abitudine che si sta scrivendo. */
@@ -72,6 +79,12 @@ data class BozzaAbitudine(
 
 private val GIORNI = listOf(
     1 to "Lun", 2 to "Mar", 3 to "Mer", 4 to "Gio", 5 to "Ven", 6 to "Sab", 0 to "Dom",
+)
+
+private val FREQUENZE = listOf(
+    "daily" to "Ogni giorno",
+    "daily_multiple" to "Più volte al giorno",
+    "weekly" to "Giorni della settimana",
 )
 
 /**
@@ -141,32 +154,23 @@ fun AbituatiForm(
 
             // ── Categoria ───────────────────────────────────────────────
             if (categorie.isNotEmpty()) {
-                Etichetta("Categoria")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Scelta("— nessuna —", b.categoriaId == null) { b = b.copy(categoriaId = null) }
-                    categorie.forEach { cat ->
-                        Scelta(cat.etichetta, b.categoriaId == cat.id) {
-                            b = b.copy(categoriaId = cat.id)
-                        }
-                    }
-                }
+                TendinaFacoltativa(
+                    etichetta = "Categoria",
+                    tutte = "— nessuna —",
+                    scelto = b.categoriaId,
+                    voci = categorie.map { it.id to it.etichetta },
+                ) { scelta -> b = b.copy(categoriaId = scelta) }
             }
 
             // ── Frequenza ───────────────────────────────────────────────
-            Etichetta("Frequenza")
             if (nuova) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Scelta("Ogni giorno", b.frequenza == "daily") {
-                        b = b.copy(frequenza = "daily")
-                    }
-                    Scelta("Più volte al giorno", b.frequenza == "daily_multiple") {
-                        b = b.copy(frequenza = "daily_multiple")
-                    }
-                    Scelta("Giorni della settimana", b.frequenza == "weekly") {
-                        b = b.copy(frequenza = "weekly")
-                    }
-                }
+                Tendina(
+                    etichetta = "Frequenza",
+                    scelto = FREQUENZE.first { it.first == b.frequenza }.second,
+                    voci = FREQUENZE,
+                ) { scelta -> b = b.copy(frequenza = scelta) }
             } else {
+                Etichetta("Frequenza")
                 Text(
                     text = when (b.frequenza) {
                         "daily_multiple" -> "Più volte al giorno — non si cambia"
@@ -179,10 +183,11 @@ fun AbituatiForm(
             }
 
             if (b.frequenza == "weekly") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val larghezzaGiorni = larghezzaPulsanti(GIORNI.map { it.second })
+                RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                     GIORNI.forEach { (numero, nome) ->
                         val scelto = numero in b.giorniSettimana
-                        Scelta(nome, scelto) {
+                        Scelta(nome, scelto, larghezzaGiorni) {
                             b = b.copy(
                                 giorniSettimana = if (scelto) b.giorniSettimana - numero
                                 else b.giorniSettimana + numero
@@ -257,18 +262,21 @@ private fun Numero(etichetta: String, valore: Int, onCambia: (Int) -> Unit) {
 }
 
 @Composable
-private fun Scelta(testo: String, scelto: Boolean, onTocca: () -> Unit) {
+private fun Scelta(testo: String, scelto: Boolean, larghezza: Dp? = null, onTocca: () -> Unit) {
     Text(
         text = testo,
         color = if (scelto) Palette.light else Palette.dark,
         fontWeight = if (scelto) FontWeight.Bold else FontWeight.Normal,
         style = MaterialTheme.typography.bodyMedium,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
         modifier = Modifier
+            .then(larghezza?.let { Modifier.width(it) } ?: Modifier)
             .padding(vertical = 2.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(if (scelto) NeroAbituati else Palette.inputBg)
             .clickable(onClick = onTocca)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = if (larghezza == null) 14.dp else 0.dp, vertical = 10.dp),
     )
 }
 

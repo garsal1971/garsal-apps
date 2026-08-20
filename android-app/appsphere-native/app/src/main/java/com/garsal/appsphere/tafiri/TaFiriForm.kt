@@ -7,8 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.Tendina
 import java.time.LocalDate
 
 /**
@@ -47,7 +46,6 @@ import java.time.LocalDate
  * decidere cosa fare delle spunte già date — e la sfida non sarebbe più quella
  * che si è cominciata.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaFiriForm(
     bozzaIniziale: BozzaSfida,
@@ -126,12 +124,11 @@ fun TaFiriForm(
             Titoletto("Punteggio in palio")
             CampoNumero(b.punti, "Punti totali") { b = b.copy(punti = it.coerceAtLeast(0)) }
 
-            Titoletto("Schema punteggio")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SCHEMI.forEach { (valore, etichetta) ->
-                    Pillola(etichetta, b.punteggio == valore) { b = b.copy(punteggio = valore) }
-                }
-            }
+            Tendina(
+                etichetta = "Schema punteggio",
+                scelto = SCHEMI.first { it.first == b.punteggio }.second,
+                voci = SCHEMI,
+            ) { scelta -> b = b.copy(punteggio = scelta) }
             Nota(
                 if (b.punteggio == "proportional")
                     "Punti in base ai giorni riusciti."
@@ -228,18 +225,3 @@ private fun CampoNumero(valore: Int, etichetta: String, onCambia: (Int) -> Unit)
     )
 }
 
-@Composable
-private fun Pillola(testo: String, scelta: Boolean, onClick: () -> Unit) {
-    Text(
-        text = testo,
-        color = if (scelta) Palette.light else Palette.dark,
-        fontWeight = if (scelta) FontWeight.SemiBold else FontWeight.Normal,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier
-            .padding(bottom = 8.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (scelta) Viola else Palette.inputBg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-    )
-}

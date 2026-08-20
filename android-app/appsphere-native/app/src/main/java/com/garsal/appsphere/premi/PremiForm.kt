@@ -1,10 +1,8 @@
 package com.garsal.appsphere.premi
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.Tendina
 
 /**
  * Il premio che si sta scrivendo. Costo e punti per uso restano testo finché
@@ -109,19 +108,14 @@ fun PremiForm(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text("Tipo", color = Palette.muted, style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SceltaTipo(
-                    testo = "⭐ Una tantum",
-                    scelto = !b.ripetibile,
-                    modifier = Modifier.weight(1f),
-                ) { b = b.copy(tipo = Premio.UNA_TANTUM) }
-                SceltaTipo(
-                    testo = "🔄 Ripetibile",
-                    scelto = b.ripetibile,
-                    modifier = Modifier.weight(1f),
-                ) { b = b.copy(tipo = Premio.RIPETIBILE) }
-            }
+            Tendina(
+                etichetta = "Tipo",
+                scelto = if (b.ripetibile) "🔄 Ripetibile" else "⭐ Una tantum",
+                voci = listOf(
+                    Premio.UNA_TANTUM to "⭐ Una tantum",
+                    Premio.RIPETIBILE to "🔄 Ripetibile",
+                ),
+            ) { scelta -> b = b.copy(tipo = scelta) }
             Text(
                 text = if (b.ripetibile)
                     "Resta nel catalogo e rincara a ogni utilizzo."
@@ -155,21 +149,3 @@ fun PremiForm(
 }
 
 @Composable
-private fun SceltaTipo(
-    testo: String,
-    scelto: Boolean,
-    modifier: Modifier = Modifier,
-    onScegli: () -> Unit,
-) {
-    Text(
-        text = testo,
-        color = if (scelto) Palette.light else Palette.dark,
-        fontWeight = if (scelto) FontWeight.Bold else FontWeight.Normal,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (scelto) RossoPremi else Palette.inputBg)
-            .clickable(onClick = onScegli)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-    )
-}

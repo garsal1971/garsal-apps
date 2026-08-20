@@ -3,19 +3,15 @@ package com.garsal.appsphere.tasks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,14 +23,15 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.Pillola
+import com.garsal.appsphere.core.RigaScorrevole
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.core.larghezzaPulsanti
 
 /**
  * La **panoramica**, come la disegna `renderDashboard()` in `tasks.html`.
@@ -73,7 +70,7 @@ fun VistaPanoramica(
     }
 
     val azioni = AzioniScheda(onApri, onCompleta, onFallisci, onSalta)
-    val larghezzaPulsanti = larghezzaPulsanti()
+    val larghezzaPulsanti = larghezzaPulsanti(listOf(COMPLETA, FALLISCI, SALTA))
 
     LazyColumn(
         contentPadding = PaddingValues(10.dp, 6.dp, 10.dp, 88.dp),
@@ -269,47 +266,15 @@ private fun SchedaTask(
         }
 
         RigaScorrevole(Arrangement.spacedBy(8.dp)) {
-            Pulsante(COMPLETA, Palette.success, larghezzaPulsanti) { azioni.completa(task) }
+            Pillola(COMPLETA, Palette.success, larghezzaPulsanti) { azioni.completa(task) }
             if (task.tipo != "free_repeat") {
-                Pulsante(FALLISCI, Palette.danger, larghezzaPulsanti) { azioni.fallisci(task) }
+                Pillola(FALLISCI, Palette.danger, larghezzaPulsanti) { azioni.fallisci(task) }
             }
             if (task.tipo in TIPI_CON_SALTA) {
-                Pulsante(SALTA, Palette.accent, larghezzaPulsanti) { azioni.salta(task) }
+                Pillola(SALTA, Palette.accent, larghezzaPulsanti) { azioni.salta(task) }
             }
         }
     }
-}
-
-/**
- * Una riga che **non va mai a capo**: quello che non entra si raggiunge
- * scorrendo col dito verso sinistra.
- *
- * È la scelta opposta al solito consiglio sui caratteri di sistema grandi, ed
- * è voluta. Andare a capo tiene tutto leggibile ma allunga la scheda: con
- * l'ingrandimento alto tre pulsanti diventano tre righe, il titolo altre tre,
- * e in uno schermo ci sta un task e mezzo. Una riga sola tiene la scheda
- * compatta e non nasconde niente — il testo tagliato dal bordo non è perso,
- * basta trascinarlo — a patto che quello che conta di più stia **a sinistra**:
- * la data prima delle etichette, *Completa* prima di *Salta*.
- *
- * Lo scorrimento è orizzontale e quello della lista verticale: i due gesti non
- * si contendono niente, e il tocco sulla scheda continua ad aprire il dettaglio
- * perché un trascinamento non è un tocco.
- */
-@Composable
-private fun RigaScorrevole(
-    disposizione: Arrangement.Horizontal,
-    modifier: Modifier = Modifier,
-    contenuto: @Composable RowScope.() -> Unit,
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = disposizione,
-        verticalAlignment = Alignment.CenterVertically,
-        content = contenuto,
-    )
 }
 
 /** Gli unici tipi su cui il web offre **Salta**: hanno una prossima occorrenza. */
@@ -318,42 +283,6 @@ private val TIPI_CON_SALTA = setOf("recurring", "simple_recurring", "multiple")
 private const val COMPLETA = "Completa"
 private const val FALLISCI = "Fallisci"
 private const val SALTA = "Salta"
-
-/**
- * La larghezza comune dei tre pulsanti: quella che serve alla parola più
- * lunga, misurata **con lo stile e l'ingrandimento di adesso**.
- *
- * Non una misura in `dp` scelta a occhio: coi caratteri di sistema grandi una
- * costante o taglia «Completa», o lascia «Salta» in un pulsante il doppio di
- * quanto gli serve. Si misura una volta per schermata e la si passa alle
- * schede, invece di rifare il conto per ognuna delle trenta che ci sono.
- */
-@Composable
-private fun larghezzaPulsanti(): Dp {
-    val misuratore = rememberTextMeasurer()
-    val stile = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-    val piuLarga = listOf(COMPLETA, FALLISCI, SALTA)
-        .maxOf { misuratore.measure(it, stile).size.width }
-    return with(LocalDensity.current) { piuLarga.toDp() } + 28.dp
-}
-
-@Composable
-private fun Pulsante(testo: String, sfondo: Color, larghezza: Dp, onClick: () -> Unit) {
-    Text(
-        text = testo,
-        color = Palette.light,
-        fontWeight = FontWeight.SemiBold,
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        maxLines = 1,
-        modifier = Modifier
-            .width(larghezza)
-            .clip(RoundedCornerShape(4.dp))
-            .background(sfondo)
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-    )
-}
 
 @Composable
 private fun Etichetta(testo: String, colore: Color) {

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -42,6 +43,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.Tendina
+import com.garsal.appsphere.core.larghezzaPulsanti
 import java.time.LocalDate
 
 /**
@@ -133,15 +137,12 @@ fun GestioneObiettivoScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Titoletto("Tipo Obiettivo")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pillola("📉 Perdere peso", bozza.tipo == "perdere", enabled = !isClosed) {
-                        bozza = bozza.copy(tipo = "perdere")
-                    }
-                    Pillola("⚖️ Mantenere peso", bozza.tipo == "mantenere", enabled = !isClosed) {
-                        bozza = bozza.copy(tipo = "mantenere")
-                    }
-                }
+                Tendina(
+                    etichetta = "Tipo Obiettivo",
+                    scelto = if (bozza.tipo == "mantenere") "⚖️ Mantenere peso" else "📉 Perdere peso",
+                    voci = listOf("perdere" to "📉 Perdere peso", "mantenere" to "⚖️ Mantenere peso"),
+                    abilitata = !isClosed,
+                ) { scelta -> bozza = bozza.copy(tipo = scelta) }
 
                 if (bozza.tipo == "mantenere") {
                     Titoletto("Data Inizio")
@@ -251,12 +252,11 @@ fun GestioneObiettivoScreen(
 
                 HorizontalDivider(color = Palette.border)
 
-                FlowRow(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val meta = Modifier.weight(1f)
+                val larghezzaAzioni = larghezzaPulsanti(
+                    listOf("💾 Salva", "🏆 Successo", "💀 Fallito", "🗑️ Elimina")
+                )
+                RigaScorrevole(Arrangement.spacedBy(8.dp)) {
+                    val meta = Modifier.width(larghezzaAzioni)
                     Bottone("💾 Salva", meta, Verde, enabled = !isClosed && bozza.valida) {
                         vm.salvaObiettivo(editando?.id, bozza)
                     }
@@ -404,21 +404,6 @@ private fun Bottone(
             .background(if (enabled) colore else colore.copy(alpha = 0.5f))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-    )
-}
-
-@Composable
-private fun Pillola(testo: String, scelta: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    Text(
-        text = testo,
-        color = if (scelta) Palette.light else Palette.dark,
-        fontWeight = if (scelta) FontWeight.SemiBold else FontWeight.Normal,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (scelta) Verde else Palette.inputBg)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
     )
 }
 

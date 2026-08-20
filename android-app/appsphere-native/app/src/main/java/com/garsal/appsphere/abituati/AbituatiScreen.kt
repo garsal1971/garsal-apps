@@ -5,13 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,13 +35,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.core.larghezzaPulsanti
 import java.time.LocalDate
 
 /** Il nero della bolla di Abituati (`#1A1A1A`, uno dei cerchi olimpici). */
@@ -247,7 +249,6 @@ private fun SelettoreVista(scelta: Vista, onScegli: (Vista) -> Unit) {
  * web: il jolly però lo conta il giorno, non la sessione, e quel conto lo fa la
  * RPC.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SchedaAbitudine(
     abitudine: HbAbitudine,
@@ -336,22 +337,26 @@ private fun SchedaAbitudine(
  * `newState === 'none'` del web, e serve per correggere un tocco sbagliato
  * (togliendo un `failed` la RPC restituisce anche il jolly).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Spunte(statoOggi: String?, onSegna: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        listOf(
-            "completed" to "✅ Fatto",
-            "failed" to "❌ Fallito",
-            "skipped" to "⏭ Saltato",
-        ).forEach { (valore, etichetta) ->
+    val opzioni = listOf(
+        "completed" to "✅ Fatto",
+        "failed" to "❌ Fallito",
+        "skipped" to "⏭ Saltato",
+    )
+    val larghezza = larghezzaPulsanti(opzioni.map { it.second })
+    RigaScorrevole(Arrangement.spacedBy(6.dp)) {
+        opzioni.forEach { (valore, etichetta) ->
             val attivo = statoOggi == valore
             Text(
                 text = etichetta,
                 color = if (attivo) Palette.light else Palette.dark,
                 fontWeight = if (attivo) FontWeight.Bold else FontWeight.Normal,
                 style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
                 modifier = Modifier
+                    .width(larghezza)
                     .padding(vertical = 2.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
@@ -363,7 +368,7 @@ private fun Spunte(statoOggi: String?, onSegna: (String) -> Unit) {
                         }
                     )
                     .clickable { onSegna(if (attivo) "none" else valore) }
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(vertical = 10.dp),
             )
         }
     }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,12 +47,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.Tendina
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.core.larghezzaPulsanti
 import kotlinx.coroutines.launch
 
 /** Una voce di lista mentre la si scrive: senza `id` è nuova. */
@@ -448,7 +453,8 @@ fun MemoForm(
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val larghezzaCategorie = larghezzaPulsanti(categorie.map { it.etichetta })
+                RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                     categorie.forEach { cat ->
                         val scelta = cat.id in b.categorie
                         Text(
@@ -456,7 +462,10 @@ fun MemoForm(
                             color = if (scelta) Palette.light else Palette.dark,
                             fontWeight = if (scelta) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
                             modifier = Modifier
+                                .width(larghezzaCategorie)
                                 .padding(vertical = 2.dp)
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(
@@ -469,7 +478,7 @@ fun MemoForm(
                                         else b.categorie + cat.id
                                     )
                                 }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(vertical = 8.dp),
                         )
                     }
                 }
@@ -689,27 +698,28 @@ private fun SezioneMisure(
                 }
             }
 
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TipoMisura.entries.forEach { tipo ->
-                    Tasto(tipo.etichetta, "Misura ${tipo.etichetta}", attivo = m.tipo == tipo) {
-                        aggiorna(i) { misura ->
-                            misura.copy(
-                                tipo = tipo,
-                                minimo = if (tipo == TipoMisura.SCALA) misura.minimo ?: 1.0 else null,
-                                massimo = if (tipo == TipoMisura.SCALA) misura.massimo ?: 10.0 else null,
-                                unita = if (tipo == TipoMisura.NUMERO) misura.unita else "",
-                                // Le opzioni non si buttano passando a un altro
-                                // tipo e tornando indietro: sono la cosa più
-                                // lunga da riscrivere di tutta la misura.
-                                opzioni = if (tipo == TipoMisura.SCELTA && misura.opzioni.isEmpty())
-                                    listOf(
-                                        MmOpzione(nuovoIdOpzione(), ""),
-                                        MmOpzione(nuovoIdOpzione(), ""),
-                                    )
-                                else misura.opzioni,
+            Tendina(
+                etichetta = "Tipo",
+                scelto = m.tipo.etichetta,
+                voci = TipoMisura.entries.map { it.chiave to it.etichetta },
+            ) { scelta ->
+                val tipo = TipoMisura.da(scelta)
+                aggiorna(i) { misura ->
+                    misura.copy(
+                        tipo = tipo,
+                        minimo = if (tipo == TipoMisura.SCALA) misura.minimo ?: 1.0 else null,
+                        massimo = if (tipo == TipoMisura.SCALA) misura.massimo ?: 10.0 else null,
+                        unita = if (tipo == TipoMisura.NUMERO) misura.unita else "",
+                        // Le opzioni non si buttano passando a un altro
+                        // tipo e tornando indietro: sono la cosa più
+                        // lunga da riscrivere di tutta la misura.
+                        opzioni = if (tipo == TipoMisura.SCELTA && misura.opzioni.isEmpty())
+                            listOf(
+                                MmOpzione(nuovoIdOpzione(), ""),
+                                MmOpzione(nuovoIdOpzione(), ""),
                             )
-                        }
-                    }
+                        else misura.opzioni,
+                    )
                 }
             }
 
