@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi Costi v1.0.71</title>
+    <title>Analisi Costi v1.0.72</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -735,6 +735,51 @@
     </div>
 </div>
 
+<!-- ====== MODAL: MODIFICA TRANSAZIONE ====== -->
+<div class="modal" id="txEditModal">
+    <div class="modal-content" style="max-width:520px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Modifica transazione</h2>
+            <span class="modal-close" onclick="closeTxEditModal()">✕</span>
+        </div>
+        <div style="margin-bottom:1.1rem;">
+            <div class="tx-top">
+                <span class="tx-desc" id="txEditDesc"></span>
+                <span class="tx-amount mono" id="txEditAmount"></span>
+            </div>
+            <div class="tx-meta" id="txEditDate"></div>
+        </div>
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem;" title="Se attivo, le modifiche a categoria e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
+                <input type="checkbox" id="txEditOnlyThis" onchange="toggleOnlyThisTx(_txEditId, this.checked)">
+                🔒 Solo questa transazione (non imparare/propagare)
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <div style="display:flex;gap:.5rem;align-items:center;">
+                <div class="tx-cat-picker" style="position:relative;flex:1;">
+                    <input type="text" class="form-input" id="txEditCatSearch"
+                        placeholder="Cerca o scegli categoria..."
+                        oninput="renderTxEditCategorySuggestions()" onfocus="renderTxEditCategorySuggestions()"
+                        onblur="hideTxEditCategorySuggestions()" autocomplete="off">
+                    <div id="txEditCatSuggest" class="tx-cat-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;margin-top:2px;"></div>
+                </div>
+                <button type="button" class="btn btn-small btn-ghost" onclick="openCategoryModalFromTxEdit()" title="Nuova categoria/sotto-categoria">+</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Chi ha speso</label>
+            <select class="form-select" id="txEditSpender" onchange="setTxSpender(_txEditId, this.value)"></select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Per chi</label>
+            <select class="form-select" id="txEditPerson" onchange="setTxPerson(_txEditId, this.value)"></select>
+        </div>
+        <button type="button" class="btn btn-primary" style="width:100%;" onclick="closeTxEditModal()">Fatto</button>
+    </div>
+</div>
+
 <!-- ====== MODAL: ANTEPRIMA SINCRONIZZAZIONE BANCARIA ====== -->
 <div class="modal" id="syncPreviewModal">
     <div class="modal-content" style="max-width:640px;">
@@ -880,8 +925,8 @@
     // ==========================================
     // VERSION
     // ==========================================
-    var APP_VERSION = 'v1.0.71';
-    var BUILD_TIME  = '2026-08-16T18:30:00Z';
+    var APP_VERSION = 'v1.0.72';
+    var BUILD_TIME  = '2026-08-20T12:00:00Z';
     console.log('%c Analisi Costi ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -954,6 +999,7 @@
     // Transazioni marcate "solo questa transazione": la prossima modifica (tag o "per chi")
     // non viene salvata nella mappa di apprendimento né propagata/rianalizzata sulle altre.
     let _onlyThisTxIds = new Set();
+    let _txEditId = null; // id della transazione aperta nel popup di modifica
     let bankConnections = [];
     let cardPersonMap = [];
     let trips = [];
@@ -1287,7 +1333,16 @@
         document.getElementById('categoryModal').classList.remove('active');
         if (_categoryQuickAddTxId) {
             const txId = _categoryQuickAddTxId; _categoryQuickAddTxId = null;
-            if (_lastSavedCategoryId) setTxCategory(txId, _lastSavedCategoryId);
+            if (_lastSavedCategoryId) {
+                setTxCategory(txId, _lastSavedCategoryId);
+                // Il popup di modifica resta aperto sotto: gli si riporta la categoria appena
+                // creata, altrimenti il campo mostrerebbe ancora quella di prima.
+                if (_txEditId === txId) {
+                    const c = categories.find(x => x.id === _lastSavedCategoryId);
+                    const input = document.getElementById('txEditCatSearch');
+                    if (input && c) input.value = categoryLabel(c);
+                }
+            }
         } else if (_aiSuggestionsReturnPending) {
             _aiSuggestionsReturnPending = false;
             renderAiSuggestionsList();
@@ -1311,11 +1366,6 @@
             if (_lastSavedCategoryId) document.getElementById('merchantCategory').value = _lastSavedCategoryId;
         }
         _lastSavedCategoryId = null;
-    }
-
-    function openCategoryModalFromTxRow(txId) {
-        _categoryQuickAddTxId = txId;
-        openCategoryModal(null);
     }
 
     function openCategoryModalFromAiSuggestions() {
@@ -2819,12 +2869,15 @@
         return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    // La riga è di sola lettura: categoria, persone ed eventuale blocco "solo questa
+    // transazione" si leggono qui, ma si cambiano solo dal popup di ✏️ Modifica — niente
+    // di editabile direttamente in lista, per non ritrovarsi a modificare per sbaglio la
+    // transazione sbagliata scorrendo l'elenco.
     function renderTxRow(t) {
         const catIds = getTxCategoryIds(t.id);
-        const currentCategoryId = catIds[0] || '';
-        const currentCategory = categories.find(c => c.id === currentCategoryId);
-        const personOptions = ['<option value="">— Per chi —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
-        const spenderOptions = ['<option value="">— Chi ha speso —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.spender_person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+        const currentCategory = categories.find(c => c.id === (catIds[0] || ''));
+        const person = t.person_id ? people.find(p => p.id === t.person_id) : null;
+        const spender = t.spender_person_id ? people.find(p => p.id === t.spender_person_id) : null;
         return `
         <div class="tx-row">
             <div class="tx-top">
@@ -2832,48 +2885,69 @@
                 <span class="tx-amount mono ${t.amount < 0 ? 'pts-neg' : 'pts-pos'}">${fmtEUR(t.amount)}</span>
             </div>
             <div class="tx-meta">${formatDateIt(t.date)} ${t.type ? '· ' + t.type : ''}</div>
-            <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;">
-                <div class="tx-cat-picker" style="position:relative;flex:1;">
-                    <input type="text" class="form-input" style="font-size:.85rem;" id="tx-cat-search-${t.id}"
-                        placeholder="Cerca o scegli categoria..." value="${currentCategory ? escAttr(categoryLabel(currentCategory)) : ''}"
-                        oninput="renderTxCategorySuggestions('${t.id}')" onfocus="renderTxCategorySuggestions('${t.id}')"
-                        onblur="hideTxCategorySuggestions('${t.id}')" autocomplete="off">
-                    <div id="tx-cat-suggest-${t.id}" class="tx-cat-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);max-height:260px;overflow-y:auto;z-index:50;margin-top:2px;"></div>
-                </div>
-                <button type="button" class="btn btn-small btn-ghost" onclick="openCategoryModalFromTxRow('${t.id}')" title="Nuova categoria/sotto-categoria">+</button>
+            <div class="tx-meta" style="margin-top:.4rem;display:flex;flex-wrap:wrap;gap:.3rem 1rem;">
+                <span>${currentCategory ? categoryLabel(currentCategory) : '— Nessuna categoria —'}</span>
+                ${spender ? `<span>Speso da: ${spender.name}</span>` : ''}
+                ${person ? `<span>Per: ${person.name}</span>` : ''}
+                ${_onlyThisTxIds.has(t.id) ? `<span title="Non impara e non propaga">🔒 isolata</span>` : ''}
             </div>
-            <div style="margin-top:.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
-                <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxSpender('${t.id}', this.value)">${spenderOptions}</select>
-                <select class="form-select" style="width:auto;font-size:.85rem;" onchange="setTxPerson('${t.id}', this.value)">${personOptions}</select>
+            <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+                <button type="button" class="btn btn-small btn-secondary" onclick="openTxEditModal('${t.id}')">✏️ Modifica</button>
                 ${t.raw ? `<button type="button" class="btn btn-small btn-ghost" onclick="openRawDataModal('${t.id}')" title="Vedi il dato grezzo originale (banca o CSV)">🔍 RAW</button>` : ''}
                 <button type="button" class="btn btn-small btn-danger" onclick="deleteTransaction('${t.id}')" title="Elimina questa transazione">🗑️</button>
             </div>
-            <label style="margin-top:.4rem;display:flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);cursor:pointer;" title="Se attivo, le modifiche a categoria e &quot;per chi&quot; su questa transazione non vengono salvate nella mappa di apprendimento né applicate alle altre transazioni.">
-                <input type="checkbox" ${_onlyThisTxIds.has(t.id) ? 'checked' : ''} onchange="toggleOnlyThisTx('${t.id}', this.checked)">
-                🔒 Solo questa transazione (non imparare/propagare)
-            </label>
         </div>`;
     }
 
-    // Autocomplete categoria/sotto-categoria nella riga transazione: filtra scrivendo nel campo
-    // testo e mostra i risultati raggruppati per categoria principale (con le sue sotto-categorie
-    // indentate sotto), così anche a lista filtrata resta chiaro il rapporto padre/figlio.
-    function renderTxCategorySuggestions(txId) {
-        const input = document.getElementById(`tx-cat-search-${txId}`);
-        const box = document.getElementById(`tx-cat-suggest-${txId}`);
+    // ==========================================
+    // POPUP DI MODIFICA TRANSAZIONE
+    // ==========================================
+    // Un solo popup (id fissi, non uno per riga): la lista è di sola lettura, quindi non
+    // serve più un set di campi per transazione come prima del passaggio al popup.
+    function openTxEditModal(txId) {
+        const t = transactions.find(x => x.id === txId);
+        if (!t) return;
+        _txEditId = txId;
+        document.getElementById('txEditDesc').textContent = t.description || '(senza descrizione)';
+        const amountEl = document.getElementById('txEditAmount');
+        amountEl.textContent = fmtEUR(t.amount);
+        amountEl.className = 'tx-amount mono ' + (t.amount < 0 ? 'pts-neg' : 'pts-pos');
+        document.getElementById('txEditDate').textContent = formatDateIt(t.date) + (t.type ? ' · ' + t.type : '');
+        // La spunta viene per prima, prima ancora di guardare la categoria: decide se quello
+        // che si sta per fare imparerà o resterà isolato su questa sola transazione.
+        document.getElementById('txEditOnlyThis').checked = _onlyThisTxIds.has(txId);
+        const currentCategory = categories.find(c => c.id === (getTxCategoryIds(txId)[0] || ''));
+        document.getElementById('txEditCatSearch').value = currentCategory ? categoryLabel(currentCategory) : '';
+        const spenderOptions = ['<option value="">— Chi ha speso —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.spender_person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+        const personOptions = ['<option value="">— Per chi —</option>', ...people.map(p => `<option value="${p.id}" ${p.id === t.person_id ? 'selected' : ''}>${p.name}</option>`)].join('');
+        document.getElementById('txEditSpender').innerHTML = spenderOptions;
+        document.getElementById('txEditPerson').innerHTML = personOptions;
+        document.getElementById('txEditModal').classList.add('active');
+    }
+
+    function closeTxEditModal() {
+        document.getElementById('txEditModal').classList.remove('active');
+        _txEditId = null;
+    }
+
+    // Stesso autocomplete di prima (raggruppato per categoria principale con le sotto-categorie
+    // indentate sotto), ma su campi fissi del popup invece che uno per riga.
+    function renderTxEditCategorySuggestions() {
+        const input = document.getElementById('txEditCatSearch');
+        const box = document.getElementById('txEditCatSuggest');
         if (!input || !box) return;
         const query = (input.value || '').trim().toLowerCase();
-        const rows = [`<div onmousedown="selectTxCategory('${txId}', '')" style="padding:.5rem .6rem;cursor:pointer;color:var(--muted);font-size:.85rem;border-bottom:1px solid var(--border);">— Nessuna categoria —</div>`];
+        const rows = [`<div onmousedown="selectTxEditCategory('')" style="padding:.5rem .6rem;cursor:pointer;color:var(--muted);font-size:.85rem;border-bottom:1px solid var(--border);">— Nessuna categoria —</div>`];
         topCategories().forEach(c => {
             const kids = childCategories(c.id);
             const topMatches = !query || c.name.toLowerCase().includes(query);
             const matchingKids = kids.filter(k => topMatches || k.name.toLowerCase().includes(query));
             if (!topMatches && !matchingKids.length) return;
-            rows.push(`<div onmousedown="selectTxCategory('${txId}', '${c.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;cursor:pointer;font-weight:600;">
+            rows.push(`<div onmousedown="selectTxEditCategory('${c.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;cursor:pointer;font-weight:600;">
                 <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(c)}
             </div>`);
             matchingKids.forEach(k => {
-                rows.push(`<div onmousedown="selectTxCategory('${txId}', '${k.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem .4rem 1.8rem;cursor:pointer;font-size:.9rem;">
+                rows.push(`<div onmousedown="selectTxEditCategory('${k.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem .4rem 1.8rem;cursor:pointer;font-size:.9rem;">
                     <span class="mgmt-group-dot" style="background:${c.color || '#999'}"></span>${categoryLabel(k)}
                 </div>`);
             });
@@ -2885,20 +2959,27 @@
 
     // Ritardo prima di nascondere: onmousedown sulla riga scelta scatta comunque prima del
     // blur, ma il timeout resta come rete di sicurezza per il click fuori dal campo.
-    function hideTxCategorySuggestions(txId) {
+    function hideTxEditCategorySuggestions() {
         setTimeout(() => {
-            const box = document.getElementById(`tx-cat-suggest-${txId}`);
+            const box = document.getElementById('txEditCatSuggest');
             if (box) box.style.display = 'none';
         }, 150);
     }
 
-    function selectTxCategory(txId, categoryId) {
-        const input = document.getElementById(`tx-cat-search-${txId}`);
-        const box = document.getElementById(`tx-cat-suggest-${txId}`);
+    function selectTxEditCategory(categoryId) {
+        const input = document.getElementById('txEditCatSearch');
+        const box = document.getElementById('txEditCatSuggest');
         const c = categoryId ? categories.find(x => x.id === categoryId) : null;
         if (input) input.value = c ? categoryLabel(c) : '';
         if (box) box.style.display = 'none';
-        setTxCategory(txId, categoryId);
+        if (_txEditId) setTxCategory(_txEditId, categoryId);
+    }
+
+    // "+ Nuova categoria" dal popup: riusa categoryModal come "+" faceva già dalla riga,
+    // il popup di modifica resta aperto sotto e closeCategoryModal() lo aggiorna al ritorno.
+    function openCategoryModalFromTxEdit() {
+        _categoryQuickAddTxId = _txEditId;
+        openCategoryModal(null);
     }
 
     // Ogni transazione ha una sola categoria (o nessuna): assegnarne una nuova sostituisce
@@ -3021,6 +3102,7 @@
 
     function toggleOnlyThisTx(txId, checked) {
         if (checked) _onlyThisTxIds.add(txId); else _onlyThisTxIds.delete(txId);
+        renderTransactionsList(); // aggiorna il badge "🔒 isolata" sulla riga di sola lettura
     }
 
     function openRawDataModal(txId) {
@@ -3168,6 +3250,7 @@
         if (error) { alert('Errore: ' + error.message); return; }
         const t = transactions.find(x => x.id === txId);
         if (t) { t.person_id = personId || null; t.person_source = 'manual'; }
+        renderTransactionsList(); // la riga in lista è di sola lettura: va ridisegnata per mostrare la persona nuova
         showToast('✅ Persona aggiornata');
         if (_onlyThisTxIds.has(txId)) return; // modifica isolata: non imparare né propagare
         // La persona appena assegnata vale anche per il merchant (transazioni future comprese)
@@ -3184,6 +3267,7 @@
         if (error) { alert('Errore: ' + error.message); return; }
         const t = transactions.find(x => x.id === txId);
         if (t) t.spender_person_id = spenderPersonId || null;
+        renderTransactionsList(); // la riga in lista è di sola lettura: va ridisegnata per mostrare "chi ha speso" nuovo
         showToast('✅ "Chi ha speso" aggiornato');
     }
 
