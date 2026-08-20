@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.31</title>
+    <title>Memorandum v1.0.32</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -139,13 +139,14 @@
 
         .memo-card {
             border: 2px solid var(--border);
-            background: var(--card-bg);
+            background: #E6F4FE; /* azzurina: sfondo di default della scheda */
             transition: all 0.2s;
             cursor: pointer;
             position: relative;
             overflow: hidden;
             display: flex; flex-direction: column;
         }
+        .memo-card.kind-diario { background: #FEF9E0; } /* giallino: solo i diari */
         .memo-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); border-color: #d1d5db; }
         .memo-card.pinned { border-color: var(--warning); }
 
@@ -509,8 +510,12 @@
             border-radius: 3px; text-transform: uppercase; letter-spacing: 0.4px;
             flex-shrink: 0; color: white;
         }
+        .kind-badge.nota   { background: var(--accent); }
         .kind-badge.lista  { background: var(--success); }
         .kind-badge.diario { background: var(--secondary); }
+
+        /* riga del tipo, sotto il titolo della scheda */
+        .memo-card-kind-row { margin-bottom: 0.5rem; }
 
         /* barra di avanzamento della lista, in fondo alla scheda */
         .list-progress {
@@ -1233,8 +1238,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.31';
-var BUILD_TIME  = '2026-08-16T20:00:00Z';
+var APP_VERSION = 'v1.0.32';
+var BUILD_TIME  = '2026-08-20T21:49:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1659,9 +1664,7 @@ function renderCardTile(c) {
 
     // il tipo si vede sulla scheda: una lista e un diario si aprono
     // diversamente da una nota, e deve saperlo prima di toccarli
-    const badge = (c.kind !== 'nota'
-            ? `<span class="kind-badge ${c.kind}">${KINDS[c.kind].icon} ${KINDS[c.kind].label}</span>`
-            : '')
+    const badge = `<span class="kind-badge ${c.kind}">${KINDS[c.kind].icon} ${KINDS[c.kind].label}</span>`
         + (c.riservato ? '<span class="kind-badge riservato">🙈 Riservato</span>' : '');
 
     let extra = '';
@@ -1678,14 +1681,14 @@ function renderCardTile(c) {
         meta = `<span class="memo-card-img-count">📊 ${c.entriesCount}${last}</span>` + imgBadge;
     }
 
-    return `<div class="memo-card${c.pinned?' pinned':''}" onclick="openCard('${c.id}')">
+    return `<div class="memo-card kind-${c.kind}${c.pinned?' pinned':''}" onclick="openCard('${c.id}')">
         <div class="memo-card-color-bar" style="background:${barColor}"></div>
         <div class="memo-card-body">
             <div class="memo-card-header">
                 <div class="memo-card-title">${escHtml(c.title) || '<em style="opacity:0.4">Senza titolo</em>'}</div>
-                ${badge}
                 ${pin}
             </div>
+            <div class="memo-card-kind-row">${badge}</div>
             <div class="memo-card-excerpt">${escHtml(excerpt)}</div>
             ${extra}
             ${cats ? `<div class="cat-chips">${cats}</div>` : ''}
