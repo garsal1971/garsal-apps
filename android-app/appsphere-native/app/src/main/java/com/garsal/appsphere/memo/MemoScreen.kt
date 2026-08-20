@@ -132,6 +132,7 @@ fun MemoScreen(
                 vista = vista,
                 onIndietro = { vm.chiudiVista() },
                 onModifica = apriEditor,
+                onFissa = { vm.cambiaFissata(inVista) },
                 onSpunta = vm::spuntaVoce,
                 onAggiungi = vm::aggiungiVoce,
                 onElimina = vm::eliminaVoce,
@@ -141,6 +142,7 @@ fun MemoScreen(
                 vista = vista,
                 onIndietro = { vm.chiudiVista() },
                 onModifica = apriEditor,
+                onFissa = { vm.cambiaFissata(inVista) },
                 onSalvaRegistrazione = { id, titolo, data, nota, misure, onFatto ->
                     vm.salvaRegistrazione(id, titolo, data, nota, misure, onFatto)
                 },
@@ -292,7 +294,7 @@ fun MemoScreen(
 }
 
 /**
- * Le quattro Tab: una per tipo più 📌 Fissa.
+ * Le quattro Tab: 📌 Fissa per prima, poi una per tipo.
  *
  * Non esiste una vista che mescola i tipi — ogni Tab ha la sua ricerca, il suo
  * ordinamento e il suo filtro categoria — e **📌 Fissa è l'unica che li
@@ -301,12 +303,18 @@ fun MemoScreen(
  */
 @Composable
 private fun Tab(stato: MemoState, vm: MemoViewModel) {
-    val etichette = TipoScheda.entries.map { "${it.icona} ${it.plurale}" } + "📌 Fissa"
+    val etichette = listOf("📌 Fissa") + TipoScheda.entries.map { "${it.icona} ${it.plurale}" }
     val larghezza = larghezzaPulsanti(etichette)
     RigaScorrevole(
         Arrangement.spacedBy(6.dp),
         Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
+        Etichetta(
+            testo = "📌 Fissa",
+            attiva = stato.tipo == null,
+            larghezza = larghezza,
+            onTocca = { vm.apriTab(null) },
+        )
         TipoScheda.entries.forEach { tipo ->
             Etichetta(
                 testo = "${tipo.icona} ${tipo.plurale}",
@@ -315,12 +323,6 @@ private fun Tab(stato: MemoState, vm: MemoViewModel) {
                 onTocca = { vm.apriTab(tipo) },
             )
         }
-        Etichetta(
-            testo = "📌 Fissa",
-            attiva = stato.tipo == null,
-            larghezza = larghezza,
-            onTocca = { vm.apriTab(null) },
-        )
     }
 }
 

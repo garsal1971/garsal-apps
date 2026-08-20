@@ -54,6 +54,7 @@ fun MemoListaView(
     vista: VistaScheda,
     onIndietro: () -> Unit,
     onModifica: () -> Unit,
+    onFissa: () -> Unit,
     onSpunta: (MmVoce, Boolean) -> Unit,
     onAggiungi: (String) -> Unit,
     onElimina: (MmVoce) -> Unit,
@@ -71,6 +72,14 @@ fun MemoListaView(
                 titolo = scheda.titolo.ifBlank { "Lista senza titolo" },
                 onIndietro = onIndietro,
                 azioni = {
+                    Text(
+                        text = if (scheda.fissata) "📌" else "📍",
+                        fontSize = 18.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onFissa)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
                     Text(
                         text = "✏️",
                         fontSize = 18.sp,

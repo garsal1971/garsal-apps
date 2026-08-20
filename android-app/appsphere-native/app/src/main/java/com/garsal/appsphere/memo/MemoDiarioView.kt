@@ -58,6 +58,7 @@ fun MemoDiarioView(
     vista: VistaScheda,
     onIndietro: () -> Unit,
     onModifica: () -> Unit,
+    onFissa: () -> Unit,
     onSalvaRegistrazione: (
         String?, String, String, String, Map<String, JsonPrimitive>, () -> Unit,
     ) -> Unit,
@@ -98,6 +99,14 @@ fun MemoDiarioView(
                 onIndietro = onIndietro,
                 azioni = {
                     if (scheda.riservato) Text("🙈", fontSize = 16.sp)
+                    Text(
+                        text = if (scheda.fissata) "📌" else "📍",
+                        fontSize = 18.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onFissa)
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
                     Text(
                         text = "✏️",
                         fontSize = 18.sp,
