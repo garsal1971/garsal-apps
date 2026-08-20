@@ -15,6 +15,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -338,4 +339,43 @@ object PesoRepository {
         db.from("ps_objectives").delete { filter { eq("id", id) } }
         Unit
     }
+
+    // ── Sincronizzazione con la bilancia (Health Connect) ────────────────
+
+    /**
+     * La riga da scrivere per una pesata letta da Health Connect —
+     * `processWeights()` nel web: data e ora locali dell'istante, **peso
+     * troncato a un decimale** (non arrotondato — `Math.floor`, come là) e il
+     * target interpolato sull'obiettivo che si sta guardando in quel momento.
+     */
+    fun rigaPuntoSalute(punto: PuntoSalute, obiettivo: Obiettivo?): JsonObject {
+        val locale = Instant.ofEpochMilli(punto.timestamp).atZone(ZoneId.systemDefault())
+        val giorno = punto.giorno()
+        val ora = "%02d:%02d".format(locale.hour, locale.minute)
+        val peso = Math.floor(punto.pesoKg * 10.0) / 10.0
+        return buildJsonObject {
+            put("date", giorno)
+            put("time", ora)
+            put("timestamp", punto.timestamp)
+            put("weight", peso)
+            put("target_weight", obiettivo?.let { PesoRegole.targetInterpolato(it.traguardi, giorno) })
+        }
+    }
+
+    /**
+     * Scrive le pesate sincronizzate e toglie le pesate manuali che
+     * diventano ridondanti — `processWeights()`: prima elimina, poi
+     * scrive, così una pesata manuale del giorno non resta a fare da
+     * doppione quando arriva quella vera dalla bilancia.
+     */
+    suspend fun sincronizzaPunti(righe: List<JsonObject>, manualiDaRimuovere: List<Long>) =
+        withContext(Dispatchers.IO) {
+            if (manualiDaRimuovere.isNotEmpty()) {
+                db.from("ps_weight_tracking").delete { filter { isIn("timestamp", manualiDaRimuovere) } }
+            }
+            if (righe.isNotEmpty()) {
+                db.from("ps_weight_tracking").upsert(righe) { onConflict = "timestamp" }
+            }
+            Unit
+        }
 }

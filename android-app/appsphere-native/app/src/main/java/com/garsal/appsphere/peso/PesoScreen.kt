@@ -1,6 +1,7 @@
 package com.garsal.appsphere.peso
 
 import android.app.TimePickerDialog
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +35,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +51,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
@@ -69,12 +76,13 @@ private enum class Vista(val etichetta: String) {
  *
  * ⚠️ Gemella di `weight-quest.html`, sulle stesse tabelle `ps_*`. Qui ci sono
  * le cose che si fanno col telefono in mano: **segnare la pesata**, guardare
- * **com'è andata** giorno per giorno, vedere **la curva** e, da «✏️ Gestisci»
- * ([GestioneObiettivoScreen]), creare/modificare/chiudere/cancellare un
- * obiettivo. Restano sulla pagina web, che è dove si fa da seduti: le
- * statistiche, «genera dieta», la sincronizzazione con Google Fit e la
- * bilancia, e il gratta e vinci dei premi (che vive in `localStorage` ed è
- * per dispositivo, quindi non avrebbe niente da mostrare qui).
+ * **com'è andata** giorno per giorno, vedere **la curva**, da «✏️ Gestisci»
+ * ([GestioneObiettivoScreen]) creare/modificare/chiudere/cancellare un
+ * obiettivo e, da «⚖️ Salute», aprire la bilancia Renpho e — al ritorno —
+ * sincronizzare le pesate lette da Health Connect ([SaluteRepository]). Restano sulla
+ * pagina web, che è dove si fa da seduti: le statistiche, «genera dieta» e il
+ * gratta e vinci dei premi, che vive in `localStorage` ed è per dispositivo,
+ * quindi non avrebbe niente da mostrare qui.
  *
  * Le regole di calcolo non sono riscritte a occhio: stanno in [PesoRegole],
  * ricalcate una per una dalla pagina.
@@ -92,6 +100,39 @@ fun PesoScreen(
     // intero finché è aperta, e non è un dialogo — i campi sono troppi.
     var gestioneAperta by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
+
+    // Il permesso Health Connect si chiede col contratto ufficiale, come nel
+    // bridge Kotlin dell'APK WebView: è l'unico modo per cui HC sblocchi le
+    // letture successive. `sincronizzaSalute` torna a chiamarsi da sola dopo
+    // la concessione, invece di lasciare l'utente a ripremere il pulsante.
+    val richiediPermessiSalute = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract(),
+    ) { vm.sincronizzaSalute(context) }
+
+    LaunchedEffect(stato.permessiSaluteRichiesti) {
+        if (stato.permessiSaluteRichiesti) {
+            vm.permessiSaluteMostrati()
+            richiediPermessiSalute.launch(PERMESSI_SALUTE)
+        }
+    }
+
+    // «Tornato da Renpho»: lo stesso `renphoLaunched` del bridge Kotlin
+    // dell'APK WebView. Senza questa guardia ogni ritorno in primo piano
+    // dell'app — per qualunque motivo — lancerebbe una sincronizzazione.
+    var tornatoDaRenpho by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val osservatore = LifecycleEventObserver { _, evento ->
+            if (evento == Lifecycle.Event.ON_RESUME && tornatoDaRenpho) {
+                tornatoDaRenpho = false
+                vm.sincronizzaSalute(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(osservatore)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(osservatore) }
+    }
+
     if (gestioneAperta) {
         GestioneObiettivoScreen(
             stato = stato,
@@ -107,6 +148,18 @@ fun PesoScreen(
                 titolo = "Ti pisasti?",
                 onIndietro = onIndietro,
                 azioni = {
+                    Text(
+                        text = "⚖️ Salute",
+                        color = Palette.light,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                tornatoDaRenpho = true
+                                SaluteRepository.apriRenpho(context)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
                     Text(
                         text = "${stato.punteggio} pt",
                         color = Palette.light,

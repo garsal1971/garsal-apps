@@ -4,6 +4,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Health Connect — lettura peso, per la sincronizzazione con la bilancia. -->
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+
+    <!-- Necessario per rilevare Health Connect e per aprire Renpho — stesse tre righe dell'APK WebView. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />       <!-- HC da Play Store (Android 9-13) -->
+        <package android:name="com.android.healthconnect.controller" />     <!-- HC integrato Android 14+ -->
+        <package android:name="com.renpho.health" />                        <!-- Renpho — aperta da «⚖️ Salute» -->
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -48,7 +58,33 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="garsalnative" android:host="oauth" />
             </intent-filter>
+
+            <!-- Necessario per apparire nella lista app di Health Connect — come l'APK WebView. -->
+            <intent-filter>
+                <action android:name="androidx.health.connect.client.SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
         </activity>
+
+        <!--
+            activity-alias richiesto da Android 14+ per apparire in Health Connect.
+            HC usa VIEW_PERMISSION_USAGE + HEALTH_PERMISSIONS per trovare le app compatibili.
+            Senza questo, AppSphere nativa non compare mai nella lista "Le tue app per la salute".
+        -->
+        <activity-alias
+            android:name=".ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- URL privacy policy richiesto da Health Connect -->
+        <meta-data
+            android:name="health_privacy_policy_url"
+            android:value="https://garsal.netlify.app/" />
 
         <!--
             Serve alla fotocamera per le foto di Memo: lo scatto va scritto in

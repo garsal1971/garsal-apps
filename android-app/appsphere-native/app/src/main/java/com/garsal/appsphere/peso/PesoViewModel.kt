@@ -1,5 +1,6 @@
 package com.garsal.appsphere.peso
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,6 +19,8 @@ data class PesoState(
     val caricamento: Boolean = true,
     val errore: String? = null,
     val messaggio: String? = null,
+    /** Un tocco: Health Connect ha rifiutato la lettura, va richiesto il permesso. */
+    val permessiSaluteRichiesti: Boolean = false,
 ) {
     val obiettivo: Obiettivo?
         get() = obiettivi.firstOrNull { it.id == obiettivoId }
@@ -315,6 +318,62 @@ class PesoViewModel : ViewModel() {
                 Log.w(TAG, "eliminazione obiettivo non riuscita", e)
                 _state.value = _state.value.copy(messaggio = "Non eliminato: ${e.message ?: "connessione assente"}")
             }
+        }
+    }
+
+    // ── Sincronizzazione con la bilancia (Health Connect) ──────────────────
+
+    /**
+     * Legge le pesate da Health Connect e le scrive — `syncFitNative()` +
+     * `processWeights()` nel web. Se il permesso non è ancora concesso lo
+     * dice con [PesoState.permessiSaluteRichiesti]: tocca alla schermata
+     * aprire la richiesta di sistema e richiamare questa funzione dopo la
+     * concessione, esattamente come il `retry` del bridge Kotlin nel web.
+     */
+    fun sincronizzaSalute(context: Context) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(messaggio = "🏃 Sincronizzazione con Salute...")
+            when (val esito = SaluteRepository.leggiPeso(context)) {
+                is EsitoSalute.PermessiRichiesti ->
+                    _state.value = _state.value.copy(messaggio = null, permessiSaluteRichiesti = true)
+                is EsitoSalute.Errore ->
+                    _state.value = _state.value.copy(messaggio = "Salute: ${esito.messaggio}")
+                is EsitoSalute.Ok -> salvaPuntiSalute(esito.punti)
+            }
+        }
+    }
+
+    fun permessiSaluteMostrati() {
+        _state.value = _state.value.copy(permessiSaluteRichiesti = false)
+    }
+
+    private suspend fun salvaPuntiSalute(punti: List<PuntoSalute>) {
+        if (punti.isEmpty()) {
+            _state.value = _state.value.copy(
+                messaggio = "Nessuna pesata trovata in Health Connect (ultimi 90 giorni)."
+            )
+            return
+        }
+        // Health Connect non dovrebbe mai duplicare un istante, ma il web si
+        // guarda comunque dai doppioni sullo stesso timestamp.
+        val unici = punti.distinctBy { it.timestamp }.sortedBy { it.timestamp }
+        val obiettivo = _state.value.obiettivo
+        val righe = unici.map { PesoRepository.rigaPuntoSalute(it, obiettivo) }
+
+        // Le pesate manuali degli stessi giorni diventano ridondanti appena
+        // arriva il dato vero dalla bilancia — si tolgono prima di scrivere.
+        val giorniSincronizzati = unici.mapTo(mutableSetOf()) { it.giorno() }
+        val manualiDaRimuovere = _state.value.pesate
+            .filter { it.manuale && it.giorno in giorniSincronizzati }
+            .map { it.timestamp }
+
+        try {
+            PesoRepository.sincronizzaPunti(righe, manualiDaRimuovere)
+            _state.value = _state.value.copy(messaggio = "✅ ${unici.size} pesate sincronizzate da Salute")
+            carica()
+        } catch (e: Exception) {
+            Log.w(TAG, "sincronizzazione Salute non riuscita", e)
+            _state.value = _state.value.copy(messaggio = "Non sincronizzato: ${e.message ?: "connessione assente"}")
         }
     }
 

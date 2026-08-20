@@ -929,23 +929,38 @@ all'ingrandimento si sfalda da sé, con le icone spinte a capo per prime — cio
 servono per toccare), e le palline della griglia hanno un diametro che segue `fontScale` invece
 dei 32 px fissi del CSS, altrimenti il numero dentro verrebbe tagliato.
 
-### ⚠️ «Ti pisasti?» nativo: pesata e obiettivi sì, il resto no
+### ⚠️ «Ti pisasti?» nativo: pesata, obiettivi e bilancia sì, il resto no
 
 `peso/` porta in nativo **le cose che si fanno col telefono in mano**:
 segnare la pesata (il pulsante ⚖️, che scrive in `ps_weight_tracking`), la **Tabella**
-giorno per giorno, il **Grafico** dell'andamento e, da **✏️ Gestisci**
-(`GestioneObiettivoScreen`), creare/modificare/chiudere/cancellare un obiettivo — lo stesso form di
+giorno per giorno, il **Grafico** dell'andamento, da **✏️ Gestisci**
+(`GestioneObiettivoScreen`) creare/modificare/chiudere/cancellare un obiettivo — lo stesso form di
 *🎯 Gestione Obiettivo* nel web, campo per campo: nome, tipo (perdere/mantenere), punti
 bonus/malus giornalieri e finali, milestone progressive (o le tre voci di «mantenere»: data
-inizio, settimane, peso). La scheda *Oggi* apre con la domanda che dà il nome all'app —
-*oggi ti sei pesato?* — e sotto i **sei riquadri della pagina**, nello stesso ordine: Minimo oggi,
-Target oggi, Mancano al target, Kg alla fine, Punteggio, Punti oggi.
+inizio, settimane, peso) — e da **⚖️ Salute** aprire la bilancia Renpho e sincronizzare le pesate
+lette da Health Connect (`Salute.kt`). La scheda *Oggi* apre con la domanda che dà il nome
+all'app — *oggi ti sei pesato?* — e sotto i **sei riquadri della pagina**, nello stesso ordine:
+Minimo oggi, Target oggi, Mancano al target, Kg alla fine, Punteggio, Punti oggi.
+
+**«⚖️ Salute»** ricalca `openRenpho()` + `onAndroidResume()` + `syncFitNative()` +
+`processWeights()` del web, ma **senza passare da un `JavascriptInterface`**: l'app nativa chiama
+l'SDK Health Connect direttamente da una coroutine, quindi niente `ExecutorService` con timeout
+da 25 s — quella complicazione nel bridge Kotlin dell'APK WebView esiste solo perché lì la
+chiamata parte da un thread JS sincrono. Il pulsante apre Renpho (`com.renpho.health`, o lo Store
+se non è installata) e arma un flag locale; al **ritorno in primo piano** (`DisposableEffect` +
+`Lifecycle.Event.ON_RESUME`) — e solo se il flag è armato, altrimenti ogni ritorno in foreground
+per qualunque motivo lancerebbe una sync — legge Health Connect (90 giorni + 25 ore di margine,
+stessa finestra del web) e scrive: **peso troncato a un decimale** (`Math.floor`, non
+arrotondato), target interpolato sull'obiettivo che si sta guardando, e le pesate **manuali**
+degli stessi giorni tolte prima di scrivere quelle vere — altrimenti resterebbero a fare da
+doppione. Il permesso si chiede col contratto ufficiale `PermissionController` (l'unico modo per
+cui Health Connect sblocchi le letture successive, come nel web) e, quando manca, la
+sincronizzazione si rilancia da sola dopo la concessione.
 
 ⚠️ **Non replicato**: la barra di stelline con `⭐ Punti Totali Traguardi Intermedi` e il premio
 cibo che ci sta dietro. Quella è un dato di `localStorage`, per dispositivo, e da qui non avrebbe
 niente da mostrare — la stessa ragione per cui non ci sta nemmeno il gratta e vinci. **Restano su
-`weight-quest.html`**: le statistiche, *genera dieta* e la sincronizzazione con Google Fit e con
-la bilancia.
+`weight-quest.html`**: le statistiche e *genera dieta*.
 
 Le due regole di chiusura di `closeObjective('success')` sono ricalcate in
 `PesoViewModel.preparaChiusura()`, non riscritte a occhio — se cambia una delle due condizioni nel
@@ -1325,9 +1340,11 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Ti pisasti?** (`weight-quest.html`) — target interpolato fra i traguardi, giorni senza pesata
   ricostruiti e contati lo stesso, confronto peso/target **a un decimale**, `target_weight`
   congelato nella riga; le due condizioni di `closeObjective('success')` (minimo di oggi / massimo
-  del periodo sotto il peso finale) e il punteggio di chiusura. Il nativo porta pesata, tabella,
-  grafico e Gestione Obiettivo: statistiche, dieta, sync e il gratta e vinci dei premi restano di
-  là. Dettagli nella sezione qui sopra.
+  del periodo sotto il peso finale) e il punteggio di chiusura; la sincronizzazione con Health
+  Connect e Renpho (finestra di 90 giorni, peso troncato a un decimale, pesate manuali tolte
+  quando arriva il dato vero). Il nativo porta pesata, tabella, grafico, Gestione Obiettivo e
+  Salute: statistiche, dieta e il gratta e vinci dei premi restano di là. Dettagli nella sezione
+  qui sopra.
 - **Memo** — note, liste e diari esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
   converte in marcatori per modificarlo e lo riconverte salvando (`MemoHtml`), quindi ogni voce
   della barra del web deve avere il suo marcatore di qua. Le altre regole da tenere allineate:
