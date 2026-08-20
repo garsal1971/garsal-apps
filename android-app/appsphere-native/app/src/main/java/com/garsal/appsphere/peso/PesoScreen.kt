@@ -181,7 +181,7 @@ fun PesoScreen(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("🔄 Sincronizza (Renpho)") },
+                        text = { Text("🔄 Sincronizzazione") },
                         onClick = {
                             menuPesatiAperto = false
                             tornatoDaRenpho = true

@@ -44,10 +44,21 @@ fun VistaGrafico(stato: PesoState) {
     val righe = stato.righe.asReversed() // dalla più vecchia alla più recente
     val misuratore = rememberTextMeasurer()
 
-    val punti = righe.mapNotNull { riga ->
+    val tuttiIPunti = righe.mapNotNull { riga ->
         val giorno = PesoRegole.giornoDa(riga.giorno) ?: return@mapNotNull null
         val peso = riga.minimo ?: return@mapNotNull null
         Triple(giorno, peso, riga.target)
+    }
+
+    // Col mese di respiro che il caricamento si tiene prima dell'inizio
+    // dell'obiettivo (`daQuando()`, per la prima interpolazione), le pesate
+    // di prima affollerebbero il grafico senza dire niente sull'obiettivo in
+    // corso: si parte dal suo inizio, la tabella resta quella con tutto.
+    val inizioObiettivo = stato.obiettivo?.let { PesoRegole.giornoDa(it.inizio) }
+    val punti = if (inizioObiettivo != null) {
+        tuttiIPunti.filter { !it.first.isBefore(inizioObiettivo) }
+    } else {
+        tuttiIPunti
     }
 
     if (punti.size < 2) {
