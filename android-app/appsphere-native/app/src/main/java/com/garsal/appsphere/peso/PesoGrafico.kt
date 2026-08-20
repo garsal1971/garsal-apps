@@ -47,7 +47,7 @@ fun VistaGrafico(stato: PesoState) {
     val tuttiIPunti = righe.mapNotNull { riga ->
         val giorno = PesoRegole.giornoDa(riga.giorno) ?: return@mapNotNull null
         val peso = riga.minimo ?: return@mapNotNull null
-        Triple(giorno, peso, riga.target)
+        giorno to peso
     }
 
     // Col mese di respiro che il caricamento si tiene prima dell'inizio
@@ -75,7 +75,29 @@ fun VistaGrafico(stato: PesoState) {
     val ultimo = punti.last().first
     val giorniTotali = (ultimo.toEpochDay() - primo.toEpochDay()).coerceAtLeast(1L).toFloat()
 
-    val valori = punti.map { it.second } + punti.mapNotNull { it.third }
+    // La spezzata del target è quella dei traguardi, non i valori
+    // interpolati giorno per giorno — quelli restano nella tabella, dove
+    // servono al punteggio. Fra due traguardi la retta è quella e basta:
+    // ricostruirla campionandola un giorno alla volta la farebbe sembrare
+    // seghettata per via dell'arrotondamento a due decimali di ogni giorno.
+    // Agli estremi della finestra visibile, se non cadono già su un
+    // traguardo, un solo valore interpolato completa la linea fino a lì.
+    val traguardi = stato.obiettivo?.traguardi.orEmpty()
+    val target = buildList {
+        traguardi.forEach { t ->
+            val giorno = PesoRegole.giornoDa(t.giorno) ?: return@forEach
+            if (!giorno.isBefore(primo) && !giorno.isAfter(ultimo)) add(giorno to t.peso)
+        }
+        if (none { it.first == primo }) {
+            PesoRegole.targetInterpolato(traguardi, primo.toString())?.let { add(primo to it) }
+        }
+        if (none { it.first == ultimo }) {
+            PesoRegole.targetInterpolato(traguardi, ultimo.toString())?.let { add(ultimo to it) }
+        }
+        sortBy { it.first }
+    }
+
+    val valori = punti.map { it.second } + target.map { it.second }
     val minimo = valori.min()
     val massimo = valori.max()
     // Un filo di aria sopra e sotto: con la curva appiccicata al bordo non si
@@ -128,13 +150,13 @@ fun VistaGrafico(stato: PesoState) {
                 )
             }
 
-            // La curva del target, tratteggiata: è una promessa, non un fatto.
-            val conTarget = punti.filter { it.third != null }
-            if (conTarget.size >= 2) {
+            // La curva del target, tratteggiata: è una promessa, non un fatto —
+            // e dritta fra un traguardo e l'altro, perché è quella dei traguardi.
+            if (target.size >= 2) {
                 val strada = Path().apply {
-                    conTarget.forEachIndexed { indice, (giorno, _, target) ->
+                    target.forEachIndexed { indice, (giorno, peso) ->
                         val px = x(giorno)
-                        val py = y(target!!)
+                        val py = y(peso)
                         if (indice == 0) moveTo(px, py) else lineTo(px, py)
                     }
                 }
@@ -150,7 +172,7 @@ fun VistaGrafico(stato: PesoState) {
 
             // La curva del peso.
             val strada = Path().apply {
-                punti.forEachIndexed { indice, (giorno, peso, _) ->
+                punti.forEachIndexed { indice, (giorno, peso) ->
                     val px = x(giorno)
                     val py = y(peso)
                     if (indice == 0) moveTo(px, py) else lineTo(px, py)
@@ -159,7 +181,7 @@ fun VistaGrafico(stato: PesoState) {
             drawPath(path = strada, color = Palette.primary, style = Stroke(width = 4f))
 
             // L'ultima pesata segnata da un pallino: è quella che si cerca.
-            val (ultimoGiorno, ultimoPeso, _) = punti.last()
+            val (ultimoGiorno, ultimoPeso) = punti.last()
             drawCircle(
                 color = Palette.primary,
                 radius = 7f,
