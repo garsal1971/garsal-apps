@@ -1000,7 +1000,11 @@ Due differenze di forma. La **tabella non è una tabella**: sei colonne coi cara
 grandi si tagliano o vanno a capo ognuna per conto suo, quindi ogni giornata è una scheda con la
 data e il peso in cima. E il **grafico è disegnato a mano su un `Canvas`** invece che con Chart.js:
 restano le due curve che si guardano davvero — peso e target — perché un grafico fitto di etichette
-su uno schermo di telefono è illeggibile prima ancora di essere utile.
+su uno schermo di telefono è illeggibile prima ancora di essere utile. Comincia dall'inizio
+dell'obiettivo, non dal mese di respiro che il caricamento tiene prima per la prima interpolazione
+(`daQuando()`), e la spezzata del target è quella dei **traguardi presi diretti**, non i valori
+interpolati giorno per giorno che restano nella tabella: fra un traguardo e l'altro serve la retta
+vera, non tanti segmenti arrotondati a due decimali che sembrano seghettati.
 
 `ps_weight_tracking` e `ps_objectives` non stanno in nessuna migration e si leggono come
 `JsonObject`, non come `data class` serializzate: è la stessa scelta di `ts_tasks` e per la stessa
