@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -40,12 +41,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.larghezzaPulsanti
 
 /** Il viola di Ta Firi? (`--challenge` nel CSS della pagina). */
 internal val Viola = Color(0xFF8E44AD)
@@ -268,6 +272,7 @@ private fun BannerCheckin(
     onFatto: (SfSfida) -> Unit,
     onNonFatto: (SfSfida) -> Unit,
 ) {
+    val larghezza = larghezzaPulsanti(listOf("✅ Fatto", "❌ Non fatto"))
     Column(
         Modifier
             .fillMaxWidth()
@@ -284,9 +289,9 @@ private fun BannerCheckin(
         sfide.forEach { sfida ->
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(sfida.title, color = Palette.dark)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pulsante("✅ Fatto", Palette.success) { onFatto(sfida) }
-                    Pulsante("❌ Non fatto", Palette.danger) { onNonFatto(sfida) }
+                RigaScorrevole(Arrangement.spacedBy(8.dp)) {
+                    Pulsante("✅ Fatto", Palette.success, larghezza) { onFatto(sfida) }
+                    Pulsante("❌ Non fatto", Palette.danger, larghezza) { onNonFatto(sfida) }
                 }
             }
         }
@@ -294,17 +299,20 @@ private fun BannerCheckin(
 }
 
 @Composable
-private fun Pulsante(testo: String, colore: Color, onClick: () -> Unit) {
+private fun Pulsante(testo: String, colore: Color, larghezza: Dp? = null, onClick: () -> Unit) {
     Text(
         text = testo,
         color = Palette.light,
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.bodyMedium,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
         modifier = Modifier
+            .then(larghezza?.let { Modifier.width(it) } ?: Modifier)
             .clip(RoundedCornerShape(10.dp))
             .background(colore)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = if (larghezza == null) 14.dp else 0.dp, vertical = 10.dp),
     )
 }
 
@@ -377,11 +385,12 @@ private fun SchedaSfida(
 
         GrigliaGiorni(sfida, stato, onTocca)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val larghezza = larghezzaPulsanti(listOf("✏️ Modifica", "🗑 Elimina"))
+        RigaScorrevole(Arrangement.spacedBy(8.dp)) {
             // La modifica c'è solo sulle sfide attive, come nel web: su una
             // conclusa cambierebbe i punti in palio di una gara già giocata.
-            if (sfida.attiva) Pulsante("✏️ Modifica", Viola, onModifica)
-            Pulsante("🗑 Elimina", Palette.danger, onElimina)
+            if (sfida.attiva) Pulsante("✏️ Modifica", Viola, larghezza, onModifica)
+            Pulsante("🗑 Elimina", Palette.danger, larghezza, onElimina)
         }
     }
 }

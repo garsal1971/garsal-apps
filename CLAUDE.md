@@ -773,6 +773,38 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
 | App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
+### ⚠️ Righe di pulsanti e liste di scelta: due componenti condivisi, non uno per schermata
+
+Due pattern per i caratteri di sistema grandi, nati in `tasks/Panoramica.kt` e `tasks/Gestione.kt`
+e poi duplicati a mano schermata per schermata, ora vivono **una sola volta** in
+`core/PulsantiTendine.kt` e si importano invece di reinventarli:
+
+- **`RigaScorrevole` + `larghezzaPulsanti(testi)` + `Pillola`** — una riga di pulsanti-azione
+  (Salva/Elimina, Fatto/Fallito, Modifica/Cancella…) **non va mai a capo**: scorre col dito su una
+  riga sola, e i pulsanti sono **larghi uguale**, misurati con `larghezzaPulsanti()` sullo stile e
+  l'ingrandimento correnti — mai una costante in `dp`. `larghezzaPulsanti` vuole **tutte** le
+  etichette che possono comparire in quella riga, non solo quelle mostrate in un dato momento,
+  altrimenti un pulsante condizionale farebbe traballare la larghezza degli altri. Dentro una
+  `RigaScorrevole` (che scorre, quindi ha larghezza indefinita) **non si può usare `weight(1f)`**
+  per pareggiare le larghezze — va bene solo in un `Row` normale, non scorrevole — serve sempre la
+  larghezza misurata.
+- **`Tendina` / `TendinaFacoltativa`** — una scelta singola fra poche opzioni fisse (tipo, stato,
+  priorità, categoria…) è **sempre una tendina**, mai una fila di pillole che va a capo o si
+  accorcia: un campo chiuso col valore scelto, che si apre in un `DropdownMenu` al tocco.
+  `TendinaFacoltativa` è la stessa cosa con una voce «tutte/nessuna» in cima, per i filtri e le
+  scelte facoltative. `Tendina` accetta anche `abilitata = false` per i campi che esistono ma non
+  si possono cambiare (es. il tipo di un task o di un obiettivo già esistente): mostra il valore
+  attuale fisso, invece di sparire o restare comunque cliccabile.
+
+Quello che **resta** una `FlowRow` che va a capo, di proposito: le **liste a scelta multipla**
+(giorni della settimana/mese, categorie di un task) — dove più valori possono essere scelti
+insieme, quindi non c'entra una tendina — passano comunque da `RigaScorrevole` con la larghezza
+misurata (restano selezionabili in multipla, semplicemente scorrono anziché andare a capo); le
+**barre di icone** (formattazione testo di Memo, tavolozza colori) restano `FlowRow`, perché sono
+toolbar e non scelte da ricordare; e la scelta di un'opzione `SCELTA` in un diario di Memo resta
+volutamente pillole invece di tendina — è un'eccezione documentata in `MemoRegistrazione.kt`,
+perché lì una tendina taglierebbe l'etichetta proprio dove la scelta si fa.
+
 ### ⚠️ Tasks nativo: le RPC valgono anche qui, e i workflow no
 
 `tasks/` porta in nativo **quattro schede**: *Panoramica*, *Gestione*, *Mese*, *Settimana* — le tre

@@ -41,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.Tendina
+import com.garsal.appsphere.core.TendinaFacoltativa
 import com.garsal.appsphere.core.coloreDaHex
 
 /** Blu di Memo, il `--primary` della pagina. */
@@ -308,47 +310,28 @@ private fun Tab(stato: MemoState, vm: MemoViewModel) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Filtri(stato: MemoState, vm: MemoViewModel) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // L'ordinamento: la tendina del web, qui una fila di pulsanti che va a
-        // capo da sé — coi caratteri grandi una riga sola si taglierebbe.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Ordinamento.entries.forEach { o ->
-                Etichetta(
-                    testo = o.etichetta,
-                    attiva = stato.ordinamento == o,
-                    onTocca = { vm.ordina(o) },
-                )
-            }
-        }
+        Tendina(
+            etichetta = "Ordina per",
+            scelto = stato.ordinamento.etichetta,
+            voci = Ordinamento.entries.map { it.name to it.etichetta },
+        ) { scelta -> vm.ordina(Ordinamento.valueOf(scelta)) }
 
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Etichetta(
-                testo = "Tutte (${stato.quanteInTab})",
-                attiva = stato.filtroCategoria == null,
-                onTocca = { vm.filtraCategoria(null) },
-            )
-            stato.categorie.forEach { cat ->
-                // I conteggi seguono la Tab aperta: con «Liste» attiva una
-                // categoria che ha solo note mostra 0, e sparisce dai filtri.
-                val quante = stato.quante(cat.id)
-                if (quante > 0) {
-                    Etichetta(
-                        testo = "${cat.etichetta} ($quante)",
-                        attiva = stato.filtroCategoria == cat.id,
-                        colore = coloreDaHex(cat.colore) ?: BluMemo,
-                        onTocca = {
-                            vm.filtraCategoria(if (stato.filtroCategoria == cat.id) null else cat.id)
-                        },
-                    )
-                }
-            }
-        }
+        // I conteggi seguono la Tab aperta: con «Liste» attiva una categoria
+        // che ha solo note mostra 0, e sparisce dai filtri.
+        TendinaFacoltativa(
+            etichetta = "Categoria",
+            tutte = "Tutte (${stato.quanteInTab})",
+            scelto = stato.filtroCategoria,
+            voci = stato.categorie
+                .filter { stato.quante(it.id) > 0 }
+                .map { it.id to "${it.etichetta} (${stato.quante(it.id)})" },
+        ) { scelta -> vm.filtraCategoria(scelta) }
     }
 }
 

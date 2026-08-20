@@ -3,22 +3,16 @@ package com.garsal.appsphere.tasks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -27,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,13 +31,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.Pillola
+import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.Tendina
+import com.garsal.appsphere.core.TendinaFacoltativa
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.core.larghezzaPulsanti
 
 /**
  * La scheda **Gestione**, cioè la pagina ✏️ di `tasks.html`: l'elenco completo
@@ -82,14 +79,14 @@ fun VistaGestione(
 ) {
     val trovati = stato.gestione(filtri)
     val azioni = AzioniGestione(onVedi, onModifica, onClona, onElimina, onRiattiva)
-    val larghezza = larghezzaAzioni()
+    val larghezza = larghezzaPulsanti(listOf(VEDI, MODIFICA, CLONA, CANCELLA, RIATTIVA))
 
     LazyColumn(
         contentPadding = PaddingValues(10.dp, 8.dp, 10.dp, 88.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item(key = "azioni-pagina") {
-            RigaOrizzontale(Arrangement.spacedBy(8.dp)) {
+            RigaScorrevole(Arrangement.spacedBy(8.dp)) {
                 Pillola("Nuovo task", Palette.primary) { onNuovo() }
             }
         }
@@ -308,7 +305,7 @@ private fun SchedaGestione(
             .clickable { azioni.vedi(task) }
             .padding(10.dp),
     ) {
-        RigaOrizzontale(Arrangement.spacedBy(6.dp)) {
+        RigaScorrevole(Arrangement.spacedBy(6.dp)) {
             Text(
                 text = "${TsTask.segnoTipo(task.tipo)}  ${dataOraItaliana(task.dataDiRiferimento)}",
                 fontWeight = FontWeight.SemiBold,
@@ -321,7 +318,7 @@ private fun SchedaGestione(
         }
 
         if (priorita != null || categorie.isNotEmpty()) {
-            RigaOrizzontale(Arrangement.spacedBy(6.dp), Modifier.padding(top = 6.dp)) {
+            RigaScorrevole(Arrangement.spacedBy(6.dp), Modifier.padding(top = 6.dp)) {
                 priorita?.let {
                     Targhetta("🎯 ${it.nome}", coloreDaHex(it.colore) ?: Palette.secondary)
                 }
@@ -332,7 +329,7 @@ private fun SchedaGestione(
             }
         }
 
-        RigaOrizzontale(Arrangement.Start, Modifier.padding(top = 6.dp, bottom = 8.dp)) {
+        RigaScorrevole(Arrangement.Start, Modifier.padding(top = 6.dp, bottom = 8.dp)) {
             Text(
                 text = task.titolo,
                 color = Palette.dark,
@@ -343,7 +340,7 @@ private fun SchedaGestione(
             )
         }
 
-        RigaOrizzontale(Arrangement.spacedBy(8.dp)) {
+        RigaScorrevole(Arrangement.spacedBy(8.dp)) {
             Pillola(VEDI, Palette.accent, larghezza) { azioni.vedi(task) }
             if (task.vivo) {
                 // I `workflow` non passano dal form: i loro step hanno
@@ -376,34 +373,7 @@ private fun coloreStato(stato: String): Color = when (stato) {
     else -> Palette.muted
 }
 
-/** Come in panoramica: i pulsanti sono larghi uguali, e la misura si misura. */
-@Composable
-private fun larghezzaAzioni(): Dp {
-    val misuratore = rememberTextMeasurer()
-    val stile = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-    val piuLarga = listOf(VEDI, MODIFICA, CLONA, CANCELLA, RIATTIVA)
-        .maxOf { misuratore.measure(it, stile).size.width }
-    return with(LocalDensity.current) { piuLarga.toDp() } + 28.dp
-}
-
 // ── Pezzi ────────────────────────────────────────────────────────────────
-
-/** Come `RigaScorrevole` in panoramica: una riga sola, e si scorre col dito. */
-@Composable
-private fun RigaOrizzontale(
-    disposizione: Arrangement.Horizontal,
-    modifier: Modifier = Modifier,
-    contenuto: @Composable RowScope.() -> Unit,
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = disposizione,
-        verticalAlignment = Alignment.CenterVertically,
-        content = contenuto,
-    )
-}
 
 @Composable
 private fun Riquadro(titolo: String, contenuto: @Composable () -> Unit) {
@@ -438,93 +408,6 @@ private fun Riquadro(titolo: String, contenuto: @Composable () -> Unit) {
             Column(Modifier.padding(top = 10.dp)) { contenuto() }
         }
     }
-}
-
-/**
- * Una tendina. Non `ExposedDropdownMenuBox`: quello vuole l'opt-in su un'API
- * sperimentale e in cambio dà un campo di testo che qui non serve, perché non
- * si scrive niente — si sceglie da un elenco chiuso.
- */
-@Composable
-private fun Tendina(
-    etichetta: String,
-    scelto: String,
-    voci: List<Pair<String, String>>,
-    onScegli: (String) -> Unit,
-) {
-    var aperta by remember { mutableStateOf(false) }
-
-    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-        Text(
-            text = etichetta.uppercase(),
-            color = Palette.muted,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Box {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Palette.inputBg)
-                    .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                    .clickable { aperta = true }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(scelto, color = Palette.dark, modifier = Modifier.weight(1f))
-                Text("⌄", color = Palette.muted)
-            }
-            DropdownMenu(expanded = aperta, onDismissRequest = { aperta = false }) {
-                voci.forEach { (valore, testo) ->
-                    DropdownMenuItem(
-                        text = { Text(testo) },
-                        onClick = {
-                            aperta = false
-                            onScegli(valore)
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Una tendina che ha in cima un «tutte»: la scelta può non esserci. */
-@Composable
-private fun TendinaFacoltativa(
-    etichetta: String,
-    tutte: String,
-    scelto: String?,
-    voci: List<Pair<String, String>>,
-    onScegli: (String?) -> Unit,
-) {
-    Tendina(
-        etichetta = etichetta,
-        scelto = voci.firstOrNull { it.first == scelto }?.second ?: tutte,
-        voci = listOf(TUTTE to tutte) + voci,
-    ) { scelta -> onScegli(scelta.takeIf { it != TUTTE }) }
-}
-
-private const val TUTTE = "__tutte__"
-
-@Composable
-private fun Pillola(testo: String, sfondo: Color, larghezza: Dp? = null, onClick: () -> Unit) {
-    Text(
-        text = testo,
-        color = Palette.light,
-        fontWeight = FontWeight.SemiBold,
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        maxLines = 1,
-        modifier = Modifier
-            .then(larghezza?.let { Modifier.width(it) } ?: Modifier)
-            .clip(RoundedCornerShape(4.dp))
-            .background(sfondo)
-            .clickable(onClick = onClick)
-            .padding(horizontal = if (larghezza == null) 16.dp else 0.dp, vertical = 10.dp),
-    )
 }
 
 @Composable
