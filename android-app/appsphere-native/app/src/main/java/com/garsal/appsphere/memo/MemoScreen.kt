@@ -56,6 +56,12 @@ internal val BluMemo = Color(0xFF2563EB)
 /** Il viola `--secondary`, che sul web tinge il segno 🙈 Riservato. */
 internal val ViolaMemo = Color(0xFF6C5CE7)
 
+/** Sfondo di default della scheda, quando non ha un colore scelto a mano. */
+internal val AzzurroSchedaMemo = Color(0xFFE6F4FE)
+
+/** Sfondo delle sole schede diario, stessa eccezione del colore scelto a mano. */
+internal val GialloSchedaMemo = Color(0xFFFEF9E0)
+
 /**
  * Memo in nativo: le schede di `memo.html` — note, liste e diari — con ricerca,
  * filtro per categoria, ordinamento, dettaglio e modifica.
@@ -399,8 +405,11 @@ private fun SchedaCard(
     // Il colore della scheda tinge tutta la card, dove il web ne fa una
     // striscia a sinistra: là le schede stanno su una griglia bianca e la
     // striscia basta a distinguerle, qui sono una sotto l'altra a tutta
-    // larghezza, e il colore pieno si vede scorrendo col pollice.
-    val coloreScheda = coloreDaHex(scheda.colore) ?: Palette.cardBg
+    // larghezza, e il colore pieno si vede scorrendo col pollice. Senza un
+    // colore scelto a mano (il bianco di default) lo sfondo è azzurino,
+    // giallino per i soli diari — la stessa eccezione del web.
+    val coloreScheda = coloreDaHex(scheda.colore.takeIf { it != MmScheda.BIANCO })
+        ?: if (scheda.tipo == TipoScheda.DIARIO) GialloSchedaMemo else AzzurroSchedaMemo
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onApri),
         colors = CardDefaults.cardColors(containerColor = coloreScheda),
@@ -417,15 +426,12 @@ private fun SchedaCard(
                     style = MaterialTheme.typography.titleMedium,
                 )
 
-                // Il tipo si vede sulla scheda: una lista e un diario si aprono
-                // diversamente da una nota, e chi tocca deve saperlo prima.
-                if (scheda.tipo != TipoScheda.NOTA || scheda.riservato) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (scheda.tipo != TipoScheda.NOTA) {
-                            Segno("${scheda.tipo.icona} ${scheda.tipo.etichetta}", BluMemo)
-                        }
-                        if (scheda.riservato) Segno("🙈 Riservato", ViolaMemo)
-                    }
+                // Il tipo si vede sempre sulla scheda, sotto il titolo: una
+                // lista e un diario si aprono diversamente da una nota, e chi
+                // tocca deve saperlo prima.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Segno("${scheda.tipo.icona} ${scheda.tipo.etichetta}", BluMemo)
+                    if (scheda.riservato) Segno("🙈 Riservato", ViolaMemo)
                 }
 
                 if (scheda.anteprima.isNotBlank()) {
