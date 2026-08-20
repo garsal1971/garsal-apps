@@ -198,7 +198,7 @@ fun VistaGrafico(stato: PesoState) {
                     // Una tacca e la data ogni settimana: senza, in un disegno
                     // che può essere lungo mesi non si capirebbe mai a che
                     // punto del periodo si sta scorrendo.
-                    var cursore = inizio
+                    var cursore: LocalDate = inizio
                     while (!cursore.isAfter(fine)) {
                         val px = x(cursore)
                         drawLine(
