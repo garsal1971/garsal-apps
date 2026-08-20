@@ -1000,11 +1000,24 @@ Due differenze di forma. La **tabella non è una tabella**: sei colonne coi cara
 grandi si tagliano o vanno a capo ognuna per conto suo, quindi ogni giornata è una scheda con la
 data e il peso in cima. E il **grafico è disegnato a mano su un `Canvas`** invece che con Chart.js:
 restano le due curve che si guardano davvero — peso e target — perché un grafico fitto di etichette
-su uno schermo di telefono è illeggibile prima ancora di essere utile. Comincia dall'inizio
-dell'obiettivo, non dal mese di respiro che il caricamento tiene prima per la prima interpolazione
-(`daQuando()`), e la spezzata del target è quella dei **traguardi presi diretti**, non i valori
-interpolati giorno per giorno che restano nella tabella: fra un traguardo e l'altro serve la retta
-vera, non tanti segmenti arrotondati a due decimali che sembrano seghettati.
+su uno schermo di telefono è illeggibile prima ancora di essere utile. La spezzata del target è
+quella dei **traguardi presi diretti**, non i valori interpolati giorno per giorno che restano
+nella tabella: fra un traguardo e l'altro serve la retta vera, non tanti segmenti arrotondati a
+due decimali che sembrano seghettati.
+
+⚠️ **Il grafico copre l'intero periodo dell'obiettivo, futuro compreso, ed è scorrevole.** La
+curva del peso comincia dal giorno di inizio (non dal mese di respiro che il caricamento tiene
+prima per la prima interpolazione) e si ferma all'ultima pesata — il futuro non si disegna, solo
+il piano lo promette. La spezzata del target invece arriva fino alla **fine** dell'obiettivo anche
+se quel giorno non è ancora passato: è l'unico modo per vedere a colpo d'occhio quanto manca al
+traguardo finale, non solo quanto già fatto. Il `Canvas` del disegno è largo quanto l'intero
+periodo (12.dp per giorno) dentro un `Box` con `horizontalScroll`, mentre la colonna delle
+etichette in kg a sinistra resta fissa e non scorre — altrimenti scorrendo si perderebbe subito il
+riferimento dell'altezza della curva. All'apertura la vista si centra da sé su **oggi** (marcato
+da una riga tratteggiata verticale con l'etichetta «Oggi»), con circa due settimane prima e dopo
+in vista: lo scorrimento iniziale si calcola con un `LaunchedEffect` sulla larghezza reale del
+riquadro (`onSizeChanged`), disponibile solo dopo il primo posizionamento — prima di allora il
+riquadro è 0×0 e non c'è niente da centrare.
 
 `ps_weight_tracking` e `ps_objectives` non stanno in nessuna migration e si leggono come
 `JsonObject`, non come `data class` serializzate: è la stessa scelta di `ts_tasks` e per la stessa
