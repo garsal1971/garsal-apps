@@ -942,11 +942,16 @@ lette da Health Connect (`Salute.kt`). La scheda *Oggi* apre con la domanda che 
 all'app — *oggi ti sei pesato?* — e sotto i **sei riquadri della pagina**, nello stesso ordine:
 Minimo oggi, Target oggi, Mancano al target, Kg alla fine, Punteggio, Punti oggi.
 
-**«⚖️ Salute»** ricalca `openRenpho()` + `onAndroidResume()` + `syncFitNative()` +
+**Il FAB è un solo pulsante per le due strade della pesata**: il tocco apre un `DropdownMenu`
+ancorato al FAB stesso con «➕ Inserisci a mano» (il dialogo di sempre) e «🔄 Sincronizza
+(Renpho)» — non due pulsanti separati in barra, che coi caratteri di sistema grandi non
+avrebbero spazio garantito.
+
+**«🔄 Sincronizza (Renpho)»** ricalca `openRenpho()` + `onAndroidResume()` + `syncFitNative()` +
 `processWeights()` del web, ma **senza passare da un `JavascriptInterface`**: l'app nativa chiama
 l'SDK Health Connect direttamente da una coroutine, quindi niente `ExecutorService` con timeout
 da 25 s — quella complicazione nel bridge Kotlin dell'APK WebView esiste solo perché lì la
-chiamata parte da un thread JS sincrono. Il pulsante apre Renpho (`com.renpho.health`, o lo Store
+chiamata parte da un thread JS sincrono. La voce apre Renpho (`com.renpho.health`, o lo Store
 se non è installata) e arma un flag locale; al **ritorno in primo piano** (`DisposableEffect` +
 `Lifecycle.Event.ON_RESUME`) — e solo se il flag è armato, altrimenti ogni ritorno in foreground
 per qualunque motivo lancerebbe una sync — legge Health Connect (90 giorni + 25 ore di margine,

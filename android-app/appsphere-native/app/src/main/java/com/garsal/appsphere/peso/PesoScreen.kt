@@ -75,14 +75,15 @@ private enum class Vista(val etichetta: String) {
  * «Ti pisasti?» — il peso, in nativo.
  *
  * ⚠️ Gemella di `weight-quest.html`, sulle stesse tabelle `ps_*`. Qui ci sono
- * le cose che si fanno col telefono in mano: **segnare la pesata**, guardare
- * **com'è andata** giorno per giorno, vedere **la curva**, da «✏️ Gestisci»
- * ([GestioneObiettivoScreen]) creare/modificare/chiudere/cancellare un
- * obiettivo e, da «⚖️ Salute», aprire la bilancia Renpho e — al ritorno —
- * sincronizzare le pesate lette da Health Connect ([SaluteRepository]). Restano sulla
- * pagina web, che è dove si fa da seduti: le statistiche, «genera dieta» e il
- * gratta e vinci dei premi, che vive in `localStorage` ed è per dispositivo,
- * quindi non avrebbe niente da mostrare qui.
+ * le cose che si fanno col telefono in mano: **segnare la pesata** — dal FAB,
+ * che apre la scelta fra «➕ Inserisci a mano» e «🔄 Sincronizza (Renpho)»,
+ * quest'ultima con Health Connect ([SaluteRepository]) — guardare **com'è
+ * andata** giorno per giorno, vedere **la curva** e, da «✏️ Gestisci»
+ * ([GestioneObiettivoScreen]), creare/modificare/chiudere/cancellare un
+ * obiettivo. Restano sulla pagina web, che è dove si fa da seduti: le
+ * statistiche, «genera dieta» e il gratta e vinci dei premi, che vive in
+ * `localStorage` ed è per dispositivo, quindi non avrebbe niente da
+ * mostrare qui.
  *
  * Le regole di calcolo non sono riscritte a occhio: stanno in [PesoRegole],
  * ricalcate una per una dalla pagina.
@@ -142,24 +143,14 @@ fun PesoScreen(
         return
     }
 
+    var menuPesatiAperto by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             GarsalTopBar(
                 titolo = "Ti pisasti?",
                 onIndietro = onIndietro,
                 azioni = {
-                    Text(
-                        text = "⚖️ Salute",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                tornatoDaRenpho = true
-                                SaluteRepository.apriRenpho(context)
-                            }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                    )
                     Text(
                         text = "${stato.punteggio} pt",
                         color = Palette.light,
@@ -169,11 +160,36 @@ fun PesoScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { pesataDaFare = LocalDate.now() },
-                containerColor = Verde,
-                contentColor = Palette.light,
-            ) { Text(if (stato.pesatoOggi) "⚖️ Pesati ancora" else "⚖️ Pesati") }
+            // Un solo FAB per le due strade della pesata — a mano o dalla
+            // bilancia — invece di un pulsante a sé in barra: il tocco apre
+            // la scelta, come un `DropdownMenu` ancorato al FAB stesso.
+            Box {
+                ExtendedFloatingActionButton(
+                    onClick = { menuPesatiAperto = true },
+                    containerColor = Verde,
+                    contentColor = Palette.light,
+                ) { Text(if (stato.pesatoOggi) "⚖️ Pesati ancora" else "⚖️ Pesati") }
+                DropdownMenu(
+                    expanded = menuPesatiAperto,
+                    onDismissRequest = { menuPesatiAperto = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("➕ Inserisci a mano") },
+                        onClick = {
+                            menuPesatiAperto = false
+                            pesataDaFare = LocalDate.now()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🔄 Sincronizza (Renpho)") },
+                        onClick = {
+                            menuPesatiAperto = false
+                            tornatoDaRenpho = true
+                            SaluteRepository.apriRenpho(context)
+                        },
+                    )
+                }
+            }
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
