@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,16 +35,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
 import com.garsal.appsphere.core.Tendina
 import com.garsal.appsphere.core.TendinaFacoltativa
 import com.garsal.appsphere.core.coloreDaHex
+import com.garsal.appsphere.core.larghezzaPulsanti
 
 /** Blu di Memo, il `--primary` della pagina. */
 internal val BluMemo = Color(0xFF2563EB)
@@ -288,23 +293,26 @@ fun MemoScreen(
  * attraversa**, che è la ragione per cui il segno del tipo resta sulla scheda
  * anche ora che ogni Tab ne mostra uno solo.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Tab(stato: MemoState, vm: MemoViewModel) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    val etichette = TipoScheda.entries.map { "${it.icona} ${it.plurale}" } + "📌 Fissa"
+    val larghezza = larghezzaPulsanti(etichette)
+    RigaScorrevole(
+        Arrangement.spacedBy(6.dp),
+        Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         TipoScheda.entries.forEach { tipo ->
             Etichetta(
                 testo = "${tipo.icona} ${tipo.plurale}",
                 attiva = stato.tipo == tipo,
+                larghezza = larghezza,
                 onTocca = { vm.apriTab(tipo) },
             )
         }
         Etichetta(
             testo = "📌 Fissa",
             attiva = stato.tipo == null,
+            larghezza = larghezza,
             onTocca = { vm.apriTab(null) },
         )
     }
@@ -340,6 +348,7 @@ internal fun Etichetta(
     testo: String,
     attiva: Boolean,
     colore: Color = BluMemo,
+    larghezza: Dp? = null,
     onTocca: () -> Unit,
 ) {
     Text(
@@ -347,12 +356,15 @@ internal fun Etichetta(
         color = if (attiva) Palette.light else Palette.dark,
         fontWeight = if (attiva) FontWeight.Bold else FontWeight.Normal,
         style = MaterialTheme.typography.bodySmall,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
         modifier = Modifier
+            .then(larghezza?.let { Modifier.width(it) } ?: Modifier)
             .padding(vertical = 2.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(if (attiva) colore else Palette.inputBg)
             .clickable(onClick = onTocca)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = if (larghezza == null) 12.dp else 0.dp, vertical = 8.dp),
     )
 }
 
@@ -445,13 +457,20 @@ private fun SchedaCard(
                 }
 
                 if (scheda.categorie.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Le etichette di categoria sono testo libero: a differenza dei
+                    // pulsanti-azione qui non ha senso una larghezza comune, che
+                    // sprecherebbe spazio sulle etichette corte per far posto alla
+                    // più lunga. Restano larghe quanto il loro testo, ma scorrono
+                    // su una riga sola invece di andare a capo.
+                    RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                         scheda.categorie.forEach { id ->
                             categorie.firstOrNull { it.id == id }?.let { cat ->
                                 Text(
                                     text = cat.etichetta,
                                     color = Palette.light,
                                     style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier
                                         .padding(vertical = 2.dp)
                                         .clip(RoundedCornerShape(20.dp))
