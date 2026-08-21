@@ -396,6 +396,11 @@ private fun VistaOggi(
             }
             stato.obiettivo?.let { obiettivo ->
                 item { DettaglioObiettivo(obiettivo) }
+                // Le stelline dei traguardi intermedi: sola lettura qui, i
+                // punti si tarano solo da «✏️ Gestisci» (BarraTraguardi in
+                // GestioneObiettivo.kt), ma si toccano lo stesso per grattare
+                // un premio già raggiunto.
+                item { BarraTraguardi(obiettivo = obiettivo, pesate = stato.pesate, modificabile = false) }
             }
         } else {
             item {

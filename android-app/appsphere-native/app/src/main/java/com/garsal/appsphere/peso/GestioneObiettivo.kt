@@ -497,9 +497,14 @@ private fun CampoDecimale(
  * `updateMilestoneProgressBar()` nel web. I punti totali e i premi già
  * grattati sono dati **locali, per dispositivo** ([PesoPremi]), non colonne
  * del database: la stessa scelta già fatta sul web con `localStorage`.
+ *
+ * [modificabile] mostra anche il campo dei punti totali — solo in Gestione
+ * Obiettivo, dove ha senso cambiarli. Nella Panoramica («Oggi») la barra
+ * compare **sola lettura**: le stelline si toccano lo stesso per grattare un
+ * premio già raggiunto, ma i punti si tarano solo da Gestisci.
  */
 @Composable
-private fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>) {
+internal fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>, modificabile: Boolean = true) {
     val soglie = remember(obiettivo.pesoIniziale, obiettivo.pesoFinale) {
         PesoRegole.sogliePremio(obiettivo.pesoIniziale, obiettivo.pesoFinale)
     }
@@ -527,13 +532,15 @@ private fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>) {
     var bigliettoAperto by remember { mutableStateOf<Int?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CampoIntero(
-            valore = puntiTotali,
-            etichetta = "⭐ Punti Totali Traguardi Intermedi",
-            chiave = obiettivo.id,
-        ) { nuovo ->
-            puntiTotali = nuovo
-            PesoPremi.salvaPuntiTotali(context, obiettivo.id, nuovo)
+        if (modificabile) {
+            CampoIntero(
+                valore = puntiTotali,
+                etichetta = "⭐ Punti Totali Traguardi Intermedi",
+                chiave = obiettivo.id,
+            ) { nuovo ->
+                puntiTotali = nuovo
+                PesoPremi.salvaPuntiTotali(context, obiettivo.id, nuovo)
+            }
         }
 
         RigaScorrevole(Arrangement.spacedBy(8.dp)) {
