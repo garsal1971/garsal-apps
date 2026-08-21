@@ -12,7 +12,7 @@ import kotlinx.serialization.json.put
 
 /**
  * Un premio cibo — gemello di `PRIZES` in `weight-quest.html`. Le foto sono
- * le stesse di `risorse/premi/*.jpg`, bundlate come drawable perché qui non
+ * le stesse cinque di `risorse/premi`, bundlate come drawable perché qui non
  * c'è una pagina statica da cui caricarle.
  */
 data class PremioCibo(
