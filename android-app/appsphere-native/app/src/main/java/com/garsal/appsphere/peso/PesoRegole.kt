@@ -253,6 +253,39 @@ object PesoRegole {
         return Math.round(valore * fattore) / fattore
     }
 
+    /**
+     * Le soglie intere dei traguardi premio, dalla più facile alla più
+     * difficile — `getMilestoneThresholds` nel web. Con `pesoIniziale` non
+     * sopra `pesoFinale` (o uno dei due mancante) non c'è nessuna soglia.
+     */
+    fun sogliePremio(pesoIniziale: Double?, pesoFinale: Double?): List<Int> {
+        if (pesoIniziale == null || pesoFinale == null || pesoIniziale <= pesoFinale) return emptyList()
+        val top = Math.floor(pesoIniziale).toInt() - 1
+        val bot = Math.ceil(pesoFinale).toInt()
+        if (top < bot) return emptyList()
+        return (top downTo bot).toList()
+    }
+
+    /**
+     * Distribuzione crescente dei punti fra le soglie —
+     * `getMilestonePtsDistribution`: la soglia più lontana (l'ultima, la più
+     * difficile) vale di più. L'ultima prende il residuo, per non perdere
+     * punti negli arrotondamenti.
+     */
+    fun distribuzionePunti(totalPts: Int, n: Int): List<Int> {
+        if (n <= 0 || totalPts <= 0) return emptyList()
+        val sommaFattori = n * (n + 1) / 2.0
+        val punti = mutableListOf<Int>()
+        var assegnati = 0
+        for (i in 0 until n) {
+            val p = if (i < n - 1) Math.round(totalPts * (i + 1) / sommaFattori).toInt()
+                    else totalPts - assegnati
+            punti += p
+            assegnati += p
+        }
+        return punti
+    }
+
     /** `2026-08-14` → data; qualunque altra cosa → null, senza sollevare. */
     fun giornoDa(iso: String?): LocalDate? =
         iso?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }

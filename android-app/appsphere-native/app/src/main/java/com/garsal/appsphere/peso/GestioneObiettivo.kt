@@ -3,6 +3,7 @@ package com.garsal.appsphere.peso
 import android.app.DatePickerDialog
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.RigaScorrevole
@@ -53,10 +55,11 @@ import java.time.LocalDate
  * (creare, modificare, chiudere e cancellare un obiettivo), a tutto schermo
  * come [com.garsal.appsphere.tafiri.TaFiriForm].
  *
- * ⚠️ **Non replica il gratta-e-vinci dei premi** (la barra di stelline con
- * `⭐ Punti Totali Traguardi Intermedi`): quella è un dato di `localStorage`,
- * per dispositivo, e da qui non avrebbe niente da mostrare — la stessa scelta
- * già presa per Weight Quest nativo. Tutto il resto — nome, tipo, punti,
+ * Include anche il gratta-e-vinci dei premi (la barra di stelline con
+ * `⭐ Punti Totali Traguardi Intermedi`, [BarraTraguardi]): i punti totali e i
+ * premi già grattati restano un dato **locale, per dispositivo**
+ * ([PesoPremi], gemello di `localStorage` sul web) — nessuna tabella nuova su
+ * Supabase, stessa scelta già presa là. Tutto il resto — nome, tipo, punti,
  * milestone, Salva/Successo/Fallito/Elimina — è lo stesso form, campo per
  * campo, e le regole di calcolo (validazione di chiusura, punteggio finale)
  * stanno in [PesoViewModel.preparaChiusura]: se cambiano lì, cambiano anche in
@@ -180,6 +183,15 @@ fun GestioneObiettivoScreen(
                 }
 
                 if (bozza.tipo == "perdere") {
+                    // I traguardi premio si calcolano dal peso salvato
+                    // sull'obiettivo, non dalla bozza ancora in modifica —
+                    // per un obiettivo nuovo, mai ancora salvato, non c'è
+                    // niente da mostrare (come sul web, dove la barra legge
+                    // `userData.currentObjective`).
+                    editando?.let { obiettivo ->
+                        BarraTraguardi(obiettivo = obiettivo, pesate = stato.pesate)
+                    }
+
                     Titoletto("Milestone Progressive")
                     if (bozza.traguardi.isEmpty()) {
                         Nota("Nessuna milestone impostata")
@@ -387,7 +399,7 @@ private fun Nota(testo: String) {
 }
 
 @Composable
-private fun Bottone(
+internal fun Bottone(
     testo: String,
     modifier: Modifier = Modifier,
     colore: Color = Verde,
@@ -398,7 +410,16 @@ private fun Bottone(
         text = testo,
         color = if (enabled) Palette.light else Palette.light.copy(alpha = 0.6f),
         fontWeight = FontWeight.SemiBold,
+        // Stessa misura di `larghezzaPulsanti()`: se il testo fosse
+        // disegnato con uno stile diverso da quello misurato, la larghezza
+        // condivisa fra i pulsanti della riga non basterebbe più e la
+        // scritta andrebbe a capo. `maxLines`/`softWrap` sono la rete di
+        // sicurezza — coi caratteri di sistema grandi tagliano piuttosto che
+        // spezzare la scritta su due righe.
+        style = MaterialTheme.typography.bodyMedium,
         textAlign = TextAlign.Center,
+        maxLines = 1,
+        softWrap = false,
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
             .background(if (enabled) colore else colore.copy(alpha = 0.5f))
@@ -467,4 +488,124 @@ private fun CampoDecimale(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+// ── Gratta e vinci dei traguardi ────────────────────────────────────────
+
+/**
+ * La barra delle stelline dei traguardi intermedi —
+ * `updateMilestoneProgressBar()` nel web. I punti totali e i premi già
+ * grattati sono dati **locali, per dispositivo** ([PesoPremi]), non colonne
+ * del database: la stessa scelta già fatta sul web con `localStorage`.
+ */
+@Composable
+private fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>) {
+    val soglie = remember(obiettivo.pesoIniziale, obiettivo.pesoFinale) {
+        PesoRegole.sogliePremio(obiettivo.pesoIniziale, obiettivo.pesoFinale)
+    }
+    if (soglie.isEmpty()) return
+
+    val context = LocalContext.current
+    var puntiTotali by remember(obiettivo.id) {
+        mutableStateOf(PesoPremi.puntiTotali(context, obiettivo.id))
+    }
+    // Si rilegge dopo ogni gratta, per far comparire subito il cibo vinto.
+    var versionePremi by remember(obiettivo.id) { mutableStateOf(0) }
+    val premiVinti = remember(obiettivo.id, versionePremi) {
+        PesoPremi.premiVinti(context, obiettivo.id)
+    }
+    val puntiPerSoglia = remember(soglie, puntiTotali) {
+        PesoRegole.distribuzionePunti(puntiTotali, soglie.size)
+    }
+    // Minimo giornaliero dall'inizio dell'obiettivo — `getDailyMinWeights`
+    // filtrato su `date >= objStart`, come nel web.
+    val minimoRaggiunto = remember(pesate, obiettivo.inizio) {
+        PesoRegole.minimiGiornalieri(pesate.filter { it.giorno >= obiettivo.inizio })
+            .minOfOrNull { it.second }
+    }
+
+    var bigliettoAperto by remember { mutableStateOf<Int?>(null) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CampoIntero(
+            valore = puntiTotali,
+            etichetta = "⭐ Punti Totali Traguardi Intermedi",
+            chiave = obiettivo.id,
+        ) { nuovo ->
+            puntiTotali = nuovo
+            PesoPremi.salvaPuntiTotali(context, obiettivo.id, nuovo)
+        }
+
+        RigaScorrevole(Arrangement.spacedBy(8.dp)) {
+            soglie.forEachIndexed { indice, soglia ->
+                val raggiunta = minimoRaggiunto != null && minimoRaggiunto <= soglia
+                val vinto = if (raggiunta) premiVinti[soglia] else null
+                StellaTraguardo(
+                    soglia = soglia,
+                    raggiunta = raggiunta,
+                    punti = puntiPerSoglia.getOrNull(indice) ?: 0,
+                    premio = vinto?.let { premioDa(it.id) },
+                    onTocca = { if (raggiunta) bigliettoAperto = soglia },
+                )
+            }
+        }
+
+        Nota("Ogni stellina accesa dà anche un premio: resta evidenziata con 🎁 finché non la tocchi e gratti il biglietto.")
+    }
+
+    bigliettoAperto?.let { soglia ->
+        DialogoGrattaEVinci(
+            soglia = soglia,
+            vinto = premiVinti[soglia],
+            onRivelato = { premio ->
+                PesoPremi.salvaPremio(context, obiettivo.id, soglia, premio.id, LocalDate.now().toString())
+                versionePremi++
+            },
+            onChiudi = { bigliettoAperto = null },
+        )
+    }
+}
+
+/** Una stellina della barra — raggiunta (⭐, dorata) o no (☆, spenta). */
+@Composable
+private fun StellaTraguardo(
+    soglia: Int,
+    raggiunta: Boolean,
+    punti: Int,
+    premio: PremioCibo?,
+    onTocca: () -> Unit,
+) {
+    val oro = Color(0xFFFFD700)
+    Column(
+        Modifier
+            .width(64.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (raggiunta) oro.copy(alpha = 0.16f) else Palette.inputBg)
+            .border(2.dp, if (raggiunta) oro else Palette.border, RoundedCornerShape(10.dp))
+            .clickable(enabled = raggiunta, onClick = onTocca)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(if (raggiunta) "⭐" else "☆", fontSize = 20.sp)
+        Text(
+            "< $soglia kg",
+            fontSize = 9.sp,
+            color = if (raggiunta) Color(0xFFB8860B) else Palette.muted,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+        )
+        if (punti > 0) {
+            Text(
+                "+$punti",
+                fontSize = 10.sp,
+                color = if (raggiunta) Color(0xFFC9960C) else Palette.muted,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        if (raggiunta) {
+            Text(premio?.emoji ?: "🎁", fontSize = 15.sp)
+        }
+    }
 }
