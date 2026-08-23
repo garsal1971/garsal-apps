@@ -44,6 +44,9 @@ class SosOverlay(
     interface Callbacks {
         /** L'utente ha risposto a «com'è andata?». */
         fun onRisposta(outcome: SosOutcome, completato: Boolean)
+        /** Il countdown è stato interrotto con «mi arrendo»: chi conta i secondi
+            deve smettere, o arrivando a zero rimpiazzerebbe la domanda già a schermo. */
+        fun onInterrotto()
         /** L'overlay è stato chiuso: il servizio può fermarsi. */
         fun onChiuso()
     }
@@ -146,14 +149,15 @@ class SosOverlay(
         }
         c.aggiungi(tvTimer!!, 18, ctx)
 
-        barra = ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
+        val pb = ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
             progress = progressoDi(rimasti, totali)
         }
+        barra = pb
         val lpBarra = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ctx.dp(6))
         lpBarra.topMargin = ctx.dp(14)
-        c.addView(barra, lpBarra)
+        c.addView(pb, lpBarra)
 
         c.aggiungi(costruisciTicker(), 26, ctx)
 
@@ -166,7 +170,7 @@ class SosOverlay(
                 "✋ Tieni premuto per arrenderti",
                 "Rilascia per arrenderti",
                 Color.WHITE, Config.GIVE_UP_HOLD_MS
-            ) { chiediComeEAndata(completato = false) },
+            ) { callbacks.onInterrotto(); chiediComeEAndata(completato = false) },
             12, ctx
         )
     }
@@ -186,12 +190,19 @@ class SosOverlay(
     private var tickerTv: TextView? = null
     private var tickerIdx = 0
     private var pxPerFrame = 0f
+    private var tickerLarghezza = 0
 
     private val tickerStep = object : Runnable {
         override fun run() {
             val tv = tickerTv ?: return
             tv.translationX -= pxPerFrame
-            if (tv.translationX + tv.width <= 0f) prossimoMessaggio()
+            // La larghezza si legge da tickerLarghezza e non da tv.width: quest'ultima
+            // vale ancora quella della frase precedente finché non passa un layout,
+            // e nei primi frame farebbe saltare subito al messaggio dopo.
+            if (tv.translationX + tickerLarghezza <= 0f) {
+                prossimoMessaggio()   // riprogramma da sé: qui si esce, o le catene diventano due
+                return
+            }
             handler.postDelayed(this, 16)
         }
     }
@@ -233,6 +244,7 @@ class SosOverlay(
         val box = tickerBox ?: return
         tv.text = txt
         val larghezza = (tv.paint.measureText(txt) + ctx.dp(8)).toInt()
+        tickerLarghezza = larghezza
         tv.layoutParams = FrameLayout.LayoutParams(larghezza, ViewGroup.LayoutParams.WRAP_CONTENT)
         tv.requestLayout()
         tv.translationX = box.width.toFloat().coerceAtLeast(1f)

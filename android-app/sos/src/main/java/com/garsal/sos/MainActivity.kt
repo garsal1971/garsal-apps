@@ -217,8 +217,8 @@ class MainActivity : AppCompatActivity() {
         if (t.description.isNotBlank())
             col.aggiungi(testo(this, t.description, 16f, Color.WHITE, alpha = 0.72f), 2, this)
 
-        col.addView(bottoneSos(t), LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        val d = diametroBottone()
+        col.addView(bottoneSos(t), LinearLayout.LayoutParams(d, d).apply {
             topMargin = dp(24); gravity = Gravity.CENTER_HORIZONTAL
         })
 
@@ -244,9 +244,10 @@ class MainActivity : AppCompatActivity() {
      * si ridimensiona da sola (autosize), così l'ingrandimento dei caratteri di
      * sistema non la fa uscire dal cerchio.
      */
+    private fun diametroBottone(): Int =
+        minOf((resources.displayMetrics.widthPixels * 0.72f).toInt(), dp(300))
+
     private fun bottoneSos(t: SosType): View {
-        val schermo = resources.displayMetrics.widthPixels
-        val diametro = minOf((schermo * 0.72f).toInt(), dp(300))
         val rosso = colore(t.color)
 
         val tv = AppCompatTextView(this).apply {
@@ -267,7 +268,6 @@ class MainActivity : AppCompatActivity() {
         }
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
             tv, 24, 120, 2, android.util.TypedValue.COMPLEX_UNIT_SP)
-        tv.layoutParams = ViewGroup.LayoutParams(diametro, diametro)
         return tv
     }
 
