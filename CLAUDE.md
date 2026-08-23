@@ -410,6 +410,41 @@ periodo — nessuna colonna in più, `amount` è già con segno.
 | `sp_key_days` | Giornate chiave (`UNIQUE (user_id, day)`); `label` è l'etichetta libera mostrata alla spunta |
 | `sp_stecche` | Archivio delle stecche chiuse: traguardo e periodo com'erano, `total_days`/`done_days`, `satisfaction` (1-100), `note`, e la fotografia jsonb di `checks` e `key_days` |
 
+### SOS (`sos_*`)
+| Table | Purpose |
+|---|---|
+| `sos_types` | I diversi SOS. `current_seconds` è la durata del **prossimo** giro, `base_seconds` quella di partenza, `min_seconds`/`max_seconds` gli estremi entro cui le percentuali possono muoverla |
+| `sos_outcomes` | Le risposte a «com'è andata?»: `points` (anche negativi) e `time_delta_pct` (positiva allunga, negativa accorcia) |
+| `sos_messages` | Le frasi che scorrono sotto il countdown; `sos_type_id NULL` = vale per tutti i SOS |
+| `sos_sessions` | Un giro: `planned_seconds`, `completed` (false = countdown interrotto), la risposta scelta e `seconds_before`/`seconds_after` |
+| `sos_devices` | Il codice con cui l'APK si accoppia. `token` **è** la credenziale |
+
+⚠️ **La regola del tempo sta nelle RPC, non nel client** — è la stessa scelta di `task_complete`
+e `sf_finalize_challenge`, per la stessa ragione: due implementazioni della stessa formula sono
+due durate diverse il giorno che una delle due cambia.
+
+| Funzione | Chi la chiama | Cosa fa |
+|---|---|---|
+| `sos_config(token)` | APK | Tutti i SOS attivi con risposte e frasi, in una chiamata sola |
+| `sos_session_start(token, type_id)` | APK | Apre il giro e **dice quanto dura** — la durata la decide il server |
+| `sos_session_finish(token, session_id, outcome_id, …)` | APK | Applica punti e percentuale: `next = clamp(current × (1 + pct/100), min, max)` |
+| `sos_session_log(token, type_id, outcome_id, …)` | APK | Il giro fatto senza rete, rispedito dopo: crea la sessione già chiusa e delega a `sos_session_finish` |
+| `sos_device_create(name)` | `sos.html` | Genera un codice di accoppiamento |
+
+`sos_session_finish` è **idempotente**: una sessione già chiusa risponde con quello che era stato
+deciso allora invece di riapplicare punti e percentuale. Senza, il rinvio della coda offline
+dell'APK conterebbe due volte gli stessi punti e sposterebbe il tempo due volte.
+
+Le quattro RPC dell'APK sono eseguibili dalla **anon key**: il controllo è il codice di
+accoppiamento (`sos_devices.token`), non il ruolo. Le tabelle restano dietro la RLS del
+proprietario — da PostgREST con la anon key non si legge niente — e `sos_user_by_token`, che il
+codice lo risolve, ha l'EXECUTE revocato ai client.
+
+⚠️ **Le risposte si aggiornano riga per riga e non si cancellano per ricrearle**
+(`salvaSos()` in `sos.html`): `sos_sessions.outcome_id` le cita, e ricreandole ogni giro passato
+resterebbe agganciato a una riga che non esiste più. È la stessa scelta delle misure di un diario
+in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo in un ordine.
+
 ### Obiettivi (`ob_`)
 | Table | Purpose |
 |---|---|
@@ -753,6 +788,56 @@ JSON (`notifications: [{who, outcome}]`) e nei log della function per ogni desti
 
 Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock` restituisce sempre
 `true`): il PIN è di Salvatore e su quel telefono un blocco rosso sarebbe insbloccabile.
+
+---
+
+## SOS — il bottone rosso e il countdown che blocca il telefono
+
+`android-app/sos/` è un modulo del progetto Gradle di `android-app/` (come `smartblocker`, non
+come i progetti standalone), `applicationId` `com.garsal.sos`, APK
+`releases/Sos-latest.apk`. **È nato da Smart Blocker** e ne riusa il pezzo che conta: la
+finestra `TYPE_APPLICATION_OVERLAY` tenuta viva da un servizio in primo piano.
+
+Una schermata sola: un SOS per pagina, si sfoglia con lo **swipe destra/sinistra**
+(`ViewPager2`), e in ogni pagina c'è un cerchio rosso col diametro ricavato dallo schermo
+(72 % della larghezza, con un tetto) e la scritta in **autosize** — così l'ingrandimento dei
+caratteri di sistema non la fa uscire dal cerchio. Si preme, parte il countdown, il telefono
+resta bloccato, e alla fine arriva la domanda «com'è andata?».
+
+Le cose che *sono* la funzionalità, e che vanno cambiate insieme al database:
+
+- **il blocco è l'overlay, non un'Activity.** `SosOverlay` è una finestra di sistema: sta sopra
+  qualsiasi app, launcher compreso, non se ne va col tasto Home (non è nello stack) e i tocchi si
+  fermano lì. Non c'è nessun servizio di accessibilità come in Smart Blocker, e non serve: là
+  rilanciava un'*Activity* che l'utente poteva scavalcare, qui non c'è niente da rilanciare;
+- **il countdown vive nel servizio** (`SosSessionService`, foreground `specialUse`), non
+  nell'Activity. Uno schermo che si spegne o una rotazione non devono poter accorciare un blocco;
+- **una via d'uscita c'è, e costa.** *Tieni premuto per arrenderti* (3 secondi, conferma al
+  rilascio) interrompe il giro — che finisce comunque in archivio, con `completed = false`, e la
+  domanda si fa lo stesso. Un blocco senza uscita, su un telefono che è anche il modo per
+  chiamare qualcuno, sarebbe un rischio e non una funzionalità;
+- **il bottone parte anche senza rete.** La configurazione sta in cache (`Prefs`), il countdown
+  parte sulla durata che il telefono conosce e `sos_session_start` va in parallelo: la durata del
+  server si adotta solo nei primi quattro secondi, dopo di che allungare quel che si sta già
+  guardando sembrerebbe un difetto. Il giro chiuso senza rete finisce in **coda** e si rispedisce
+  con `sos_session_log` alla prossima apertura;
+- ⚠️ **in coda va solo ciò che può ancora riuscire.** Un errore di merito — codice revocato,
+  risposta cancellata dalla configurazione — fallirebbe identico ad ogni rinvio e resterebbe lì
+  per sempre: si riprova solo quando il server non ha risposto affatto;
+- **punti e durata del prossimo giro non si calcolano in Kotlin.** Li dà
+  `sos_session_finish`, e quello che l'overlay mostra è la sua risposta.
+
+Il **testo motivante scorre su una riga sola** invece di andare a capo: con i caratteri di
+sistema grandi un paragrafo spingerebbe fuori schermo proprio il countdown. La larghezza del
+`TextView` si **misura** (`paint.measureText`) invece di lasciarla a `WRAP_CONTENT`, che dentro
+un contenitore largo quanto lo schermo si ferma al bordo e manda il testo a capo — cioè proprio
+quello che non deve fare.
+
+⚠️ **L'APK non fa il login Google.** Si accoppia una volta col codice generato da
+`sos.html` → 📱 Telefoni e da lì in poi parla con quattro RPC che lo riconoscono da quel codice.
+La ragione è la stessa per cui il bottone è grande: si preme in un momento di crisi, e in quel
+momento non si può inciampare in una sessione scaduta o in una schermata di Google che chiede di
+riautenticarsi.
 
 ---
 
@@ -1901,6 +1986,25 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
   tolta e compare un toast di errore, così non resta una spunta finta che sparisce al reload
 - Registrata in `cm_apps` da `20260727230000_spuntiamola_app.sql`; la `score_query` (aggiornata
   dalla migration `sp_`) conta i **giorni che mancano**, quindi la bolla nel launcher è proporzionata
+
+### `sos.html` — SOS
+- **Non è l'app: è la sua configurazione.** Il SOS si preme sul telefono
+  (`android-app/sos/`); qui si decide che cosa dice, quanto dura e quanto vale.
+- Tre schede: **🆘 I miei SOS** (creazione e modifica), **📱 Telefoni** (i codici di
+  accoppiamento dell'APK), **📊 Storico** (KPI e l'elenco dei giri).
+- Un SOS ha un nome, che cosa si sta fronteggiando, una durata **di partenza** e due estremi.
+  Nella stessa finestra si scrivono le **risposte** alla domanda finale — emoji, testo, punti,
+  percentuale — e le **frasi** che scorrono sotto il countdown, una per riga.
+- ⚠️ **Modificare un SOS non tocca `current_seconds`**: è dove l'hanno portato gli esiti, e
+  riscriverlo dal form butterebbe via la storia dei giri fatti. Si riporta alla partenza col
+  pulsante *↺ Riporta a N min*, che lo dice e chiede conferma. Se però il nuovo minimo/massimo
+  esclude il valore corrente, quello viene riportato dentro gli estremi — altrimenti il CHECK
+  della tabella rifiuterebbe il salvataggio.
+- Le durate si scrivono **in minuti interi** e si archiviano in secondi: mm:ss in un form si
+  sbaglia, e i secondi servono solo perché le percentuali li producono (−10 % di 10 minuti = 9:00).
+- Il **codice del telefono si vede per intero una volta sola**, alla creazione. Dopo restano le
+  ultime quattro lettere: è quanto basta per riconoscere *quale* codice è, che è la sola domanda
+  a cui serve rispondere guardando l'elenco. Un telefono perso si chiude revocando il codice.
 
 ---
 
