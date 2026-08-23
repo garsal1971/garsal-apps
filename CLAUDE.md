@@ -1331,6 +1331,12 @@ due regole che **sono** la funzionalità, da cambiare nelle due implementazioni 
   premio segnato come ritirato senza che nessun punto sia stato speso;
 - **una tantum e ripetibile finiscono diversamente**: il primo esce dal catalogo (`is_redeemed`),
   il secondo resta e **rincara** di `points_per_use` a ogni uso, contandoli in `use_count`.
+  ⚠️ **`points_per_use` a zero è legittimo** — è il premio ripetibile che costa sempre uguale — e
+  va distinto dal campo lasciato in bianco, che resta non valido. Il web ci era cascato con
+  `parseInt(…) || null`, che trasformava lo zero in «non impostato»: il premio si salvava senza
+  incremento e il form si riapriva vuoto. Le due implementazioni ammettono `>= 0` e all'elenco
+  scrivono *costo fisso* invece di tacere, perché un incremento taciuto è indistinguibile da un
+  incremento che nessuno ha scritto.
 
 ### ⚠️ Modalità nascosta: si accende col codice a colori, e vive in memoria
 

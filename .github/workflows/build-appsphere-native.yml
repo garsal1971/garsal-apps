@@ -137,24 +137,41 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin master
-          git checkout master
-          git reset --hard origin/master
+          # ⚠️ Il push su master va rifatto se master si muove sotto i piedi.
+          # Le build Android della repo scattano insieme (toccare settings.gradle o
+          # il build.gradle di root le sveglia tutte) e finiscono a pochi secondi
+          # l'una dall'altra: la prima che arriva sposta master e le altre si
+          # prendono un "cannot lock ref", con l'APK già compilato e buttato via.
+          # Si rilegge master e si riprova.
+          for i in 1 2 3 4 5; do
+            git fetch origin master
+            git checkout -B master origin/master
+            git reset --hard origin/master
 
-          mkdir -p releases
-          cp /tmp/AppSphereNative-latest.apk releases/AppSphereNative-latest.apk
+            mkdir -p releases
+            cp /tmp/AppSphereNative-latest.apk releases/AppSphereNative-latest.apk
 
-          # La scheda si aggiorna solo se si aggiorna l'APK: `builtAt` cambia a
-          # ogni run, e commetterla da sola vorrebbe dire annunciare una build
-          # nuova per un pacchetto identico a quello di prima.
-          git add releases/AppSphereNative-latest.apk
-          if git diff --staged --quiet && [ -f releases/AppSphereNative-latest.json ]; then
-            echo "APK non cambiato, skip commit"
-            exit 0
-          fi
+            # La scheda si aggiorna solo se si aggiorna l'APK: `builtAt` cambia a
+            # ogni run, e commetterla da sola vorrebbe dire annunciare una build
+            # nuova per un pacchetto identico a quello di prima.
+            git add releases/AppSphereNative-latest.apk
+            if git diff --staged --quiet && [ -f releases/AppSphereNative-latest.json ]; then
+              echo "APK non cambiato, skip commit"
+              exit 0
+            fi
 
-          cp /tmp/AppSphereNative-latest.json releases/AppSphereNative-latest.json
-          git add releases/AppSphereNative-latest.json
+            cp /tmp/AppSphereNative-latest.json releases/AppSphereNative-latest.json
+            git add releases/AppSphereNative-latest.json
 
-          git commit -m "build: aggiorna AppSphereNative APK v${{ env.VERSION }} [skip actions]"
-          git push origin master
+            git commit -m "build: aggiorna AppSphereNative APK v${{ env.VERSION }} [skip actions]"
+            if git push origin master; then
+              echo "✅ pubblicati al tentativo $i"
+              exit 0
+            fi
+
+            echo "⚠️  master si è mosso, riprovo ($i/5)"
+            sleep $((i * 5))
+          done
+
+          echo "❌ master continua a muoversi: APK non pubblicato"
+          exit 1

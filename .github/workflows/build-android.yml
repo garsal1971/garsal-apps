@@ -110,15 +110,35 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin master
-          git checkout master
-          git reset --hard origin/master
+          # ⚠️ Il push su master va rifatto se master si muove sotto i piedi.
+          # Le build Android della repo scattano insieme (toccare settings.gradle o
+          # il build.gradle di root le sveglia tutte) e finiscono a pochi secondi
+          # l'una dall'altra: la prima che arriva sposta master e le altre si
+          # prendono un "cannot lock ref", con l'APK già compilato e buttato via.
+          # Si rilegge master e si riprova.
+          for i in 1 2 3 4 5; do
+            git fetch origin master
+            git checkout -B master origin/master
+            git reset --hard origin/master
 
-          mkdir -p releases
-          cp /tmp/GarsalApps-latest.apk releases/GarsalApps-latest.apk
+            mkdir -p releases
+            cp /tmp/GarsalApps-latest.apk releases/GarsalApps-latest.apk
 
-          git add releases/GarsalApps-latest.apk
-          git diff --staged --quiet && echo "APK non cambiato, skip commit" && exit 0
+            git add releases/GarsalApps-latest.apk
+            if git diff --staged --quiet; then
+              echo "APK non cambiato, skip commit"
+              exit 0
+            fi
 
-          git commit -m "chore: aggiorna APK GarsalApps v${{ env.VERSION }} [skip actions]"
-          git push origin master
+            git commit -m "chore: aggiorna APK GarsalApps v${{ env.VERSION }} [skip actions]"
+            if git push origin master; then
+              echo "✅ pubblicato al tentativo $i"
+              exit 0
+            fi
+
+            echo "⚠️  master si è mosso, riprovo ($i/5)"
+            sleep $((i * 5))
+          done
+
+          echo "❌ master continua a muoversi: APK non pubblicato"
+          exit 1

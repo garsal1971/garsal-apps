@@ -43,9 +43,16 @@ data class BozzaPremio(
 
     val costoValido: Int? get() = costo.trim().toIntOrNull()?.takeIf { it >= 1 }
 
-    /** Solo i ripetibili lo usano: su un «una tantum» resta nullo. */
+    /**
+     * Solo i ripetibili lo usano: su un «una tantum» resta nullo.
+     *
+     * ⚠️ Lo zero è ammesso, ed è la differenza fra «non rincara» e «non l'ho
+     * scritto»: un premio ripetibile che costa sempre uguale è una cosa che si
+     * vuole davvero, mentre il campo lasciato in bianco resta non valido
+     * (toIntOrNull su stringa vuota torna null). Stessa regola in `saveReward()`.
+     */
     val puntiPerUsoValidi: Int? get() =
-        if (ripetibile) puntiPerUso.trim().toIntOrNull()?.takeIf { it >= 1 } else null
+        if (ripetibile) puntiPerUso.trim().toIntOrNull()?.takeIf { it >= 0 } else null
 
     /** Le stesse tre condizioni di `saveReward()` nel web. */
     val valida: Boolean get() = nome.isNotBlank() &&
@@ -118,7 +125,7 @@ fun PremiForm(
             ) { scelta -> b = b.copy(tipo = scelta) }
             Text(
                 text = if (b.ripetibile)
-                    "Resta nel catalogo e rincara a ogni utilizzo."
+                    "Resta nel catalogo e rincara di quanto scrivi qui sotto."
                 else
                     "Si ritira una volta sola, poi esce dal catalogo.",
                 color = Palette.muted,
@@ -139,6 +146,7 @@ fun PremiForm(
                     value = b.puntiPerUso,
                     onValueChange = { b = b.copy(puntiPerUso = it.filter(Char::isDigit)) },
                     label = { Text("Punti in più per ogni utilizzo") },
+                    supportingText = { Text("0 = costa sempre uguale") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
