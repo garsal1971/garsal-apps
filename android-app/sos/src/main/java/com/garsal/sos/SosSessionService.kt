@@ -147,6 +147,11 @@ class SosSessionService : Service(), SosOverlay.Callbacks {
         }.start()
     }
 
+    override fun onInterrotto() {
+        finito = true
+        handler.removeCallbacks(tick)
+    }
+
     override fun onChiuso() {
         stopSelf()
     }
