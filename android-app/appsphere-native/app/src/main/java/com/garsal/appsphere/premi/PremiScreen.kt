@@ -324,8 +324,12 @@ private fun Gestisci(
                         text = buildString {
                             append("${premio.costo} punti · ")
                             append(if (premio.ripetibile) "ripetibile" else "una tantum")
-                            if (premio.ripetibile && premio.puntiPerUso != null) {
-                                append(" · +${premio.puntiPerUso}/uso")
+                            // A 0 — o non impostato, com'erano i ripetibili prima che la
+                            // colonna esistesse — il premio non rincara: tacerlo sarebbe
+                            // indistinguibile da «non lo so». Stessa riga in renderRewards().
+                            if (premio.ripetibile) {
+                                val p = premio.puntiPerUso ?: 0
+                                append(if (p > 0) " · +$p/uso" else " · costo fisso")
                             }
                             if (premio.ritirato) append(" · già ritirato")
                         },

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.126</title>
+<title>AppSphere v1.5.127</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1402,6 +1402,12 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
+  .rw-hint {
+    font-size: 11px;
+    color: #888;
+    font-weight: 500;
+    margin-top: -2px;
+  }
   .rw-input, .rw-select {
     padding: 10px 12px;
     border: 1.5px solid #E5E7EB;
@@ -1932,7 +1938,8 @@
       </div>
       <div class="rw-field rw-per-use-row" id="rw-per-use-row">
         <label class="rw-label">Punti per ogni utilizzo</label>
-        <input class="rw-input" id="rw-per-use" type="number" min="1" placeholder="es. 10">
+        <input class="rw-input" id="rw-per-use" type="number" min="0" placeholder="es. 10">
+        <div class="rw-hint">Di quanto rincara ad ogni riscatto. <b>0</b> = costa sempre uguale.</div>
       </div>
     </div>
     <div class="rw-form-footer">
@@ -1948,8 +1955,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.126';
-const BUILD_TIME  = '2026-08-15T10:00:00Z';
+const APP_VERSION = 'v1.5.127';
+const BUILD_TIME  = '2026-08-23T09:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -4313,7 +4320,9 @@ function renderRewards() {
     const isRepeat = r.type === 'ripetibile';
     const emoji = isRepeat ? '🔄' : '⭐';
     let meta = `${r.points_cost} punti`;
-    if (isRepeat && r.points_per_use) meta += ` · ${r.points_per_use}/uso`;
+    // A 0 (o non impostato, com'erano i ripetibili prima di questa colonna) il
+    // premio non rincara: tacere sarebbe indistinguibile da "non lo so".
+    if (isRepeat) meta += r.points_per_use ? ` · +${r.points_per_use}/uso` : ' · costo fisso';
     return `
       <div class="rw-card">
         <div class="rw-card-emoji">${emoji}</div>
@@ -4341,7 +4350,9 @@ function openRewardForm(id) {
     document.getElementById('rw-name').value    = r.name;
     document.getElementById('rw-type').value    = r.type;
     document.getElementById('rw-points').value  = r.points_cost;
-    document.getElementById('rw-per-use').value = r.points_per_use || '';
+    // ?? e non ||: con || un incremento di 0 riaprirebbe il form vuoto, e
+    // salvando si perderebbe proprio il valore che si era scelto.
+    document.getElementById('rw-per-use').value = r.points_per_use ?? '';
   } else {
     document.getElementById('rw-name').value    = '';
     document.getElementById('rw-type').value    = 'una_tantum';
@@ -4366,11 +4377,17 @@ async function saveReward() {
   const name       = document.getElementById('rw-name').value.trim();
   const type       = document.getElementById('rw-type').value;
   const pointsCost = parseInt(document.getElementById('rw-points').value);
-  const perUse     = type === 'ripetibile' ? parseInt(document.getElementById('rw-per-use').value) || null : null;
+  // parseInt e basta, senza `|| null`: 0 è un incremento legittimo — un premio
+  // ripetibile che costa sempre uguale — e `0 || null` lo trasformava in
+  // "non impostato", cioè in un campo che tornava vuoto alla riapertura.
+  const perUse     = type === 'ripetibile' ? parseInt(document.getElementById('rw-per-use').value, 10) : null;
 
-  if (!name)                                            { alert('Inserisci un nome per il premio.'); return; }
-  if (!pointsCost || pointsCost < 1)                   { alert('Inserisci i punti necessari (minimo 1).'); return; }
-  if (type === 'ripetibile' && (!perUse || perUse < 1)) { alert('Inserisci i punti per ogni utilizzo (minimo 1).'); return; }
+  if (!name)                        { alert('Inserisci un nome per il premio.'); return; }
+  if (!pointsCost || pointsCost < 1) { alert('Inserisci i punti necessari (minimo 1).'); return; }
+  if (type === 'ripetibile' && (!Number.isInteger(perUse) || perUse < 0)) {
+    alert('Inserisci i punti per ogni utilizzo: 0 se il premio deve costare sempre uguale.');
+    return;
+  }
 
   const payload = { name, type, points_cost: pointsCost, points_per_use: perUse };
   const isNew   = !_editingRewardId;
