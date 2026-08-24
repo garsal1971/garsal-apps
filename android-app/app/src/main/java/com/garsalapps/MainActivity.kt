@@ -255,6 +255,28 @@ class MainActivity : AppCompatActivity() {
         @android.webkit.JavascriptInterface
         fun isNativeApp(): Boolean = true
 
+        /**
+         * «Che versione ho?» — `1.0.36 (37)`. La legge dal pacchetto, non da una
+         * costante: è la versione davvero installata, non quella che il codice
+         * credeva di essere quando è stato compilato.
+         */
+        @android.webkit.JavascriptInterface
+        fun appVersion(): String {
+            val (nome, codice) = versioneInstallata(this@MainActivity)
+            return "$nome ($codice)"
+        }
+
+        /**
+         * Il controllo aggiornamenti, come il ⚙️ dell'app nativa: dice se c'è una
+         * build più nuova e apre il download nel browser. Il dialogo è nativo
+         * perché è l'unica cosa che deve funzionare anche quando la pagina non
+         * si carica — ed è la ragione per cui questo pulsante esiste.
+         */
+        @android.webkit.JavascriptInterface
+        fun checkUpdate() {
+            runOnUiThread { mostraDialogoAggiornamento(this@MainActivity) }
+        }
+
         @android.webkit.JavascriptInterface
         fun openApp(packageName: String) {
             val intent = packageManager.getLaunchIntentForPackage(packageName)

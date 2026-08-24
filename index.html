@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.127</title>
+<title>AppSphere v1.5.128</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1656,8 +1656,11 @@
   </div>
   <div class="login-card">
     <div class="login-title">AppSphere</div>
+    <!-- Scritta da APP_VERSION appena parte lo script: a mano restava indietro
+         (era ferma alla v1.5.96 con la pagina alla v1.5.127), cioè proprio il
+         numero che si guarda per capire quale versione si sta usando. -->
     <div id="login-version" style="text-align:center; font-family:'DM Mono',monospace;
-         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">v1.5.96</div>
+         font-size:28px; font-weight:700; letter-spacing:1px; color:#0081C8; margin:6px 0 10px;">…</div>
     <div class="login-sub">// il tuo universo di applicazioni</div>
     <button class="google-btn" onclick="loginWithGoogle()">
       <svg class="google-icon" viewBox="0 0 24 24">
@@ -1691,6 +1694,10 @@
   <button class="hm-item" onclick="closeHamburgerMenu(); openPrioritiesSettings();">🚦 Priorità</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNotifiche();">🔔 Notifiche</button>
   <button class="hm-item" onclick="closeHamburgerMenu(); openNqv();">⚡ Notifica al Volo</button>
+  <!-- Solo dentro l'APK Android: sul PC non c'è nessun APK da aggiornare.
+       Resta nascosta anche negli APK più vecchi del ponte checkUpdate(). -->
+  <button class="hm-item" id="hm-versione" style="display:none"
+          onclick="closeHamburgerMenu(); checkAppUpdate();">📱 Versione app</button>
   <button class="hm-item danger" onclick="closeHamburgerMenu(); logout();">↩ Esci</button>
 </div>
 
@@ -1955,8 +1962,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.127';
-const BUILD_TIME  = '2026-08-23T09:00:00Z';
+const APP_VERSION = 'v1.5.128';
+const BUILD_TIME  = '2026-08-24T11:10:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -1970,6 +1977,10 @@ function getCookie(name) {
 function deleteCookie(name) {
   document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
 }
+(function scriviVersioneLogin() {
+  var el = document.getElementById('login-version');
+  if (el) el.textContent = APP_VERSION;
+})();
 console.log('%c AppSphere ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3323,6 +3334,34 @@ function renderHomeAlertBubble() {
   overlay.appendChild(bubble);
   document.body.appendChild(overlay);
 }
+
+// ── VERSIONE APP (solo dentro l'APK Android) ──
+// Il ponte lo espone solo l'APK WebView: sul PC la voce resta nascosta, e negli
+// APK precedenti a checkUpdate() pure — un pulsante che non fa niente è peggio
+// di un pulsante che non c'è.
+function bridgeAggiornamenti() {
+  var b = window.AndroidBridge;
+  return (b && typeof b.checkUpdate === 'function') ? b : null;
+}
+
+function checkAppUpdate() {
+  var b = bridgeAggiornamenti();
+  if (b) b.checkUpdate();
+}
+
+(function mostraVoceVersione() {
+  function init() {
+    var b  = bridgeAggiornamenti();
+    var el = document.getElementById('hm-versione');
+    if (!b || !el) return;
+    el.style.display = 'block';
+    try {
+      if (typeof b.appVersion === 'function') el.textContent = '📱 Versione app · v' + b.appVersion();
+    } catch (e) { /* l'etichetta base va bene lo stesso */ }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
 
 // ── HAMBURGER MENU ──
 function toggleHamburgerMenu() {

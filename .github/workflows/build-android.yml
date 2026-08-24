@@ -87,8 +87,35 @@ jobs:
       - name: Salva APK e versione
         run: |
           VERSION=$(grep versionName android-app/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          VERSION_CODE=$(grep versionCode android-app/app/build.gradle | grep -o '[0-9]\+' | head -1)
           cp android-app/app/build/outputs/apk/release/app-release.apk /tmp/GarsalApps-latest.apk
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION"           >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+
+      # Il nome del file è fisso (`-latest.apk`), quindi da fuori un APK vale
+      # l'altro: chi lo scarica non ha modo di sapere se sta prendendo la build
+      # di prima o quella appena pubblicata. Questa scheda dice cosa c'è dentro
+      # quello lì accanto — la legge `comandi.html` sul pulsante e il
+      # «📱 Versione app» dentro l'APK (Aggiornamento.kt).
+      - name: Scheda della build
+        run: |
+          BYTES=$(stat -c%s /tmp/GarsalApps-latest.apk)
+          MB=$(awk "BEGIN {printf \"%.1f\", $BYTES/1048576}")
+          SHA=$(sha256sum /tmp/GarsalApps-latest.apk | cut -d' ' -f1)
+          echo "📦 GarsalApps v$VERSION — ${MB} MB (${BYTES} byte)"
+          echo "🔑 SHA-256: $SHA"
+          cat > /tmp/GarsalApps-latest.json <<EOF
+          {
+            "app": "GarsalApps",
+            "version": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "$GITHUB_SHA",
+            "bytes": $BYTES,
+            "sha256": "$SHA"
+          }
+          EOF
+          cat /tmp/GarsalApps-latest.json
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -125,10 +152,16 @@ jobs:
             cp /tmp/GarsalApps-latest.apk releases/GarsalApps-latest.apk
 
             git add releases/GarsalApps-latest.apk
-            if git diff --staged --quiet; then
+            # La scheda si aggiorna solo se si aggiorna l'APK: `builtAt` cambia a
+            # ogni run, e commetterla da sola vorrebbe dire annunciare una build
+            # nuova per un pacchetto identico a quello di prima.
+            if git diff --staged --quiet && [ -f releases/GarsalApps-latest.json ]; then
               echo "APK non cambiato, skip commit"
               exit 0
             fi
+
+            cp /tmp/GarsalApps-latest.json releases/GarsalApps-latest.json
+            git add releases/GarsalApps-latest.json
 
             git commit -m "chore: aggiorna APK GarsalApps v${{ env.VERSION }} [skip actions]"
             if git push origin master; then

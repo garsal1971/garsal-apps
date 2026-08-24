@@ -1012,6 +1012,16 @@ dentro l'app il ⚙️ in home: `DialogoAggiornamento` legge la stessa scheda, c
 sapere **prima** di scaricare se c'è davvero qualcosa di nuovo — la domanda che l'11 agosto non
 aveva risposta da nessuna parte.
 
+⚠️ **Lo stesso giro esiste ora anche nell'APK WebView**, ed è voluto che siano due copie parallele:
+`build-android.yml` pubblica `releases/GarsalApps-latest.json` con le stesse sette chiavi, e
+`android-app/app/.../Aggiornamento.kt` la legge da **☰ → 📱 Versione app** nel launcher. Le
+differenze sono solo di forma — lì Compose e `BuildConfig`, qui un `AlertDialog` di AppCompat e la
+versione letta dal **pacchetto installato** (`packageManager.getPackageInfo`), che è quella vera e
+non quella che il codice credeva di essere. La voce di menù compare **solo dentro l'APK**: il
+launcher la mostra se `window.AndroidBridge.checkUpdate` esiste, quindi resta nascosta sul PC e
+negli APK precedenti a questo ponte. Cambiando la forma della scheda in un workflow, cambiala
+anche nell'altro e in `mostraVersione()` di `comandi.html`, che ora disegna tutt'e due i pulsanti.
+
 ### ⚠️ Ta Firi? nativo: il punteggio sta nella RPC, e il promemoria si scrive da qui
 
 `tafiri/` porta in nativo le due voci della sidebar del web, che qui sono due schede —
