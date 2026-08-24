@@ -372,7 +372,7 @@ private fun VistaOggi(
                 Riquadro("Mancano al target", conSegno(stato.mancanoAlTarget), Palette.secondary, meta)
                 Riquadro("Kg alla fine", conSegno(stato.kgAllaFine), Palette.warning, meta)
                 Riquadro("Punteggio", "${stato.punteggio}", Palette.topBar, meta)
-                Riquadro("Punti oggi", stato.puntiOggi?.toString() ?: "–", Palette.primary, meta)
+                Riquadro("Punti oggi", stato.puntiOggiMostrati?.toString() ?: "–", Palette.primary, meta)
             }
         }
 

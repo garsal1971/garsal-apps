@@ -267,6 +267,25 @@ object PesoRegole {
     }
 
     /**
+     * I punti delle soglie **già raggiunte** — quelli che la casella «Punti
+     * oggi» somma ai giornalieri e che la chiusura incassa, ma **solo col
+     * successo**.
+     *
+     * Raggiunta vuol dire che il minimo di una giornata, dall'inizio
+     * dell'obiettivo in poi, è sceso sotto quella soglia: non che il premio sia
+     * stato grattato — dimenticarsi di toccare una stellina non deve costare
+     * punti. È lo stesso conto di `milestoneAwards()` nel web.
+     */
+    fun puntiTraguardiRaggiunti(obiettivo: Obiettivo, pesate: List<Pesata>, puntiTotali: Int): Int {
+        val soglie = sogliePremio(obiettivo.pesoIniziale, obiettivo.pesoFinale)
+        if (soglie.isEmpty() || puntiTotali <= 0) return 0
+        val minimo = minimiGiornalieri(pesate.filter { it.giorno >= obiettivo.inizio })
+            .minOfOrNull { it.second } ?: return 0
+        val punti = distribuzionePunti(puntiTotali, soglie.size)
+        return soglie.indices.sumOf { i -> if (minimo <= soglie[i]) punti.getOrElse(i) { 0 } else 0 }
+    }
+
+    /**
      * Distribuzione crescente dei punti fra le soglie —
      * `getMilestonePtsDistribution`: la soglia più lontana (l'ultima, la più
      * difficile) vale di più. L'ultima prende il residuo, per non perdere
