@@ -247,9 +247,9 @@ body {
       <div>
         <div class="apk-panel-label">📱 Android APK</div>
         <div class="apk-title">GarsalApps</div>
-        <div class="apk-sub">Build aggiornata automaticamente</div>
+        <div class="apk-sub" id="gaSub">Build aggiornata automaticamente</div>
       </div>
-      <a class="apk-btn" href="/releases/GarsalApps-latest.apk" download="GarsalApps.apk">
+      <a class="apk-btn" id="gaBtn" href="/releases/GarsalApps-latest.apk" download="GarsalApps.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -459,19 +459,19 @@ AND    routine_schema = 'public';</pre>
 
 <script>
 // ── Quale versione sto scaricando ─────────────────────────────────────────────
-// Il file si chiama sempre `AppSphereNative-latest.apk`: senza questo blocco il
+// Il file si chiama sempre `<nome>-latest.apk`: senza questo blocco il
 // pulsante non dice niente su cosa c'è dentro, e scaricare la build di ieri al
 // posto di quella appena pubblicata è indistinguibile da un aggiornamento
 // riuscito — finché l'app non rifà lo stesso difetto che era appena stato
 // chiuso. La scheda la scrive il workflow accanto all'APK.
 // Il `?v=` non serve al server: serve a impedire che il browser riproponga il
 // pacchetto già scaricato quando l'indirizzo è identico.
-(async function mostraVersioneNativa() {
-  var sub = document.getElementById('anSub');
-  var btn = document.getElementById('anBtn');
+async function mostraVersione(idSub, idBtn, nomeFile, coda) {
+  var sub = document.getElementById(idSub);
+  var btn = document.getElementById(idBtn);
   if (!sub || !btn) return;
   try {
-    var res = await fetch('/releases/AppSphereNative-latest.json?t=' + Date.now(), { cache: 'no-store' });
+    var res = await fetch('/releases/' + nomeFile + '.json?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var b = await res.json();
     var mb = (b.bytes / 1048576).toFixed(1).replace('.', ',');
@@ -479,15 +479,18 @@ AND    routine_schema = 'public';</pre>
     var data = isNaN(d) ? '' : ' · ' + d.toLocaleDateString('it-IT') + ' ' +
                d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
     sub.innerHTML = '<b>v' + b.version + '</b> (build ' + b.versionCode + ')' + data +
-                    ' · ' + mb + ' MB<br>Kotlin/Compose · si affianca a GarsalApps';
-    btn.href = '/releases/AppSphereNative-latest.apk?v=' + encodeURIComponent(b.version);
+                    ' · ' + mb + ' MB<br>' + coda;
+    btn.href = '/releases/' + nomeFile + '.apk?v=' + encodeURIComponent(b.version);
     btn.title = 'SHA-256: ' + b.sha256;
   } catch (e) {
     // Meglio dirlo che lasciar credere che la versione mostrata sia quella
     // vera: qui sotto non c'è nessun numero, e il pulsante resta com'era.
-    sub.textContent = 'Versione non leggibile (' + e.message + ') · Kotlin/Compose';
+    sub.textContent = 'Versione non leggibile (' + e.message + ') · ' + coda;
   }
-})();
+}
+
+mostraVersione('anSub', 'anBtn', 'AppSphereNative-latest', 'Kotlin/Compose · si affianca a GarsalApps');
+mostraVersione('gaSub', 'gaBtn', 'GarsalApps-latest', 'WebView · dentro l\'app: ☰ → 📱 Versione app');
 
 function copyCode(blockId, btn) {
   var pre = document.getElementById(blockId).querySelector('pre');
