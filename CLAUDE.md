@@ -2236,6 +2236,16 @@ Pushing to a `claude/**` branch triggers `.github/workflows/deploy.yml` which:
 1. Merges the branch into `master` automatically (no PR needed)
 2. Netlify picks up the master push and deploys within seconds
 
+⚠️ **Il push su master si riprova, perché può essere rifiutato senza nessun conflitto.** Dallo
+stesso push partono anche le due build APK, che a lavoro finito committano il pacchetto **su
+master**: su un commit che tocca insieme le pagine e il codice Android arrivano mentre il deploy
+è ancora al checkout, e il suo push trova un master più avanti — `! [rejected] (fetch first)`.
+È successo il 24 agosto 2026 (run #1400): il merge era riuscito, il push no, e **tutti i passi
+successivi sono stati saltati**, migration comprese — il codice non era in produzione e l'unico
+posto dove si vedeva era Actions. Il passo *Merge branch into master and push* rilegge quindi
+master e rifà il merge fino a cinque volte. **Un conflitto vero non si riprova**: `git merge`
+esce diverso da zero, e con `bash -e` il passo muore lì — un conflitto lo risolve una persona.
+
 ⚠️ **Il workflow non usa `supabase link`.** Fra le altre cose `link` chiama
 `GET /v1/projects/{ref}/api-keys`, che dal 7 agosto 2026 risponde con un errore di validazione
 del suo stesso schema (`SchemaError` su `inserted_at`): l'intero deploy moriva lì, portandosi
