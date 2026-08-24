@@ -337,6 +337,10 @@ fun GestioneObiettivoScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Punti giornalieri: ${esito.puntiGiornalieri}")
+                    Text(
+                        if (successo) "Traguardi raggiunti: +${esito.puntiTraguardi}"
+                        else "Traguardi raggiunti: 0 (si incassano solo col successo)"
+                    )
                     Text("Punti chiusura: ${if (esito.puntiChiusura >= 0) "+" else ""}${esito.puntiChiusura}")
                     Text("TOTALE FINALE: ${esito.totale}", fontWeight = FontWeight.Bold)
                 }

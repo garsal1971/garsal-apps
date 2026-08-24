@@ -109,7 +109,13 @@ data class PesoState(
  */
 sealed class EsitoChiusura {
     data class Bloccata(val motivo: String) : EsitoChiusura()
-    data class DaConfermare(val puntiGiornalieri: Int, val puntiChiusura: Int, val totale: Int) : EsitoChiusura()
+    data class DaConfermare(
+        val puntiGiornalieri: Int,
+        /** Le soglie già raggiunte: valgono solo chiudendo con successo. */
+        val puntiTraguardi: Int,
+        val puntiChiusura: Int,
+        val totale: Int,
+    ) : EsitoChiusura()
 }
 
 class PesoViewModel : ViewModel() {
@@ -301,7 +307,20 @@ class PesoViewModel : ViewModel() {
 
         val puntiGiornalieri = _state.value.puntiOggi ?: 0
         val puntiChiusura = if (nuovoStato == "success") obiettivo.bonusFinale else -obiettivo.malusFinale
-        return EsitoChiusura.DaConfermare(puntiGiornalieri, puntiChiusura, puntiGiornalieri + puntiChiusura)
+
+        // ⚠️ I traguardi intermedi entrano nel punteggio **solo qui e solo col
+        // successo**: valgono le soglie **raggiunte** — non quelle grattate,
+        // dimenticarsi di toccare una stellina non deve costare punti — e su un
+        // obiettivo fallito non si incassano. Stessa regola in `closeObjective()`
+        // nel web: se cambia una, cambia l'altra.
+        val puntiTraguardi = if (nuovoStato == "success") puntiTraguardiRaggiunti(obiettivo) else 0
+
+        return EsitoChiusura.DaConfermare(
+            puntiGiornalieri = puntiGiornalieri,
+            puntiTraguardi = puntiTraguardi,
+            puntiChiusura = puntiChiusura,
+            totale = puntiGiornalieri + puntiTraguardi + puntiChiusura,
+        )
     }
 
     /** Chiude l'obiettivo col punteggio già confermato dall'utente. */
@@ -402,6 +421,23 @@ class PesoViewModel : ViewModel() {
             Log.w(TAG, "sincronizzazione Salute non riuscita", e)
             _state.value = _state.value.copy(messaggio = "Non sincronizzato: ${e.message ?: "connessione assente"}")
         }
+    }
+
+    /**
+     * I punti delle soglie già raggiunte — la stessa lettura che fa la barra
+     * delle stelline ([com.garsal.appsphere.peso.BarraTraguardi]): soglie da
+     * [PesoRegole.sogliePremio], punti distribuiti da
+     * [PesoRegole.distribuzionePunti], raggiunta = il minimo di una giornata
+     * dall'inizio dell'obiettivo è sceso sotto quella soglia.
+     */
+    private fun puntiTraguardiRaggiunti(obiettivo: Obiettivo): Int {
+        val soglie = PesoRegole.sogliePremio(obiettivo.pesoIniziale, obiettivo.pesoFinale)
+        if (soglie.isEmpty()) return 0
+        val minimo = PesoRegole.minimiGiornalieri(
+            _state.value.pesate.filter { it.giorno >= obiettivo.inizio }
+        ).minOfOrNull { it.second } ?: return 0
+        val punti = PesoRegole.distribuzionePunti(_state.value.puntiTraguardi, soglie.size)
+        return soglie.indices.sumOf { i -> if (minimo <= soglie[i]) punti.getOrElse(i) { 0 } else 0 }
     }
 
     // ── Premi dei traguardi intermedi ───────────────────────────────────

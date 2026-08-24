@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.6.1</title>
+    <title>Weight Quest v3.7.0</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -768,6 +768,84 @@
         }
 
         /* ── Ruota dei premi ────────────────────────────────────────── */
+        /* ── Cronologia dei punti (clic su una casella del punteggio) ── */
+        #scoreHistOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 10001;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+        }
+        #scoreHistCard {
+            background: #fff;
+            border-radius: 0;
+            width: 100%;
+            max-width: 460px;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+        }
+        #scoreHistHead {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 14px 16px;
+            border-bottom: 2px solid #E5E7EB;
+        }
+        #scoreHistHead h3 { margin: 0; font-size: 16px; }
+        #scoreHistBody { padding: 12px 16px 18px; overflow-y: auto; }
+        .sh-sec {
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6B7280;
+            margin: 16px 0 8px;
+        }
+        .sh-sec:first-child { margin-top: 0; }
+        .sh-tot {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 8px 10px;
+            background: #F9FAFB;
+            border-left: 4px solid #FF3366;
+            margin-bottom: 4px;
+        }
+        .sh-tot b { font-size: 18px; }
+        .sh-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 6px 2px;
+            border-bottom: 1px solid #F1F3F5;
+            font-size: 13px;
+        }
+        .sh-row .sh-day   { width: 58px; font-weight: 700; color: #1F2937; flex: 0 0 auto; }
+        .sh-row .sh-kg    { flex: 1 1 auto; color: #6B7280; font-size: 12px; }
+        .sh-row .sh-pt    { width: 44px; text-align: right; font-weight: 800; flex: 0 0 auto; }
+        .sh-row .sh-cum   { width: 52px; text-align: right; color: #9CA3AF; font-size: 12px; flex: 0 0 auto; }
+        .sh-row.win  .sh-pt { color: #00B894; }
+        .sh-row.lose .sh-pt { color: #E74C3C; }
+        .sh-row.interp .sh-day { color: #9CA3AF; }
+        .sh-note { font-size: 12px; color: #6B7280; line-height: 1.5; margin-top: 8px; }
+        .sh-chip {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 3px 8px;
+            margin: 0 5px 5px 0;
+            border: 2px solid #E5E7EB;
+            color: #9CA3AF;
+        }
+        .sh-chip.on { border-color: #FFD700; background: #fff8dc; color: #b8860b; }
+
         #prizeOverlay {
             display: none;
             position: fixed;
@@ -1037,13 +1115,15 @@
                             <div class="stat-label" style="color: #F39C12;">Kg alla fine</div>
                         </div>
 
-                        <div class="stat-box gradient">
+                        <div class="stat-box gradient" onclick="openScoreHistory()"
+                             style="cursor:pointer" title="Da dove vengono questi punti">
                             <div class="stat-value" id="statsScore">0</div>
-                            <div class="stat-label">Punteggio</div>
+                            <div class="stat-label">Punteggio 📜</div>
                         </div>
-                        <div class="stat-box" style="border: 3px solid #FF3366;">
+                        <div class="stat-box" onclick="openScoreHistory()"
+                             style="border: 3px solid #FF3366; cursor:pointer" title="Da dove vengono questi punti">
                             <div class="stat-value" id="scoreValue" style="color: #FF3366;">-</div>
-                            <div class="stat-label" style="color: #FF3366;">Punti oggi</div>
+                            <div class="stat-label" style="color: #FF3366;">Punti oggi 📜</div>
                         </div>
                     </div>
 
@@ -1439,8 +1519,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.6.1';
-        var BUILD_TIME  = '2026-08-24T10:20:00Z';
+        var APP_VERSION = 'v3.7.0';
+        var BUILD_TIME  = '2026-08-24T12:10:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2264,29 +2344,10 @@
             }
             var ptsArr = getMilestonePtsDistribution(totalPts, thresholds.length);
 
-            // Pesi durante l'obiettivo (solo da start_date), ordinati per data asc
-            var objStart = obj ? obj.start_date : null;
-            var objWeights = [];
-            if (userData.weights && userData.weights.length > 0) {
-                objWeights = userData.weights.filter(function(r) {
-                    return r.weight != null && isFinite(r.weight) && (!objStart || r.date >= objStart);
-                }).slice().sort(function(a, b) { return a.date < b.date ? -1 : 1; });
-            }
-
-            // Minimo giornaliero: il traguardo è raggiunto quando
-            // il minimo della giornata è <= soglia.
-            var dailyMins = getDailyMinWeights(objWeights);
-            var minDailyMin = dailyMins.length
-                ? Math.min.apply(null, dailyMins.map(function(r) { return r.weight; }))
-                : Infinity;
-
-            // Prima data in cui il minimo della giornata è <= t
-            function firstDateBelow(t) {
-                for (var i = 0; i < dailyMins.length; i++) {
-                    if (dailyMins[i].weight <= t) return dailyMins[i].date;
-                }
-                return null;
-            }
+            // Quali soglie sono raggiunte, quando e quanto valgono: lo dice
+            // milestoneAwards, che è lo stesso conto usato alla chiusura
+            // dell'obiettivo. Due letture, una regola.
+            var premiTraguardi = milestoneAwards(obj, totalPts);
 
             // Premi già estratti per questo obiettivo
             var prizes = obj ? loadPrizes(obj) : {};
@@ -2295,8 +2356,9 @@
             bar.innerHTML = '';
             bar.style.display = 'flex';
             thresholds.forEach(function(t, i) {
-                var reached = isFinite(minDailyMin) && minDailyMin <= t;
-                var firstDate = reached ? firstDateBelow(t) : null;
+                var voce = premiTraguardi.rows[i] || { reached: false, firstDate: null };
+                var reached = voce.reached;
+                var firstDate = voce.firstDate;
                 var won  = reached ? prizes[String(t)] : null;
                 var prize = won ? findPrize(won.id) : null;
 
@@ -2359,16 +2421,122 @@
                 bar.appendChild(div);
             });
 
-            // Mostra distribuzione punti sotto il campo input
+            // Mostra distribuzione punti sotto il campo input, e quanto di
+            // quei punti è già stato raggiunto: si incassano alla chiusura con
+            // successo, quindi dirlo prima evita di scoprirlo alla fine.
             if (distrib && totalPts > 0) {
                 distrib.textContent = ptsArr.map(function(p, i) {
                     return '< ' + thresholds[i] + ' kg: +' + p + ' pt';
-                }).join('  ·  ');
+                }).join('  ·  ')
+                + '  —  raggiunti ' + premiTraguardi.reached + '/' + thresholds.length
+                + ' (+' + premiTraguardi.reachedPoints + ' pt alla chiusura con successo)';
             } else if (distrib) {
                 distrib.textContent = '';
             }
         }
         // ────────────────────────────────────────────────────────────────
+
+        // ── Cronologia dei punti ────────────────────────────────────────
+        // Si apre da una delle due caselle del punteggio, e risponde alla sola
+        // domanda che quelle caselle non possono: **da dove vengono**. Non
+        // ricalcola niente per conto suo — legge buildScoreRows e
+        // milestoneAwards, gli stessi due conti dei badge e della chiusura.
+        function openScoreHistory() {
+            var body = document.getElementById('scoreHistBody');
+            var ov   = document.getElementById('scoreHistOverlay');
+            if (!body || !ov) return;
+
+            var obj = userData.currentObjective;
+            var attivo = obj && obj.status !== 'success' && obj.status !== 'failed';
+            var punti  = buildScoreRows(userData.weights);
+            var premi  = milestoneAwards(obj);
+            var html   = '';
+
+            // 1. Il punteggio: la somma degli obiettivi chiusi, e basta.
+            var chiusi = (allObjectives || []).filter(function(o) {
+                return o.status === 'success' || o.status === 'failed';
+            });
+            var totaleChiusi = chiusi.reduce(function(acc, o) { return acc + (o.total_score || 0); }, 0);
+
+            html += '<div class="sh-sec">Punteggio — obiettivi chiusi</div>';
+            html += '<div class="sh-tot"><span>Totale in archivio</span><b>' + totaleChiusi + ' pt</b></div>';
+            if (chiusi.length === 0) {
+                html += '<div class="sh-note">Nessun obiettivo ancora chiuso: il punteggio si muove solo alla chiusura.</div>';
+            } else {
+                chiusi.slice().sort(function(a, b) { return (a.end_date < b.end_date) ? 1 : -1; })
+                      .forEach(function(o) {
+                    var esito = o.status === 'success' ? '✅' : '❌';
+                    html += '<div class="sh-row ' + (o.status === 'success' ? 'win' : 'lose') + '">'
+                          + '<span class="sh-day">' + esito + '</span>'
+                          + '<span class="sh-kg">' + (o.objective_name || 'Senza nome')
+                          + '<br>' + fmtDateIt(o.start_date) + ' → ' + fmtDateIt(o.end_date) + '</span>'
+                          + '<span class="sh-pt">' + (o.total_score || 0) + '</span></div>';
+                });
+            }
+
+            // 2. L'obiettivo in corso: quanto ha maturato e quanto vale chiuderlo.
+            if (attivo) {
+                var bonusFinale = obj.final_bonus || 100;
+                var malusFinale = obj.final_malus || 50;
+                var seSuccesso  = punti.total + premi.reachedPoints + bonusFinale;
+
+                html += '<div class="sh-sec">In corso — ' + (obj.objective_name || 'Senza nome') + '</div>';
+                html += '<div class="sh-tot"><span>Punti giornalieri maturati</span><b>' + punti.total + ' pt</b></div>';
+
+                if (premi.rows.length) {
+                    html += '<div class="sh-sec">Traguardi intermedi</div>';
+                    premi.rows.forEach(function(r) {
+                        html += '<span class="sh-chip' + (r.reached ? ' on' : '') + '">&lt; ' + r.threshold
+                              + ' kg · +' + r.points + (r.reached && r.firstDate ? ' · ' + fmtDateIt(r.firstDate) : '')
+                              + '</span>';
+                    });
+                    html += '<div class="sh-note">Raggiunti <b>' + premi.reached + '/' + premi.rows.length
+                          + '</b> per <b>+' + premi.reachedPoints + ' pt</b>. Contano le soglie <b>raggiunte</b> '
+                          + '(non serve grattare il premio) e si incassano <b>solo chiudendo con successo</b>: '
+                          + 'su un obiettivo fallito valgono zero.</div>';
+                }
+
+                html += '<div class="sh-sec">Se lo chiudessi oggi</div>';
+                html += '<div class="sh-row win"><span class="sh-day">✅</span>'
+                      + '<span class="sh-kg">' + punti.total + ' giornalieri + ' + premi.reachedPoints
+                      + ' traguardi + ' + bonusFinale + ' bonus</span>'
+                      + '<span class="sh-pt">' + seSuccesso + '</span></div>';
+                html += '<div class="sh-row lose"><span class="sh-day">❌</span>'
+                      + '<span class="sh-kg">' + punti.total + ' giornalieri − ' + malusFinale + ' malus</span>'
+                      + '<span class="sh-pt">' + (punti.total - malusFinale) + '</span></div>';
+
+                html += '<div class="sh-sec">Giorno per giorno</div>';
+                if (punti.rows.length === 0) {
+                    html += '<div class="sh-note">Ancora nessun giorno da contare.</div>';
+                } else {
+                    punti.rows.slice().reverse().forEach(function(r) {
+                        var p = r.date.split('-');
+                        html += '<div class="sh-row ' + (r.points > 0 ? 'win' : 'lose')
+                              + (r.interp ? ' interp' : '') + '">'
+                              + '<span class="sh-day">' + p[2] + '/' + p[1] + '</span>'
+                              + '<span class="sh-kg">' + (r.interp ? '≈ ' : '')
+                              + r.weight.toFixed(1) + ' kg · target ' + r.target.toFixed(1) + '</span>'
+                              + '<span class="sh-pt">' + (r.points > 0 ? '+' : '') + r.points + '</span>'
+                              + '<span class="sh-cum">' + r.cum + '</span></div>';
+                    });
+                    html += '<div class="sh-note">I giorni col <b>≈</b> non hanno una pesata: sono ricostruiti '
+                          + 'fra quella prima e quella dopo, e contano come gli altri. L\'ultima colonna è il '
+                          + 'totale progressivo — l\'ultimo valore è quello della casella «Punti oggi».</div>';
+                }
+            } else {
+                html += '<div class="sh-sec">In corso</div>';
+                html += '<div class="sh-note">Nessun obiettivo aperto: i punti giornalieri si contano solo '
+                      + 'mentre un obiettivo è in corso.</div>';
+            }
+
+            body.innerHTML = html;
+            ov.style.display = 'flex';
+        }
+
+        function closeScoreHistory() {
+            var ov = document.getElementById('scoreHistOverlay');
+            if (ov) ov.style.display = 'none';
+        }
 
         // ── Milestone Weight Celebration ────────────────────────────────
         function checkMilestoneCelebration(data) {
@@ -3866,22 +4034,36 @@
             
             var label = newStatus === 'success' ? 'SUCCESSO' : 'FALLITO';
             
-            // Punteggio giornaliero accumulato fino ad ora
-            var dailyScore = parseInt(document.getElementById('scoreValue').textContent) || 0;
-            
+            // Punteggio giornaliero accumulato fino ad ora. Si ricalcola invece
+            // di leggerlo dal badge: un trattino a schermo diventerebbe uno zero
+            // in archivio senza che nessuno se ne accorga.
+            var dailyScore = buildScoreRows(userData.weights).total;
+
             // Aggiungi bonus/malus finale in base allo stato di chiusura
             var finalBonus = userData.currentObjective.final_bonus || 100;
             var finalMalus = userData.currentObjective.final_malus || 50;
-            
-            var finalScore = dailyScore;
+
+            // ⚠️ I traguardi intermedi entrano nel punteggio **solo qui e solo
+            // col successo**: valgono le soglie raggiunte (non quelle grattate —
+            // dimenticarsi di toccare una stellina non deve costare punti), e su
+            // un obiettivo fallito non si incassano. Stessa regola nell'app
+            // nativa (PesoViewModel.preparaChiusura): se cambia una, cambia l'altra.
+            var premi = milestoneAwards(userData.currentObjective);
+            var puntiTraguardi = newStatus === 'success' ? premi.reachedPoints : 0;
+
+            var finalScore = dailyScore + puntiTraguardi;
             if (newStatus === 'success') {
                 finalScore += finalBonus;
             } else if (newStatus === 'failed') {
                 finalScore -= finalMalus;
             }
-            
+
             var confirmMsg = 'Vuoi chiudere questo obiettivo come ' + label + '?\n\n' +
                            'Punti giornalieri: ' + dailyScore + '\n' +
+                           'Traguardi raggiunti: ' + premi.reached + '/' + premi.rows.length +
+                             ' → ' + (newStatus === 'success'
+                                        ? '+' + puntiTraguardi
+                                        : '0 (si incassano solo col successo)') + '\n' +
                            'Punti chiusura: ' + (newStatus === 'success' ? '+' + finalBonus : '-' + finalMalus) + '\n' +
                            'TOTALE FINALE: ' + finalScore;
             
@@ -4730,6 +4912,125 @@
             return null;
         }
 
+        // ── I punti giorno per giorno: una regola sola ───────────────────
+        // La leggono il badge «Punti oggi», la cronologia (📜) e la chiusura
+        // dell'obiettivo. Erano tre posti che potevano rispondere in tre modi
+        // diversi alla stessa domanda: qui il conto si fa una volta.
+        // ⚠️ Vale sull'obiettivo **corrente**: `getInterpolatedTarget` legge
+        // `userData.milestones`, che sono le sue.
+        function buildScoreRows(data) {
+            var vuoto = { rows: [], total: 0 };
+            var obj = userData.currentObjective;
+            if (!obj || !userData.milestones || userData.milestones.length < 2) return vuoto;
+
+            var dailyBonus = obj.daily_bonus || 10;
+            var dailyMalus = obj.daily_malus || 5;
+
+            var dayGroups = {};
+            (data || []).forEach(function(row) {
+                if (!dayGroups[row.date]) dayGroups[row.date] = [];
+                dayGroups[row.date].push(row);
+            });
+
+            var todayStr = localDateStr();
+            var endLoop  = obj.end_date < todayStr ? obj.end_date : todayStr;
+
+            // I giorni dell'obiettivo senza pesata: si ricostruiscono e contano
+            // come gli altri — toglierli cambierebbe il punteggio.
+            var interpolatedDays = {};
+            var cursor = new Date(obj.start_date);
+            while (true) {
+                var dateStr = localDateStr(cursor);
+                if (dateStr > endLoop) break;
+                if (!dayGroups[dateStr] && getInterpolatedTarget(dateStr) !== null) {
+                    interpolatedDays[dateStr] = true;
+                }
+                cursor.setDate(cursor.getDate() + 1);
+            }
+
+            var giorni = Object.keys(dayGroups)
+                .concat(Object.keys(interpolatedDays))
+                .filter(function(d) { return d >= obj.start_date && d <= endLoop; })
+                .sort();
+
+            var totale = 0;
+            var rows = [];
+            giorni.forEach(function(date) {
+                var isInterp = !!interpolatedDays[date];
+                var target, peso;
+                if (isInterp) {
+                    target = getInterpolatedTarget(date);
+                    peso   = getInterpolatedWeightFromSeries(date, dayGroups);
+                } else {
+                    var minEntry = dayGroups[date].reduce(function(a, b) { return a.weight < b.weight ? a : b; });
+                    // Il target congelato nella riga, non ricalcolato: spostare i
+                    // traguardi domani non riscrive il giudizio di ieri.
+                    target = minEntry.target_weight || getInterpolatedTarget(date);
+                    peso   = minEntry.weight;
+                }
+                if (target == null || peso == null || !isFinite(target) || !isFinite(peso)) return;
+
+                // Il confronto si fa a un decimale: 79,44 contro 79,4 è vinta.
+                var punti = Math.round(peso * 10) / 10 <= Math.round(target * 10) / 10 ? dailyBonus : -dailyMalus;
+                totale += punti;
+                rows.push({
+                    date: date, interp: isInterp, weight: peso,
+                    target: target, points: punti, cum: totale
+                });
+            });
+            return { rows: rows, total: totale };
+        }
+
+        // ── I traguardi intermedi: quali sono raggiunti e quanto valgono ──
+        // `reachedPoints` è quello che si somma al punteggio **alla chiusura
+        // con successo** — e solo allora: vedi closeObjective().
+        function milestoneAwards(obj, totalPts) {
+            obj = obj || userData.currentObjective;
+            var vuoto = { rows: [], reached: 0, reachedPoints: 0, totalPoints: 0 };
+            if (!obj) return vuoto;
+
+            var thresholds = getMilestoneThresholds(obj);
+            if (thresholds.length === 0) return vuoto;
+
+            if (totalPts == null) {
+                var campo = document.getElementById('objectiveMilestonePts');
+                totalPts = parseInt(campo ? campo.value : '', 10);
+                if (!isFinite(totalPts)) totalPts = parseInt(localStorage.getItem(getMilestonePtsKey(obj)), 10) || 0;
+            }
+            var ptsArr = getMilestonePtsDistribution(totalPts, thresholds.length);
+
+            // Solo le pesate dall'inizio dell'obiettivo, e il minimo di ogni
+            // giornata: la soglia scatta quando anche la peggiore ci passa sotto.
+            var objWeights = (userData.weights || []).filter(function(r) {
+                return r.weight != null && isFinite(r.weight) && r.date >= obj.start_date;
+            });
+            var dailyMins = getDailyMinWeights(objWeights);
+            var minDailyMin = dailyMins.length
+                ? Math.min.apply(null, dailyMins.map(function(r) { return r.weight; }))
+                : Infinity;
+
+            function firstDateBelow(t) {
+                for (var i = 0; i < dailyMins.length; i++) {
+                    if (dailyMins[i].weight <= t) return dailyMins[i].date;
+                }
+                return null;
+            }
+
+            var out = { rows: [], reached: 0, reachedPoints: 0, totalPoints: totalPts };
+            thresholds.forEach(function(t, i) {
+                var reached = isFinite(minDailyMin) && minDailyMin <= t;
+                var punti = ptsArr[i] || 0;
+                if (reached) { out.reached++; out.reachedPoints += punti; }
+                out.rows.push({
+                    threshold: t,
+                    points: punti,
+                    reached: reached,
+                    firstDate: reached ? firstDateBelow(t) : null
+                });
+            });
+            return out;
+        }
+
         function calculateTotalScores(data) {
             var scoreEl = document.getElementById('scoreValue');
             var kgEl    = document.getElementById('avgScoreValue');
@@ -4747,64 +5048,13 @@
                 return;
             }
 
-            var dailyBonus  = obj.daily_bonus  || 10;
-            var dailyMalus  = obj.daily_malus  || 5;
-            var startDateStr = obj.start_date;
-            var endDateStr   = obj.end_date;
+            var endDateStr = obj.end_date;
+            var todayStr   = localDateStr();
 
-            // --- Badge "Punti oggi": punteggio accumulato fino ad oggi
-            //     (stessa logica della tabella: pesate reali + giorni interpolati) ---
-            var dayGroups = {};
-            if (data && data.length > 0) {
-                data.forEach(function(row) {
-                    var d = row.date;
-                    if (!dayGroups[d]) dayGroups[d] = [];
-                    dayGroups[d].push(row);
-                });
-            }
-
-            var todayStr  = localDateStr();
-            var endLoop   = endDateStr < todayStr ? endDateStr : todayStr;
-
-            // Individua giorni interpolati (nel range obiettivo, senza pesata reale)
-            var interpolatedDays = {};
-            var cursor = new Date(startDateStr);
-            while (true) {
-                var dateStr = localDateStr(cursor);
-                if (dateStr > endLoop) break;
-                if (!dayGroups[dateStr] && getInterpolatedTarget(dateStr) !== null) {
-                    interpolatedDays[dateStr] = true;
-                }
-                cursor.setDate(cursor.getDate() + 1);
-            }
-
-            // Calcola punteggio cumulativo (reali + interpolati) fino ad oggi
-            var allDaysAsc = Object.keys(dayGroups)
-                .concat(Object.keys(interpolatedDays))
-                .filter(function(d) { return d >= startDateStr && d <= endLoop; })
-                .sort();
-
-            var totalScore = 0;
-            allDaysAsc.forEach(function(date) {
-                var isInterp = !!interpolatedDays[date];
-                var target, effectiveWeight;
-
-                if (isInterp) {
-                    target          = getInterpolatedTarget(date);
-                    effectiveWeight = getInterpolatedWeightFromSeries(date, dayGroups);
-                } else {
-                    var dayData  = dayGroups[date];
-                    var minEntry = dayData.reduce(function(a, b) { return a.weight < b.weight ? a : b; });
-                    target          = minEntry.target_weight || getInterpolatedTarget(date);
-                    effectiveWeight = minEntry.weight;
-                }
-
-                if (target === null || effectiveWeight === null) return;
-
-                var daily = Math.round(effectiveWeight * 10) / 10 <= Math.round(target * 10) / 10 ? dailyBonus : -dailyMalus;
-                totalScore += daily;
-            });
-
+            // --- Badge "Punti oggi": il cumulativo fino ad oggi ---
+            // Il conto lo fa buildScoreRows: è lo stesso numero che mostrano la
+            // cronologia (📜) e la chiusura dell'obiettivo.
+            var totalScore = buildScoreRows(data).total;
             if (scoreEl) scoreEl.textContent = totalScore;
 
             // --- Badge "Peso target": target interpolato di oggi ---
@@ -7806,6 +8056,17 @@
     </div>
 
     <!-- Estrazione premio (ruota della fortuna) -->
+    <div id="scoreHistOverlay" onclick="if (event.target === this) closeScoreHistory()">
+        <div id="scoreHistCard">
+            <div id="scoreHistHead">
+                <h3>📜 Cronologia dei punti</h3>
+                <button type="button" class="btn btn-secondary" style="padding:6px 12px"
+                        onclick="closeScoreHistory()">Chiudi</button>
+            </div>
+            <div id="scoreHistBody"></div>
+        </div>
+    </div>
+
     <div id="prizeOverlay">
         <div id="prizeCard">
             <div id="prizeConfetti"></div>
