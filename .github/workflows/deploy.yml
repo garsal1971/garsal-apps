@@ -40,25 +40,56 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      # ⚠️ Il push su master può essere **rifiutato senza che ci sia nessun
+      # conflitto**: è una gara, non un errore. Le due build APK
+      # (`build-android.yml`, `build-appsphere-native.yml`) partono dallo stesso
+      # push di questo job e committano il pacchetto appena costruito **su
+      # master**; su un commit che tocca insieme le pagine e il codice Android
+      # arrivano mentre questo job è ancora al checkout, e il push trova un
+      # master più avanti di quello che ha in mano — `! [rejected] (fetch
+      # first)`.
+      #
+      # È già successo (run #1400, 24 agosto 2026): il merge era riuscito, il
+      # push no, e **tutti i passi successivi sono stati saltati** — migration
+      # comprese. Il codice non arrivava in produzione e nessuno se ne
+      # accorgeva se non guardando Actions.
+      #
+      # Si rilegge master e si rifà il merge, fino a cinque volte. Un conflitto
+      # vero invece **non si riprova**: `git merge` esce diverso da zero e con
+      # `bash -e` il passo muore lì, che è quello che deve succedere — un
+      # conflitto lo risolve una persona, non un ciclo.
       - name: Merge branch into master and push
         run: |
           BRANCH="${{ github.ref_name }}"
-          git checkout master
-          git merge "origin/$BRANCH" --no-ff -m "deploy: $BRANCH → master [$(date -u '+%Y-%m-%dT%H:%M:%SZ')]"
 
-          # Rimuove i vecchi workflow PR/merge se ancora presenti
-          CHANGED=0
-          for F in .github/workflows/auto-pr-claude.yml .github/workflows/auto-merge-claude.yml; do
-            if [ -f "$F" ]; then
-              git rm "$F"
-              CHANGED=1
+          for TENTATIVO in 1 2 3 4 5; do
+            git fetch origin master
+            git checkout -B master origin/master
+            git merge "origin/$BRANCH" --no-ff -m "deploy: $BRANCH → master [$(date -u '+%Y-%m-%dT%H:%M:%SZ')]"
+
+            # Rimuove i vecchi workflow PR/merge se ancora presenti
+            CHANGED=0
+            for F in .github/workflows/auto-pr-claude.yml .github/workflows/auto-merge-claude.yml; do
+              if [ -f "$F" ]; then
+                git rm "$F"
+                CHANGED=1
+              fi
+            done
+            if [ "$CHANGED" = "1" ]; then
+              git commit -m "chore: rimuove vecchi workflow auto-pr e auto-merge"
             fi
-          done
-          if [ "$CHANGED" = "1" ]; then
-            git commit -m "chore: rimuove vecchi workflow auto-pr e auto-merge"
-          fi
 
-          git push origin master
+            if git push origin master; then
+              echo "✓ master aggiornato (tentativo $TENTATIVO)"
+              exit 0
+            fi
+
+            echo "⚠️ push rifiutato al tentativo $TENTATIVO: master si è mosso, rileggo e rifaccio il merge"
+            sleep $((TENTATIVO * 5))
+          done
+
+          echo "::error::push su master rifiutato dopo 5 tentativi — qualcuno continua a scriverci"
+          exit 1
 
       # Sull'avvio manuale non c'è un commit da ispezionare: cosa fare lo dicono gli input.
       # FN_LIST viaggia insieme ai flag perché su dispatch le funzioni da ridistribuire non
