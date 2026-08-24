@@ -6,6 +6,10 @@
 
     <!-- Health Connect — lettura peso, per la sincronizzazione con la bilancia. -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <!-- Senza questo, HC lascia leggere solo i dati scritti nei 30 giorni prima
+         della concessione: la finestra di 90 giorni torna tagliata e senza
+         errori. Vedi PERMESSI_SALUTE in Salute.kt. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <!-- Necessario per rilevare Health Connect e per aprire Renpho — stesse tre righe dell'APK WebView. -->
     <queries>

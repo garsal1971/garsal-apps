@@ -60,10 +60,15 @@ fun DialogoGrattaEVinci(
     soglia: Int,
     vinto: PremioVinto?,
     onRivelato: (PremioCibo) -> Unit,
+    onUsufruito: (Boolean) -> Unit,
     onChiudi: () -> Unit,
 ) {
     val premio = remember(soglia) { vinto?.let { premioDa(it.id) } ?: PREMI_CIBO.random() }
     var rivelato by remember(soglia) { mutableStateOf(vinto != null) }
+    // Non è uno stato locale: arriva da [PesoState.premi], che si aggiorna in
+    // modo ottimistico appena si tocca il pulsante. Tenerne una copia qui
+    // vorrebbe dire due verità sullo stesso premio.
+    val usufruitoIl = vinto?.usufruitoIl
 
     Dialog(onDismissRequest = onChiudi) {
         Column(
@@ -82,8 +87,11 @@ fun DialogoGrattaEVinci(
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = if (rivelato) "Premio già grattato per questa soglia."
-                    else "Gratta l'argento col dito e scopri cosa hai vinto.",
+                text = when {
+                    usufruitoIl != null -> "Premio già usufruito il ${dataIt(usufruitoIl)}."
+                    rivelato -> "Premio già grattato per questa soglia."
+                    else -> "Gratta l'argento col dito e scopri cosa hai vinto."
+                },
                 color = Color(0xFF9AA5C4),
                 fontSize = 12.sp,
                 textAlign = TextAlign.Center,
@@ -117,7 +125,26 @@ fun DialogoGrattaEVinci(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                if (usufruitoIl != null) {
+                    Text(
+                        "🍽️ Usufruito il ${dataIt(usufruitoIl)}",
+                        color = Color(0xFF00B894),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 Spacer(Modifier.height(6.dp))
+                // La domanda che il biglietto pone dopo il gratta: il premio
+                // resta vinto, ma si spegne. Reversibile — un tocco per sbaglio
+                // non deve costare un cannolo — e per questo qui non c'è la
+                // conferma che il web chiede con un `confirm()`.
+                Bottone(
+                    testo = if (usufruitoIl != null) "↺ Non l'ho ancora usufruito" else "🍽️ L'ho usufruito",
+                    modifier = Modifier.fillMaxWidth(),
+                    colore = if (usufruitoIl != null) Color(0xFF2E3A5E) else Color(0xFF00B894),
+                ) { onUsufruito(usufruitoIl == null) }
             } else {
                 Bottone("👆 Scopri tutto", Modifier.fillMaxWidth(), Color(0xFFFFD700)) {
                     rivelato = true
@@ -297,4 +324,10 @@ private fun disegnaPatina(w: Int, h: Int): Bitmap {
     tela.drawText("col dito 👆", w / 2f, h / 2f + h * 0.11f, testo)
 
     return bmp
+}
+
+/** «2026-08-24» → «24/08/2026», come `fmtDateIt()` nel web. */
+private fun dataIt(iso: String): String {
+    val p = iso.split("-")
+    return if (p.size == 3) "${p[2]}/${p[1]}/${p[0]}" else iso
 }

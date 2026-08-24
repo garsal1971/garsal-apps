@@ -108,18 +108,33 @@ class HealthConnectBridge(
             val start = Instant.now().minus(90, ChronoUnit.DAYS)
             Log.d("HCBridge", "readRecords: avvio (90 gg)...")
 
-            val response = runBlocking {
-                client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = WeightRecord::class,
-                        timeRangeFilter = TimeRangeFilter(startTime = start, endTime = end)
+            // ⚠️ Si seguono le pagine: readRecords ne restituisce al massimo
+            // PAGE_SIZE per volta e le altre stanno dietro un pageToken.
+            // Fermarsi alla prima non darebbe un errore — darebbe qualche
+            // pesata in meno, che è il modo peggiore di sbagliare.
+            val records = runBlocking {
+                val tutti = mutableListOf<WeightRecord>()
+                var page: String? = null
+                var giri = 0
+                do {
+                    val response = client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = WeightRecord::class,
+                            timeRangeFilter = TimeRangeFilter(startTime = start, endTime = end),
+                            pageSize = PAGE_SIZE,
+                            pageToken = page
+                        )
                     )
-                )
+                    tutti += response.records
+                    page = response.pageToken
+                    giri++
+                } while (page != null && giri < MAX_PAGES)
+                tutti
             }
 
-            Log.d("HCBridge", "readRecords: ${response.records.size} record")
-            notifyJS("doSync: readRecords OK, ${response.records.size} record")
-            val points = response.records.joinToString(",") { r ->
+            Log.d("HCBridge", "readRecords: ${records.size} record")
+            notifyJS("doSync: readRecords OK, ${records.size} record")
+            val points = records.joinToString(",") { r ->
                 """{"timestamp":${r.time.toEpochMilli()},"weight":${String.format(Locale.US, "%.2f", r.weight.inKilograms)}}"""
             }
             """{"ok":true,"points":[$points]}"""
@@ -166,6 +181,11 @@ class HealthConnectBridge(
                 null
             )
         }
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 1000
+        const val MAX_PAGES = 20
     }
 
     private fun callback(callbackId: String, json: String) {

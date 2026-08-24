@@ -56,8 +56,16 @@ class MainActivity : AppCompatActivity() {
     // HC Service riceva la notifica del grant e sblocchi le chiamate readRecords().
     // Con startActivity manuale il grant appare concesso ma HC rimane in attesa
     // della conferma ufficiale → readRecords() si blocca indefinitamente.
+    //
+    // ⚠️ Il permesso sullo storico non è un di più: senza, Health Connect
+    // lascia leggere solo i dati **scritti nei 30 giorni prima della
+    // concessione**, e la finestra di 90 giorni che chiediamo torna tagliata
+    // senza nessun errore — è la ragione per cui la stessa bilancia rendeva
+    // 290 pesate qui e 37 nell'app nativa (concessa da poco). Su un
+    // dispositivo dove non esiste resta semplicemente non concesso.
     private val HC_PERMISSIONS = setOf(
-        HealthPermission.getReadPermission(WeightRecord::class)
+        HealthPermission.getReadPermission(WeightRecord::class),
+        HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
     )
 
     private lateinit var requestHcPermissions: ActivityResultLauncher<Set<String>>
