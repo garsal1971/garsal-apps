@@ -1348,6 +1348,28 @@ Le bolle sono disegnate come sul web: **cerchio col bordo nero** (`border: 4px s
 dentro il nome col **punteggio** sotto, che a zero non si scrive — una bolla al minimo con uno «0»
 sotto sembra rotta, non vuota.
 
+### ⚠️ Non tutti i numeri di `score_query` sono punti
+
+`cm_apps.score_query` restituisce un numero, ma per alcune app quel numero **conta delle cose**:
+Spuntiamola dà i giorni che mancano al traguardo, Obiettivi gli obiettivi attivi, Memo le schede,
+le app del conto familiare le transazioni in archivio. Quei numeri **non si scrivono sotto il nome
+della bolla e non entrano nel totale che paga i premi** — un conteggio sommato ai punti è un saldo
+che nessuno può rifare a mano, e un traguardo spuntato che *abbassa* i punti spendibili è un premio
+che va e viene da sé.
+
+L'elenco è **duplicato e va tenuto uguale**: `APP_SENZA_PUNTI` in `index.html` e `AppSenzaPunti`
+in `home/PortedApps.kt`. Se divergono, le due home mostrano due totali diversi e un premio
+comprabile da una parte non lo è dall'altra — è lo stesso rischio di `totaleNetto` qui sotto, un
+gradino più a monte. Comprende anche app che in nativo non hanno una bolla: i loro punti entrano
+comunque nel totale, quindi la domanda «sono punti?» le riguarda uguale.
+
+⚠️ Il numero continua invece a **dimensionare** la bolla, anche quando non si vede: quella di
+Spuntiamola che si sgonfia man mano che i giorni finiscono è la cosa che rende utile guardarla, e
+con l'area a zero resterebbe al minimo per sempre. La scelta si fa sull'`html_file` e non su un
+campo salvato dentro la bolla, perché le due cache (`localStorage` sul web, le preferenze nel
+nativo) portano le bolle dell'avvio precedente: un campo aggiunto oggi lì dentro non c'è, e il
+totale ripartirebbe da zero al primo avvio dopo l'aggiornamento.
+
 ### ⚠️ Il totale in home e i premi: la stessa cifra da tutt'e due le parti
 
 In basso a sinistra c'è il **riquadro rosso del totale** (`PannelloTotale`, il `#score-panel` del
@@ -1359,6 +1381,7 @@ web. Se le due formule divergono, un premio comprabile da una parte non lo è da
 `HomeRepository.carica()` fa girare la `score_query` di ogni riga di `cm_apps`, comprese quelle che
 qui non hanno una bolla: quei punti sono guadagnati lo stesso, e un premio costa uguale da tutt'e
 due gli APK. Sommare le sole bolle darebbe un saldo diverso a seconda di che app si è aperta.
+Restano fuori dal totale le app il cui numero **non è un punteggio** (sezione qui sopra).
 
 Le bolle **scansano il riquadro** (`BubbleLayout.Pannello`, portato da `pushFromPanel`), e
 l'ingombro si **misura** (`onSizeChanged`) invece di essere un rettangolo scritto nel codice: coi
@@ -2068,7 +2091,10 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
 - Le scritture sono **ottimistiche con rollback**: se la chiamata al DB fallisce la spunta viene
   tolta e compare un toast di errore, così non resta una spunta finta che sparisce al reload
 - Registrata in `cm_apps` da `20260727230000_spuntiamola_app.sql`; la `score_query` (aggiornata
-  dalla migration `sp_`) conta i **giorni che mancano**, quindi la bolla nel launcher è proporzionata
+  dalla migration `sp_`) conta i **giorni che mancano**, quindi la bolla nel launcher è proporzionata.
+  ⚠️ Quel numero **dimensiona la bolla ma non si scrive più sotto il nome e non fa punti**: è un
+  conteggio, ed è la voce capofila di `APP_SENZA_PUNTI` — vedi *AppSphere nativa → Non tutti i
+  numeri di `score_query` sono punti*
 
 ### `sos.html` — SOS
 - **Non è l'app: è la sua configurazione.** Il SOS si preme sul telefono

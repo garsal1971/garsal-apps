@@ -330,7 +330,13 @@ private fun BollaCerchio(
     // olimpico con scritta bianca sopra non si legge.
     val coloreTesto = if (coloreCerchio.luminance() > 0.6f) Palette.dark else Palette.light
     val diametroDp = (raggio * 2f / densita).dp
-    val conPunteggio = bolla.punteggio > 0
+    // Il numero si scrive solo se è un punteggio: quello di Spuntiamola sono i
+    // giorni che mancano, quello di Obiettivi gli obiettivi attivi, e sotto il
+    // nome di una bolla un conteggio si legge come punti (vedi
+    // [AppSenzaPunti]). Si decide dall'`html_file` e non da un campo dentro la
+    // bolla: la cache delle preferenze porta quelle dell'avvio precedente, e un
+    // campo aggiunto oggi lì dentro non c'è.
+    val conPunteggio = bolla.punteggio > 0 && AppSenzaPunti.contaComePunti(bolla.htmlFile)
     val dimensioneTesto = misuraTesto(bolla.nome, raggio * 2f, densita, conPunteggio)
     // `size * 0.13` come il web, con lo stesso minimo di 9.
     val dimensionePunteggio = ((raggio * 2f * 0.13f) / densita).coerceAtLeast(9f).sp

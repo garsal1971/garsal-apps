@@ -38,6 +38,45 @@ data class AppPortata(
     val coloreDiRipiego: String,
 )
 
+/**
+ * Quali numeri sono punti.
+ *
+ * `cm_apps.score_query` restituisce un numero, ma non è sempre un punteggio:
+ * per alcune app conta delle cose. Spuntiamola dà i giorni che mancano al
+ * traguardo, Obiettivi gli obiettivi attivi, Memo le schede, le app del conto
+ * familiare le transazioni in archivio. Quei numeri non si scrivono più sotto
+ * il nome della bolla e non entrano nel totale che paga i premi: un conteggio
+ * sommato ai punti è un saldo che nessuno può rifare a mano, e giorni che
+ * mancano sommati a delle stelline non vogliono dire niente.
+ *
+ * ⚠️ **Lo stesso elenco vive in `index.html`** (`APP_SENZA_PUNTI`): se qui ne
+ * aggiungi o togli una, riportalo là, o le due home mostreranno due totali
+ * diversi — e un premio comprabile da una parte non lo sarebbe dall'altra.
+ * L'elenco comprende anche app che in nativo non hanno una bolla: i loro punti
+ * entrano comunque nel totale, quindi la domanda «sono punti?» le riguarda
+ * esattamente come le altre.
+ *
+ * Il numero continua invece a **dimensionare** la bolla: quella di Spuntiamola
+ * che si sgonfia man mano che i giorni finiscono è la cosa che rende utile
+ * guardarla, e con l'area a zero sarebbe al minimo per sempre.
+ */
+object AppSenzaPunti {
+
+    private val file = setOf(
+        "spuntiamola.html",
+        "obiettivi.html",
+        "memo.html",
+        "finanza.html",
+        "casarosa.html",
+        "casaterrasini.html",
+        "contabilita.html",
+        "cost-analysis.html",
+    )
+
+    /** Vero se il numero di quell'app è un punteggio, e quindi si mostra e si somma. */
+    fun contaComePunti(htmlFile: String?): Boolean = htmlFile !in file
+}
+
 object PortedApps {
 
     val perHtmlFile: Map<String, AppPortata> = mapOf(

@@ -54,6 +54,10 @@ data class Avviso(val testo: String, val route: String)
  * il pannello del web. Con quella cifra si comprano i premi, che costano lo
  * stesso da qui e dall'app WebView: sommare solo le cinque bolle darebbe un
  * saldo più basso a seconda di che APK si è aperto.
+ *
+ * Attive sì, ma non tutte: il numero di alcune app è un conteggio e non un
+ * punteggio, e quelle restano fuori dal totale — l'elenco è in
+ * [AppSenzaPunti].
  */
 data class DatiHome(val bolle: List<Bolla>, val totaleLordo: Int)
 
@@ -118,6 +122,9 @@ object HomeRepository {
      * portate**: le altre non hanno una bolla da disegnare qui, ma i loro punti
      * entrano nel totale in basso esattamente come sul web, ed è quel totale
      * che paga i premi. Sono una manciata di RPC in più, tutte in parallelo.
+     * Nel totale entrano però i soli numeri che **sono** punti: quali lo dice
+     * [AppSenzaPunti], che va tenuto uguale a `APP_SENZA_PUNTI` di
+     * `index.html`.
      *
      * Il filtro su `riservato` è fatto qui e non nella query: le righe in gioco
      * sono poche, e la pagina web ha già la stessa strada come ripiego per
@@ -175,7 +182,15 @@ object HomeRepository {
                 )
             }
 
-        DatiHome(bolle = dalDatabase + senzaRiga, totaleLordo = punteggi.sum())
+        // ⚠️ Il lordo somma **solo i numeri che sono punti**: quello di
+        // Spuntiamola sono i giorni che mancano, quello di Obiettivi gli
+        // obiettivi attivi (vedi [AppSenzaPunti]). Sommarli darebbe un saldo
+        // che cala spuntando un giorno, cioè premi che vanno e vengono da sé.
+        val lordo = visibili.indices.sumOf { i ->
+            if (AppSenzaPunti.contaComePunti(visibili[i].htmlFile)) punteggi[i] else 0
+        }
+
+        DatiHome(bolle = dalDatabase + senzaRiga, totaleLordo = lordo)
     }
 
     /**

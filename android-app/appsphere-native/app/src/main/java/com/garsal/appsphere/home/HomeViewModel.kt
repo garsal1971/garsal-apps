@@ -43,7 +43,10 @@ data class HomeState(
     val inCattura: Boolean = false,
     /** I colori toccati finora, uno per casella. */
     val coloriCatturati: List<String> = emptyList(),
-    /** Punti guadagnati: la somma dei punteggi di **tutte** le app attive. */
+    /**
+     * Punti guadagnati: la somma dei punteggi di **tutte** le app attive, meno
+     * quelle il cui numero è un conteggio e non un punteggio ([AppSenzaPunti]).
+     */
     val totaleLordo: Int = 0,
     /** Punti già spesi in premi (`cm_rewards_log`). */
     val puntiSpesi: Int = 0,
