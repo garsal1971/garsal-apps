@@ -1598,6 +1598,19 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Stack-based habits with daily completion tracking
 - Gamification: points, multipliers, streaks
 - Imports/exports via JSON backup
+- ⚠️ **`hb_habits.frequency` ha tre valori e basta**: `daily`, `daily_multiple`, `weekly`. La
+  tendina offriva anche *Personalizzata* (`custom`), che però **nessuna riga di codice leggeva** —
+  la stringa compariva una volta sola, nell'`<option>`. Un'abitudine così cadeva nel ramo `else`
+  di ogni funzione, cioè si comportava da giornaliera, **tranne nel controllo dei giorni
+  mancati**: `checkMissedDays` e `hb_reconcile` (che ha un `ELSE false` esplicito) non la
+  guardavano, quindi nessun giorno diventava `missed`, nessun jolly si consumava e lo stack non
+  poteva fallire. La voce è stata tolta e
+  `20260824180000_hb_frequenza_custom_a_daily.sql` ha riportato quelle righe a `daily`.
+  ⚠️ Aggiungendo una frequenza nuova, i posti da toccare sono **cinque**: le due tendine della
+  pagina, `checkMissedDays`, `hb_reconcile`/`hb_periodo_key` e `FREQUENZE` + `cadeIl()` nel
+  nativo — dove una frequenza sconosciuta vale `false`, cioè l'abitudine **non compare mai in
+  🎯 Oggi**. La tendina di modifica ripiega su `daily` quando la riga porta un valore che non
+  conosce: prima il select restava senza selezione e il salvataggio scriveva `frequency: ''`.
 
 ### `events-log.html` — Events Log
 - Groups → Events → Logs hierarchy
