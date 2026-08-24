@@ -106,13 +106,6 @@ fun PremiScreen(
             GarsalTopBar(
                 titolo = "🎁 Premi",
                 onIndietro = onIndietro,
-                azioni = {
-                    Text(
-                        text = "$disponibili pt",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
             )
         },
         floatingActionButton = {

@@ -187,11 +187,6 @@ fun MemoScreen(
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
-                    Text(
-                        text = "${stato.visibili.size}",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
                 },
             )
         },

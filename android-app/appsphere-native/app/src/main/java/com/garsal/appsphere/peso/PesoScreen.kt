@@ -157,13 +157,6 @@ fun PesoScreen(
             GarsalTopBar(
                 titolo = "Ti pisasti?",
                 onIndietro = onIndietro,
-                azioni = {
-                    Text(
-                        text = "${stato.punteggio} pt",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
             )
         },
         floatingActionButton = {
