@@ -61,12 +61,12 @@ val PREMI_CIBO = listOf(
 fun premioDa(id: String): PremioCibo? = PREMI_CIBO.firstOrNull { it.id == id }
 
 /**
- * Un premio già grattato. [usufruitoIl] è **l'unica verità** sull'«l'ho
- * usufruito»: non c'è un booleano accanto alla data, che sarebbe un secondo
- * modo di dire la stessa cosa. Nullo = premio ancora da godersi.
+ * Un premio già grattato. [mangiatoIl] è **l'unica verità** sul «Mangiato !!!»:
+ * non c'è un booleano accanto alla data, che sarebbe un secondo modo di dire
+ * la stessa cosa. Nullo = premio ancora da godersi.
  */
-data class PremioVinto(val id: String, val data: String, val usufruitoIl: String? = null) {
-    val usufruito: Boolean get() = usufruitoIl != null
+data class PremioVinto(val id: String, val data: String, val mangiatoIl: String? = null) {
+    val mangiato: Boolean get() = mangiatoIl != null
 }
 
 /**
@@ -114,7 +114,7 @@ object PesoPremi {
                     soglia to PremioVinto(
                         id = premio,
                         data = testo(riga, "won_on").orEmpty(),
-                        usufruitoIl = testo(riga, "consumed_on"),
+                        mangiatoIl = testo(riga, "consumed_on"),
                     )
                 }
                 .toMap()
@@ -145,12 +145,12 @@ object PesoPremi {
         }
 
     /**
-     * «L'ho usufruito» — e il suo contrario. Reversibile di proposito: un
+     * «Mangiato !!!» — e il suo contrario. Reversibile di proposito: un
      * tocco per sbaglio non deve costare un cannolo.
      */
-    suspend fun segnaUsufruito(obiettivoId: String, soglia: Int, usufruito: Boolean): String? =
+    suspend fun segnaMangiato(obiettivoId: String, soglia: Int, mangiato: Boolean): String? =
         withContext(Dispatchers.IO) {
-            val quando = if (usufruito) oggi() else null
+            val quando = if (mangiato) oggi() else null
             db.from("ps_milestone_prizes").update(
                 buildJsonObject { put("consumed_on", quando) }
             ) {

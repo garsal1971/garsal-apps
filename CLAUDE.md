@@ -377,13 +377,13 @@ quante volte è uscita ciascuna opzione — che è la domanda che una combo pone
 |---|---|
 | `ps_weight_tracking` | Weight measurement entries |
 | `ps_objectives` | Obiettivi di peso (nata a mano, non sta in nessuna migration) |
-| `ps_milestone_prizes` | Il premio cibo grattato per una soglia: `prize_id`, `won_on` e `consumed_on` (l'«ho usufruito») |
+| `ps_milestone_prizes` | Il premio cibo grattato per una soglia: `prize_id`, `won_on` e `consumed_on` (il «Mangiato !!!») |
 | `ps_milestone_points` | `⭐ Punti Totali Traguardi Intermedi`, una riga per obiettivo |
 
 Le ultime due (`20260824100000_ps_milestone_prizes.sql`) esistono perché premi e punti stavano in
 `localStorage` sul web e nelle preferenze del telefono nel nativo: erano **due verità diverse
 sulla stessa stellina**. Ora il DB è la fonte di verità e il locale resta cache. `consumed_on` è
-l'unica colonna sull'«usufruito» — niente booleano accanto alla data, che sarebbe un secondo modo
+l'unica colonna sul «Mangiato !!!» — niente booleano accanto alla data, che sarebbe un secondo modo
 di dire la stessa cosa.
 
 ### Spese Ada (`ada_`)
@@ -1112,7 +1112,7 @@ La **barra di stelline** con `⭐ Punti Totali Traguardi Intermedi` e il **gratt
 (`BarraTraguardi` in `GestioneObiettivo.kt`, `DialogoGrattaEVinci` in `PesoGrattaEVinci.kt`), e
 dall'agosto 2026 **premi e punti sono gli stessi del web**: stanno in `ps_milestone_prizes` /
 `ps_milestone_points` (vedi lo schema `ps_`), non più nelle preferenze del telefono. Un premio
-grattato qui si ritrova sul PC già scoperto, e dopo il gratta si può dire **«l'ho usufruito»** —
+grattato qui si ritrova sul PC già scoperto, e dopo il gratta si può dire **«Mangiato !!!»** —
 il premio resta vinto ma si spegne (emoji sbiadita col ✓), ed è reversibile perché un tocco per
 sbaglio non deve costare un cannolo. Le vecchie righe rimaste nelle preferenze salgono sul DB da
 sé al primo avvio (`PesoPremi.premi`), altrimenti l'aggiornamento avrebbe fatto sparire premi già
@@ -1523,7 +1523,7 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   Connect e Renpho (finestra di 90 giorni, permesso sullo storico, peso troncato a un decimale,
   pesate manuali tolte quando arriva il dato vero). **Premi dei traguardi e punti stanno sulle
   stesse righe** (`ps_milestone_prizes`, `ps_milestone_points`): soglie, distribuzione dei punti,
-  id dei cinque premi e «l'ho usufruito» vanno cambiati nelle due implementazioni insieme. Il
+  id dei cinque premi e il «Mangiato !!!» vanno cambiati nelle due implementazioni insieme. Il
   nativo porta pesata, tabella, grafico, Gestione Obiettivo, gratta e vinci e Salute: statistiche
   e dieta restano di là. Dettagli nella sezione qui sopra.
 - **Memo** — note, liste e diari esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
@@ -1602,9 +1602,9 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   cache**, perché la barra compaia subito senza aspettare la rete: il premio è quindi lo stesso
   da ogni dispositivo e dall'app nativa. Le righe che stavano solo in locale salgono sul DB al
   primo caricamento (`fetchPrizes`).
-- **Dopo il gratta si dice se il premio è stato usufruito** (`🍽️ L'ho usufruito`, che scrive
+- **Dopo il gratta si dice se il premio è stato mangiato** (`🍽️ Mangiato !!!`, che scrive
   `consumed_on`): il premio resta vinto — la stellina non si spegne — ma il cibo sbiadisce col ✓ e
-  il biglietto scrive quando. È **reversibile** (`↺ Non l'ho ancora usufruito`), perché un tocco
+  il biglietto scrive quando. È **reversibile** (`↺ Non l'ho ancora mangiato`), perché un tocco
   per sbaglio non deve costare un cannolo. ⚠️ Stesso pulsante nell'app nativa, sulla stessa riga
   del database.
 
