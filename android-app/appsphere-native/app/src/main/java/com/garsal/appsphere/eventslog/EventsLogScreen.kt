@@ -62,13 +62,6 @@ fun EventsLogScreen(
             GarsalTopBar(
                 titolo = "Events Log",
                 onIndietro = onIndietro,
-                azioni = {
-                    Text(
-                        "${stato.puntiTotali} pt",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
             )
         }
     ) { padding ->

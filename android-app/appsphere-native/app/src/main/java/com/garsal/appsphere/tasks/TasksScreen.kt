@@ -85,13 +85,6 @@ fun TasksScreen(
             GarsalTopBar(
                 titolo = "Tasks",
                 onIndietro = onIndietro,
-                azioni = {
-                    Text(
-                        text = "${stato.scaduti.size + stato.diOggi.size}",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
             )
         },
         // Il + galleggiante è quello del web, stesso posto e stesso gesto.

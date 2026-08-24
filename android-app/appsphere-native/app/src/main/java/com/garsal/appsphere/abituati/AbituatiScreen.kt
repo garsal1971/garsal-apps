@@ -94,13 +94,6 @@ fun AbituatiScreen(
             GarsalTopBar(
                 titolo = "Abituati",
                 onIndietro = onIndietro,
-                azioni = {
-                    Text(
-                        text = "${stato.diOggi(oggi).size}",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
             )
         },
         floatingActionButton = {

@@ -91,7 +91,7 @@ fun GarsalTopBar(
             fontSize = 18.sp,
             // Due righe e poi i puntini: il titolo può crescere in altezza, ma
             // non fino a spingere fuori dalla barra quello che c'è a destra —
-            // in Events Log è il punteggio, che serve più del titolo per esteso.
+            // il ⚙️ di Spuntiamola, il ✏️ di Memo, il «Salva» dei form.
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier

@@ -98,13 +98,6 @@ fun TaFiriScreen(
             GarsalTopBar(
                 titolo = "Ta Firi?",
                 onIndietro = onIndietro,
-                azioni = {
-                    Text(
-                        text = "${stato.puntiTotali} pt",
-                        color = Palette.light,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
             )
         },
         floatingActionButton = {
