@@ -111,6 +111,13 @@ fun PesoScreen(
         contract = PermissionController.createRequestPermissionResultContract(),
     ) { vm.sincronizzaSalute(context) }
 
+    // Premi e punti dei traguardi arrivano dal database, e sono di
+    // quell'obiettivo: si rileggono ogni volta che cambia quello aperto. Il
+    // context serve solo alla migrazione una-tantum dalle vecchie preferenze.
+    LaunchedEffect(stato.obiettivoId) {
+        if (stato.obiettivoId != null) vm.caricaPremi(context)
+    }
+
     LaunchedEffect(stato.permessiSaluteRichiesti) {
         if (stato.permessiSaluteRichiesti) {
             vm.permessiSaluteMostrati()
@@ -205,6 +212,7 @@ fun PesoScreen(
                     when (vista) {
                         Vista.OGGI -> VistaOggi(
                             stato = stato,
+                            vm = vm,
                             onScegliObiettivo = { vm.scegliObiettivo(it) },
                             onPesati = { pesataDaFare = LocalDate.now() },
                             onGestisci = { gestioneAperta = true },
@@ -311,6 +319,7 @@ private fun SelettoreVista(scelta: Vista, onScegli: (Vista) -> Unit) {
 @Composable
 private fun VistaOggi(
     stato: PesoState,
+    vm: PesoViewModel,
     onScegliObiettivo: (String) -> Unit,
     onPesati: () -> Unit,
     onGestisci: () -> Unit,
@@ -400,7 +409,14 @@ private fun VistaOggi(
                 // punti si tarano solo da «✏️ Gestisci» (BarraTraguardi in
                 // GestioneObiettivo.kt), ma si toccano lo stesso per grattare
                 // un premio già raggiunto.
-                item { BarraTraguardi(obiettivo = obiettivo, pesate = stato.pesate, modificabile = false) }
+                item {
+                    BarraTraguardi(
+                        obiettivo = obiettivo,
+                        stato = stato,
+                        vm = vm,
+                        modificabile = false,
+                    )
+                }
             }
         } else {
             item {

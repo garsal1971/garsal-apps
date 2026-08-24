@@ -12,6 +12,10 @@
 
     <!-- Health Connect — lettura peso -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <!-- Senza questo, HC lascia leggere solo i dati scritti nei 30 giorni
+         prima della concessione: la finestra di 90 giorni tornerebbe tagliata
+         e senza errori. Vedi HC_PERMISSIONS in MainActivity. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <!-- Necessario per rilevare se Health Connect è installato (Android 11+) -->
     <queries>

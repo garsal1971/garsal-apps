@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -21,6 +23,19 @@ data class PesoState(
     val messaggio: String? = null,
     /** Un tocco: Health Connect ha rifiutato la lettura, va richiesto il permesso. */
     val permessiSaluteRichiesti: Boolean = false,
+    /**
+     * I premi già grattati dell'obiettivo che si sta guardando, per soglia in
+     * kg — da `ps_milestone_prizes`, la stessa tabella del web.
+     */
+    val premi: Map<Int, PremioVinto> = emptyMap(),
+    /** `⭐ Punti Totali Traguardi Intermedi` dell'obiettivo che si sta guardando. */
+    val puntiTraguardi: Int = 0,
+    /**
+     * Cresce di uno **solo** quando premi e punti arrivano dal database, mai
+     * mentre si digita: è la chiave con cui il campo dei punti si riscrive una
+     * volta caricato, senza azzerarsi ad ogni cifra battuta.
+     */
+    val premiVersione: Int = 0,
 ) {
     val obiettivo: Obiettivo?
         get() = obiettivi.firstOrNull { it.id == obiettivoId }
@@ -148,7 +163,9 @@ class PesoViewModel : ViewModel() {
     }
 
     fun scegliObiettivo(id: String) {
-        _state.value = _state.value.copy(obiettivoId = id)
+        // Premi e punti sono di **quell'** obiettivo: lasciare i vecchi a
+        // schermo mentre arrivano i nuovi mostrerebbe le stelline sbagliate.
+        _state.value = _state.value.copy(obiettivoId = id, premi = emptyMap(), puntiTraguardi = 0)
         // Un altro obiettivo è un altro periodo: le pesate vanno rilette, o la
         // sua tabella comincerebbe dal giorno in cui comincia quella di prima.
         carica()
@@ -369,12 +386,125 @@ class PesoViewModel : ViewModel() {
 
         try {
             PesoRepository.sincronizzaPunti(righe, manualiDaRimuovere)
-            _state.value = _state.value.copy(messaggio = "✅ ${unici.size} pesate sincronizzate da Salute")
+            // Lo stesso riepilogo del `showSyncResult()` del web — quante, da
+            // quando a quando e l'ultima pesata: il solo conteggio non dice se
+            // la finestra letta è quella che ci si aspetta, ed è proprio la
+            // domanda che il 24 agosto 2026 non aveva risposta da nessuna parte.
+            val primo = unici.first().giorno()
+            val ultimo = unici.last()
+            val peso = Math.floor(ultimo.pesoKg * 10.0) / 10.0
+            _state.value = _state.value.copy(
+                messaggio = "✅ ${unici.size} pesate da Salute · dal ${dataIt(primo)} al " +
+                    "${dataIt(ultimo.giorno())} · ultima ${"%.1f".format(peso)} kg"
+            )
             carica()
         } catch (e: Exception) {
             Log.w(TAG, "sincronizzazione Salute non riuscita", e)
             _state.value = _state.value.copy(messaggio = "Non sincronizzato: ${e.message ?: "connessione assente"}")
         }
+    }
+
+    // ── Premi dei traguardi intermedi ───────────────────────────────────
+    //
+    // ⚠️ Vivono su Supabase e non più nelle preferenze del telefono: sono le
+    // stesse righe che scrive `weight-quest.html`, quindi un premio grattato
+    // qui si ritrova sul PC. Le regole (quali soglie esistono, quanti punti
+    // valgono) restano in [PesoRegole], una copia sola per app.
+
+    /**
+     * Premi e punti dell'obiettivo aperto. Il [context] serve solo alla
+     * migrazione una-tantum di quel che era rimasto nelle preferenze.
+     */
+    fun caricaPremi(context: Context) {
+        val id = _state.value.obiettivoId ?: return
+        viewModelScope.launch {
+            try {
+                val premi = PesoPremi.premi(context, id)
+                val punti = PesoPremi.puntiTotali(context, id)
+                // Se nel frattempo si è cambiato obiettivo, questa risposta
+                // risponde a una domanda che non è più quella aperta.
+                if (_state.value.obiettivoId != id) return@launch
+                _state.value = _state.value.copy(
+                    premi = premi,
+                    puntiTraguardi = punti,
+                    premiVersione = _state.value.premiVersione + 1,
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "premi non caricati", e)
+            }
+        }
+    }
+
+    /**
+     * Il premio appena grattato. Scrittura ottimistica come le spunte di
+     * Spuntiamola: la stellina mostra subito il cibo, e se il database rifiuta
+     * lo si dice invece di lasciare a schermo un premio che non esiste.
+     */
+    fun grattaPremio(soglia: Int, premio: PremioCibo) {
+        val id = _state.value.obiettivoId ?: return
+        val prima = _state.value.premi
+        _state.value = _state.value.copy(
+            premi = prima + (soglia to PremioVinto(premio.id, LocalDate.now().toString()))
+        )
+        viewModelScope.launch {
+            try {
+                PesoPremi.salvaPremio(id, soglia, premio.id)
+            } catch (e: Exception) {
+                Log.w(TAG, "premio non salvato", e)
+                _state.value = _state.value.copy(
+                    premi = prima,
+                    messaggio = "Premio non salvato: ${e.message ?: "database non raggiungibile"}",
+                )
+            }
+        }
+    }
+
+    /** «L'ho usufruito», e il suo contrario — reversibile di proposito. */
+    fun segnaUsufruito(soglia: Int, usufruito: Boolean) {
+        val id = _state.value.obiettivoId ?: return
+        val premio = _state.value.premi[soglia] ?: return
+        val quando = if (usufruito) LocalDate.now().toString() else null
+        _state.value = _state.value.copy(
+            premi = _state.value.premi + (soglia to premio.copy(usufruitoIl = quando))
+        )
+        viewModelScope.launch {
+            try {
+                PesoPremi.segnaUsufruito(id, soglia, usufruito)
+            } catch (e: Exception) {
+                Log.w(TAG, "«usufruito» non salvato", e)
+                _state.value = _state.value.copy(
+                    premi = _state.value.premi + (soglia to premio),
+                    messaggio = "Non salvato: ${e.message ?: "database non raggiungibile"}",
+                )
+            }
+        }
+    }
+
+    /**
+     * I punti totali dei traguardi. Si scrive con un ritardo perché il campo
+     * chiama qui ad ogni cifra digitata, e una scrittura per tasto sarebbe un
+     * colpo al database per niente.
+     */
+    fun salvaPuntiTraguardi(punti: Int) {
+        val id = _state.value.obiettivoId ?: return
+        _state.value = _state.value.copy(puntiTraguardi = punti)
+        salvataggioPunti?.cancel()
+        salvataggioPunti = viewModelScope.launch {
+            delay(700)
+            try {
+                PesoPremi.salvaPuntiTotali(id, punti)
+            } catch (e: Exception) {
+                Log.w(TAG, "punti dei traguardi non salvati", e)
+            }
+        }
+    }
+
+    private var salvataggioPunti: Job? = null
+
+    /** «2026-08-24» → «24/08», per il riepilogo della sincronizzazione. */
+    private fun dataIt(iso: String): String {
+        val p = iso.split("-")
+        return if (p.size == 3) "${p[2]}/${p[1]}" else iso
     }
 
     private companion object {

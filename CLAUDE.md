@@ -376,6 +376,15 @@ quante volte è uscita ciascuna opzione — che è la domanda che una combo pone
 | Table | Purpose |
 |---|---|
 | `ps_weight_tracking` | Weight measurement entries |
+| `ps_objectives` | Obiettivi di peso (nata a mano, non sta in nessuna migration) |
+| `ps_milestone_prizes` | Il premio cibo grattato per una soglia: `prize_id`, `won_on` e `consumed_on` (l'«ho usufruito») |
+| `ps_milestone_points` | `⭐ Punti Totali Traguardi Intermedi`, una riga per obiettivo |
+
+Le ultime due (`20260824100000_ps_milestone_prizes.sql`) esistono perché premi e punti stavano in
+`localStorage` sul web e nelle preferenze del telefono nel nativo: erano **due verità diverse
+sulla stessa stellina**. Ora il DB è la fonte di verità e il locale resta cache. `consumed_on` è
+l'unica colonna sull'«usufruito» — niente booleano accanto alla data, che sarebbe un secondo modo
+di dire la stessa cosa.
 
 ### Spese Ada (`ada_`)
 | Table | Purpose |
@@ -1079,10 +1088,35 @@ doppione. Il permesso si chiede col contratto ufficiale `PermissionController` (
 cui Health Connect sblocchi le letture successive, come nel web) e, quando manca, la
 sincronizzazione si rilancia da sola dopo la concessione.
 
-⚠️ **Non replicato**: la barra di stelline con `⭐ Punti Totali Traguardi Intermedi` e il premio
-cibo che ci sta dietro. Quella è un dato di `localStorage`, per dispositivo, e da qui non avrebbe
-niente da mostrare — la stessa ragione per cui non ci sta nemmeno il gratta e vinci. **Restano su
-`weight-quest.html`**: le statistiche e *genera dieta*.
+#### ⚠️ Health Connect legge solo 30 giorni indietro, se non glielo si chiede
+
+Senza il permesso `android.permission.health.READ_HEALTH_DATA_HISTORY`, Health Connect lascia
+leggere **soltanto i dati scritti nei 30 giorni prima della concessione**. La finestra di 90
+giorni che le due app chiedono torna quindi tagliata **senza nessun errore**: la
+sincronizzazione sembra funzionare benissimo, su un terzo dei dati.
+
+È esattamente quel che si vedeva il 24 agosto 2026 — la stessa bilancia, lo stesso telefono,
+lo stesso istante: **290 pesate** dall'APK WebView (permesso concesso mesi prima, quindi con
+tutto lo storico da lì in poi) e **37** dal nativo, che il permesso l'aveva avuto da poco. Il
+codice delle due letture era identico, e infatti non era lì. Il permesso è ora dichiarato e
+richiesto in tutt'e due (`PERMESSI_SALUTE` in `Salute.kt`, `HC_PERMISSIONS` in `MainActivity.kt`
+dell'APK WebView); su un dispositivo dove non esiste resta semplicemente non concesso.
+
+Corollario: **il conteggio da solo non dice niente**. La sincronizzazione nativa mostra ora lo
+stesso riepilogo del `showSyncResult()` del web — quante pesate, da quando a quando, l'ultima —
+perché la domanda «è la finestra che mi aspetto?» abbia una risposta a schermo. Ed entrambe
+seguono ora il `pageToken` di `readRecords`, che ne restituisce al massimo mille per volta:
+fermarsi alla prima pagina non darebbe un errore, darebbe qualche pesata in meno.
+
+La **barra di stelline** con `⭐ Punti Totali Traguardi Intermedi` e il **gratta e vinci** ci sono
+(`BarraTraguardi` in `GestioneObiettivo.kt`, `DialogoGrattaEVinci` in `PesoGrattaEVinci.kt`), e
+dall'agosto 2026 **premi e punti sono gli stessi del web**: stanno in `ps_milestone_prizes` /
+`ps_milestone_points` (vedi lo schema `ps_`), non più nelle preferenze del telefono. Un premio
+grattato qui si ritrova sul PC già scoperto, e dopo il gratta si può dire **«l'ho usufruito»** —
+il premio resta vinto ma si spegne (emoji sbiadita col ✓), ed è reversibile perché un tocco per
+sbaglio non deve costare un cannolo. Le vecchie righe rimaste nelle preferenze salgono sul DB da
+sé al primo avvio (`PesoPremi.premi`), altrimenti l'aggiornamento avrebbe fatto sparire premi già
+vinti. **Restano su `weight-quest.html`**: le statistiche e *genera dieta*.
 
 Le due regole di chiusura di `closeObjective('success')` sono ricalcate in
 `PesoViewModel.preparaChiusura()`, non riscritte a occhio — se cambia una delle due condizioni nel
@@ -1486,10 +1520,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   ricostruiti e contati lo stesso, confronto peso/target **a un decimale**, `target_weight`
   congelato nella riga; le due condizioni di `closeObjective('success')` (minimo di oggi / massimo
   del periodo sotto il peso finale) e il punteggio di chiusura; la sincronizzazione con Health
-  Connect e Renpho (finestra di 90 giorni, peso troncato a un decimale, pesate manuali tolte
-  quando arriva il dato vero). Il nativo porta pesata, tabella, grafico, Gestione Obiettivo e
-  Salute: statistiche, dieta e il gratta e vinci dei premi restano di là. Dettagli nella sezione
-  qui sopra.
+  Connect e Renpho (finestra di 90 giorni, permesso sullo storico, peso troncato a un decimale,
+  pesate manuali tolte quando arriva il dato vero). **Premi dei traguardi e punti stanno sulle
+  stesse righe** (`ps_milestone_prizes`, `ps_milestone_points`): soglie, distribuzione dei punti,
+  id dei cinque premi e «l'ho usufruito» vanno cambiati nelle due implementazioni insieme. Il
+  nativo porta pesata, tabella, grafico, Gestione Obiettivo, gratta e vinci e Salute: statistiche
+  e dieta restano di là. Dettagli nella sezione qui sopra.
 - **Memo** — note, liste e diari esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
   converte in marcatori per modificarlo e lo riconverte salvando (`MemoHtml`), quindi ogni voce
   della barra del web deve avere il suo marcatore di qua. Le altre regole da tenere allineate:
@@ -1561,10 +1597,16 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   rosso col 🎁 che pulsa**; dopo l'estrazione mostra l'emoji del premio vinto e ritoccandola lo
   rimostra già scoperto. Il biglietto di prova non ha più un pulsante: la modalità resta in
   `openPrizeDraw(null, true)`, richiamabile dalla console, e non salva niente.
-  I premi stanno in **localStorage** (`wq_prizes_<objective id>`), come i punti dei traguardi
-  (`wq_mpts_<id>`): nessuna tabella nuova, quindi il premio è **per dispositivo** — chi apre
-  l'app da un altro telefono si ritrova la stellina di nuovo da estrarre. Spostarlo sul DB
-  vorrebbe dire una colonna/tabella nuova, e quelle si chiedono prima.
+  I premi stanno su Supabase (`ps_milestone_prizes`), come i punti dei traguardi
+  (`ps_milestone_points`), e `localStorage` (`wq_prizes_<id>`, `wq_mpts_<id>`) è rimasto **solo
+  cache**, perché la barra compaia subito senza aspettare la rete: il premio è quindi lo stesso
+  da ogni dispositivo e dall'app nativa. Le righe che stavano solo in locale salgono sul DB al
+  primo caricamento (`fetchPrizes`).
+- **Dopo il gratta si dice se il premio è stato usufruito** (`🍽️ L'ho usufruito`, che scrive
+  `consumed_on`): il premio resta vinto — la stellina non si spegne — ma il cibo sbiadisce col ✓ e
+  il biglietto scrive quando. È **reversibile** (`↺ Non l'ho ancora usufruito`), perché un tocco
+  per sbaglio non deve costare un cannolo. ⚠️ Stesso pulsante nell'app nativa, sulla stessa riga
+  del database.
 
 ### `memo.html` — Memorandum
 - Schede con testo formattato, foto con OCR, categorie condivise, colore e 📌 in evidenza.

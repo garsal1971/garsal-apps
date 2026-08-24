@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Quest v3.5.129</title>
+    <title>Weight Quest v3.6.0</title>
     <!-- Chart.js + Hammer + plugin zoom NON sono più nel <head> (erano render-blocking).
          Vengono caricati on-demand via ensureChartLibs() quando serve il grafico,
          sbloccando il first paint della pagina. -->
@@ -734,6 +734,13 @@
             animation: msPrizePulse 1.1s ease-in-out infinite alternate;
         }
         .ms-th.prize-won { cursor: pointer; }
+        /* Premio gia' usufruito: resta vinto (la stellina non si spegne) ma il
+           cibo si sbiadisce, per distinguerlo da uno ancora da godersi. */
+        .ms-th.prize-used .ms-th-prize {
+            filter: grayscale(1);
+            opacity: 0.55;
+            font-size: 13px;
+        }
         .ms-th-prize {
             font-size: 15px;
             line-height: 1.2;
@@ -872,7 +879,15 @@
             color: #1a1a2e;
         }
         .prize-btn.secondary { background: #2e3a5e; color: #dbe2f5; font-weight: 700; }
+        .prize-btn.used      { background: #00B894; color: #06281f; }
         .prize-btn[disabled] { opacity: 0.5; cursor: default; }
+        /* La riga che dice quando il premio e' stato mangiato davvero */
+        #prizeUsedNote {
+            margin-top: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #00B894;
+        }
         #prizeConfetti {
             position: absolute;
             inset: 0;
@@ -1424,8 +1439,8 @@
     <div id="debugLog"></div>
 
     <script>
-        var APP_VERSION = 'v3.5.129';
-        var BUILD_TIME  = '2026-08-14T19:00:00Z';
+        var APP_VERSION = 'v3.6.0';
+        var BUILD_TIME  = '2026-08-24T09:30:00Z';
         console.log('%c WEIGHT QUEST ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#4caf50;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2243,8 +2258,9 @@
             // Punti totali traguardi
             var totalPts = parseInt((document.getElementById('objectiveMilestonePts') || {}).value) || 0;
             if (obj) {
-                // Salva in localStorage per persistenza
-                localStorage.setItem(getMilestonePtsKey(obj), totalPts);
+                // Il totale e' dell'obiettivo, non del telefono: va sul DB
+                // (localStorage resta come cache dentro saveMilestonePts).
+                saveMilestonePts(obj, totalPts);
             }
             var ptsArr = getMilestonePtsDistribution(totalPts, thresholds.length);
 
@@ -2284,13 +2300,18 @@
                 var won  = reached ? prizes[String(t)] : null;
                 var prize = won ? findPrize(won.id) : null;
 
+                var usato = !!(won && won.consumedOn);
+
                 var div = document.createElement('div');
                 div.className = 'ms-th' + (reached ? ' reached' : '')
                               + (reached && !won ? ' prize-pending' : '')
-                              + (prize ? ' prize-won' : '');
+                              + (prize ? ' prize-won' : '')
+                              + (usato ? ' prize-used' : '');
                 div.title = reached
                     ? '✓ Prima volta < ' + t + ' kg: ' + (firstDate || '?')
-                        + (prize ? ' — premio: ' + prize.name : ' — 🎁 tocca per estrarre il premio!')
+                        + (prize ? ' — premio: ' + prize.name
+                                     + (usato ? ' (usufruito il ' + fmtDateIt(won.consumedOn) + ')' : '')
+                                 : ' — 🎁 tocca per estrarre il premio!')
                     : 'Prima volta < ' + t + ' kg — non ancora raggiunta';
 
                 // La stellina raggiunta si clicca: estrae il premio (o lo rimostra)
@@ -2329,7 +2350,9 @@
                 if (reached) {
                     var prizeEl = document.createElement('div');
                     prizeEl.className = prize ? 'ms-th-prize' : 'ms-th-gift';
-                    prizeEl.textContent = prize ? prize.emoji : '🎁';
+                    // Un premio usufruito si spegne: emoji sbiadita col ✓, per
+                    // distinguere «vinto e mangiato» da «vinto e ancora li'».
+                    prizeEl.textContent = prize ? (prize.emoji + (usato ? '✓' : '')) : '🎁';
                     div.appendChild(prizeEl);
                 }
 
@@ -2438,8 +2461,9 @@
         // ── Premio cibo: estrazione alla ruota ──────────────────────────
         // Ogni soglia raggiunta dà, oltre ai punti, un premio da estrarre:
         // la stellina resta evidenziata (🎁) finché non la si clicca.
-        // Il premio estratto è definitivo e resta salvato in localStorage,
-        // come i punti dei traguardi (vedi getMilestonePtsKey).
+        // Il premio estratto è definitivo e vive su Supabase
+        // (`ps_milestone_prizes`), quindi si ritrova anche dall'app nativa;
+        // dopo il gratta si può dire «l'ho usufruito» e il premio si spegne.
         var PRIZES = [
             // pos = che pezzo della foto finisce dentro lo spicchio (object-position)
             { id: 'torta_savoia', emoji: '🍰', name: 'Torta Savoia',            img: 'risorse/premi/torta.jpg',      pos: '50% 46%', msg: 'Sette strati di gloria, e te li sei sudati tutti.' },
@@ -2455,27 +2479,236 @@
         var prizeScratchLast = null;
         var prizeScratchMoves = 0;
 
+        // ── Premi e punti dei traguardi: la fonte di verita' e' il DB ───
+        // Fino alla v3.5.129 stavano solo in localStorage, cioe' per
+        // dispositivo: il premio grattato dal telefono non si vedeva sul PC e
+        // i punti sotto la stellina potevano essere diversi nelle due app.
+        // Ora vivono in `ps_milestone_prizes` / `ps_milestone_points`
+        // (migration 20260824100000) e localStorage resta **solo cache**, cosi'
+        // la barra compare subito senza aspettare la rete.
+        // ⚠️ Le stesse due tabelle le legge e le scrive l'app nativa
+        // (`peso/PesoPremi.kt`): cambiando qui la forma dei dati, cambiala anche la'.
         function getPrizesKey(obj) {
             return 'wq_prizes_' + (obj ? obj.id : 'new');
         }
 
+        // objective id → { "78": { id: 'cannolo', date: '2026-08-22', consumedOn: null } }
+        var prizesCache = {};
+
+        // Lettura sincrona: la barra delle stelline si ridisegna di continuo e
+        // non puo' aspettare una fetch ad ogni ridisegno.
         function loadPrizes(obj) {
-            try {
-                return JSON.parse(localStorage.getItem(getPrizesKey(obj)) || '{}') || {};
-            } catch (e) {
-                return {};
-            }
+            if (!obj) return {};
+            if (prizesCache[obj.id]) return prizesCache[obj.id];
+            var cached = {};
+            try { cached = JSON.parse(localStorage.getItem(getPrizesKey(obj)) || '{}') || {}; }
+            catch (e) { cached = {}; }
+            prizesCache[obj.id] = cached;
+            return cached;
         }
 
+        function cachePrizes(obj, map) {
+            prizesCache[obj.id] = map;
+            try { localStorage.setItem(getPrizesKey(obj), JSON.stringify(map)); } catch (e) {}
+        }
+
+        function prizeRowsUrl(obj, filtro) {
+            return supabase.url + '/rest/v1/ps_milestone_prizes?objective_id=eq.'
+                 + encodeURIComponent(obj.id) + (filtro || '');
+        }
+
+        // Legge i premi dal DB e, la prima volta, ci porta su quelli grattati
+        // quando vivevano solo in locale: senza, l'aggiornamento dell'app
+        // farebbe sparire premi gia' vinti.
+        function fetchPrizes(obj) {
+            if (!obj || !supabase) return Promise.resolve({});
+            var local = loadPrizes(obj);
+            return fetch(prizeRowsUrl(obj, '&select=threshold,prize_id,won_on,consumed_on'), {
+                headers: supabase.headers
+            })
+            .then(function(res) {
+                if (!res.ok) return res.text().then(function(t) { throw new Error('HTTP ' + res.status + ' ' + t.substring(0, 120)); });
+                return res.json();
+            })
+            .then(function(rows) {
+                var map = {};
+                rows.forEach(function(r) {
+                    map[String(r.threshold)] = {
+                        id: r.prize_id,
+                        date: r.won_on,
+                        consumedOn: r.consumed_on || null
+                    };
+                });
+                var daSalire = Object.keys(local).filter(function(t) {
+                    return !map[t] && local[t] && local[t].id;
+                });
+                cachePrizes(obj, map);
+                if (daSalire.length === 0) return map;
+
+                log('Premi: porto sul DB ' + daSalire.length + ' premio/i che stavano solo in locale');
+                var righe = daSalire.map(function(t) {
+                    return {
+                        objective_id: String(obj.id),
+                        threshold: parseInt(t, 10),
+                        prize_id: local[t].id,
+                        won_on: local[t].date || localDateStr()
+                    };
+                });
+                return fetch(supabase.url + '/rest/v1/ps_milestone_prizes', {
+                    method: 'POST',
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' }),
+                    body: JSON.stringify(righe)
+                }).then(function(res) {
+                    if (!res.ok) return res.text().then(function(t) { throw new Error(t.substring(0, 120)); });
+                    righe.forEach(function(r) {
+                        map[String(r.threshold)] = { id: r.prize_id, date: r.won_on, consumedOn: null };
+                    });
+                    cachePrizes(obj, map);
+                    return map;
+                }).catch(function(e) {
+                    log('Premi: i premi locali non sono saliti sul DB — ' + e.message);
+                    return map;
+                });
+            })
+            .catch(function(e) {
+                log('Premi: lettura dal DB non riuscita (' + e.message + ') — resta la cache locale');
+                return local;
+            })
+            .then(function(map) {
+                updateMilestoneProgressBar();
+                return map;
+            });
+        }
+
+        // Scrittura ottimistica come le spunte di Spuntiamola: la stellina
+        // mostra subito il cibo vinto, e se il DB rifiuta lo si dice.
         function savePrize(obj, threshold, prizeId) {
+            if (!obj) return Promise.resolve();
+            var oggi = localDateStr();
+            var map = Object.assign({}, loadPrizes(obj));
+            map[String(threshold)] = { id: prizeId, date: oggi, consumedOn: null };
+            cachePrizes(obj, map);
+            if (!supabase) return Promise.resolve();
+            return fetch(supabase.url + '/rest/v1/ps_milestone_prizes', {
+                method: 'POST',
+                headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' }),
+                body: JSON.stringify([{
+                    objective_id: String(obj.id),
+                    threshold: parseInt(threshold, 10),
+                    prize_id: prizeId,
+                    won_on: oggi
+                }])
+            }).then(function(res) {
+                if (!res.ok) return res.text().then(function(t) { throw new Error('HTTP ' + res.status + ' ' + t.substring(0, 120)); });
+            }).catch(function(e) {
+                log('Premio non salvato sul DB: ' + e.message);
+                showToast('Premio salvato solo su questo dispositivo (DB non raggiungibile).', 5000);
+            });
+        }
+
+        // «L'ho usufruito»: il premio resta vinto ma si spegne — la stellina lo
+        // mostra sbiadito con un ✓ e il biglietto scrive quando. E' reversibile
+        // di proposito: un tocco per sbaglio non deve costare un cannolo.
+        function setPrizeConsumed(obj, threshold, usufruito) {
+            if (!obj) return Promise.resolve();
+            var map = Object.assign({}, loadPrizes(obj));
+            var voce = map[String(threshold)];
+            if (!voce) return Promise.resolve();
+            var quando = usufruito ? localDateStr() : null;
+            map[String(threshold)] = { id: voce.id, date: voce.date, consumedOn: quando };
+            cachePrizes(obj, map);
+            if (!supabase) return Promise.resolve();
+            return fetch(prizeRowsUrl(obj, '&threshold=eq.' + parseInt(threshold, 10)), {
+                method: 'PATCH',
+                headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' }),
+                body: JSON.stringify({ consumed_on: quando })
+            }).then(function(res) {
+                if (!res.ok) return res.text().then(function(t) { throw new Error('HTTP ' + res.status + ' ' + t.substring(0, 120)); });
+                log('Premio < ' + threshold + ' kg: ' + (usufruito ? 'usufruito il ' + quando : 'di nuovo da usufruire'));
+            }).catch(function(e) {
+                log('Stato «usufruito» non salvato sul DB: ' + e.message);
+                showToast('Segnato solo su questo dispositivo (DB non raggiungibile).', 5000);
+            });
+        }
+
+        // ── Punti totali dei traguardi ──────────────────────────────────
+        // Stessa storia dei premi: il numero e' uno solo per obiettivo, non uno
+        // per telefono. Si scrive con un ritardo perche' il campo lo chiama ad
+        // ogni cifra digitata, e una PATCH per tasto sarebbe un colpo al DB.
+        var milestonePtsSaved = {};
+        var milestonePtsPronti = {};   // objective id → il DB ha gia' risposto
+        var milestonePtsTimer = null;
+
+        function fetchMilestonePts(obj) {
+            if (!obj || !supabase) return Promise.resolve(null);
+            return fetch(supabase.url + '/rest/v1/ps_milestone_points?select=total_points&objective_id=eq.'
+                         + encodeURIComponent(obj.id), { headers: supabase.headers })
+            .then(function(res) {
+                if (!res.ok) return res.text().then(function(t) { throw new Error('HTTP ' + res.status + ' ' + t.substring(0, 120)); });
+                return res.json();
+            })
+            .then(function(rows) {
+                var campo = document.getElementById('objectiveMilestonePts');
+                milestonePtsPronti[obj.id] = true;
+                if (rows && rows.length) {
+                    milestonePtsSaved[obj.id] = rows[0].total_points;
+                    localStorage.setItem(getMilestonePtsKey(obj), rows[0].total_points);
+                    if (campo && userData.currentObjective && userData.currentObjective.id === obj.id) {
+                        campo.value = rows[0].total_points;
+                        updateMilestoneProgressBar();
+                    }
+                    return rows[0].total_points;
+                }
+                // Nessuna riga: se in locale c'era un valore, e' quello di
+                // prima della migration e va portato su.
+                var locale = parseInt(localStorage.getItem(getMilestonePtsKey(obj)), 10);
+                if (isFinite(locale) && locale > 0) saveMilestonePts(obj, locale, true);
+                return locale || 0;
+            })
+            .catch(function(e) {
+                // Anche l'errore sblocca la scrittura: senza, il campo non si
+                // potrebbe piu' cambiare finche' la rete non torna.
+                milestonePtsPronti[obj.id] = true;
+                log('Punti traguardi: lettura dal DB non riuscita — ' + e.message);
+                return null;
+            });
+        }
+
+        function saveMilestonePts(obj, punti, subito) {
             if (!obj) return;
-            var all = loadPrizes(obj);
-            all[String(threshold)] = { id: prizeId, date: localDateStr() };
-            try {
-                localStorage.setItem(getPrizesKey(obj), JSON.stringify(all));
-            } catch (e) {
-                log('Errore salvataggio premio: ' + e.message);
-            }
+            localStorage.setItem(getMilestonePtsKey(obj), punti);
+            // ⚠️ Finche' il DB non ha risposto non si scrive: il campo mostra
+            // ancora il valore di cache, e mandarlo su cancellerebbe il numero
+            // messo dall'altra app. La barra si ridisegna (e chiama qui) anche
+            // solo perche' sono arrivati i premi.
+            if (!supabase || !milestonePtsPronti[obj.id]) return;
+            // Il timer si azzera comunque, anche quando non c'e' niente da
+            // scrivere: altrimenti una scrittura vecchia gia' in coda partirebbe
+            // dopo quella nuova.
+            if (milestonePtsTimer) { clearTimeout(milestonePtsTimer); milestonePtsTimer = null; }
+            if (milestonePtsSaved[obj.id] === punti) return;
+            var scrivi = function() {
+                milestonePtsSaved[obj.id] = punti;
+                // PATCH prima, INSERT solo se non c'era ancora la riga: le due
+                // colonne chiave hanno un default lato server (user_id), quindi
+                // un upsert vorrebbe l'utente nel corpo, che qui non si conosce.
+                fetch(supabase.url + '/rest/v1/ps_milestone_points?objective_id=eq.' + encodeURIComponent(obj.id), {
+                    method: 'PATCH',
+                    headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=representation' }),
+                    body: JSON.stringify({ total_points: punti, updated_at: new Date().toISOString() })
+                })
+                .then(function(res) { return res.ok ? res.json() : []; })
+                .then(function(rows) {
+                    if (rows && rows.length) return null;
+                    return fetch(supabase.url + '/rest/v1/ps_milestone_points', {
+                        method: 'POST',
+                        headers: Object.assign({}, supabase.headers, { 'Prefer': 'return=minimal' }),
+                        body: JSON.stringify([{ objective_id: String(obj.id), total_points: punti }])
+                    });
+                })
+                .catch(function(e) { log('Punti traguardi non salvati sul DB: ' + e.message); });
+            };
+            if (subito) scrivi(); else milestonePtsTimer = setTimeout(scrivi, 700);
         }
 
         function findPrize(id) {
@@ -2648,7 +2881,13 @@
             var p = won ? (findPrize(won.id) || PRIZES[0])
                         : PRIZES[Math.floor(Math.random() * PRIZES.length)];
 
-            prizeDraw = { threshold: threshold, demo: !!demo, prize: p, done: !!won };
+            prizeDraw = {
+                threshold: threshold,
+                demo: !!demo,
+                prize: p,
+                done: !!won,
+                consumedOn: won ? (won.consumedOn || null) : null
+            };
 
             var title    = document.getElementById('prizeTitle');
             var subtitle = document.getElementById('prizeSubtitle');
@@ -2678,15 +2917,17 @@
 
             if (won) {
                 cv.style.display = 'none';
-                showPrizeResult(p, won.date);
+                showPrizeResult(p, won.date, won.consumedOn);
                 revealBtn.style.display = 'none';
                 closeBtn.textContent = 'Chiudi';
+                updatePrizeUseBtn();
             } else {
                 result.innerHTML = '';
                 revealBtn.style.display = 'block';
                 revealBtn.disabled = false;
                 revealBtn.textContent = '👆 Scopri tutto';
                 closeBtn.textContent = 'Più tardi';
+                updatePrizeUseBtn();
                 // Il canvas si dimensiona solo a overlay visibile: prima è 0×0
                 buildScratchFoil();
             }
@@ -2721,11 +2962,12 @@
                 log('Premio grattato per < ' + prizeDraw.threshold + ' kg: ' + p.name);
             }
 
-            showPrizeResult(p, prizeDraw.demo ? null : localDateStr());
+            showPrizeResult(p, prizeDraw.demo ? null : localDateStr(), null);
+            updatePrizeUseBtn();
             prizeConfetti();
         }
 
-        function showPrizeResult(p, dateStr) {
+        function showPrizeResult(p, dateStr, consumedOn) {
             var result = document.getElementById('prizeResult');
             if (!result) return;
             var when = '';
@@ -2733,9 +2975,51 @@
                 var parts = String(dateStr).split('-');
                 if (parts.length === 3) when = ' · vinto il ' + parts[2] + '/' + parts[1] + '/' + parts[0];
             }
+            var usato = consumedOn
+                ? '<div id="prizeUsedNote">🍽️ Usufruito il ' + fmtDateIt(consumedOn) + '</div>'
+                : '';
             result.innerHTML =
                 '<div id="prizeResultName">🎉 ' + p.name + '!</div>' +
-                '<div id="prizeResultMsg">' + p.msg + when + '</div>';
+                '<div id="prizeResultMsg">' + p.msg + when + '</div>' + usato;
+        }
+
+        // Il pulsante «l'ho usufruito»: compare solo su un biglietto vero e
+        // gia' scoperto — su una prova non c'e' niente da consumare, e prima di
+        // grattare non si sa nemmeno cosa.
+        function updatePrizeUseBtn() {
+            var btn = document.getElementById('prizeUseBtn');
+            if (!btn) return;
+            if (prizeDraw.demo || !prizeDraw.done) {
+                btn.style.display = 'none';
+                return;
+            }
+            btn.style.display = 'block';
+            btn.textContent = prizeDraw.consumedOn
+                ? '↺ Non l\'ho ancora usufruito'
+                : '🍽️ L\'ho usufruito';
+            btn.className = 'prize-btn' + (prizeDraw.consumedOn ? ' secondary' : ' used');
+        }
+
+        // Segna il premio come consumato (o torna indietro). Il premio resta
+        // vinto — la stellina non si spegne — ma si vede che e' stato speso: e'
+        // la domanda che il biglietto pone dopo il gratta.
+        function togglePrizeConsumed() {
+            if (prizeDraw.demo || !prizeDraw.done) return;
+            var obj = userData.currentObjective;
+            if (!obj) return;
+            var nome = prizeDraw.prize ? prizeDraw.prize.name : 'il premio';
+            var ora  = !prizeDraw.consumedOn;
+            if (ora && !confirm('Segno \u00ab' + nome + '\u00bb come usufruito?\n\n' +
+                                'La stellina resta accesa, ma il premio si spegne. ' +
+                                'Si pu\u00f2 riaccendere se \u00e8 stato un tocco per sbaglio.')) return;
+
+            prizeDraw.consumedOn = ora ? localDateStr() : null;
+            setPrizeConsumed(obj, prizeDraw.threshold, ora);
+
+            var voce = loadPrizes(obj)[String(prizeDraw.threshold)];
+            showPrizeResult(prizeDraw.prize, voce ? voce.date : localDateStr(), prizeDraw.consumedOn);
+            updatePrizeUseBtn();
+            updateMilestoneProgressBar();
         }
 
         function prizeConfetti() {
@@ -3412,9 +3696,13 @@
             document.getElementById('objectiveFinalBonus').value = obj.final_bonus || 100;
             document.getElementById('objectiveFinalMalus').value = obj.final_malus || 50;
 
-            // Carica punti traguardi da localStorage
+            // Punti traguardi: subito dalla cache locale perche' il campo non
+            // resti vuoto un istante, poi dal DB, che e' la fonte di verita' e
+            // puo' avere il valore messo dall'app nativa.
             var savedPts = localStorage.getItem(getMilestonePtsKey(obj));
             document.getElementById('objectiveMilestonePts').value = savedPts !== null ? savedPts : 0;
+            fetchMilestonePts(obj);
+            fetchPrizes(obj);
 
             // Tipo obiettivo + campi specifici
             var objType = obj.objective_type || 'perdere';
@@ -7532,6 +7820,7 @@
             <div id="prizeResult"></div>
 
             <button type="button" id="prizeRevealBtn" class="prize-btn" onclick="revealPrizeNow()">👆 Scopri tutto</button>
+            <button type="button" id="prizeUseBtn" class="prize-btn used" onclick="togglePrizeConsumed()" style="display:none">🍽️ L'ho usufruito</button>
             <button type="button" id="prizeCloseBtn" class="prize-btn secondary" onclick="closePrizeOverlay()">Chiudi</button>
         </div>
     </div>

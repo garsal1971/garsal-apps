@@ -27,8 +27,23 @@ import java.time.temporal.ChronoUnit
 /** Il pacchetto della bilancia, aperta da qui come `openRenpho()`. */
 private const val PACCHETTO_RENPHO = "com.renpho.health"
 
-/** L'unico permesso che serve: leggere il peso, mai scriverlo. */
-internal val PERMESSI_SALUTE = setOf(HealthPermission.getReadPermission(WeightRecord::class))
+/**
+ * I permessi che servono: leggere il peso — mai scriverlo — e leggere lo
+ * **storico**.
+ *
+ * ⚠️ Il secondo non è un di più. Senza, Health Connect lascia leggere solo i
+ * dati scritti nei **30 giorni prima della concessione**: la finestra di 90
+ * giorni che chiediamo qui sotto torna tagliata **senza nessun errore**, e la
+ * sincronizzazione sembra funzionare benissimo su un terzo dei dati. È la
+ * ragione per cui il 24 agosto 2026 la stessa bilancia ha reso 290 pesate
+ * dall'APK WebView (permesso concesso mesi prima) e 37 da qui (concesso da
+ * poco). Su un dispositivo dove il permesso non esiste resta semplicemente non
+ * concesso, e si torna al comportamento di prima.
+ */
+internal val PERMESSI_SALUTE = setOf(
+    HealthPermission.getReadPermission(WeightRecord::class),
+    HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY,
+)
 
 /** Una pesata letta da Health Connect: istante e peso in kg. */
 data class PuntoSalute(val timestamp: Long, val pesoKg: Double)
@@ -74,6 +89,11 @@ object SaluteRepository {
      * Le pesate degli ultimi 90 giorni — `doSync()` nel web. Il margine di 25
      * ore sul limite superiore è lo stesso: copre pesate di oggi scritte con
      * un orologio del telefono leggermente avanti.
+     *
+     * ⚠️ Si seguono le pagine: `readRecords` ne restituisce al massimo
+     * [PAGINA] per volta e le altre stanno dietro un `pageToken`. Fermarsi
+     * alla prima pagina non darebbe un errore — darebbe qualche pesata in
+     * meno, che è il modo peggiore di sbagliare.
      */
     suspend fun leggiPeso(context: Context): EsitoSalute = withContext(Dispatchers.IO) {
         if (!sdkDisponibile(context)) {
@@ -85,17 +105,36 @@ object SaluteRepository {
             val client = HealthConnectClient.getOrCreate(context)
             val fine = Instant.now().plus(25, ChronoUnit.HOURS)
             val inizio = Instant.now().minus(90, ChronoUnit.DAYS)
-            val risposta = client.readRecords(
-                ReadRecordsRequest(
-                    recordType = WeightRecord::class,
-                    timeRangeFilter = TimeRangeFilter(startTime = inizio, endTime = fine),
+
+            val punti = mutableListOf<PuntoSalute>()
+            var pagina: String? = null
+            var giri = 0
+            do {
+                val risposta = client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = WeightRecord::class,
+                        timeRangeFilter = TimeRangeFilter(startTime = inizio, endTime = fine),
+                        pageSize = PAGINA,
+                        pageToken = pagina,
+                    )
                 )
-            )
-            EsitoSalute.Ok(risposta.records.map { PuntoSalute(it.time.toEpochMilli(), it.weight.inKilograms) })
+                punti += risposta.records.map {
+                    PuntoSalute(it.time.toEpochMilli(), it.weight.inKilograms)
+                }
+                pagina = risposta.pageToken
+                giri++
+                // Rete di sicurezza: un provider che restituisse sempre lo
+                // stesso token ci terrebbe qui per sempre.
+            } while (pagina != null && giri < MAX_PAGINE)
+
+            EsitoSalute.Ok(punti)
         } catch (e: SecurityException) {
             EsitoSalute.PermessiRichiesti
         } catch (e: Exception) {
             EsitoSalute.Errore(e.message ?: "Errore Health Connect")
         }
     }
+
+    private const val PAGINA = 1000
+    private const val MAX_PAGINE = 20
 }

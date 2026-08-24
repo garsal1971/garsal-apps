@@ -56,10 +56,9 @@ import java.time.LocalDate
  * come [com.garsal.appsphere.tafiri.TaFiriForm].
  *
  * Include anche il gratta-e-vinci dei premi (la barra di stelline con
- * `⭐ Punti Totali Traguardi Intermedi`, [BarraTraguardi]): i punti totali e i
- * premi già grattati restano un dato **locale, per dispositivo**
- * ([PesoPremi], gemello di `localStorage` sul web) — nessuna tabella nuova su
- * Supabase, stessa scelta già presa là. Tutto il resto — nome, tipo, punti,
+ * `⭐ Punti Totali Traguardi Intermedi`, [BarraTraguardi]): punti e premi
+ * grattati stanno su Supabase ([PesoPremi]), nelle stesse due tabelle che usa
+ * `weight-quest.html` — un premio vinto qui si ritrova sul PC. Tutto il resto — nome, tipo, punti,
  * milestone, Salva/Successo/Fallito/Elimina — è lo stesso form, campo per
  * campo, e le regole di calcolo (validazione di chiusura, punteggio finale)
  * stanno in [PesoViewModel.preparaChiusura]: se cambiano lì, cambiano anche in
@@ -189,7 +188,7 @@ fun GestioneObiettivoScreen(
                     // niente da mostrare (come sul web, dove la barra legge
                     // `userData.currentObjective`).
                     editando?.let { obiettivo ->
-                        BarraTraguardi(obiettivo = obiettivo, pesate = stato.pesate)
+                        BarraTraguardi(obiettivo = obiettivo, stato = stato, vm = vm)
                     }
 
                     Titoletto("Milestone Progressive")
@@ -494,9 +493,14 @@ private fun CampoDecimale(
 
 /**
  * La barra delle stelline dei traguardi intermedi —
- * `updateMilestoneProgressBar()` nel web. I punti totali e i premi già
- * grattati sono dati **locali, per dispositivo** ([PesoPremi]), non colonne
- * del database: la stessa scelta già fatta sul web con `localStorage`.
+ * `updateMilestoneProgressBar()` nel web.
+ *
+ * ⚠️ Punti totali e premi grattati **stanno su Supabase**
+ * (`ps_milestone_points`, `ps_milestone_prizes`), non più nelle preferenze del
+ * telefono: sono le stesse righe che legge e scrive `weight-quest.html`,
+ * quindi il premio grattato qui si ritrova sul PC e il numero sotto la
+ * stellina è uno solo. Arrivano già caricati in [PesoState] — questa barra li
+ * disegna e basta.
  *
  * [modificabile] mostra anche il campo dei punti totali — solo in Gestione
  * Obiettivo, dove ha senso cambiarli. Nella Panoramica («Oggi») la barra
@@ -504,28 +508,25 @@ private fun CampoDecimale(
  * premio già raggiunto, ma i punti si tarano solo da Gestisci.
  */
 @Composable
-internal fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>, modificabile: Boolean = true) {
+internal fun BarraTraguardi(
+    obiettivo: Obiettivo,
+    stato: PesoState,
+    vm: PesoViewModel,
+    modificabile: Boolean = true,
+) {
     val soglie = remember(obiettivo.pesoIniziale, obiettivo.pesoFinale) {
         PesoRegole.sogliePremio(obiettivo.pesoIniziale, obiettivo.pesoFinale)
     }
     if (soglie.isEmpty()) return
 
-    val context = LocalContext.current
-    var puntiTotali by remember(obiettivo.id) {
-        mutableStateOf(PesoPremi.puntiTotali(context, obiettivo.id))
-    }
-    // Si rilegge dopo ogni gratta, per far comparire subito il cibo vinto.
-    var versionePremi by remember(obiettivo.id) { mutableStateOf(0) }
-    val premiVinti = remember(obiettivo.id, versionePremi) {
-        PesoPremi.premiVinti(context, obiettivo.id)
-    }
-    val puntiPerSoglia = remember(soglie, puntiTotali) {
-        PesoRegole.distribuzionePunti(puntiTotali, soglie.size)
+    val premiVinti = stato.premi
+    val puntiPerSoglia = remember(soglie, stato.puntiTraguardi) {
+        PesoRegole.distribuzionePunti(stato.puntiTraguardi, soglie.size)
     }
     // Minimo giornaliero dall'inizio dell'obiettivo — `getDailyMinWeights`
     // filtrato su `date >= objStart`, come nel web.
-    val minimoRaggiunto = remember(pesate, obiettivo.inizio) {
-        PesoRegole.minimiGiornalieri(pesate.filter { it.giorno >= obiettivo.inizio })
+    val minimoRaggiunto = remember(stato.pesate, obiettivo.inizio) {
+        PesoRegole.minimiGiornalieri(stato.pesate.filter { it.giorno >= obiettivo.inizio })
             .minOfOrNull { it.second }
     }
 
@@ -534,13 +535,12 @@ internal fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>, modifica
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (modificabile) {
             CampoIntero(
-                valore = puntiTotali,
+                valore = stato.puntiTraguardi,
                 etichetta = "⭐ Punti Totali Traguardi Intermedi",
-                chiave = obiettivo.id,
-            ) { nuovo ->
-                puntiTotali = nuovo
-                PesoPremi.salvaPuntiTotali(context, obiettivo.id, nuovo)
-            }
+                // La chiave cambia solo quando il valore arriva dal database,
+                // mai mentre si digita: vedi PesoState.premiVersione.
+                chiave = obiettivo.id to stato.premiVersione,
+            ) { nuovo -> vm.salvaPuntiTraguardi(nuovo) }
         }
 
         RigaScorrevole(Arrangement.spacedBy(8.dp)) {
@@ -552,22 +552,24 @@ internal fun BarraTraguardi(obiettivo: Obiettivo, pesate: List<Pesata>, modifica
                     raggiunta = raggiunta,
                     punti = puntiPerSoglia.getOrNull(indice) ?: 0,
                     premio = vinto?.let { premioDa(it.id) },
+                    usufruito = vinto?.usufruito == true,
                     onTocca = { if (raggiunta) bigliettoAperto = soglia },
                 )
             }
         }
 
-        Nota("Ogni stellina accesa dà anche un premio: resta evidenziata con 🎁 finché non la tocchi e gratti il biglietto.")
+        Nota(
+            "Ogni stellina accesa dà anche un premio: resta evidenziata con 🎁 finché non la tocchi " +
+                "e gratti il biglietto. Dopo il gratta puoi dire «l'ho usufruito» e il premio si spegne."
+        )
     }
 
     bigliettoAperto?.let { soglia ->
         DialogoGrattaEVinci(
             soglia = soglia,
             vinto = premiVinti[soglia],
-            onRivelato = { premio ->
-                PesoPremi.salvaPremio(context, obiettivo.id, soglia, premio.id, LocalDate.now().toString())
-                versionePremi++
-            },
+            onRivelato = { premio -> vm.grattaPremio(soglia, premio) },
+            onUsufruito = { usufruito -> vm.segnaUsufruito(soglia, usufruito) },
             onChiudi = { bigliettoAperto = null },
         )
     }
@@ -580,6 +582,7 @@ private fun StellaTraguardo(
     raggiunta: Boolean,
     punti: Int,
     premio: PremioCibo?,
+    usufruito: Boolean,
     onTocca: () -> Unit,
 ) {
     val oro = Color(0xFFFFD700)
@@ -612,7 +615,14 @@ private fun StellaTraguardo(
             )
         }
         if (raggiunta) {
-            Text(premio?.emoji ?: "🎁", fontSize = 15.sp)
+            // Un premio usufruito resta vinto — la stellina non si spegne — ma
+            // il cibo si segna col ✓ e sbiadisce: «vinto e mangiato» e «vinto e
+            // ancora lì» sono due cose diverse. È lo stesso `.prize-used` del web.
+            Text(
+                text = if (premio == null) "🎁" else premio.emoji + if (usufruito) "✓" else "",
+                fontSize = if (usufruito) 13.sp else 15.sp,
+                color = if (usufruito) Palette.muted else Color.Unspecified,
+            )
         }
     }
 }
