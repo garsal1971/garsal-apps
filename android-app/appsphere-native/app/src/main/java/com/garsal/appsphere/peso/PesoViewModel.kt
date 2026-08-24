@@ -459,19 +459,19 @@ class PesoViewModel : ViewModel() {
         }
     }
 
-    /** «L'ho usufruito», e il suo contrario — reversibile di proposito. */
-    fun segnaUsufruito(soglia: Int, usufruito: Boolean) {
+    /** «Mangiato !!!», e il suo contrario — reversibile di proposito. */
+    fun segnaMangiato(soglia: Int, mangiato: Boolean) {
         val id = _state.value.obiettivoId ?: return
         val premio = _state.value.premi[soglia] ?: return
-        val quando = if (usufruito) LocalDate.now().toString() else null
+        val quando = if (mangiato) LocalDate.now().toString() else null
         _state.value = _state.value.copy(
-            premi = _state.value.premi + (soglia to premio.copy(usufruitoIl = quando))
+            premi = _state.value.premi + (soglia to premio.copy(mangiatoIl = quando))
         )
         viewModelScope.launch {
             try {
-                PesoPremi.segnaUsufruito(id, soglia, usufruito)
+                PesoPremi.segnaMangiato(id, soglia, mangiato)
             } catch (e: Exception) {
-                Log.w(TAG, "«usufruito» non salvato", e)
+                Log.w(TAG, "«mangiato» non salvato", e)
                 _state.value = _state.value.copy(
                     premi = _state.value.premi + (soglia to premio),
                     messaggio = "Non salvato: ${e.message ?: "database non raggiungibile"}",

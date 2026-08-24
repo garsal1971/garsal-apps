@@ -60,7 +60,7 @@ fun DialogoGrattaEVinci(
     soglia: Int,
     vinto: PremioVinto?,
     onRivelato: (PremioCibo) -> Unit,
-    onUsufruito: (Boolean) -> Unit,
+    onMangiato: (Boolean) -> Unit,
     onChiudi: () -> Unit,
 ) {
     val premio = remember(soglia) { vinto?.let { premioDa(it.id) } ?: PREMI_CIBO.random() }
@@ -68,7 +68,7 @@ fun DialogoGrattaEVinci(
     // Non è uno stato locale: arriva da [PesoState.premi], che si aggiorna in
     // modo ottimistico appena si tocca il pulsante. Tenerne una copia qui
     // vorrebbe dire due verità sullo stesso premio.
-    val usufruitoIl = vinto?.usufruitoIl
+    val mangiatoIl = vinto?.mangiatoIl
 
     Dialog(onDismissRequest = onChiudi) {
         Column(
@@ -88,7 +88,7 @@ fun DialogoGrattaEVinci(
             )
             Text(
                 text = when {
-                    usufruitoIl != null -> "Premio già usufruito il ${dataIt(usufruitoIl)}."
+                    mangiatoIl != null -> "Premio già mangiato il ${dataIt(mangiatoIl)}."
                     rivelato -> "Premio già grattato per questa soglia."
                     else -> "Gratta l'argento col dito e scopri cosa hai vinto."
                 },
@@ -125,9 +125,9 @@ fun DialogoGrattaEVinci(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 4.dp),
                 )
-                if (usufruitoIl != null) {
+                if (mangiatoIl != null) {
                     Text(
-                        "🍽️ Usufruito il ${dataIt(usufruitoIl)}",
+                        "🍽️ Mangiato il ${dataIt(mangiatoIl)}",
                         color = Color(0xFF00B894),
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
@@ -141,10 +141,10 @@ fun DialogoGrattaEVinci(
                 // non deve costare un cannolo — e per questo qui non c'è la
                 // conferma che il web chiede con un `confirm()`.
                 Bottone(
-                    testo = if (usufruitoIl != null) "↺ Non l'ho ancora usufruito" else "🍽️ L'ho usufruito",
+                    testo = if (mangiatoIl != null) "↺ Non l'ho ancora mangiato" else "🍽️ Mangiato !!!",
                     modifier = Modifier.fillMaxWidth(),
-                    colore = if (usufruitoIl != null) Color(0xFF2E3A5E) else Color(0xFF00B894),
-                ) { onUsufruito(usufruitoIl == null) }
+                    colore = if (mangiatoIl != null) Color(0xFF2E3A5E) else Color(0xFF00B894),
+                ) { onMangiato(mangiatoIl == null) }
             } else {
                 Bottone("👆 Scopri tutto", Modifier.fillMaxWidth(), Color(0xFFFFD700)) {
                     rivelato = true

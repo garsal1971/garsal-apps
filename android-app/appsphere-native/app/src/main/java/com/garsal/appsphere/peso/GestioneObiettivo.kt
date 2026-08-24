@@ -552,7 +552,7 @@ internal fun BarraTraguardi(
                     raggiunta = raggiunta,
                     punti = puntiPerSoglia.getOrNull(indice) ?: 0,
                     premio = vinto?.let { premioDa(it.id) },
-                    usufruito = vinto?.usufruito == true,
+                    mangiato = vinto?.mangiato == true,
                     onTocca = { if (raggiunta) bigliettoAperto = soglia },
                 )
             }
@@ -560,7 +560,7 @@ internal fun BarraTraguardi(
 
         Nota(
             "Ogni stellina accesa dà anche un premio: resta evidenziata con 🎁 finché non la tocchi " +
-                "e gratti il biglietto. Dopo il gratta puoi dire «l'ho usufruito» e il premio si spegne."
+                "e gratti il biglietto. Dopo il gratta puoi dire «Mangiato !!!» e il premio si spegne."
         )
     }
 
@@ -569,7 +569,7 @@ internal fun BarraTraguardi(
             soglia = soglia,
             vinto = premiVinti[soglia],
             onRivelato = { premio -> vm.grattaPremio(soglia, premio) },
-            onUsufruito = { usufruito -> vm.segnaUsufruito(soglia, usufruito) },
+            onMangiato = { mangiato -> vm.segnaMangiato(soglia, mangiato) },
             onChiudi = { bigliettoAperto = null },
         )
     }
@@ -582,7 +582,7 @@ private fun StellaTraguardo(
     raggiunta: Boolean,
     punti: Int,
     premio: PremioCibo?,
-    usufruito: Boolean,
+    mangiato: Boolean,
     onTocca: () -> Unit,
 ) {
     val oro = Color(0xFFFFD700)
@@ -615,13 +615,13 @@ private fun StellaTraguardo(
             )
         }
         if (raggiunta) {
-            // Un premio usufruito resta vinto — la stellina non si spegne — ma
+            // Un premio mangiato resta vinto — la stellina non si spegne — ma
             // il cibo si segna col ✓ e sbiadisce: «vinto e mangiato» e «vinto e
             // ancora lì» sono due cose diverse. È lo stesso `.prize-used` del web.
             Text(
-                text = if (premio == null) "🎁" else premio.emoji + if (usufruito) "✓" else "",
-                fontSize = if (usufruito) 13.sp else 15.sp,
-                color = if (usufruito) Palette.muted else Color.Unspecified,
+                text = if (premio == null) "🎁" else premio.emoji + if (mangiato) "✓" else "",
+                fontSize = if (mangiato) 13.sp else 15.sp,
+                color = if (mangiato) Palette.muted else Color.Unspecified,
             )
         }
     }
