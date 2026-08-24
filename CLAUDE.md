@@ -2114,6 +2114,19 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
 - Il **codice del telefono si vede per intero una volta sola**, alla creazione. Dopo restano le
   ultime quattro lettere: è quanto basta per riconoscere *quale* codice è, che è la sola domanda
   a cui serve rispondere guardando l'elenco. Un telefono perso si chiude revocando il codice.
+- Nello **Storico ogni giro si cancella** (🗑 in fondo alla riga, `eliminaGiro`). ⚠️ Non è pulizia
+  di schermo: la `score_query` di SOS somma i punti dei giri chiusi, quindi la riga che sparisce
+  si porta via i suoi punti dalla bolla in home e dal totale che paga i premi — la conferma lo
+  dice con la cifra davanti. ⚠️ **La durata del prossimo giro non torna indietro**: la percentuale
+  della risposta è stata applicata a `sos_types.current_seconds` quando il giro si è chiuso, e
+  quel valore è dove l'hanno portato *tutti* i giri, non solo quello. Rifarne il conto
+  all'indietro vorrebbe dire riapplicare in ordine tutta la storia; il tempo si riporta alla
+  partenza col pulsante *↺ Riporta a N min*, che esiste apposta. La cancellazione è per riga: si
+  vedono (e si cancellano) i soli giri **chiusi**, non le sessioni rimaste aperte per una app
+  chiusa a metà countdown.
+- ⚠️ **Il numero di SOS è un punteggio vero**, non un conteggio: sta fuori da `APP_SENZA_PUNTI`,
+  quindi si scrive nella bolla e fa parte del totale (vedi *AppSphere nativa → Non tutti i numeri
+  di `score_query` sono punti*). È la ragione per cui cancellare un giro ha un prezzo.
 
 ---
 

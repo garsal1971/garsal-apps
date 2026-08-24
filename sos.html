@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🆘 SOS v1.0.0</title>
+<title>🆘 SOS v1.0.1</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -298,8 +298,8 @@ textarea{min-height:120px;line-height:1.35}
 </div>
 
 <script>
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-08-23T10:00:00Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-08-24T19:10:00Z';
 console.log('%c 🆘 SOS ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#EE334E;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -793,7 +793,7 @@ function renderStorico(){
     return;
   }
   tbl.innerHTML = '<tr><th>Quando</th><th>SOS</th><th>Risposta</th><th>Punti</th>'
-                + '<th>Durata</th><th>Poi</th></tr>'
+                + '<th>Durata</th><th>Poi</th><th></th></tr>'
     + righe.map(function(g){
       return '<tr>'
         + '<td class="muted">'+dataIt(g.started_at)+'</td>'
@@ -803,10 +803,41 @@ function renderStorico(){
         + '<td>'+puntiTxt(g.points)+'</td>'
         + '<td>'+mmss(g.planned_seconds)+'</td>'
         + '<td class="muted">'+(g.seconds_after!=null ? mmss(g.seconds_after) : '—')+'</td>'
+        + '<td><button class="btn ghost small" onclick="eliminaGiro(\''+g.id+'\')">🗑</button></td>'
         + '</tr>';
     }).join('');
 }
 function kpi(v,l){ return '<div class="kpi"><div class="kpi-v">'+esc(v)+'</div><div class="kpi-l">'+esc(l)+'</div></div>'; }
+
+// Cancellare un giro non è un dettaglio di pulizia: `cm_apps.score_query` di
+// SOS somma i punti dei giri chiusi, quindi la riga che sparisce si porta via
+// i suoi punti dalla bolla in home e dal totale che paga i premi. La conferma
+// lo dice, con la cifra davanti.
+//
+// ⚠️ **La durata del prossimo giro non torna indietro.** La percentuale della
+// risposta è stata applicata a `sos_types.current_seconds` il giorno che il
+// giro si è chiuso, e quel valore è dove l'hanno portato tutti i giri fatti,
+// non solo questo: rifarne il conto all'indietro vorrebbe dire riapplicare in
+// ordine tutta la storia. Il tempo si riporta alla partenza col pulsante
+// *↺ Riporta a N min* della scheda del SOS, che è il comando che esiste
+// apposta.
+async function eliminaGiro(id){
+  var g = S.giri.filter(function(x){ return x.id === id; })[0];
+  if (!g) return;
+  var p = Number(g.points)||0;
+  var testo = 'Elimino il giro di ' + nomeSos(g.sos_type_id) + ' del ' + dataIt(g.started_at) + '?\n\n';
+  if (p) testo += 'I suoi ' + puntiTxt(p) + ' escono dal totale in home.\n';
+  testo += 'La durata del prossimo giro resta dov\'è: si riporta alla partenza dalla scheda del SOS.\n\n';
+  testo += 'Di qui non si torna indietro.';
+  if (!confirm(testo)) return;
+  var d = await sb.from('sos_sessions').delete().eq('id', id);
+  if (d.error){
+    if (handleAuthError(d.error)) return;
+    alert('Errore: '+d.error.message);
+    return;
+  }
+  await dbLoad();
+}
 
 // ============================================================
 // EVENTI
