@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.129</title>
+<title>AppSphere v1.5.130</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1962,8 +1962,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.129';
-const BUILD_TIME  = '2026-08-24T18:40:00Z';
+const APP_VERSION = 'v1.5.130';
+const BUILD_TIME  = '2026-08-24T20:10:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2345,7 +2345,11 @@ function render(apps) {
   });
 
   // Update total score in the panel (net = gross - punti premi spesi)
-  const total = puntiLordi(CURRENT_APPS);
+  // ⚠️ Mai sotto zero, come `updateScorePanel()` che arriva subito dopo: il
+  // totale di un'app può essere negativo (una risposta di SOS toglie punti),
+  // e senza il clamp qui il riquadro rosso lampeggerebbe un numero col meno
+  // per l'attimo che ci vuole a leggere i punti spesi.
+  const total = Math.max(0, puntiLordi(CURRENT_APPS));
   const spv = document.getElementById('sp-value');
   if (spv) spv.textContent = total.toLocaleString('it-IT');
   updateScorePanel();
@@ -2890,7 +2894,8 @@ async function loadApps(forceRender = false) {
     // Aggiorna comunque il modello e il totale nel pannello punteggio
     // (solo testo, nessuna bolla viene spostata o ridimensionata).
     CURRENT_APPS = apps;
-    const total = puntiLordi(apps);
+    // Come sopra: il lordo può essere negativo, il saldo mostrato no.
+    const total = Math.max(0, puntiLordi(apps));
     const spv = document.getElementById('sp-value');
     if (spv) spv.textContent = total.toLocaleString('it-IT');
     updateScorePanel();

@@ -336,7 +336,15 @@ private fun BollaCerchio(
     // [AppSenzaPunti]). Si decide dall'`html_file` e non da un campo dentro la
     // bolla: la cache delle preferenze porta quelle dell'avvio precedente, e un
     // campo aggiunto oggi lì dentro non c'è.
-    val conPunteggio = bolla.punteggio > 0 && AppSenzaPunti.contaComePunti(bolla.htmlFile)
+    //
+    // ⚠️ **La condizione è «diverso da zero», non «maggiore di zero».** Il
+    // totale di un'app può essere **negativo** — una risposta di SOS toglie
+    // punti, un'abitudine fallita pure — e con `> 0` quel numero spariva dalla
+    // bolla: la stessa app mostrava −40 sul web e niente qui, che è il modo
+    // peggiore di dirlo, perché una bolla senza numero si legge come «zero».
+    // Solo lo zero resta muto, come sul web (`app.score ? … : ''`): una bolla
+    // al minimo con uno «0» sotto sembra rotta, non vuota.
+    val conPunteggio = bolla.punteggio != 0 && AppSenzaPunti.contaComePunti(bolla.htmlFile)
     val dimensioneTesto = misuraTesto(bolla.nome, raggio * 2f, densita, conPunteggio)
     // `size * 0.13` come il web, con lo stesso minimo di 9.
     val dimensionePunteggio = ((raggio * 2f * 0.13f) / densita).coerceAtLeast(9f).sp

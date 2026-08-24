@@ -1363,9 +1363,23 @@ comprabile da una parte non lo è dall'altra — è lo stesso rischio di `totale
 gradino più a monte. Comprende anche app che in nativo non hanno una bolla: i loro punti entrano
 comunque nel totale, quindi la domanda «sono punti?» le riguarda uguale.
 
+⚠️ **Un punteggio può essere negativo**, ed è un'informazione, non un errore: una risposta di SOS
+toglie punti, una decisione sbagliata pure. La bolla lo scrive **col segno** — la condizione è
+«diverso da zero», non «maggiore di zero», in tutt'e due le home — perché una bolla senza numero
+si legge come «zero», che è il modo peggiore di dire −40. **Solo lo zero resta muto**: una bolla al
+minimo con uno «0» sotto sembra rotta, non vuota. Il **saldo spendibile** invece non scende sotto
+zero (`updateScorePanel()` e `HomeState.totaleNetto`, entrambi `max(0, lordo − spesi)`): non si
+comprano premi con un debito, ma il debito si vede.
+`20260824190000_score_query_ammette_negativi.sql` ha tolto i `GREATEST(0, …)` che schiacciavano a
+zero il totale di SOS e Decisioni — con quelli, da −40 a 0 la bolla mostrava lo stesso numero e il
+malus non esisteva. Le altre `score_query` non stanno in nessuna migration: se una ha lo stesso
+clamp, si toglie dal pannello ⚙️ delle badge query in `index.html`.
+
 ⚠️ Il numero continua invece a **dimensionare** la bolla, anche quando non si vede: quella di
 Spuntiamola che si sgonfia man mano che i giorni finiscono è la cosa che rende utile guardarla, e
-con l'area a zero resterebbe al minimo per sempre. La scelta si fa sull'`html_file` e non su un
+con l'area a zero resterebbe al minimo per sempre. Un punteggio negativo dà la bolla **al minimo**,
+in tutt'e due le implementazioni: l'area si ferma al pavimento di 6 cm² che tiene la bolla
+toccabile. La scelta si fa sull'`html_file` e non su un
 campo salvato dentro la bolla, perché le due cache (`localStorage` sul web, le preferenze nel
 nativo) portano le bolle dell'avvio precedente: un campo aggiunto oggi lì dentro non c'è, e il
 totale ripartirebbe da zero al primo avvio dopo l'aggiornamento.
