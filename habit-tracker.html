@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.77</title>
+    <title>Habit Stack Tracker v9.3.78</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1677,8 +1677,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.77';
-        const BUILD_TIME  = '2026-08-24T19:40:00Z';
+        const APP_VERSION = 'v9.3.78';
+        const BUILD_TIME  = '2026-08-24T21:10:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -6465,7 +6465,8 @@
                                         ${stack.started_at || ''} → ${stack.ended_at || ''}
                                     </div>
                                 </div>
-                                <span style="padding: 0.3rem 0.8rem; background: ${bg}; border-radius: 20px; font-size: 0.85rem; white-space: nowrap;">
+                                <span onclick="toggleArchiveDelete(this)" title="Clicca per eliminare dall'archivio"
+                                      style="padding: 0.3rem 0.8rem; background: ${bg}; border-radius: 20px; font-size: 0.85rem; white-space: nowrap; cursor: pointer; user-select: none;">
                                     ${label}
                                 </span>
                             </div>
@@ -6479,6 +6480,11 @@
                             </div>
                             <div class="progress-bar" style="margin: 0; height: 8px; border-radius: 4px;">
                                 <div class="progress-fill" style="width: ${pct}%;"></div>
+                            </div>
+                            <div class="archive-delete" style="display: none; margin-top: 0.75rem; text-align: right;">
+                                <button class="btn btn-danger" onclick="deleteArchivedStack('${stack.id}')" style="padding: 0.35rem 0.8rem; font-size: 0.85rem;">
+                                    🗑 Elimina dall'archivio
+                                </button>
                             </div>
                         </div>
                     `;
@@ -6503,9 +6509,15 @@
                                 </h3>
                                 <div style="font-size: 0.8rem; opacity: 0.6;">${habit.updated_at ? habit.updated_at.split('T')[0] : ''}</div>
                             </div>
-                            <span style="padding: 0.25rem 0.7rem; background: ${bg}; border-radius: 20px; font-size: 0.8rem; white-space: nowrap;">
+                            <span onclick="toggleArchiveDelete(this)" title="Clicca per eliminare dall'archivio"
+                                  style="padding: 0.25rem 0.7rem; background: ${bg}; border-radius: 20px; font-size: 0.8rem; white-space: nowrap; cursor: pointer; user-select: none;">
                                 ${label}
                             </span>
+                        </div>
+                        <div class="archive-delete" style="display: none; margin-top: 0.75rem; text-align: right;">
+                            <button class="btn btn-danger" onclick="deleteInactiveHabit('${habit.id}')" style="padding: 0.35rem 0.8rem; font-size: 0.85rem;">
+                                🗑 Elimina dall'archivio
+                            </button>
                         </div>
                     </div>
                 `;
@@ -6515,6 +6527,61 @@
                 container.innerHTML = '<p style="opacity: 0.7; text-align: center; padding: 2rem;">Nessun archivio disponibile.</p>';
             } else {
                 container.innerHTML = stacksHtml + inactiveHtml;
+            }
+        }
+
+        // Il badge di stato apre (e richiude) il pulsante di eliminazione della scheda:
+        // un tocco solo cancellerebbe per sbaglio proprio dove si legge lo storico.
+        function toggleArchiveDelete(badge) {
+            const card = badge.closest('.card');
+            if (!card) return;
+            const box = card.querySelector('.archive-delete');
+            if (!box) return;
+            const apri = box.style.display === 'none';
+            // Richiude le altre schede: un solo pulsante alla volta
+            document.querySelectorAll('#archivedStacksList .archive-delete').forEach(el => el.style.display = 'none');
+            box.style.display = apri ? 'block' : 'none';
+        }
+
+        async function deleteArchivedStack(stackId) {
+            const stack = archivedStacks.find(s => String(s.id) === String(stackId));
+            const punti = stack?.points_earned || 0;
+            const avviso = punti ? `\n\nI suoi ${punti} punti usciranno dal punteggio totale.` : '';
+            if (!confirm(`Eliminare definitivamente "${stack?.habit_name || 'questo ciclo'}" dall'archivio?${avviso}`)) return;
+
+            try {
+                const { error } = await supabaseClient.from('hb_archived_stacks').delete().eq('id', stackId);
+                if (error) throw error;
+
+                archivedStacks = archivedStacks.filter(s => String(s.id) !== String(stackId));
+                renderArchive();
+                await recalculateTotalScore();
+                showToast('Ciclo eliminato dall\'archivio');
+            } catch (error) {
+                console.error('❌ Errore eliminazione ciclo archiviato:', error);
+                showToast('Errore nell\'eliminazione');
+            }
+        }
+
+        async function deleteInactiveHabit(habitId) {
+            const habit = inactiveHabits.find(h => String(h.id) === String(habitId));
+            if (!confirm(`Eliminare definitivamente "${habit?.name || 'questa abitudine'}" e tutti i suoi completamenti?`)) return;
+
+            try {
+                await supabaseClient.from('hb_completions').delete().eq('habit_id', habitId);
+                await deleteHabitNotificationRule(habitId);
+
+                const { error } = await supabaseClient.from('hb_habits').delete().eq('id', habitId);
+                if (error) throw error;
+
+                inactiveHabits = inactiveHabits.filter(h => String(h.id) !== String(habitId));
+                completions = completions.filter(c => String(c.habit_id) !== String(habitId));
+                renderArchive();
+                await recalculateTotalScore();
+                showToast('Abitudine eliminata dall\'archivio');
+            } catch (error) {
+                console.error('❌ Errore eliminazione abitudine archiviata:', error);
+                showToast('Errore nell\'eliminazione');
             }
         }
 
