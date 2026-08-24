@@ -1533,7 +1533,9 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   Connect e Renpho (finestra di 90 giorni, permesso sullo storico, peso troncato a un decimale,
   pesate manuali tolte quando arriva il dato vero). **Premi dei traguardi e punti stanno sulle
   stesse righe** (`ps_milestone_prizes`, `ps_milestone_points`): soglie, distribuzione dei punti,
-  id dei cinque premi e il «Mangiato !!!» vanno cambiati nelle due implementazioni insieme. Il
+  id dei cinque premi e il «Mangiato !!!» vanno cambiati nelle due implementazioni insieme.
+  Lo stesso vale per **come si chiude un obiettivo**: `total_score` = punti giornalieri +
+  punti delle soglie **raggiunte** (solo col successo) ± bonus/malus finale. Il
   nativo porta pesata, tabella, grafico, Gestione Obiettivo, gratta e vinci e Salute: statistiche
   e dieta restano di là. Dettagli nella sezione qui sopra.
 - **Memo** — note, liste e diari esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
@@ -1612,6 +1614,22 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   cache**, perché la barra compaia subito senza aspettare la rete: il premio è quindi lo stesso
   da ogni dispositivo e dall'app nativa. Le righe che stavano solo in locale salgono sul DB al
   primo caricamento (`fetchPrizes`).
+- ⚠️ **I punti dei traguardi si incassano alla chiusura, e solo col successo**: al
+  `total_score` si somma la distribuzione delle **soglie raggiunte** — raggiunte, non
+  grattate: dimenticarsi di toccare una stellina non deve costare punti — mentre su un
+  obiettivo chiuso come fallito valgono zero. Prima di questa regola i «+N» sotto le
+  stelline non entravano in nessun totale: erano una promessa scritta a schermo e mai
+  incassata. Il conto sta in `milestoneAwards()` (web) e in
+  `PesoViewModel.puntiTraguardiRaggiunti()` (nativo), e la conferma di chiusura mostra i
+  tre addendi separati.
+- **Le caselle «Punteggio» e «Punti oggi» si cliccano** e aprono 📜 *Cronologia dei punti*:
+  gli obiettivi chiusi con il loro punteggio, i traguardi raggiunti, quanto varrebbe
+  chiudere oggi (successo o fallimento) e il giorno per giorno con peso, target, punti e
+  totale progressivo. Non ricalcola niente per conto suo — legge `buildScoreRows()` e
+  `milestoneAwards()`, gli stessi due conti dei badge e della chiusura. ⚠️ Quelle due
+  funzioni sono ora **l'unico posto** dove i punti si contano: prima la stessa formula
+  stava in `calculateTotalScores()` e in `closeObjective()`, che leggeva il badge dal DOM
+  (e un trattino a schermo sarebbe diventato uno zero in archivio).
 - **Dopo il gratta si dice se il premio è stato mangiato** (`🍽️ Mangiato !!!`, che scrive
   `consumed_on`): il premio resta vinto — la stellina non si spegne — ma il cibo sbiadisce col ✓ e
   il biglietto scrive quando. È **reversibile** (`↺ Non l'ho ancora mangiato`), perché un tocco
