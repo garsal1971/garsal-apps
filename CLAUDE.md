@@ -1622,11 +1622,18 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   incassata. Il conto sta in `milestoneAwards()` (web) e in
   `PesoViewModel.puntiTraguardiRaggiunti()` (nativo), e la conferma di chiusura mostra i
   tre addendi separati.
-- **Le caselle «Punteggio» e «Punti oggi» si cliccano** e aprono 📜 *Cronologia dei punti*:
-  gli obiettivi chiusi con il loro punteggio, i traguardi raggiunti, quanto varrebbe
-  chiudere oggi (successo o fallimento) e il giorno per giorno con peso, target, punti e
-  totale progressivo. Non ricalcola niente per conto suo — legge `buildScoreRows()` e
-  `milestoneAwards()`, gli stessi due conti dei badge e della chiusura. ⚠️ Quelle due
+- **Le caselle «Punteggio» e «Punti oggi» si cliccano** e aprono 📜 *Cronologia dei punti*,
+  **una per casella e mai mescolate**: il «Punteggio» elenca i soli obiettivi **chiusi**
+  (nome, periodo, esito, punteggio), i «Punti oggi» il solo obiettivo **aperto** —
+  traguardi raggiunti, quanto varrebbe chiuderlo oggi da vincitore o da perdente, e il
+  giorno per giorno con peso, target, punti e totale progressivo. Mescolarli vorrebbe dire
+  far cercare il proprio numero fra righe che non c'entrano. Non ricalcola niente per conto
+  suo — legge `buildScoreRows()` e `milestoneAwards()`, gli stessi due conti dei badge e
+  della chiusura.
+- ⚠️ **La casella «Punti oggi» somma i giornalieri e i traguardi già raggiunti**
+  (`puntiOggiMostrati` nel nativo): è quel che si porta a casa chiudendo bene, al netto del
+  bonus finale. La **chiusura non legge quel numero** — somma i due addendi per conto suo,
+  o i traguardi conterebbero due volte. ⚠️ Quelle due
   funzioni sono ora **l'unico posto** dove i punti si contano: prima la stessa formula
   stava in `calculateTotalScores()` e in `closeObjective()`, che leggeva il badge dal DOM
   (e un trattino a schermo sarebbe diventato uno zero in archivio).
