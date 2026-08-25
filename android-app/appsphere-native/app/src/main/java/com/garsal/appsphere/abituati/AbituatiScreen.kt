@@ -25,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +43,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.Pillola
 import com.garsal.appsphere.core.RigaScorrevole
+import com.garsal.appsphere.core.Tendina
 import com.garsal.appsphere.core.coloreDaHex
 import com.garsal.appsphere.core.larghezzaPulsanti
 import java.time.LocalDate
@@ -54,6 +57,27 @@ private enum class Vista(val etichetta: String) {
     OGGI("🎯 Oggi"),
     TUTTE("📋 Tutte"),
     ARCHIVIO("📦 Archivio"),
+}
+
+/**
+ * Il filtro sullo stato di 📋 Tutte, le stesse tre voci della tendina del web.
+ *
+ * Parte da «Attive» come là: le interrotte sono memoria, non lavoro di oggi, e
+ * un elenco che le mescola alle vive fa sembrare da spuntare qualcosa che è
+ * fermo. Una scelta fra poche opzioni fisse è **sempre una tendina**, mai una
+ * fila di pillole: coi caratteri di sistema grandi quelle andrebbero a capo o
+ * si accorcerebbero (vedi `core/PulsantiTendine.kt`).
+ */
+private enum class FiltroStato(val etichetta: String, val vuoto: String) {
+    ATTIVE("Attive", "Nessuna abitudine attiva. Creane una col +"),
+    INTERROTTE("Interrotte", "Nessuna abitudine interrotta."),
+    TUTTE("Tutte", "Nessuna abitudine. Creane una col +");
+
+    fun tiene(a: HbAbitudine): Boolean = when (this) {
+        ATTIVE -> a.stato == "active"
+        INTERROTTE -> a.stato == "stopped"
+        TUTTE -> true
+    }
 }
 
 /**
@@ -75,8 +99,11 @@ fun AbituatiScreen(
     val oggi = LocalDate.now()
 
     var vista by remember { mutableStateOf(Vista.OGGI) }
+    var filtro by remember { mutableStateOf(FiltroStato.ATTIVE) }
     var inCompilazione by remember { mutableStateOf<Pair<BozzaAbitudine, String?>?>(null) }
     var daEliminare by remember { mutableStateOf<HbAbitudine?>(null) }
+    var daInterrompere by remember { mutableStateOf<HbAbitudine?>(null) }
+    var daRiprendere by remember { mutableStateOf<HbAbitudine?>(null) }
 
     inCompilazione?.let { (bozza, id) ->
         AbituatiForm(
@@ -132,34 +159,49 @@ fun AbituatiScreen(
 
                     else -> {
                         val elenco = if (vista == Vista.OGGI) stato.diOggi(oggi)
-                        else stato.abitudini
-                        if (elenco.isEmpty()) {
-                            Vuoto(
-                                icona = if (vista == Vista.OGGI) "🎯" else "📋",
-                                testo = if (vista == Vista.OGGI)
-                                    "Oggi non c'è niente da spuntare."
-                                else
-                                    "Nessuna abitudine. Creane una col +",
-                            )
-                        } else {
-                            LazyColumn(
-                                contentPadding = PaddingValues(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                items(elenco, key = { it.id }) { abitudine ->
-                                    SchedaAbitudine(
-                                        abitudine = abitudine,
-                                        stato = stato,
-                                        oggi = oggi,
-                                        conSpunte = vista == Vista.OGGI,
-                                        onSegna = { giorno, nuovo, orario ->
-                                            vm.segna(abitudine, giorno, nuovo, orario, oggi)
-                                        },
-                                        onModifica = {
-                                            inCompilazione = BozzaAbitudine.da(abitudine) to abitudine.id
-                                        },
-                                        onElimina = { daEliminare = abitudine },
-                                    )
+                        else stato.abitudini.filter { filtro.tiene(it) }
+
+                        Column(Modifier.fillMaxSize()) {
+                            if (vista == Vista.TUTTE) {
+                                Box(Modifier.padding(horizontal = 12.dp)) {
+                                    Tendina(
+                                        etichetta = "Stato",
+                                        scelto = filtro.etichetta,
+                                        voci = FiltroStato.entries.map { it.name to it.etichetta },
+                                    ) { scelta -> filtro = FiltroStato.valueOf(scelta) }
+                                }
+                            }
+
+                            if (elenco.isEmpty()) {
+                                Vuoto(
+                                    icona = if (vista == Vista.OGGI) "🎯" else "📋",
+                                    testo = if (vista == Vista.OGGI)
+                                        "Oggi non c'è niente da spuntare."
+                                    else
+                                        filtro.vuoto,
+                                )
+                            } else {
+                                LazyColumn(
+                                    contentPadding = PaddingValues(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    items(elenco, key = { it.id }) { abitudine ->
+                                        SchedaAbitudine(
+                                            abitudine = abitudine,
+                                            stato = stato,
+                                            oggi = oggi,
+                                            conSpunte = vista == Vista.OGGI,
+                                            onSegna = { giorno, nuovo, orario ->
+                                                vm.segna(abitudine, giorno, nuovo, orario, oggi)
+                                            },
+                                            onModifica = {
+                                                inCompilazione = BozzaAbitudine.da(abitudine) to abitudine.id
+                                            },
+                                            onInterrompi = { daInterrompere = abitudine },
+                                            onRiprendi = { daRiprendere = abitudine },
+                                            onElimina = { daEliminare = abitudine },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -183,6 +225,45 @@ fun AbituatiScreen(
             esito = esito,
             onRicomincia = { inizio -> vm.chiudiStack(esito, inizio, oggi) },
             onInterrompi = { vm.chiudiStack(esito, null, oggi) },
+        )
+    }
+
+    daInterrompere?.let { abitudine ->
+        AlertDialog(
+            onDismissRequest = { daInterrompere = null },
+            title = { Text("Interrompere l'abitudine?") },
+            text = {
+                Text(
+                    "«${abitudine.nome}» non viene eliminata e il punteggio non cambia: resta " +
+                        "con tutte le sue spunte, ma esce da 🎯 Oggi.\n\n" +
+                        "Da qui in poi non conta più giorni mancati, non consuma jolly e non può " +
+                        "né vincere né fallire, finché non la riprendi.\n\n" +
+                        "🔔 Il promemoria si cancella, e riprendendola andrà riscritto."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.interrompi(abitudine, oggi)
+                    daInterrompere = null
+                }) { Text("Interrompi", color = Palette.warning, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { daInterrompere = null }) {
+                    Text("Annulla", color = Palette.muted)
+                }
+            },
+        )
+    }
+
+    daRiprendere?.let { abitudine ->
+        Riprendi(
+            abitudine = abitudine,
+            contaDaRecuperare = { da -> vm.giorniDaRecuperare(abitudine, da, oggi) },
+            onRiprendi = { inizio ->
+                vm.riprendi(abitudine, inizio, oggi)
+                daRiprendere = null
+            },
+            onChiudi = { daRiprendere = null },
         )
     }
 
@@ -250,6 +331,8 @@ private fun SchedaAbitudine(
     conSpunte: Boolean,
     onSegna: (LocalDate, String, String?) -> Unit,
     onModifica: () -> Unit,
+    onInterrompi: () -> Unit,
+    onRiprendi: () -> Unit,
     onElimina: () -> Unit,
 ) {
     val categoria = stato.categoria(abitudine.categoriaId)
@@ -280,6 +363,19 @@ private fun SchedaAbitudine(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
                         .background(coloreDaHex(cat.colore) ?: Palette.muted)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+
+            if (abitudine.stato == "stopped") {
+                Text(
+                    text = "⏹ Interrotta",
+                    color = Palette.dark,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Palette.warning.copy(alpha = 0.25f))
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 )
             }
@@ -316,9 +412,22 @@ private fun SchedaAbitudine(
                     )
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pulsante("✏️ Modifica", NeroAbituati, Modifier.weight(1f), onModifica)
-                    Pulsante("🗑 Elimina", Palette.danger, Modifier.weight(1f), onElimina)
+                // Una riga sola che scorre col dito, con le larghezze misurate
+                // su **tutte** le etichette possibili — anche quelle che questa
+                // scheda non mostra — o un pulsante condizionale farebbe
+                // traballare la larghezza degli altri (`core/PulsantiTendine.kt`).
+                val etichette = listOf("✏️ Modifica", "⏹ Interrompi", "▶️ Riprendi", "🗑 Elimina")
+                val larghezza = larghezzaPulsanti(etichette)
+                RigaScorrevole(Arrangement.spacedBy(8.dp)) {
+                    if (abitudine.stato == "stopped") {
+                        // Su un'abitudine ferma la modifica non si offre, come
+                        // nel web: quello che serve è rimetterla in moto.
+                        Pillola("▶️ Riprendi", Palette.success, larghezza, onRiprendi)
+                    } else {
+                        Pillola("✏️ Modifica", NeroAbituati, larghezza, onModifica)
+                        Pillola("⏹ Interrompi", Palette.warning, larghezza, onInterrompi)
+                    }
+                    Pillola("🗑 Elimina", Palette.danger, larghezza, onElimina)
                 }
             }
         }
@@ -494,23 +603,108 @@ private fun GameOver(
     )
 }
 
+/**
+ * RIPRENDI: rimette in moto un'abitudine interrotta, **da una data scelta**.
+ *
+ * ⚠️ La data è il punto della finestra. Riprendendo con `started_at` fermo a
+ * quando l'abitudine era partita, il primo giro di `hb_reconcile` marcherebbe
+ * `missed` ogni giorno passato dall'interruzione: i jolly finirebbero sul posto
+ * e il game over scatterebbe prima ancora di rivedere la scheda. Quanto costi
+ * la data scelta lo dice `hb_giorni_da_recuperare` — la stessa RPC che usa
+ * `habit-tracker.html`, così l'avviso è lo stesso da tutt'e due le parti — e si
+ * rilegge a ogni cambio di data.
+ *
+ * Quando i jolly non bastano il pulsante **non si blocca**: cambia scritta. È
+ * una scelta legittima — si può voler ricominciare da lontano sapendo di
+ * perdere — ma non deve succedere per distrazione.
+ */
 @Composable
-private fun Pulsante(
-    testo: String,
-    colore: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
+private fun Riprendi(
+    abitudine: HbAbitudine,
+    contaDaRecuperare: suspend (LocalDate) -> Int?,
+    onRiprendi: (LocalDate) -> Unit,
+    onChiudi: () -> Unit,
 ) {
-    Text(
-        text = testo,
-        color = Palette.light,
-        fontWeight = FontWeight.SemiBold,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(colore)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+    val context = LocalContext.current
+    val jolly = abitudine.jollyMassimi.coerceAtLeast(1)
+    var inizio by remember(abitudine.id) { mutableStateOf(LocalDate.now()) }
+    var mancati by remember(abitudine.id) { mutableStateOf<Int?>(null) }
+    var inCorso by remember(abitudine.id) { mutableStateOf(true) }
+
+    // Il conto si rifà a ogni data scelta; `LaunchedEffect` annulla da sé
+    // quello di prima, quindi vince l'ultima scelta e non l'ultima risposta.
+    LaunchedEffect(abitudine.id, inizio) {
+        inCorso = true
+        mancati = contaDaRecuperare(inizio)
+        inCorso = false
+    }
+
+    val quanti = mancati
+    val avviso = when {
+        inCorso -> "⏳ Conto i giorni da recuperare…"
+        quanti == null -> "⚠️ Non riesco a contare i giorni da recuperare: controlla la connessione."
+        quanti == 0 -> "✅ Nessun giorno da recuperare: riparte pulita."
+        quanti >= jolly ->
+            "💀 Da questa data a oggi ci sono $quanti giorni senza spunta e i jolly sono $jolly: " +
+                "riaperta così finisce subito in game over."
+        else -> "⚠️ Da questa data a oggi ci sono $quanti giorni senza spunta: " +
+            "consumerebbero $quanti jolly su $jolly."
+    }
+    val perso = quanti != null && quanti >= jolly
+
+    AlertDialog(
+        onDismissRequest = onChiudi,
+        title = { Text("▶️ Riprendere l'abitudine?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("«${abitudine.nome}»")
+                Text(
+                    text = "Riparti dal ${dataItaliana(inizio)}",
+                    color = Palette.dark,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Palette.inputBg)
+                        .clickable { scegliData(context, inizio) { inizio = it } }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+                abitudine.giornoInizio?.let {
+                    Text(
+                        text = "Era partita il ${dataItaliana(it)}",
+                        color = Palette.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text(
+                    text = avviso,
+                    color = if (perso) Palette.danger else Palette.dark,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = "I giorni prima di questa data non contano più: le spunte già fatte " +
+                        "restano in archivio, ma streak, giorni fatti e jolly ripartono da qui.",
+                    color = Palette.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = "🔔 Il promemoria era stato cancellato all'interruzione: se lo rivuoi, " +
+                        "riaprilo dal web.",
+                    color = Palette.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onRiprendi(inizio) }) {
+                Text(
+                    text = if (perso) "Riprendi lo stesso" else "Riprendi",
+                    color = if (perso) Palette.danger else Palette.success,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onChiudi) { Text("Annulla", color = Palette.muted) }
+        },
     )
 }
 

@@ -177,6 +177,47 @@ class AbituatiViewModel : ViewModel() {
         )
     }
 
+    /**
+     * INTERROMPI e RIPRENDI, le due direzioni di `status` fra `active` e
+     * `stopped`. Non passano da una RPC — come nel web sono un `update`
+     * diretto: le RPC governano dove va la prossima occorrenza, non se
+     * l'abitudine è in corso.
+     */
+    fun interrompi(abitudine: HbAbitudine, oggi: LocalDate = LocalDate.now()) {
+        viewModelScope.launch {
+            try {
+                AbituatiRepository.interrompi(abitudine.id)
+                carica(oggi)
+            } catch (e: Exception) {
+                Log.w(TAG, "interruzione non riuscita", e)
+                _state.value = _state.value.copy(errore = e.message ?: "Interruzione non riuscita")
+            }
+        }
+    }
+
+    fun riprendi(abitudine: HbAbitudine, inizio: LocalDate, oggi: LocalDate = LocalDate.now()) {
+        viewModelScope.launch {
+            try {
+                AbituatiRepository.riprendi(abitudine.id, inizio)
+                carica(oggi)
+            } catch (e: Exception) {
+                Log.w(TAG, "ripresa non riuscita", e)
+                _state.value = _state.value.copy(errore = e.message ?: "Ripresa non riuscita")
+            }
+        }
+    }
+
+    /**
+     * Quanto costerebbe riprendere da una certa data. Il conto lo fa il
+     * database, qui si passa solo la domanda: `null` vuol dire che non si è
+     * potuto chiedere, e non «zero giorni».
+     */
+    suspend fun giorniDaRecuperare(
+        abitudine: HbAbitudine,
+        da: LocalDate,
+        oggi: LocalDate = LocalDate.now(),
+    ): Int? = AbituatiRepository.giorniDaRecuperare(abitudine.id, da, oggi)
+
     fun salva(id: String?, bozza: BozzaAbitudine, onFatto: () -> Unit) {
         viewModelScope.launch {
             try {

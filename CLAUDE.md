@@ -1299,9 +1299,31 @@ aprirle per correggerle.
 
 `abituati/` porta in nativo le abitudini di `habit-tracker.html`: la scheda
 🎯 **Oggi** con le spunte (fatto / fallito / saltato, e una riga per orario sulle abitudini a più
-slot), 📋 **Tutte** con creazione, modifica ed eliminazione, 📦 **Archivio** degli stack finiti, più
-le due cerimonie del web — lo stack vinto e il game over, ciascuna con *Ricomincia da una data*
-oppure basta. Restano di là statistiche, categorie, promemoria e impostazioni.
+slot), 📋 **Tutte** con creazione, modifica, **interruzione, ripresa** ed eliminazione, 📦 **Archivio**
+degli stack finiti, più le due cerimonie del web — lo stack vinto e il game over, ciascuna con
+*Ricomincia da una data* oppure basta. Restano di là statistiche, categorie, promemoria e
+impostazioni.
+
+📋 **Tutte** ha la stessa **tendina sullo stato** della pagina (*Attive / Interrotte / Tutte*,
+`FiltroStato`), e parte da «Attive» come là: le interrotte sono memoria, non lavoro di oggi, e un
+elenco che le mescola alle vive fa sembrare da spuntare qualcosa che è fermo. Sulla scheda di
+un'interrotta la **modifica non si offre** — quel che serve è rimetterla in moto — e i pulsanti
+stanno in una `RigaScorrevole` con le larghezze misurate su **tutte e quattro** le etichette
+possibili, comprese quelle che quella scheda non mostra.
+
+⚠️ **Riprendere chiede da quale data ripartire e riscrive `started_at`** (default oggi), esattamente
+come nel web: con la data originale il primo `hb_reconcile` marcherebbe `missed` ogni giorno passato
+dall'interruzione — guarda da `started_at` a ieri — i jolly finirebbero sul posto e il game over
+scatterebbe prima ancora di rivedere la scheda. Quanto costa la data scelta lo dice
+`hb_giorni_da_recuperare`, **la stessa RPC che chiama la pagina**, riletta a ogni cambio di data; se
+i jolly non bastano il pulsante non si blocca, cambia scritta in *Riprendi lo stesso*.
+`current_failures` torna a zero perché è una cache che la riconciliazione ricalcola.
+
+Interrompere e riprendere sono un `update` diretto su `status` in tutt'e due le implementazioni, e
+non è un'eccezione alla regola qui sotto: le RPC governano dove va la prossima occorrenza, non se
+l'abitudine è in corso. L'interruzione **annulla anche le notifiche già in coda** prima di
+cancellare la regola (una partita dopo chiederebbe di spuntare un'abitudine ferma): stesso ordine di
+`deleteHabitNotificationRule()`.
 
 **Qui non c'è nessuna regola.** Streak, jolly, giorni mancati e chiusura degli stack vivevano solo
 nel JavaScript della pagina; riscriverli in Kotlin avrebbe voluto dire due copie della stessa
@@ -1314,6 +1336,7 @@ formula, e in ballo ci sono punti e archivi. Sono invece scesi nel database
 | `hb_set_completion` | **L'unica strada per segnare un periodo**: scrive la riga e ricalcola i jolly |
 | `hb_reconcile` | Il giro che il web fa a ogni disegno della dashboard: periodi passati senza riga → `missed`, jolly riallineati, stack completati archiviati, stack scaduti chiusi. Torna cosa è successo, perché il client mostri le sue cerimonie |
 | `hb_clona` / `hb_chiudi_stack` | Le due uscite del game over: *Ricomincia* e *Interrompi* |
+| `hb_giorni_da_recuperare` | Quanto costa **riprendere** un'abitudine interrotta da una certa data: un jolly per giorno dovuto senza spunta. Sola lettura, la chiamano tutt'e due i client |
 
 Tre cose che *sono* la funzionalità:
 
@@ -1584,7 +1607,10 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   `riservato` sta nella query da tutt'e due le parti. Dettagli nella sezione qui sopra.
 - **Abituati** — è l'unica dove le regole **non** sono duplicate: streak, jolly, giorni mancati e
   chiusura degli stack stanno nelle RPC `hb_*`, che il nativo chiama già e la pagina web deve
-  ancora cominciare a chiamare. Dettagli nella sezione qui sopra.
+  ancora cominciare a chiamare. La prima che chiamano **tutt'e due** è
+  `hb_giorni_da_recuperare`, il costo di una ripresa: è nata dopo il passaggio al database, quindi
+  una copia in JavaScript non è mai esistita. Interrompi, Riprendi ed Elimina ci sono ora da tutt'e
+  due le parti, con la stessa regola sulla data di ripartenza. Dettagli nella sezione qui sopra.
 
 (`tasks.html` è l'ottava, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
@@ -1623,8 +1649,18 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   (`countMissedIfResumed`, lo stesso conto di `checkMissedDays` — un jolly per giorno mancato, non
   per sessione) e lo dice; se anche così i jolly non bastano, chiede conferma invece di impedirlo.
   ⚠️ Il **promemoria non torna**: `stopHabit()` cancella la riga di `cm_notification_rules`, e ora
-  che è cancellata orario e canale non stanno più da nessuna parte — si riscrive da MODIFICA. ⚠️ Il
-  gemello nativo non ha nessuno dei due comandi.
+  che è cancellata orario e canale non stanno più da nessuna parte — si riscrive da MODIFICA (il
+  nativo i promemoria non li gestisce affatto, quindi da lì rimanda al web).
+  ⚠️ **Il conteggio dei giorni da recuperare non sta nel client**: è la RPC
+  `hb_giorni_da_recuperare`, che chiamano sia la pagina sia il nativo — due copie di quella formula
+  sarebbero due avvisi diversi sullo stesso game over. Torna `null` (non zero) se la chiamata non
+  riesce: «non lo so» e «non costa niente» sono due cose diverse.
+- **Interrompi, Riprendi ed Elimina esistono ora in tutt'e due le implementazioni**, con la stessa
+  regola sulla data. In Gestione il filtro *Attive / Interrotti / Tutte* è la tendina `#filterStatus`
+  del web e `FiltroStato` nel nativo, e parte da **Attive** in tutt'e due: le interrotte sono
+  memoria, non lavoro di oggi. Fino all'agosto 2026 la pagina non aveva l'eliminazione
+  (`deleteHabit()` esisteva ma nessun pulsante la chiamava) e il nativo non aveva né interruzione né
+  ripresa: erano due elenchi che facevano cose diverse sulla stessa tabella.
 - ⚠️ **`hb_habits.frequency` ha tre valori e basta**: `daily`, `daily_multiple`, `weekly`. La
   tendina offriva anche *Personalizzata* (`custom`), che però **nessuna riga di codice leggeva** —
   la stringa compariva una volta sola, nell'`<option>`. Un'abitudine così cadeva nel ramo `else`

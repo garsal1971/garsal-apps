@@ -86,6 +86,38 @@ object AbituatiRepository {
         }.getOrDefault(0)
     }
 
+    /**
+     * Quanti jolly costerebbe riprendere un'abitudine interrotta da una certa
+     * data: uno per ogni giorno dovuto senza spunta completata, fra `da` e
+     * ieri.
+     *
+     * ⚠️ Il conto lo fa il database (`hb_giorni_da_recuperare`), non questo
+     * file — lo stesso avviso serve a `habit-tracker.html`, e due copie della
+     * formula sono due avvisi diversi il giorno che una delle due cambia. È la
+     * stessa ragione per cui lo streak non si calcola qui.
+     *
+     * Torna `null` — non zero — se la chiamata non riesce: «non lo so» e
+     * «nessun giorno da recuperare» sono due cose diverse, e la seconda al
+     * posto della prima farebbe riprendere un'abitudine dicendo che non costa
+     * niente.
+     */
+    suspend fun giorniDaRecuperare(
+        abitudineId: String,
+        da: LocalDate,
+        oggi: LocalDate = LocalDate.now(),
+    ): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            db.rpc(
+                "hb_giorni_da_recuperare",
+                buildJsonObject {
+                    put("p_habit_id", abitudineId)
+                    put("p_da", da.toString())
+                    put("p_oggi", oggi.toString())
+                }
+            ).decodeAs<Int>()
+        }.getOrNull()
+    }
+
     // ── Scritture: solo RPC ──────────────────────────────────────────────
 
     /**
@@ -212,6 +244,67 @@ object AbituatiRepository {
 
         if (id == null) db.from("hb_habits").insert(riga)
         else db.from("hb_habits").update(riga) { filter { eq("id", id) } }
+        Unit
+    }
+
+    /**
+     * INTERROMPI: l'abitudine passa a `stopped`. Non si cancella niente — la
+     * riga e le sue spunte restano — ma esce dalla riconciliazione, quindi da
+     * lì in poi non genera `missed`, non consuma jolly e non può né vincere né
+     * fallire.
+     *
+     * Il promemoria se ne va con lo stack: una regola che continuasse a
+     * chiedere di spuntare un'abitudine ferma sarebbe solo una sveglia da
+     * spegnere. È quello che fa `stopHabit()` nel web.
+     */
+    suspend fun interrompi(id: String) = withContext(Dispatchers.IO) {
+        db.from("hb_habits")
+            .update(buildJsonObject { put("status", "stopped") }) { filter { eq("id", id) } }
+        runCatching {
+            // Prima le notifiche già in coda, poi la regola: una notifica
+            // partita dopo l'interruzione chiederebbe di spuntare un'abitudine
+            // ferma, e la regola cancellata non la fermerebbe — è già uscita.
+            // Stesso ordine di `deleteHabitNotificationRule()` nel web.
+            db.from("cm_notification_queue").update(
+                buildJsonObject { put("status", "cancelled") }
+            ) {
+                filter {
+                    eq("app", "habits")
+                    eq("entity_id", id)
+                    isIn("status", listOf("pending", "snoozed"))
+                }
+            }
+            db.from("cm_notification_rules").delete {
+                filter {
+                    eq("app", "habits")
+                    eq("entity_id", id)
+                }
+            }
+        }
+        Unit
+    }
+
+    /**
+     * RIPRENDI: l'abitudine torna `active` **da una data scelta**, che diventa
+     * il suo `started_at`.
+     *
+     * ⚠️ La data non è un vezzo. Tenendo quella di partenza, il primo giro di
+     * `hb_reconcile` — che guarda da `started_at` a ieri — marcherebbe `missed`
+     * ogni giorno passato dall'interruzione: i jolly finirebbero sul posto e il
+     * game over scatterebbe prima ancora di rivedere la scheda. Quanto costi
+     * una certa data lo dice `giorniDaRecuperare()`, prima di scrivere.
+     *
+     * `current_failures` torna a zero perché è una **cache**: la
+     * riconciliazione la ricalcola dai completamenti al primo giro.
+     */
+    suspend fun riprendi(id: String, inizio: LocalDate) = withContext(Dispatchers.IO) {
+        db.from("hb_habits").update(
+            buildJsonObject {
+                put("status", "active")
+                put("started_at", inizio.toString())
+                put("current_failures", 0)
+            }
+        ) { filter { eq("id", id) } }
         Unit
     }
 
