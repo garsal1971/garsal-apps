@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.78</title>
+    <title>Habit Stack Tracker v9.3.79</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1574,6 +1574,34 @@
         </div>
     </div>
 
+
+    <!-- Riprendi Habit Modal — l'inverso di INTERROMPI -->
+    <div class="modal" id="resumeHabitModal" style="z-index: 2000;">
+        <div class="modal-content" style="max-width: 500px; text-align: center; background: linear-gradient(135deg, #0081C8 0%, #00B894 100%); color: white; border: none; animation: pop 0.4s;">
+            <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">▶️</div>
+            <h1 style="font-size: 2rem; margin: 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">RIPRENDI</h1>
+
+            <div id="resumeHabitName" style="font-size: 1.2rem; margin: 1rem 0; padding: 1rem; background: rgba(255,255,255,0.2); border-radius: 8px;">
+                <!-- Nome abitudine -->
+            </div>
+
+            <div style="margin-top: 1rem; text-align: left;">
+                <label style="font-size: 0.9rem; opacity: 0.85; display: block; margin-bottom: 0.4rem;">📅 Riparti dal:</label>
+                <input type="date" id="resumeStartDate" onchange="updateResumePreview()"
+                    style="width: 100%; padding: 0.6rem 0.8rem; font-size: 1rem; border-radius: 8px; border: none; color: #333; box-sizing: border-box;" />
+                <div id="resumeOriginalStart" style="font-size: 0.85rem; opacity: 0.8; margin-top: 0.4rem;"></div>
+            </div>
+
+            <div id="resumePreview" style="margin-top: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.15); border-radius: 8px; font-size: 0.9rem; text-align: left; line-height: 1.5;"></div>
+
+            <button class="btn btn-primary" onclick="resumeHabit()" style="width: 100%; margin-top: 1rem; font-size: 1.2rem; background: white; color: #0081C8; border: none;">
+                ▶️ Riprendi da questa data
+            </button>
+            <button onclick="closeResumeHabitModal()" style="width: 100%; margin-top: 0.75rem; font-size: 1rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5); border-radius: 8px; padding: 0.75rem; cursor: pointer;">
+                Annulla
+            </button>
+        </div>
+    </div>
     <style>
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
@@ -1677,8 +1705,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.78';
-        const BUILD_TIME  = '2026-08-24T21:10:00Z';
+        const APP_VERSION = 'v9.3.79';
+        const BUILD_TIME  = '2026-08-25T10:30:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -4938,11 +4966,15 @@
                             </div>
                         </div>`;
                         })()}
-                        ${habit.status !== 'stopped' ? `
+                        ${habit.status === 'stopped' ? `
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <span style="font-size: 0.85rem; padding: 0.25rem 0.6rem; border-radius: 6px; background: #fff8e1; color: #8a6d3b;">⏹ Interrotta</span>
+                            <button class="btn btn-primary" onclick="showResumeHabitModal('${habit.id}')">▶️ RIPRENDI</button>
+                        </div>` : `
                         <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                             <button class="btn btn-secondary" onclick="showEditHabitModal('${habit.id}')">MODIFICA</button>
                             <button class="btn btn-danger" onclick="stopHabit('${habit.id}')">INTERROMPI</button>
-                        </div>` : ''}
+                        </div>`}
                     </div>
                 `;
             }).join('');
@@ -5661,11 +5693,158 @@
                 if (error) throw error;
 
                 await deleteHabitNotificationRule(habitId);
-                habits = habits.filter(h => h.id !== habitId);
+                // L'abitudine non sparisce: passa a 'stopped' e resta leggibile
+                // sotto il filtro «Interrotti». Toglierla dall'array la faceva
+                // sparire anche da lì fino al ricarico della pagina.
+                const _stopped = habits.find(h => h.id === habitId);
+                if (_stopped) _stopped.status = 'stopped';
                 renderHabits();
+                renderDashboard();
                 showToast('Abitudine interrotta');
             } catch (e) {
                 showToast('Errore nell\'interruzione');
+            }
+        }
+
+        // ── RIPRENDI — l'inverso di INTERROMPI ───────────────────────────
+        //
+        // Un'abitudine interrotta ha `started_at` fermo a quando era partita e
+        // nessuna spunta nel frattempo. Riattivarla con quella data farebbe
+        // marcare `missed` ogni giorno passato da allora (checkMissedDays
+        // guarda da started_at a ieri): i jolly finirebbero sul posto e il game
+        // over scatterebbe prima ancora di rivedere la scheda. Per questo la
+        // data di ripartenza si sceglie — come nel «Ricomincia» del game over —
+        // e il riquadro dice quanto costerebbe quella scelta prima di
+        // confermarla, invece di farlo scoprire dopo.
+        let resumeHabitTargetId = null;
+
+        function showResumeHabitModal(habitId) {
+            const habit = habits.find(h => h.id === habitId);
+            if (!habit) return;
+            resumeHabitTargetId = habitId;
+
+            document.getElementById('resumeHabitName').textContent = habit.name;
+            document.getElementById('resumeStartDate').value = localDateStr();
+
+            const orig = parseDateLocal(habit.started_at);
+            document.getElementById('resumeOriginalStart').textContent = orig
+                ? `Era partita il ${orig.toLocaleDateString('it-IT')}`
+                : '';
+
+            updateResumePreview();
+            document.getElementById('resumeHabitModal').classList.add('active');
+        }
+
+        function closeResumeHabitModal() {
+            document.getElementById('resumeHabitModal').classList.remove('active');
+            resumeHabitTargetId = null;
+        }
+
+        // Quanti jolly costerebbe ripartire da una certa data: è lo stesso
+        // conto di checkMissedDays — un jolly per GIORNO mancato, non per
+        // sessione — fatto prima di scrivere invece che dopo. Conta come
+        // mancato sia il giorno senza nessuna riga (che diventerebbe `missed`)
+        // sia quello già segnato come dimenticato: per i jolly valgono uguale.
+        function countMissedIfResumed(habit, fromStr) {
+            const from = parseDateLocal(fromStr);
+            if (!from) return 0;
+            const today = new Date();
+            today.setHours(12, 0, 0, 0);
+
+            let mancati = 0;
+            const d = new Date(from);
+            while (d < today) {
+                const dateStr = localDateStr(d);
+
+                let dovuto = false;
+                if (habit.frequency === 'daily' || habit.frequency === 'daily_multiple') {
+                    dovuto = true;
+                } else if (habit.frequency === 'weekly' && habit.weekdays) {
+                    dovuto = habit.weekdays.includes(d.getDay());
+                }
+
+                if (dovuto) {
+                    if (habit.frequency === 'daily_multiple' && habit.daily_times?.length > 0) {
+                        const tuttiFatti = habit.daily_times.every(t => completions.some(c =>
+                            c.habit_id === habit.id &&
+                            c.status === 'completed' &&
+                            (c.period_key === buildPeriodKey('daily_multiple', dateStr, t) ||
+                             (c.period_key == null && c.completed_at.startsWith(`${dateStr}T${t}`)))));
+                        if (!tuttiFatti) mancati++;
+                    } else {
+                        const key = buildPeriodKey(habit.frequency, dateStr);
+                        const fatto = completions.some(c =>
+                            c.habit_id === habit.id &&
+                            c.status === 'completed' &&
+                            (c.period_key === key ||
+                             (c.period_key == null && c.completed_at.startsWith(dateStr))));
+                        if (!fatto) mancati++;
+                    }
+                }
+
+                d.setDate(d.getDate() + 1);
+            }
+            return mancati;
+        }
+
+        function updateResumePreview() {
+            const habit = habits.find(h => h.id === resumeHabitTargetId);
+            const box = document.getElementById('resumePreview');
+            if (!habit || !box) return;
+
+            const dateStr = document.getElementById('resumeStartDate').value || localDateStr();
+            const mancati = countMissedIfResumed(habit, dateStr);
+            const jolly = habit.max_failures || 3;
+
+            let riga;
+            if (mancati === 0) {
+                riga = '✅ Nessun giorno da recuperare: riparte pulita.';
+            } else if (mancati >= jolly) {
+                riga = `💀 Da questa data a oggi ci sono <strong>${mancati} giorni senza spunta</strong> e i jolly sono ${jolly}: riaperta così finirebbe subito in game over.`;
+            } else {
+                riga = `⚠️ Da questa data a oggi ci sono <strong>${mancati} giorni senza spunta</strong>: consumerebbero ${mancati} jolly su ${jolly}.`;
+            }
+
+            box.innerHTML = `
+                ${riga}
+                <div style="margin-top: 0.5rem; opacity: 0.85;">I giorni prima di questa data non contano più: le spunte già fatte restano in archivio, ma streak, giorni fatti e jolly ripartono da qui.</div>
+                <div style="margin-top: 0.5rem; opacity: 0.85;">🔔 Il promemoria era stato cancellato all'interruzione: se lo rivuoi, riaprilo con MODIFICA.</div>
+            `;
+        }
+
+        async function resumeHabit() {
+            const habit = habits.find(h => h.id === resumeHabitTargetId);
+            if (!habit) return;
+
+            const startDate = document.getElementById('resumeStartDate').value || localDateStr();
+            const mancati = countMissedIfResumed(habit, startDate);
+            const jolly = habit.max_failures || 3;
+            if (mancati >= jolly &&
+                !confirm(`Da ${startDate} a oggi ci sono ${mancati} giorni senza spunta e i jolly sono ${jolly}: riaprendola così finisce subito in game over.\n\nRiprendere lo stesso?`)) return;
+
+            try {
+                const { error } = await supabaseClient
+                    .from('hb_habits')
+                    .update({ status: 'active', started_at: startDate, current_failures: 0 })
+                    .eq('id', habit.id);
+                if (error) throw error;
+
+                habit.status = 'active';
+                habit.started_at = startDate;
+                // `current_failures` è una cache: la riconciliazione la
+                // ricalcola dai completamenti al prossimo giro.
+                habit.current_failures = 0;
+
+                closeResumeHabitModal();
+                habits.forEach(h => { h._streak = computeHabitStreak(h); });
+                await recalculateTotalScore();
+                renderDashboard();
+                renderHabits();
+                showToast(`▶️ "${habit.name}" ripresa dal ${startDate}`);
+                console.log(`▶️ Abitudine ripresa: "${habit.name}" dal ${startDate}`);
+            } catch (e) {
+                console.error('❌ resumeHabit:', e);
+                showToast('Errore nella ripresa');
             }
         }
 

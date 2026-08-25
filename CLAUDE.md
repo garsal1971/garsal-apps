@@ -1612,6 +1612,19 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Stack-based habits with daily completion tracking
 - Gamification: points, multipliers, streaks
 - Imports/exports via JSON backup
+- **Interrompi ↔ Riprendi** sono le due direzioni di `hb_habits.status` fra `active` e `stopped`, e
+  non passano dall'archivio: un'abitudine interrotta resta in `hb_habits` con tutte le sue spunte,
+  ma esce dalla dashboard e dalla riconciliazione, quindi da lì in poi non genera `missed`, non
+  consuma jolly e non può né vincere né fallire.
+  ⚠️ **Riprendere chiede da quale data ripartire e riscrive `started_at`** (default oggi). Con la
+  data originale, `checkMissedDays` — che guarda da `started_at` a ieri — marcherebbe `missed` ogni
+  giorno passato dall'interruzione: i jolly finirebbero sul posto e il game over scatterebbe prima
+  ancora di rivedere la scheda. La finestra conta quei giorni **prima** di scrivere
+  (`countMissedIfResumed`, lo stesso conto di `checkMissedDays` — un jolly per giorno mancato, non
+  per sessione) e lo dice; se anche così i jolly non bastano, chiede conferma invece di impedirlo.
+  ⚠️ Il **promemoria non torna**: `stopHabit()` cancella la riga di `cm_notification_rules`, e ora
+  che è cancellata orario e canale non stanno più da nessuna parte — si riscrive da MODIFICA. ⚠️ Il
+  gemello nativo non ha nessuno dei due comandi.
 - ⚠️ **`hb_habits.frequency` ha tre valori e basta**: `daily`, `daily_multiple`, `weekly`. La
   tendina offriva anche *Personalizzata* (`custom`), che però **nessuna riga di codice leggeva** —
   la stringa compariva una volta sola, nell'`<option>`. Un'abitudine così cadeva nel ramo `else`
