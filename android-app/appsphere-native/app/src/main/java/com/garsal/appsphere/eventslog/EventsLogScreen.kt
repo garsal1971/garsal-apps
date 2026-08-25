@@ -62,6 +62,22 @@ fun EventsLogScreen(
             GarsalTopBar(
                 titolo = "Events Log",
                 onIndietro = onIndietro,
+                azioni = {
+                    // Il 🙈/👁 compare **solo a modalità nascosta accesa**, come
+                    // il FAB del web: a modalità spenta non c'è niente da
+                    // alzare, e un pulsante che non fa niente è un invito a
+                    // chiedersi perché.
+                    if (stato.modalitaNascosta) {
+                        Text(
+                            text = if (stato.soloRiservate) "👁" else "🙈",
+                            fontSize = 18.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { vm.cambiaFiltroRiservate() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                },
             )
         }
     ) { padding ->
@@ -75,7 +91,8 @@ fun EventsLogScreen(
 
                 stato.gruppi.isEmpty() ->
                     Text(
-                        "Nessun gruppo di eventi.",
+                        text = if (stato.soloRiservate) "Nessun gruppo riservato."
+                               else "Nessun gruppo di eventi.",
                         color = Palette.muted,
                         modifier = Modifier.align(Alignment.Center),
                     )
@@ -84,6 +101,10 @@ fun EventsLogScreen(
                     SchedeGruppi(
                         gruppi = stato.gruppi,
                         attivo = stato.gruppoAttivo,
+                        // Il 🙈 sulla scheda si vede solo a modalità accesa, che
+                        // è l'unico momento in cui un gruppo riservato sta in
+                        // fila con gli altri e va distinto da loro.
+                        segnaRiservati = stato.modalitaNascosta,
                         onScegli = { vm.scegliGruppo(it) },
                     )
 
@@ -189,6 +210,7 @@ fun EventsLogScreen(
 private fun SchedeGruppi(
     gruppi: List<ElGruppo>,
     attivo: String?,
+    segnaRiservati: Boolean,
     onScegli: (String) -> Unit,
 ) {
     Row(
@@ -208,8 +230,16 @@ private fun SchedeGruppi(
                     .clickable { onScegli(gruppo.id) }
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
+                // Il segno, l'icona e il nome uno accanto all'altro: un pezzo
+                // che manca non deve lasciare lo spazio che lo separava dal
+                // prossimo, e un'icona vuota è la normalità.
+                val etichetta = listOfNotNull(
+                    "🙈".takeIf { segnaRiservati && gruppo.riservato == true },
+                    gruppo.icon?.takeIf { it.isNotBlank() },
+                    gruppo.name.takeIf { it.isNotBlank() },
+                ).joinToString(" ")
                 Text(
-                    text = "${gruppo.icon.orEmpty()} ${gruppo.name}".trim(),
+                    text = etichetta,
                     color = if (scelto) Palette.light else Palette.dark,
                     fontWeight = if (scelto) FontWeight.SemiBold else FontWeight.Normal,
                 )
