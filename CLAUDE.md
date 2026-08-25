@@ -1172,9 +1172,19 @@ prima per la prima interpolazione) e si ferma all'ultima pesata — il futuro no
 il piano lo promette. La spezzata del target invece arriva fino alla **fine** dell'obiettivo anche
 se quel giorno non è ancora passato: è l'unico modo per vedere a colpo d'occhio quanto manca al
 traguardo finale, non solo quanto già fatto. Il `Canvas` del disegno è largo quanto l'intero
-periodo (12.dp per giorno) dentro un `Box` con `horizontalScroll`, mentre la colonna delle
+periodo (16.dp per giorno) dentro un `Box` con `horizontalScroll`, mentre la colonna delle
 etichette in kg a sinistra resta fissa e non scorre — altrimenti scorrendo si perderebbe subito il
-riferimento dell'altezza della curva. All'apertura la vista si centra da sé su **oggi** (marcato
+riferimento dell'altezza della curva. In **altezza** prende tutto quello che avanza
+(`weight(1f)`), meno il posto del FAB in basso: sotto il disegno non c'è più niente scritto — le
+due righe che spiegavano come leggerlo si prendevano un terzo dello schermo per dire quel che si
+vede, e legenda e minimo del periodo stanno ora in una riga sola **sopra**.
+
+⚠️ **Le misure del disegno sono in `dp`, mai in pixel grezzi.** Spessori, margini e la fascia
+sotto l'asse erano numeri in px (`4f`, `34f`): su uno schermo denso valgono un terzo di quello che
+sembrano, e le date sotto l'asse venivano **tagliate a metà** — la fascia era più bassa del testo
+che ci andava dentro. Un pallino segna ogni pesata **vera** e non i giorni ricostruiti (che la
+linea attraversa lo stesso): un pallino su un giorno interpolato sembrerebbe una misura che non
+c'è mai stata. All'apertura la vista si centra da sé su **oggi** (marcato
 da una riga tratteggiata verticale con l'etichetta «Oggi»), con circa due settimane prima e dopo
 in vista: lo scorrimento iniziale si calcola con un `LaunchedEffect` sulla larghezza reale del
 riquadro (`onSizeChanged`), disponibile solo dopo il primo posizionamento — prima di allora il
