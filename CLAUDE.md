@@ -196,9 +196,15 @@ d'ufficio con l'IBAN, che ha la sua colonna `iban`.
 ### Events Log (`el_`)
 | Table | Purpose |
 |---|---|
-| `el_groups` | Event category groups |
+| `el_groups` | Event category groups; `riservato` li tiene fuori dagli elenchi |
 | `el_events` | Event definitions |
 | `el_logs` | Event log entries |
+
+Il **riservato sta sul gruppo e non sull'evento**: eventi e registrazioni seguono il loro gruppo,
+e nascondere un evento lasciando visibile il gruppo che lo contiene direbbe comunque di cosa si
+sta parlando. ⚠️ La colonna è arrivata **dopo** le righe (`el_*` non sta in nessuna migration):
+i gruppi di prima ce l'hanno **NULL**, quindi il filtro va sempre scritto
+`riservato.eq.false,riservato.is.null` — con la sola uguaglianza sparirebbero tutti.
 
 ### Fondi (`fnz_fund*`)
 | Table | Purpose |
@@ -1599,8 +1605,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   scelto** in tutt'e due: `el_logs` non porta il gruppo, quindi il filtro passa per gli id degli
   eventi di quel gruppo (`logDelGruppo` nel nativo, le stesse due righe in `renderLogPage()`).
   Conseguenza in entrambe: la riga di un evento cancellato non sta in nessun gruppo e non si vede
-  più da nessuna parte, pur restando sul database e nel totale dei punti. Differenza voluta: il
+  più da nessuna parte, pur restando sul database. Differenza voluta: il
   web si ferma agli 8 più recenti, il nativo li elenca tutti perché lì la lista scorre.
+  ⚠️ **I gruppi 🙈 riservati hanno gli stessi tre stati da tutt'e due le parti** — modalità
+  nascosta spenta: solo i normali; accesa: tutti; accesa col 👁: solo i riservati — e **il filtro
+  sta nella query**, come in Memo: fuori dalla modalità nascosta la riga non si legge proprio.
+  Fino all'agosto 2026 il nativo la colonna la decodificava e non la guardava: un gruppo riservato
+  si vedeva sempre, con i suoi eventi e le sue registrazioni. Differenza di forma: il web ha un
+  FAB, il nativo il 🙈/👁 nella top bar (e a modalità accesa marca col 🙈 la scheda del gruppo
+  riservato, che il web non fa).
 - **Ta Firi?** — il punteggio finale resta in `sf_finalize_challenge`; il check-in di oggi passa
   da `sf_checkin_set` e la correzione di un giorno passato no; la regola Smart Block si scrive da
   tutt'e due. Dettagli nella sezione qui sopra.
@@ -1696,6 +1709,13 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 ### `events-log.html` — Events Log
 - Groups → Events → Logs hierarchy
 - Quick-log UI: select event, tap to log with timestamp
+- **Un gruppo può essere 🙈 riservato** (`el_groups.riservato`, spunta nel modale del gruppo): è
+  la stessa modalità nascosta del launcher e di `memo.html`, coi soliti tre stati. La accende
+  **AppSphere, non questa pagina** (`sessionStorage.hidden_mode`, `postMessage`,
+  `BroadcastChannel`); qui il FAB 🙈/👁 compare solo a modalità già accesa e alza o abbassa il
+  solo filtro. ⚠️ **Il filtro sta nella query** (`loadGroups()`): i gruppi riservati non si
+  leggono proprio. Eventi e registrazioni non hanno un flag proprio — seguono il gruppo
+  (`filterEventsByVisibleGroups()`, poi i log per eventi visibili).
 
 ### `obiettivi.html` — Obiettivi
 - Obiettivi annuali con sotto-obiettivi trimestrali (`parent_id`, due soli livelli)

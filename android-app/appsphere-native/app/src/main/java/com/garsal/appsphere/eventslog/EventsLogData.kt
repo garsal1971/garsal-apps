@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.garsal.appsphere.core.AuthRepo
+import com.garsal.appsphere.core.ModalitaNascosta
 import com.garsal.appsphere.core.Supabase
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
@@ -77,32 +78,90 @@ object EventsLogRepository {
 
     fun adesso(): String = LocalDateTime.now().format(FORMATO)
 
-    suspend fun gruppi(): List<ElGruppo> = withContext(Dispatchers.IO) {
+    /**
+     * I gruppi, coi **tre stati** di `loadGroups()` nel web:
+     *
+     * - modalità nascosta spenta → solo i gruppi normali;
+     * - accesa → tutti;
+     * - accesa col filtro 👁 → **solo** i riservati.
+     *
+     * ⚠️ **Il filtro sta nella query, non nel disegno.** Fuori dalla modalità
+     * nascosta la riga non si legge proprio: nasconderla solo a schermo la
+     * lascerebbe in chiaro a chiunque guardi il traffico o la memoria
+     * dell'app, che è esattamente ciò da cui la modalità protegge. È la stessa
+     * scelta di `MemoRepository.schede()`.
+     *
+     * ⚠️ Il ramo dei NULL **non è prudenza** come in Memo: `el_groups` non sta
+     * in nessuna migration e la colonna `riservato` è arrivata dopo, quindi i
+     * gruppi nati prima ce l'hanno NULL. Con la sola uguaglianza sparirebbero
+     * tutti — ed è per questo che il web scrive
+     * `riservato.eq.false,riservato.is.null`.
+     */
+    suspend fun gruppi(
+        modalitaNascosta: Boolean,
+        soloRiservate: Boolean,
+    ): List<ElGruppo> = withContext(Dispatchers.IO) {
         db.from("el_groups")
             .select(Columns.ALL) {
+                filter {
+                    when {
+                        soloRiservate -> eq("riservato", true)
+                        !modalitaNascosta -> or {
+                            eq("riservato", false)
+                            exact("riservato", null)
+                        }
+                        else -> Unit
+                    }
+                }
                 order("sort_order", Order.ASCENDING)
                 order("name", Order.ASCENDING)
             }
             .decodeList<ElGruppo>()
     }
 
-    suspend fun eventi(): List<ElEvento> = withContext(Dispatchers.IO) {
-        db.from("el_events")
-            .select(Columns.ALL) {
-                order("sort_order", Order.ASCENDING)
-                order("name", Order.ASCENDING)
-            }
-            .decodeList<ElEvento>()
-    }
+    /**
+     * Gli eventi dei soli gruppi visibili — `filterEventsByVisibleGroups()` del
+     * web, ma fatto **nella query**: il nome di un evento dice quasi sempre di
+     * cosa parla il suo gruppo, e leggerlo per poi scartarlo è la mezza misura
+     * che la modalità nascosta esiste per evitare.
+     *
+     * Senza gruppi visibili non si chiede niente: `in.()` con l'elenco vuoto
+     * non è una richiesta valida per PostgREST.
+     */
+    suspend fun eventi(gruppiVisibili: List<String>): List<ElEvento> =
+        withContext(Dispatchers.IO) {
+            if (gruppiVisibili.isEmpty()) return@withContext emptyList()
+            db.from("el_events")
+                .select(Columns.ALL) {
+                    filter { isIn("group_id", gruppiVisibili) }
+                    order("sort_order", Order.ASCENDING)
+                    order("name", Order.ASCENDING)
+                }
+                .decodeList<ElEvento>()
+        }
 
-    suspend fun log(limite: Long = 200): List<ElLog> = withContext(Dispatchers.IO) {
-        db.from("el_logs")
-            .select(Columns.ALL) {
-                order("logged_at", Order.DESCENDING)
-                limit(limite)
-            }
-            .decodeList<ElLog>()
-    }
+    /**
+     * Il registro dei soli eventi visibili, come `getGroupFilteredLogs()` nel
+     * web — anche qui nella query, per la stessa ragione: una nota di una
+     * registrazione è il contenuto, non l'etichetta.
+     *
+     * Conseguenza da conoscere: le righe il cui evento è stato **cancellato**
+     * (quelle che l'elenco mostrava come «Evento rimosso») non si leggono più.
+     * Non si vedevano comunque — il registro è sempre quello di un gruppo, e
+     * quelle righe un gruppo non ce l'hanno — e sul database restano dove
+     * sono.
+     */
+    suspend fun log(eventiVisibili: List<String>, limite: Long = 200): List<ElLog> =
+        withContext(Dispatchers.IO) {
+            if (eventiVisibili.isEmpty()) return@withContext emptyList()
+            db.from("el_logs")
+                .select(Columns.ALL) {
+                    filter { isIn("event_id", eventiVisibili) }
+                    order("logged_at", Order.DESCENDING)
+                    limit(limite)
+                }
+                .decodeList<ElLog>()
+        }
 
     /**
      * L'id lo genera il client, come fa la pagina web con `crypto.randomUUID()`:
@@ -141,6 +200,10 @@ data class EventsLogState(
     val log: List<ElLog> = emptyList(),
     val gruppoAttivo: String? = null,
     val valoriDaSelect: Map<String, Int> = emptyMap(),
+    /** La modalità nascosta di AppSphere: qui si legge, non si accende. */
+    val modalitaNascosta: Boolean = false,
+    /** Il filtro 👁: **solo** i gruppi riservati. Vale solo a modalità accesa. */
+    val soloRiservate: Boolean = false,
     val caricamento: Boolean = true,
     val errore: String? = null,
     val messaggio: String? = null,
@@ -178,20 +241,44 @@ class EventsLogViewModel : ViewModel() {
     private val _state = MutableStateFlow(EventsLogState())
     val state: StateFlow<EventsLogState> = _state.asStateFlow()
 
-    init { carica() }
+    init {
+        // La modalità nascosta la accende la home col codice a colori: qui si
+        // osserva, e quando cambia si rilegge tutto — il filtro sta nella
+        // query, quindi non basta ridisegnare. Il `collect` su uno StateFlow
+        // parte subito col valore corrente, quindi è anche il primo
+        // caricamento: chiamare `carica()` qui accanto ne farebbe due.
+        viewModelScope.launch {
+            ModalitaNascosta.attiva.collect { attiva ->
+                _state.value = _state.value.copy(
+                    modalitaNascosta = attiva,
+                    // Spegnendo la modalità cade anche il filtro 👁, o
+                    // l'elenco resterebbe a chiedere solo i riservati che non
+                    // può vedere.
+                    soloRiservate = if (attiva) _state.value.soloRiservate else false,
+                )
+                carica()
+            }
+        }
+    }
 
     fun carica() {
         viewModelScope.launch {
             _state.value = _state.value.copy(caricamento = true, errore = null)
             try {
-                val gruppi = EventsLogRepository.gruppi()
-                val eventi = EventsLogRepository.eventi()
-                val log = EventsLogRepository.log()
+                val stato = _state.value
+                val gruppi = EventsLogRepository.gruppi(stato.modalitaNascosta, stato.soloRiservate)
+                val eventi = EventsLogRepository.eventi(gruppi.map { it.id })
+                val log = EventsLogRepository.log(eventi.map { it.id })
                 _state.value = _state.value.copy(
                     gruppi = gruppi,
                     eventi = eventi,
                     log = log,
-                    gruppoAttivo = _state.value.gruppoAttivo ?: gruppi.firstOrNull()?.id,
+                    // Il gruppo aperto resta quello **solo se è ancora fra i
+                    // visibili**: alzando il filtro 👁 quello di prima non c'è
+                    // più, e senza questo controllo il registro sarebbe vuoto
+                    // con le schede di un gruppo che non è selezionato.
+                    gruppoAttivo = stato.gruppoAttivo?.takeIf { id -> gruppi.any { it.id == id } }
+                        ?: gruppi.firstOrNull()?.id,
                     caricamento = false,
                 )
                 controllaDaSelect()
@@ -246,10 +333,20 @@ class EventsLogViewModel : ViewModel() {
 
             _state.value = _state.value.copy(valoriDaSelect = valori)
             if (qualcosaScritto) {
-                runCatching { EventsLogRepository.log() }
+                runCatching { EventsLogRepository.log(_state.value.eventi.map { it.id }) }
                     .onSuccess { _state.value = _state.value.copy(log = it) }
             }
         }
+    }
+
+    /**
+     * Alza o abbassa il filtro 👁 — **solo** a modalità nascosta accesa, come
+     * `toggleHiddenMode()` nel web, che a modalità spenta esce subito.
+     */
+    fun cambiaFiltroRiservate() {
+        if (!_state.value.modalitaNascosta) return
+        _state.value = _state.value.copy(soloRiservate = !_state.value.soloRiservate)
+        carica()
     }
 
     fun scegliGruppo(id: String) {
