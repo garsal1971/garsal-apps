@@ -3,6 +3,9 @@ package com.garsal.appsphere.peso
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,9 +23,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +42,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -158,14 +166,30 @@ fun VistaGrafico(stato: PesoState) {
 
     val oggi = LocalDate.now()
     val giorniTotali = (fine.toEpochDay() - inizio.toEpochDay()).coerceAtLeast(1L)
-    // La larghezza per giorno è fissa, non ricavata dallo schermo, per restare
-    // prevedibile su telefoni diversi: ~22 giorni in una schermata.
-    val larghezzaGiorno = 16.dp
-    val larghezzaGrafico = larghezzaGiorno * (giorniTotali.toInt() + 1)
+
+    // Quanto è largo un giorno: è la variabile che il **pizzico** cambia.
+    // Non si ricava dallo schermo — così il grafico parte uguale su telefoni
+    // diversi — e da lì in poi la scala la decide il dito.
+    var dpGiorno by remember { mutableFloatStateOf(DP_GIORNO_INIZIALE) }
+    val larghezzaGiorno = dpGiorno.dp
 
     val density = LocalDensity.current
     val scrollState = rememberScrollState()
     var viewportPx by remember { mutableIntStateOf(0) }
+
+    // Allargato al massimo il periodo intero sta in una schermata, e da lì in
+    // poi il disegno non si stringe più: un `Canvas` più stretto del riquadro
+    // che lo contiene lascerebbe una fascia vuota a destra, che sembra un
+    // difetto e non una scala.
+    val larghezzaRiquadro = with(density) { viewportPx.toDp() }
+    val larghezzaGrafico =
+        (larghezzaGiorno * (giorniTotali.toInt() + 1)).coerceAtLeast(larghezzaRiquadro)
+
+    // Il giorno che stava al centro quando il pizzico è cominciato: dopo aver
+    // cambiato scala si torna lì. Senza, stringendo le dita il grafico
+    // scivolerebbe via da sé e si perderebbe il punto che si stava guardando.
+    var centroDaTenere by remember { mutableStateOf<Double?>(null) }
+
     LaunchedEffect(viewportPx) {
         if (viewportPx <= 0) return@LaunchedEffect
         val giorniDaInizio = (oggi.toEpochDay() - inizio.toEpochDay()).coerceIn(0, giorniTotali)
@@ -173,6 +197,18 @@ fun VistaGrafico(stato: PesoState) {
         val centro = pxPerGiorno * giorniDaInizio
         val offset = (centro - viewportPx / 2f).toInt().coerceIn(0, scrollState.maxValue)
         scrollState.scrollTo(offset)
+    }
+
+    LaunchedEffect(dpGiorno) {
+        val centro = centroDaTenere ?: return@LaunchedEffect
+        // Un frame di attesa: la larghezza nuova del disegno — e con lei il
+        // massimo dello scorrimento — si conosce solo dopo che è stata
+        // misurata, e scrollTo su un massimo vecchio finirebbe corto.
+        withFrameNanos { }
+        val pxPerGiorno = with(density) { dpGiorno.dp.toPx() }
+        val offset = (centro * pxPerGiorno - viewportPx / 2f).toInt()
+        scrollState.scrollTo(offset.coerceIn(0, scrollState.maxValue))
+        centroDaTenere = null
     }
 
     Column(
@@ -234,6 +270,64 @@ fun VistaGrafico(stato: PesoState) {
                     .background(Palette.cardBg)
                     .border(1.dp, Palette.border, RoundedCornerShape(12.dp))
                     .onSizeChanged { viewportPx = it.width }
+                    // ⚠️ Il pizzico si scrive a mano invece di usare
+                    // `detectTransformGestures` o `transformable`: quelli
+                    // prendono anche il trascinamento a un dito e lo
+                    // consumano, cioè si mangerebbero lo scorrimento del
+                    // grafico. Qui si guarda l'evento solo quando le dita
+                    // sono **almeno due**, e solo allora lo si consuma —
+                    // con un dito solo l'evento passa oltre e arriva a
+                    // `horizontalScroll`, che continua a funzionare come
+                    // prima.
+                    //
+                    // ⚠️ E si guarda nel passaggio **`Initial`**, non in
+                    // quello normale. `Main` arriva prima al modifier più
+                    // interno, cioè allo scorrimento, che tratterebbe il
+                    // pizzico come un trascinamento e farebbe scivolare il
+                    // grafico mentre lo si stringe; `Initial` scende invece
+                    // dall'esterno, quindi qui si può togliere l'evento di
+                    // mano allo scorrimento prima che lo veda.
+                    .pointerInput(giorniTotali) {
+                        awaitEachGesture {
+                            awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                            do {
+                                val evento = awaitPointerEvent(PointerEventPass.Initial)
+                                if (evento.changes.size >= 2) {
+                                    val fattore = evento.calculateZoom()
+                                    if (fattore != 1f && fattore > 0f) {
+                                        // Il giorno al centro si legge
+                                        // **prima** di cambiare scala, e solo
+                                        // la prima volta del gesto: rileggerlo
+                                        // a ogni evento userebbe la posizione
+                                        // già spostata dall'evento precedente.
+                                        val pxPerGiorno = dpGiorno.dp.toPx()
+                                        if (centroDaTenere == null) {
+                                            centroDaTenere =
+                                                (scrollState.value + viewportPx / 2f) / pxPerGiorno.toDouble()
+                                        }
+                                        // Il minimo non è un numero scritto
+                                        // qui: è la scala a cui **tutto il
+                                        // periodo sta in una schermata**, e
+                                        // dipende quindi da quanto è largo il
+                                        // telefono e da quanto dura
+                                        // l'obiettivo.
+                                        val minimo =
+                                            if (viewportPx > 0)
+                                                (viewportPx.toDp().value / (giorniTotali + 1))
+                                                    .toFloat()
+                                                    .coerceAtLeast(DP_GIORNO_MINIMO)
+                                            else DP_GIORNO_MINIMO
+                                        dpGiorno = (dpGiorno * fattore)
+                                            .coerceIn(minimo, DP_GIORNO_MASSIMO)
+                                    }
+                                    evento.changes.forEach { it.consume() }
+                                }
+                            } while (evento.changes.any { it.pressed })
+                        }
+                    }
                     .horizontalScroll(scrollState)
             ) {
                 Canvas(Modifier.width(larghezzaGrafico).fillMaxHeight()) {
@@ -259,6 +353,16 @@ fun VistaGrafico(stato: PesoState) {
                     // Una tacca e la data ogni settimana: senza, in un disegno
                     // che può essere lungo mesi non si capirebbe mai a che
                     // punto del periodo si sta scorrendo.
+                    //
+                    // ⚠️ Il passo segue lo zoom. A grafico stretto le date di
+                    // ogni settimana finirebbero una sopra l'altra: illeggibili
+                    // e pure più fitte delle tacche, che è il modo migliore per
+                    // far sembrare rotto un disegno che sta funzionando.
+                    val passoGiorni = when {
+                        dpGiorno >= 12f -> 7L
+                        dpGiorno >= 6f -> 14L
+                        else -> 28L
+                    }
                     var cursore: LocalDate = inizio
                     while (!cursore.isAfter(fine)) {
                         val px = x(cursore)
@@ -279,7 +383,7 @@ fun VistaGrafico(stato: PesoState) {
                             textLayoutResult = data,
                             topLeft = Offset(px - data.size.width / 2f, fondo + 6.dp.toPx()),
                         )
-                        cursore = cursore.plusDays(7)
+                        cursore = cursore.plusDays(passoGiorni)
                     }
 
                     // Oggi, marcata: è il punto da cui si parte per leggere
@@ -390,7 +494,10 @@ fun VistaGrafico(stato: PesoState) {
                     // colore dello sfondo perché non si impastino fra loro
                     // quando cadono vicine.
                     punti.forEach { (giorno, peso, ricostruito) ->
-                        if (ricostruito) return@forEach
+                        // Sotto una certa scala due giorni distano meno del
+                        // pallino stesso: una collana di pallini appiccicati
+                        // nasconde la curva invece di raccontarla.
+                        if (ricostruito || dpGiorno < 8f) return@forEach
                         val centro = Offset(x(giorno), y(peso))
                         drawCircle(Palette.cardBg, radius = 3.5.dp.toPx(), center = centro)
                         drawCircle(Palette.primary, radius = 2.dp.toPx(), center = centro)
@@ -430,6 +537,19 @@ fun VistaGrafico(stato: PesoState) {
 
 /** L'altezza della fascia sotto l'asse, dove vanno le date. */
 private val ASSE = 26.dp
+
+/**
+ * La scala di partenza e i suoi estremi, in dp per giorno.
+ *
+ * Il minimo vero lo decide lo schermo — è la scala a cui tutto il periodo sta
+ * in una schermata — e questa costante è solo il pavimento sotto cui non si
+ * scende comunque, per un obiettivo lunghissimo su un telefono stretto. Il
+ * massimo è il dettaglio di un giorno alla volta: oltre, un grafico lungo un
+ * chilometro non è uno zoom, è un modo di perdersi.
+ */
+private const val DP_GIORNO_INIZIALE = 16f
+private const val DP_GIORNO_MINIMO = 1.2f
+private const val DP_GIORNO_MASSIMO = 48f
 
 @Composable
 private fun Legenda(testo: String, colore: Color) {
