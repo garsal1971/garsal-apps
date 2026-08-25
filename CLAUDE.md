@@ -1174,7 +1174,15 @@ se quel giorno non è ancora passato: è l'unico modo per vedere a colpo d'occhi
 traguardo finale, non solo quanto già fatto. Il `Canvas` del disegno è largo quanto l'intero
 periodo (16.dp per giorno) dentro un `Box` con `horizontalScroll`, mentre la colonna delle
 etichette in kg a sinistra resta fissa e non scorre — altrimenti scorrendo si perderebbe subito il
-riferimento dell'altezza della curva. In **altezza** prende tutto quello che avanza
+riferimento dell'altezza della curva. Il passo è quello **di partenza**: si stringe e si allarga
+col **pizzico** (`pinch`, due dita), fra la scala che fa stare tutto il periodo in una schermata e
+un massimo di 48 dp al giorno. ⚠️ Il gesto è scritto a mano e intercettato nel passaggio
+**`Initial`**: `detectTransformGestures` e `transformable` prendono anche il trascinamento a un
+dito — cioè si mangerebbero lo scorrimento — e `Main` arriverebbe prima allo scorrimento, che
+tratterebbe il pizzico come un trascinamento. Il giorno al centro si legge prima di cambiare scala
+e si ritorna lì dopo, o stringendo le dita il grafico scivolerebbe via da sé; il passo delle date
+segue lo zoom (settimana, due settimane, quattro) e i pallini spariscono sotto gli 8 dp al giorno,
+dove si impasterebbero. In **altezza** prende tutto quello che avanza
 (`weight(1f)`), meno il posto del FAB in basso: sotto il disegno non c'è più niente scritto — le
 due righe che spiegavano come leggerlo si prendevano un terzo dello schermo per dire quel che si
 vede, e legenda e minimo del periodo stanno ora in una riga sola **sopra**.
