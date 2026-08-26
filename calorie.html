@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.4.0</title>
+  <title>Calorie v1.5.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -283,8 +283,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.4.0';
-var BUILD_TIME  = '2026-08-26T20:00:00Z';
+var APP_VERSION = 'v1.5.0';
+var BUILD_TIME  = '2026-08-27T09:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -825,142 +825,54 @@ async function reload() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   OPEN FOOD FACTS — i prodotti confezionati
+   LE BANCHE DATI — tutte dietro una Edge Function
    ═══════════════════════════════════════════════════════════════ */
 
-/* ⚠️ Da browser lo User-Agent non si può impostare, e Open Food Facts chiede di identificarsi:
-   per questo ci sono app_name / app_version / app_uuid in query string, che è il sostituto
-   previsto apposta. Senza, si finisce nel mucchio del traffico anonimo — che è quello che viene
-   limitato per primo.
+/* ⚠️ La pagina non parla più direttamente con Open Food Facts. Ogni ricerca passa dalla Edge
+   Function `al-food-search`, che gira sui server di Supabase. Quattro cose che dal browser non
+   si potevano avere:
 
-   ⚠️ I limiti sono diversi per tipo di chiamata: la lettura di un prodotto è larga, la RICERCA
-   TESTUALE sta intorno alle 10 al minuto. Cercare a ogni tasto premuto fa bandire l'indirizzo IP,
-   quindi la ricerca parte solo dopo una pausa di digitazione (vedi RITARDO_RICERCA). */
-const OFF_BASE = 'https://it.openfoodfacts.org';
-// ⚠️ La ricerca TESTUALE non passa più da qui. `/cgi/search.pl` è deprecato e da aprile 2026
-// risponde 503 a livello globale: Open Food Facts ha spostato la ricerca su Search-a-licious,
-// un servizio a parte (Elasticsearch). La lettura di un singolo prodotto per codice a barre
-// resta invece su `/api/v2/product/<code>.json`, che non è deprecata e funziona.
-const OFF_RICERCA = 'https://search.openfoodfacts.org/search';
-const OFF_CAMPI = 'code,product_name,product_name_it,generic_name,brands,quantity,serving_quantity,nutriments';
+     · CORS non è più un problema, quindi si possono usare servizi che gli header giusti non li
+       mandano — e quali li mandino non lo decidiamo noi;
+     · le chiavi (USDA, e domani altri) stanno nei Secrets invece che in chiaro in questo file;
+     · più fonti, una forma sola: qui arriva sempre lo stesso oggetto, comunque sia fatta la
+       risposta di chi ha risposto;
+     · ogni fonte torna col suo esito, quindi «il servizio è giù» e «quel prodotto non c'è»
+       smettono di sembrare la stessa cosa — che è il motivo per cui la ricerca è rimasta rotta
+       per giorni senza dirlo.
+
+   ⚠️ La NORMALIZZAZIONE sta tutta di là. Qui non c'è più nessuna copia di daOFF(): due
+   implementazioni della stessa conversione sono due valori diversi per lo stesso prodotto il
+   giorno che una delle due cambia. */
 const RITARDO_RICERCA = 700;
 
-function offIdent() {
-  // Un identificativo stabile per questo browser: serve a Open Food Facts per distinguere le
-  // chiamate, non a noi per riconoscere l'utente — non ci finisce dentro niente di personale.
-  let uuid = localStorage.getItem('al_off_uuid');
-  if (!uuid) {
-    uuid = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
-    localStorage.setItem('al_off_uuid', uuid);
-  }
-  return `app_name=garsal-calorie&app_version=${encodeURIComponent(APP_VERSION)}&app_uuid=${encodeURIComponent(uuid)}`;
+async function sbFn(nome, payload) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/${nome}`, {
+    method: 'POST', headers: sbH(), body: JSON.stringify(payload || {}),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d?.error) throw new Error(d?.error || `HTTP ${r.status}`);
+  return d;
 }
 
-/* Da prodotto di Open Food Facts ad alimento nostro.
-
-   ⚠️ Le calorie non sono sempre dove ci si aspetta: `energy-kcal_100g` c'è quasi sempre, ma su
-   parecchi prodotti l'etichetta è stata inserita in kJ e allora si converte (1 kcal = 4,184 kJ).
-   `energy_100g` senza suffisso è ambiguo — dipende da `energy_unit` — quindi si guarda l'unità
-   invece di dare per scontato che siano kJ. Un prodotto senza nessuna delle tre non è un prodotto
-   a zero calorie: è un prodotto di cui non si sa niente, e torna null perché la pagina possa
-   dirlo invece di archiviare uno zero falso. */
-function daOFF(p) {
-  const n = p?.nutriments || {};
-  let kcal = num(n['energy-kcal_100g']);
-  if (kcal == null && num(n['energy-kj_100g']) != null) kcal = +n['energy-kj_100g'] / 4.184;
-  if (kcal == null && num(n['energy_100g']) != null) {
-    kcal = (n.energy_unit === 'kcal') ? +n['energy_100g'] : +n['energy_100g'] / 4.184;
-  }
-  // ⚠️ Su Search-a-licious i campi di testo sono indicizzati PER LINGUA, quindi `product_name`
-  // può arrivare come oggetto ({it: …, en: …, main: …}) invece che come stringa. Dall'API v2 dei
-  // prodotti arriva invece come stringa. Si accettano tutt'e due: dare per scontata la stringa
-  // farebbe comparire «[object Object]» al posto del nome, e solo su una delle due strade.
-  const nome = (testoOff(p.product_name_it) || testoOff(p.product_name) || testoOff(p.generic_name) || '').trim();
-  if (!nome || kcal == null) return null;
-  return {
-    barcode: p.code || null,
-    name: nome,
-    brand: (testoOff(p.brands) || '').split(',')[0].trim() || null,
-    source: 'off',
-    kcal_100g: Math.round(kcal * 10) / 10,
-    proteins_100g: num(n.proteins_100g),
-    fat_100g: num(n.fat_100g),
-    sat_fat_100g: num(n['saturated-fat_100g']),
-    carbs_100g: num(n.carbohydrates_100g),
-    sugars_100g: num(n.sugars_100g),
-    fiber_100g: num(n.fiber_100g),
-    salt_100g: num(n.salt_100g),
-    default_grams: num(p.serving_quantity) || null,
-    quantita: p.quantity || null,
-  };
+/* Cerca un alimento nelle banche dati. `{ q }` per nome, `{ barcode }` per codice a barre.
+   Torna { alimenti, esiti }: `esiti` c'è quando non si è trovato niente (o se lo si chiede) e
+   dice quale fonte ha risposto cosa. */
+async function cercaOnline(richiesta) {
+  const d = await sbFn('al-food-search', richiesta);
+  return { alimenti: d.alimenti || [], esiti: d.esiti || [] };
 }
 
-// Un campo di testo di Open Food Facts, che a seconda della strada è una stringa o un oggetto
-// per lingua. L'italiano prima, poi il campo principale, poi quel che c'è.
-function testoOff(v) {
-  if (v == null) return '';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'object') return v.it || v.main || v.en || Object.values(v).find(x => typeof x === 'string' && x.trim()) || '';
-  return String(v);
-}
-
-// Una stringa di sole cifre lunga come un codice a barre è un codice a barre, non un nome: si
-// legge il prodotto invece di cercare un testo. Copre l'incollare un codice nella ricerca.
-const paresBarcode = q => /^\d{8,14}$/.test((q || '').trim());
-
-/* La ricerca per nome.
-
-   ⚠️ Due strade, provate in quest'ordine: prima Search-a-licious (`search.openfoodfacts.org`),
-   che è dove Open Food Facts ha spostato la ricerca testuale; poi, solo se quella non risponde,
-   il vecchio `/cgi/search.pl`. Il vecchio da aprile 2026 dà 503 quasi sempre, quindi non è un
-   ripiego che ci si aspetta funzioni — è lì perché una delle due potrebbe essere giù in un dato
-   momento, e provare la seconda costa una richiesta sola e solo quando la prima è già fallita.
-
-   La forma della risposta non si dà per scontata: Search-a-licious risponde con `hits`
-   (è Elasticsearch sotto), l'API vecchia con `products`. Si accettano tutt'e due più l'array
-   nudo, perché un cambio di chiave non deve tornare «nessun risultato» invece di un errore. */
-function prodottiDaRisposta(d) {
-  if (Array.isArray(d)) return d;
-  if (Array.isArray(d?.hits)) return d.hits;
-  if (Array.isArray(d?.products)) return d.products;
-  if (Array.isArray(d?.results)) return d.results;
-  return [];
-}
-
-async function offCerca(q) {
-  if (paresBarcode(q)) {
-    const uno = await offProdotto(q.trim());
-    return uno ? [uno] : [];
-  }
-  const errori = [];
-  const url = `${OFF_RICERCA}?q=${encodeURIComponent(q)}&langs=it,en&page_size=20&fields=${OFF_CAMPI}`;
-  try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const ris = prodottiDaRisposta(await r.json()).map(daOFF).filter(Boolean);
-    if (ris.length) return ris;
-    errori.push('la ricerca non ha trovato niente');
-  } catch (e) { errori.push('ricerca: ' + e.message); }
-
-  // Ripiego sul vecchio endpoint, che di solito è 503 ma non costa niente provare.
-  try {
-    const vecchio = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=${OFF_CAMPI}&${offIdent()}`;
-    const r = await fetch(vecchio);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return prodottiDaRisposta(await r.json()).map(daOFF).filter(Boolean);
-  } catch (e) { errori.push('ripiego: ' + e.message); }
-
-  if (errori.length && !errori[0].startsWith('la ricerca non ha')) throw new Error(errori.join(' · '));
-  return [];
-}
-
-async function offProdotto(barcode) {
-  const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${OFF_CAMPI}&${offIdent()}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('Open Food Facts: HTTP ' + r.status);
-  const d = await r.json();
-  if (d.status !== 1 || !d.product) return null;
-  return daOFF(d.product);
+// Il riassunto in una riga di cosa hanno risposto le fonti: è quel che si mostra all'utente
+// quando una ricerca torna vuota, al posto di un «niente trovato» che non spiega niente.
+function riassumiEsiti(esiti) {
+  if (!esiti || !esiti.length) return '';
+  return esiti.map(e => {
+    const che = e.fonte.replace(/^openfoodfacts\//, 'OFF ');
+    if (e.errore) return `${che}: non raggiungibile (${e.errore})`;
+    if (!e.ok) return `${che}: HTTP ${e.http}`;
+    return `${che}: ${e.trovati} risultati`;
+  }).join(' · ');
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1497,7 +1409,10 @@ function renderAlimenti() {
       <div class="page-title">🍎 Alimenti</div>
       <div class="page-sub">${S.foods.length} in archivio · i valori sono per 100 g</div>
     </div>
-    <button class="btn btn-primary btn-sm" data-action="nuovo-alimento">➕ Nuovo alimento</button>
+    <div class="hstack gap-8 wrap">
+      <button class="btn btn-outline btn-sm" data-action="importa-tabella">📄 Importa una tabella</button>
+      <button class="btn btn-primary btn-sm" data-action="nuovo-alimento">➕ Nuovo alimento</button>
+    </div>
   </div>`;
 
   const scanner = ('BarcodeDetector' in window);
@@ -1588,11 +1503,13 @@ function cercaOffCatalogo(q) {
       // seconda senza id. Il confronto è sul codice a barre, che è l'unica identità certa.
       const noti = new Set(S.foods.map(f => f.barcode).filter(Boolean));
       const nomi = new Set(S.foods.map(f => (f.name || '').toLowerCase()));
-      ris = (await offCerca(ql))
+      const d = await cercaOnline({ q: ql });
+      ris = d.alimenti
         .filter(a => (!a.barcode || !noti.has(a.barcode)) && !nomi.has(a.name.toLowerCase()))
         .slice(0, 12);
+      if (!ris.length) stato = riassumiEsiti(d.esiti) || 'Nessun risultato.';
     } catch (err) {
-      stato = 'Open Food Facts non risponde: ' + err.message;
+      stato = 'La ricerca non ha funzionato: ' + err.message;
     }
     if ((S.cercaAlimenti || '').trim() !== ql) return;   // nel frattempo si è scritto altro
     S.cercaOff = { q: ql, risultati: ris, stato };
@@ -1600,6 +1517,129 @@ function cercaOffCatalogo(q) {
     const i = document.querySelector('[data-action="cerca-alimenti"]');
     if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
   }, RITARDO_RICERCA);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   IMPORTARE UNA TABELLA DI COMPOSIZIONE (CREA e simili)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Le tabelle del CREA — il riferimento italiano per gli alimenti che un codice a barre non ce
+   l'hanno — non hanno un'API: si consultano dal loro sito e si scaricano come foglio. Questo
+   import prende quel foglio e ne fa righe di `al_foods` con `source = 'base'`.
+
+   ⚠️ Le colonne si riconoscono dalle INTESTAZIONI, non dalla posizione: un foglio di
+   composizione ha decine di colonne (minerali, vitamine, singoli acidi grassi) in un ordine che
+   cambia da edizione a edizione, e leggere «la terza colonna» è il modo di importare il fosforo
+   al posto dei grassi senza che nessuno se ne accorga. Quel che non si riconosce si scarta, e
+   l'anteprima dice quali colonne ha usato — così una tabella con nomi diversi si vede subito,
+   invece di entrare mezza vuota. */
+let _xlsxPromise = null;
+function caricaXLSX() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (!_xlsxPromise) {
+    _xlsxPromise = new Promise((ok, ko) => {
+      const el = document.createElement('script');
+      el.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      el.onload = () => ok(window.XLSX);
+      el.onerror = () => ko(new Error('Non riesco a caricare il lettore di fogli di calcolo'));
+      document.head.appendChild(el);
+    });
+  }
+  return _xlsxPromise;
+}
+
+// I sinonimi delle colonne. L'ordine conta: la prima che aggancia vince, quindi le forme più
+// specifiche («carboidrati disponibili») stanno prima di quelle generiche («carboidrati»).
+const COLONNE_TABELLA = [
+  { campo: 'name',          etichetta: 'Alimento',        sin: ['alimento', 'nome', 'descrizione', 'denominazione', 'food', 'prodotto'] },
+  { campo: 'kcal_100g',     etichetta: 'Energia (kcal)',  sin: ['energia kcal', 'kcal', 'energia (kcal)', 'calorie', 'energy kcal'] },
+  { campo: '_kj',           etichetta: 'Energia (kJ)',    sin: ['energia kj', 'kj', 'energia (kj)', 'energy kj'] },
+  { campo: 'proteins_100g', etichetta: 'Proteine',        sin: ['proteine totali', 'proteine', 'protein'] },
+  { campo: 'sat_fat_100g',  etichetta: 'Grassi saturi',   sin: ['acidi grassi saturi', 'grassi saturi', 'saturi', 'ag saturi', 'saturated'] },
+  { campo: 'fat_100g',      etichetta: 'Grassi',          sin: ['lipidi totali', 'lipidi', 'grassi totali', 'grassi', 'fat'] },
+  { campo: 'sugars_100g',   etichetta: 'Zuccheri',        sin: ['zuccheri solubili', 'zuccheri', 'sugars'] },
+  { campo: 'carbs_100g',    etichetta: 'Carboidrati',     sin: ['carboidrati disponibili', 'carboidrati', 'glucidi', 'carbohydrates'] },
+  { campo: 'fiber_100g',    etichetta: 'Fibra',           sin: ['fibra totale', 'fibra alimentare', 'fibra', 'fibre'] },
+  { campo: 'salt_100g',     etichetta: 'Sale',            sin: ['sale', 'salt', 'nacl'] },
+  { campo: '_sodio_mg',     etichetta: 'Sodio (mg)',      sin: ['sodio', 'sodium', 'na'] },
+];
+
+// ⚠️ Le parentesi NON si buttano via: «Energia (kcal)» e «Energia (kJ)» si distinguono solo per
+// quello che c'è dentro, e togliendole diventano la stessa intestazione — l'energia finiva letta
+// in kJ come se fossero kcal, cioè un alimento con quattro volte le calorie che ha. Si
+// appiattisce tutto a lettere, cifre e spazi, e l'unità resta parte del nome: «energia kcal».
+const normIntestazione = v => String(v ?? '')
+  .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+
+/* Un numero di una tabella di composizione. ⚠️ «tr» (tracce) e «-» NON sono zero: sono «non
+   misurato» e «assente dal dato», e tornano null — è la stessa regola della casella vuota che
+   vale in tutta l'app. Uno zero falso farebbe sembrare senza grassi un alimento di cui non si
+   sa niente. */
+function numeroTabella(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  const t = String(v ?? '').trim().toLowerCase();
+  if (!t || t === 'tr' || t === 'tracce' || t === '-' || t === '–' || t === 'n.d.' || t === 'nd') return null;
+  const pulito = t.replace(/[^0-9,.\-]/g, '');
+  const c = pulito.lastIndexOf(','), p = pulito.lastIndexOf('.');
+  const n = parseFloat(c > p ? pulito.replace(/\./g, '').replace(',', '.') : pulito.replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+/* Trova la riga di intestazione e la mappa colonna → campo. Si guardano le prime 40 righe di
+   ogni foglio: una tabella pubblicata ha quasi sempre un titolo, una nota sulla fonte e qualche
+   riga vuota prima delle intestazioni vere. Vince la riga che riconosce più colonne, e deve
+   averne almeno il nome e l'energia — senza quelle due non è una tabella di alimenti. */
+function mappaColonne(righe) {
+  let best = null;
+  righe.slice(0, 40).forEach((riga, i) => {
+    const mappa = {};
+    (riga || []).forEach((cella, col) => {
+      const t = normIntestazione(cella);
+      if (!t) return;
+      for (const c of COLONNE_TABELLA) {
+        if (mappa[c.campo] != null) continue;
+        if (c.sin.some(sn => t === sn || t.startsWith(sn + ' ') || t === sn.replace(/ /g, ''))) { mappa[c.campo] = col; break; }
+      }
+    });
+    const quante = Object.keys(mappa).length;
+    const utile = mappa.name != null && (mappa.kcal_100g != null || mappa._kj != null);
+    if (utile && (!best || quante > best.quante)) best = { riga: i, mappa, quante };
+  });
+  return best;
+}
+
+function leggiTabella(righe, best) {
+  const { mappa } = best;
+  const out = [];
+  for (let i = best.riga + 1; i < righe.length; i++) {
+    const r = righe[i] || [];
+    const nome = String(r[mappa.name] ?? '').trim();
+    if (!nome || nome.length < 2) continue;
+    let kcal = mappa.kcal_100g != null ? numeroTabella(r[mappa.kcal_100g]) : null;
+    if (kcal == null && mappa._kj != null) {
+      const kj = numeroTabella(r[mappa._kj]);
+      if (kj != null) kcal = Math.round(kj / 4.184 * 10) / 10;
+    }
+    // Senza calorie la riga non serve a niente: è quasi sempre un sottotitolo di sezione
+    // («CARNI», «LATTE E DERIVATI») rimasto in mezzo ai dati.
+    if (kcal == null) continue;
+    const v = campo => mappa[campo] != null ? numeroTabella(r[mappa[campo]]) : null;
+    let sale = v('salt_100g');
+    if (sale == null) {
+      // Le tabelle di composizione danno il SODIO in mg. Il sale dell'etichetta europea è
+      // sodio × 2,5: senza la conversione un alimento sembrerebbe salatissimo (numeri in mg
+      // letti come grammi) o insipido, a seconda di come lo si guarda.
+      const sodio = v('_sodio_mg');
+      if (sodio != null) sale = Math.round(sodio / 1000 * 2.5 * 1000) / 1000;
+    }
+    out.push({
+      name: nome, kcal_100g: kcal, proteins_100g: v('proteins_100g'), fat_100g: v('fat_100g'),
+      sat_fat_100g: v('sat_fat_100g'), carbs_100g: v('carbs_100g'), sugars_100g: v('sugars_100g'),
+      fiber_100g: v('fiber_100g'), salt_100g: sale,
+    });
+  }
+  return out;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1803,11 +1843,12 @@ function renderImpostazioni() {
   // servizio o la ricerca.
   h += `<div class="card">
     <div class="card-header-row">
-      <div class="card-title">🔌 Open Food Facts</div>
+      <div class="card-title">🔌 Banche dati alimenti</div>
       <button class="btn btn-outline btn-sm" data-action="prova-off">Prova la connessione</button>
     </div>
-    <div class="text-sm text-muted">Da qui arrivano i prodotti confezionati. La lettura di un codice a
-      barre e la ricerca per nome passano da due indirizzi diversi, e possono rompersi una per volta.</div>
+    <div class="text-sm text-muted">Da qui arrivano i prodotti confezionati, attraverso la Edge Function
+      <span class="mono">al-food-search</span>. Codice a barre e ricerca per nome passano da due servizi
+      diversi e possono rompersi uno per volta.</div>
     <div id="off-esito" class="mt-12"></div>
   </div>`;
 
@@ -1922,16 +1963,16 @@ function cercaAlimento(q) {
   if (ql.length < 3) return;
   window._timerRicerca = setTimeout(async () => {
     try {
-      const res = await offCerca(ql);
+      const d = await cercaOnline({ q: ql });
       if (S.ricerca.q.trim().toLowerCase() !== ql) return;   // nel frattempo si è scritto altro
       // Un prodotto già in archivio non si ripropone come risultato di rete: sarebbe la stessa
       // cosa due volte, una delle quali senza id.
       const noti = new Set(S.foods.map(f => f.barcode).filter(Boolean));
-      S.ricerca.off = res.filter(a => !a.barcode || !noti.has(a.barcode)).slice(0, 15);
-      S.ricerca.stato = S.ricerca.off.length ? '' : 'Open Food Facts non ha trovato niente.';
+      S.ricerca.off = d.alimenti.filter(a => !a.barcode || !noti.has(a.barcode)).slice(0, 15);
+      S.ricerca.stato = S.ricerca.off.length ? '' : (riassumiEsiti(d.esiti) || 'Nessun risultato in rete.');
     } catch (err) {
       S.ricerca.off = [];
-      S.ricerca.stato = 'Open Food Facts non risponde: ' + err.message;
+      S.ricerca.stato = 'La ricerca non ha funzionato: ' + err.message;
     }
     renderRisultati();
   }, RITARDO_RICERCA);
@@ -2039,6 +2080,100 @@ function leggiFormAlimento() {
   };
 }
 
+/* ── Importare una tabella di composizione ───────────────────── */
+function openImportaTabella() {
+  openModal('Importa una tabella di alimenti', `
+    <div class="text-sm mb-16">Carica un foglio di composizione degli alimenti (.xlsx, .xls o .csv) —
+      per l'Italia il riferimento è il <strong>CREA</strong>, che pubblica le sue tabelle su
+      <span class="mono">alimentinutrizione.it</span>. Le voci entrano nel catalogo come alimenti «base».</div>
+    <div class="form-group">
+      <input type="file" class="form-input" id="imp-file" accept=".xlsx,.xls,.csv,.txt" />
+      <div class="form-hint">Le colonne si riconoscono dalle intestazioni, non dalla posizione: prima di
+        scrivere niente ti mostro quali ha trovato e le prime righe lette.</div>
+    </div>
+    <div id="imp-esito"></div>
+  `);
+}
+
+/* ⚠️ Un CSV va letto diversamente da un xlsx, per due ragioni che si vedono solo dopo.
+
+   Il SEPARATORE: le tabelle italiane escono col punto e virgola, perché la virgola lì è il
+   decimale. Dando per scontata la virgola, ogni riga finisce in una cella sola — e le colonne
+   non si riconoscono più, che è esattamente il modo in cui questo import è fallito la prima
+   volta. Si conta quale dei tre candidati compare più spesso nelle prime righe.
+
+   La CODIFICA: UTF-8 in modo severo, e al primo carattere che non torna si ripiega su
+   Windows-1252 — in cui i fogli italiani sono scritti da sempre. Storpiare gli accenti qui
+   vuol dire «Fagiòli» in catalogo per sempre. */
+function leggiCsv(XLSX, buf) {
+  let testo;
+  try { testo = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { testo = new TextDecoder('windows-1252').decode(buf); }
+  const prime = testo.split(/\r?\n/).slice(0, 20).join('\n');
+  const conta = sep => (prime.split(sep).length - 1);
+  const FS = [';', '\t', ','].reduce((a, b) => (conta(b) > conta(a) ? b : a), ';');
+  return XLSX.read(testo, { type: 'string', raw: true, FS });
+}
+
+async function leggiFileTabella(file) {
+  setHtml('imp-esito', '<div class="search-note">Leggo il foglio…</div>');
+  try {
+    const XLSX = await caricaXLSX();
+    const buf = await file.arrayBuffer();
+    // ⚠️ `raw: true` e niente conversione: leggendo un CSV all'americana «12,5» diventerebbe 125.
+    // I numeri li interpreta numeroTabella(), che riconosce la notazione dall'ultimo separatore.
+    const wb = /\.(csv|txt)$/i.test(file.name) ? leggiCsv(XLSX, buf) : XLSX.read(buf, { type: 'array', raw: true });
+    let best = null, righe = null, foglio = null;
+    for (const nome of wb.SheetNames) {
+      const r = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, raw: true, defval: '' });
+      const m = mappaColonne(r);
+      if (m && (!best || m.quante > best.quante)) { best = m; righe = r; foglio = nome; }
+    }
+    if (!best) {
+      setHtml('imp-esito', `<div class="note-box is-danger">Non ho riconosciuto le colonne. Serve almeno
+        una colonna col <strong>nome dell'alimento</strong> e una con l'<strong>energia</strong> (kcal o kJ).
+        Mandami il file e aggiungo i nomi che usa.</div>`);
+      return;
+    }
+    const voci = leggiTabella(righe, best);
+    const noti = new Set(S.foods.map(f => (f.name || '').toLowerCase()));
+    const nuove = voci.filter(v => !noti.has(v.name.toLowerCase()));
+    window._importTabella = nuove;
+
+    const trovate = COLONNE_TABELLA.filter(c => best.mappa[c.campo] != null && !c.campo.startsWith('_'));
+    const derivate = COLONNE_TABELLA.filter(c => best.mappa[c.campo] != null && c.campo.startsWith('_'));
+    const mancanti = COLONNE_TABELLA.filter(c => best.mappa[c.campo] == null && !c.campo.startsWith('_'));
+
+    setHtml('imp-esito', `
+      <div class="note-box">Foglio <strong>${esc(foglio)}</strong>, intestazioni alla riga ${best.riga + 1}.
+        Lette <strong>${voci.length}</strong> voci${voci.length !== nuove.length
+          ? `, di cui ${voci.length - nuove.length} già in catalogo (si saltano)` : ''}.</div>
+      <div class="mt-12 text-sm"><strong>Colonne riconosciute:</strong> ${trovate.map(c => esc(c.etichetta)).join(', ') || '—'}
+        ${derivate.length ? `<div class="text-xs text-muted mt-4">Ricavate: ${derivate.map(c => esc(c.etichetta)).join(', ')}</div>` : ''}
+        ${mancanti.length ? `<div class="text-xs text-muted mt-4">Non trovate (resteranno vuote, non zero):
+          ${mancanti.map(c => esc(c.etichetta)).join(', ')}</div>` : ''}
+      </div>
+      <div class="table-wrap mt-12"><table class="table"><thead><tr>
+        <th>Alimento</th><th class="text-right">kcal</th><th class="text-right">Grassi</th>
+        <th class="text-right">Zuccheri</th><th class="text-right">Proteine</th>
+      </tr></thead><tbody>
+        ${nuove.slice(0, 8).map(v => `<tr><td>${esc(v.name)}</td>
+          <td class="text-right mono">${fmtKcal(v.kcal_100g)}</td>
+          <td class="text-right mono text-muted">${fmtG(v.fat_100g)}</td>
+          <td class="text-right mono text-muted">${fmtG(v.sugars_100g)}</td>
+          <td class="text-right mono text-muted">${fmtG(v.proteins_100g)}</td></tr>`).join('')}
+      </tbody></table></div>
+      ${nuove.length > 8 ? `<div class="text-xs text-muted mt-8">…e altre ${nuove.length - 8}.</div>` : ''}
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button class="btn btn-primary" data-action="conferma-tabella" ${nuove.length ? '' : 'disabled'}>
+          ➕ Aggiungi ${nuove.length} ${nuove.length === 1 ? 'alimento' : 'alimenti'}</button>
+      </div>`);
+  } catch (err) {
+    setHtml('imp-esito', `<div class="note-box is-danger">Non sono riuscito a leggere il file: ${esc(err.message)}</div>`);
+  }
+}
+
 /* ── Lo scanner del codice a barre ─────────────────────────────
    Solo dove il browser ha BarcodeDetector (Chrome e la WebView di Android): altrove il codice si
    scrive a mano. Nessuna libreria dal CDN — un lettore di codici a barre da mezzo megabyte per
@@ -2101,7 +2236,8 @@ async function cercaBarcode(codice) {
   }
   showToast('🔎 Cerco il prodotto…');
   try {
-    const a = await offProdotto(codice);
+    const d = await cercaOnline({ barcode: codice });
+    const a = d.alimenti[0] || null;
     if (!a) {
       alert(`Il codice ${codice} non è su Open Food Facts, o il prodotto non ha i valori nutrizionali.\nPuoi scriverlo a mano.`);
       openFormAlimento(null);
@@ -2282,6 +2418,28 @@ document.addEventListener('click', async e => {
       await reload();
     }
 
+    else if (action === 'importa-tabella') { openImportaTabella(); }
+
+    else if (action === 'conferma-tabella') {
+      const voci = window._importTabella || [];
+      if (!voci.length) return;
+      btn.disabled = true;
+      // A blocchi: novecento righe in una POST sola è un corpo che PostgREST può rifiutare, e
+      // se lo rifiuta non entra niente invece di entrare quasi tutto.
+      const BLOCCO = 150;
+      let scritte = 0;
+      for (let i = 0; i < voci.length; i += BLOCCO) {
+        const parte = voci.slice(i, i + BLOCCO).map(v => ({ ...v, source: 'base' }));
+        await sbIns('al_foods', parte, { 'Prefer': 'return=minimal' });
+        scritte += parte.length;
+        setHtml('imp-esito', `<div class="search-note">Scritte ${scritte} di ${voci.length}…</div>`);
+      }
+      window._importTabella = null;
+      closeModal();
+      showToast(`📄 ${scritte} alimenti aggiunti al catalogo`);
+      await reload();
+    }
+
     else if (action === 'aggiungi-al-catalogo') {
       const a = S.cercaOff.risultati[+btn.dataset.off];
       if (!a) return;
@@ -2301,41 +2459,34 @@ document.addEventListener('click', async e => {
     else if (action === 'prova-off') {
       btn.disabled = true;
       setHtml('off-esito', '<div class="search-note">Provo…</div>');
+      // ⚠️ Le prove le fa la Edge Function, non il browser: è lei che parla con le banche dati,
+      // quindi è il suo esito che conta. Provare da qui direbbe se il browser ci arriva, che
+      // non è più la domanda.
       const righe = [];
-      // Un prodotto notissimo e stabile: se questo non torna, non è «quel prodotto non c'è».
-      const CODICE_PROVA = '3017620422003';   // Nutella 400 g
-      try {
+      for (const [che, richiesta] of [
+        ['Codice a barre <span class="text-muted text-xs">(un prodotto notissimo)</span>', { barcode: '3017620422003' }],
+        ['Ricerca per nome <span class="text-muted text-xs">(«nutella»)</span>', { q: 'nutella' }],
+      ]) {
         const t0 = Date.now();
-        const r = await fetch(`${OFF_BASE}/api/v2/product/${CODICE_PROVA}.json?fields=code,product_name&${offIdent()}`);
-        const d = await r.json().catch(() => ({}));
-        righe.push([`Codice a barre <span class="text-muted text-xs">(${OFF_BASE})</span>`,
-          r.ok && d.status === 1 ? `✅ risponde — «${esc(testoOff(d.product?.product_name) || '?')}»` : `⚠️ HTTP ${r.status}, status ${d.status ?? '?'}`,
-          Date.now() - t0]);
-      } catch (e) { righe.push(['Codice a barre', `❌ ${esc(e.message)}`, null]); }
-      try {
-        const t0 = Date.now();
-        const r = await fetch(`${OFF_RICERCA}?q=nutella&langs=it,en&page_size=3&fields=code,product_name`);
-        const d = await r.json().catch(() => ({}));
-        const n = prodottiDaRisposta(d).length;
-        righe.push([`Ricerca per nome <span class="text-muted text-xs">(search.openfoodfacts.org)</span>`,
-          r.ok ? `${n ? '✅' : '⚠️'} HTTP ${r.status} — ${n} risultati` : `⚠️ HTTP ${r.status}`, Date.now() - t0]);
-      } catch (e) { righe.push(['Ricerca per nome', `❌ ${esc(e.message)}`, null]); }
-      try {
-        const t0 = Date.now();
-        const r = await fetch(`${OFF_BASE}/cgi/search.pl?search_terms=nutella&search_simple=1&action=process&json=1&page_size=3&fields=code&${offIdent()}`);
-        const d = await r.json().catch(() => ({}));
-        righe.push([`Ricerca vecchia <span class="text-muted text-xs">(cgi/search.pl, deprecata)</span>`,
-          r.ok ? `${prodottiDaRisposta(d).length ? '✅' : '⚠️'} HTTP ${r.status}` : `⚠️ HTTP ${r.status}`, Date.now() - t0]);
-      } catch (e) { righe.push(['Ricerca vecchia', `❌ ${esc(e.message)}`, null]); }
-
+        try {
+          const d = await cercaOnline({ ...richiesta, diagnostica: true });
+          righe.push([che, d.alimenti.length
+            ? `✅ ${d.alimenti.length} risultati — «${esc(d.alimenti[0].name)}»`
+            : '⚠️ nessun risultato', d.esiti, Date.now() - t0]);
+        } catch (e) {
+          righe.push([che, `❌ ${esc(e.message)}`, [], Date.now() - t0]);
+        }
+      }
       setHtml('off-esito', `<div class="table-wrap"><table class="table"><tbody>
-        ${righe.map(([che, esito, ms]) => `<tr><td>${che}</td><td class="text-right">${esito}
-          ${ms == null ? '' : `<span class="text-muted text-xs">· ${ms} ms</span>`}</td></tr>`).join('')}
+        ${righe.map(([che, esito, esiti, ms]) => `<tr><td>${che}
+          ${esiti.length ? `<div class="text-xs text-muted mt-4">${esc(riassumiEsiti(esiti))}</div>` : ''}</td>
+          <td class="text-right nowrap">${esito} <span class="text-muted text-xs">· ${ms} ms</span></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="note-box mt-12">«❌ Failed to fetch» vuol dire che il browser non è arrivato al
-        servizio: rete, blocco o CORS. Un «⚠️ HTTP 503» vuol dire che il servizio c'è ma è giù.
-        La <strong>ricerca vecchia</strong> è deprecata e da aprile 2026 dà 503 quasi sempre: qui è
-        solo un ripiego, e va bene che sia rossa finché quella nuova è verde.</div>`);
+      <div class="note-box mt-12">Le prove le fa la Edge Function <span class="mono">al-food-search</span>,
+        che gira sui server di Supabase: è lei a parlare con le banche dati, quindi è il suo esito
+        che conta. Sotto ogni riga c'è cosa ha risposto ciascuna fonte. La ricerca vecchia
+        (<span class="mono">cgi/search.pl</span>) è deprecata e dà 503 quasi sempre: va bene che
+        sia rossa finché quella nuova risponde.</div>`);
       btn.disabled = false;
     }
 
@@ -2381,6 +2532,7 @@ document.addEventListener('input', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.id === 'imp-file') { if (el.files?.[0]) leggiFileTabella(el.files[0]); return; }
   if (el.id === 'day-picker') { S.day = el.value || oggiStr(); render(); }
   else if (el.matches('[data-action="periodo"]')) { S.periodo = parseInt(el.value, 10) || 30; renderAndamento(); }
 });

@@ -687,6 +687,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html`, `casarosa.html` e da `finanza.html` → 🌹 Danaro di Rosa) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
+| `al-food-search` | manuale (da `calorie.html`) | **Legge e basta**: cerca un alimento per nome o per codice a barre nelle banche dati pubbliche e lo restituisce **già normalizzato**. Fonti in ordine: Open Food Facts Search-a-licious, la vecchia `/cgi/search.pl` come ripiego, e USDA FoodData Central se c'è il secret `USDA_API_KEY`. Ogni fonte torna col suo esito (HTTP, tempo, errore) |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Un prezzo può essere insieme plausibile e sbagliato
@@ -1896,6 +1897,14 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   (`'base'`, seminate dalla migration), i prodotti confezionati letti da **Open Food Facts** col
   codice a barre o cercandoli per nome, e quelli scritti a mano. È lo stesso alimento visto da tre
   parti: tre tabelle vorrebbero dire tre ricerche per rispondere a «quante calorie ha».
+- ⚠️ **La pagina non parla più con le banche dati: passa tutto dalla Edge Function
+  `al-food-search`.** Quattro cose che dal browser non si potevano avere — CORS smette di essere
+  un problema (quindi si possono usare servizi che gli header giusti non li mandano, e quali li
+  mandino non lo decidiamo noi), le chiavi stanno nei Secrets invece che in chiaro nell'HTML, più
+  fonti restituiscono **una forma sola**, e ogni fonte torna col suo esito. ⚠️ **La
+  normalizzazione vive SOLO nella Edge Function**: la pagina non ha più una copia di `daOFF()` —
+  due implementazioni della stessa conversione sono due valori diversi per lo stesso prodotto il
+  giorno che una delle due cambia.
 - ⚠️ **La ricerca per nome e la lettura di un codice a barre passano da due servizi diversi**, e
   si rompono una per volta:
 
@@ -1917,9 +1926,22 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   dei prodotti come stringa.
 - Una stringa di **sole cifre lunga come un codice a barre** non viene cercata come testo: si
   legge il prodotto. Copre l'incollare un codice nel campo di ricerca.
-- In ⚙️ Impostazioni c'è **🔌 Open Food Facts → Prova la connessione**: interroga i tre indirizzi
-  e scrive HTTP e tempi. Un servizio esterno che smette di rispondere si vede altrimenti solo
-  come «non trova niente», che è indistinguibile da «quel prodotto non c'è».
+- In ⚙️ Impostazioni c'è **🔌 Banche dati alimenti → Prova la connessione**. ⚠️ Le prove le fa la
+  **Edge Function**, non il browser: è lei a parlare coi servizi, quindi è il suo esito che conta —
+  provare dal browser direbbe se il browser ci arriva, che non è più la domanda. Un servizio
+  esterno che smette di rispondere si vede altrimenti solo come «non trova niente», che è
+  indistinguibile da «quel prodotto non c'è».
+- Da 🍎 Alimenti si può **importare una tabella di composizione** (📄 Importa una tabella): un
+  foglio .xlsx/.csv entra nel catalogo come alimenti `'base'`. ⚠️ Le colonne si riconoscono dalle
+  **intestazioni** e non dalla posizione — un foglio di composizione ha decine di colonne in un
+  ordine che cambia da edizione a edizione, e leggere «la terza» importa il fosforo al posto dei
+  grassi senza che nessuno se ne accorga; l'anteprima dice quali colonne ha usato e quali no.
+  ⚠️ Le **parentesi dell'intestazione non si buttano via**: «Energia (kcal)» e «Energia (kJ)» si
+  distinguono solo per quelle, e togliendole l'energia veniva letta in kJ come se fossero kcal —
+  un alimento con quattro volte le calorie che ha. ⚠️ In un CSV il **separatore si riconosce
+  contando** (`;` nelle tabelle italiane, dove la virgola è il decimale): dando per scontata la
+  virgola ogni riga finisce in una cella sola e le colonne non si riconoscono più. E «tr»
+  (tracce), «-» e «n.d.» tornano **null e non zero**, come ogni casella vuota di questa app.
 - ⚠️ **Open Food Facts limita le ricerche testuali a una decina al minuto** (la lettura di un
   singolo prodotto molto meno): cercare a ogni tasto premuto fa **bandire l'indirizzo IP**, quindi
   la chiamata parte solo dopo una pausa di digitazione (`RITARDO_RICERCA`). Da browser lo
