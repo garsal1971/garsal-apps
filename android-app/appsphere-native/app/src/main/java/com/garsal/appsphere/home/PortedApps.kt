@@ -64,6 +64,7 @@ object AppSenzaPunti {
 
     private val file = setOf(
         "spuntiamola.html",
+        "calorie.html",
         "obiettivi.html",
         "memo.html",
         "finanza.html",
