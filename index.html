@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.131</title>
+<title>AppSphere v1.5.132</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1962,8 +1962,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.131';
-const BUILD_TIME  = '2026-08-26T11:00:00Z';
+const APP_VERSION = 'v1.5.132';
+const BUILD_TIME  = '2026-08-26T12:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -4564,7 +4564,13 @@ async function init() {
   if (field) field.innerHTML = '';
   CURRENT_APPS = [];
 }
-init();
+// `/#profilo` apre direttamente la scheda del profilo. Serve alle altre app che leggono da
+// cm_profile — Calorie ci manda per data di nascita, altezza e sesso — perché il loro pulsante
+// arrivi sulla scheda e non su una home dove bisogna sapere che si passa dal ☰. Solo a sessione
+// valida: sopra la schermata di login non ci va aperto niente.
+init().then(() => {
+  if (location.hash === '#profilo' && localStorage.getItem('sb_token')) openProfilo();
+});
 
 window.addEventListener('resize', () => { if (CURRENT_APPS.length) render(); });
 
