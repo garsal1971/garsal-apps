@@ -423,15 +423,31 @@ l'ultimo obiettivo **attivo** di `ps_objectives` e le sue milestone, e ne ricava
 ```
 basale (Mifflin-St Jeor su età, altezza, peso, sesso)
   × al_profile.activity                       = consumo stimato
-  − (peso di oggi − peso finale) × 7700 / giorni che restano
-                                              = target del giorno
+  − deficit                                   = target del giorno
 ```
 
-⚠️ Il deficit si calcola sul **peso vero** e sui giorni che restano, **non sulla pendenza del
-piano**: se si resta indietro il target si stringe da sé, se si è avanti si allarga. La pendenza
-darebbe lo stesso numero il giorno che si è avanti di due chili e quello che si è indietro di
-due — cioè proprio quando serve che cambi. La curva del piano si mostra lo stesso, come scarto
-(«sei indietro di 0,4 kg»), che è l'informazione che quella pendenza porta davvero.
+⚠️ **Il deficit è la somma di DUE addendi, e la separazione è la funzionalità.** I traguardi di un
+obiettivo non sono equidistanti — chi ne mette tre nel primo mese e uno nei due successivi vuole
+perdere in fretta e poi tenere — quindi:
+
+| Addendo | Formula | Perché |
+|---|---|---|
+| **Ritmo del tratto** | `kg/giorno del tratto in corso × 7700` | Un piano che chiede 0,70 kg a settimana vuole ~770 kcal al giorno. Spalmare la perdita residua su tutto il tempo residuo dà lo **stesso numero nei due tratti** e fa restare indietro proprio dove il piano correva |
+| **Recupero dello scarto** | `(peso vero − peso di piano) × 7700 / giorni che restano **in tutto**` | È l'addendo che stringe il target da sé quando si è indietro e lo allarga quando si è avanti. Sui giorni del **solo tratto** sarebbe feroce a ridosso di un traguardo: due chili in cinque giorni non sono un obiettivo |
+
+Senza il primo il piano non si sente, senza il secondo non ci si accorge di essere rimasti
+indietro. La somma **non scende sotto zero**: essere molto avanti allenta il target fino al
+mantenimento, non oltre — un deficit negativo sarebbe l'app che invita a mangiare di più per
+tornare sulla curva. `segmentoDi()` trova il tratto; senza curva (meno di due traguardi) o a
+piano finito si ripiega sulla media fino alla fine, che è tutto quel che si può dire.
+
+⚠️ **L'ultimo traguardo vale come peso finale solo se i traguardi sono almeno due**: uno solo è il
+punto di partenza, non la meta, e prenderlo per tale fa credere l'obiettivo già raggiunto (peso di
+oggi ≤ «finale») e azzera il deficit senza dire niente. Con meno di due si usa `ob.end_weight`.
+
+⚠️ Fino alla v1.0.1 il deficit era la sola media `(peso di oggi − peso finale) / giorni che
+restano`. Su un piano a due velocità (3 kg nel primo mese, 1 kg nei due dopo) dava 322 kcal nel
+tratto che ne chiedeva 770: il ritmo del piano non si sentiva affatto.
 
 ⚠️ `pesoPianoAl()` è la copia di `getInterpolatedTarget()` di `weight-quest.html`: **se cambia
 là va cambiata anche qui**, o le due pagine daranno due traguardi diversi per lo stesso giorno.
