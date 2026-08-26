@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.1.0</title>
+  <title>Calorie v1.2.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -283,8 +283,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.1.0';
-var BUILD_TIME  = '2026-08-26T14:00:00Z';
+var APP_VERSION = 'v1.2.0';
+var BUILD_TIME  = '2026-08-26T16:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -298,22 +298,22 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
    per cui la pagina mostra sempre gli ingredienti del conto e non solo il totale. */
 const KCAL_PER_KG = 7700;
 
-/* Sotto queste soglie non si scende, per quanto un traguardo sia ambizioso: un
-   target di 900 kcal non è un obiettivo aggressivo, è un conto sbagliato che
-   nessuno seguirà. Quando il freno interviene la pagina lo DICE, con accanto il
-   numero che sarebbe servito: nascondere il taglio farebbe credere di essere in
-   pari mentre la data di fine si allontana. */
-const KCAL_MINIME = { M: 1500, F: 1200 };
+/* ⚠️ Queste soglie NON tagliano più niente: il target è quello che il piano
+   richiede, per basso che sia. Servono solo a far comparire un avviso, perché
+   un numero molto basso vuol dire quasi sempre che i traguardi sono troppo
+   ravvicinati — ma la decisione resta di chi guarda, non della pagina.
+   Fino alla v1.1.0 erano un pavimento vero e il target ci si fermava sopra. */
+const KCAL_ATTENZIONE = { M: 1500, F: 1200 };
 
 /* cm_profile ammette anche `sesso = 'Altro'`, che Mifflin-St Jeor non prevede: le sue due
    varianti differiscono di una costante (+5 contro −161), quindi lì si usa la via di mezzo e la
    pagina lo scrive nella spiegazione del target. Fermare il conto sarebbe la scelta pulita e
    inservibile — l'app non calcolerebbe più niente per un campo che non cambia l'ordine di
-   grandezza del risultato. Il pavimento in quel caso è il più alto dei due, che è il verso
-   prudente: un freno che interviene prima non fa danni, uno che interviene dopo sì. */
+   grandezza del risultato. La soglia di avviso in quel caso è la più alta delle due, che è il
+   verso prudente: un avviso che compare prima non fa danni, uno che compare dopo sì. */
 const CORREZIONE_SESSO = { M: 5, F: -161 };
 const correzioneSesso = sesso => CORREZIONE_SESSO[sesso] ?? (5 + -161) / 2;
-const kcalMinime = sesso => KCAL_MINIME[sesso] ?? 1500;
+const sogliaAvviso = sesso => KCAL_ATTENZIONE[sesso] ?? 1500;
 
 const PASTI = [
   { id: 'colazione',           label: '🌅 Colazione',   oraFino: 10 },
@@ -539,7 +539,7 @@ function segmentoDi(giorno) {
 function calcolaTarget(giorno) {
   const out = { ok: false, motivo: null, kcal: null, bmr: null, tdee: null, deficit: 0,
                 peso: null, pesoPiano: null, pesoFinale: null, giorniRimasti: null,
-                kgDaPerdere: null, kcalRichiesta: null, frenata: false, avvisi: [],
+                kgDaPerdere: null, sottoSoglia: false, avvisi: [],
                 // Il deficit in due addendi: il ritmo che il tratto di piano chiede, e il
                 // recupero dello scarto accumulato. Servono a schermo, perché un numero solo
                 // non direbbe se oggi è più stretto perché il piano corre o perché si è indietro.
@@ -596,7 +596,7 @@ function calcolaTarget(giorno) {
         non su quelli del tratto. È questo addendo che tiene la proprietà per cui il target si
         stringe da sé quando si resta indietro; metterlo nel solo tratto in corso lo renderebbe
         feroce a ridosso di un traguardo — due chili da recuperare in cinque giorni non sono un
-        obiettivo, sono il pavimento delle kcal minime tutti i giorni.
+        obiettivo, e il target ne uscirebbe schiacciato tutti i giorni.
 
      Senza il primo addendo il piano non si sente; senza il secondo non ci si accorge di essere
      rimasti indietro. Servono tutti e due. */
@@ -616,25 +616,63 @@ function calcolaTarget(giorno) {
     out.deficit = out.kgDaPerdere * KCAL_PER_KG / out.giorniRimasti;
   }
 
-  out.kcalRichiesta = out.tdee - out.deficit;
-  out.kcal = out.kcalRichiesta;
+  // Il target è quello che esce dal conto, senza pavimenti: se il piano chiede troppo, si vede.
+  out.kcal = out.tdee - out.deficit;
   out.motivo = out.kgDaPerdere > 0 ? 'obiettivo' : 'raggiunto';
 
-  const minimo = kcalMinime(p.sex);
-  if (out.kcal < minimo) {
-    out.frenata = true;
-    out.kcal = minimo;
-    out.deficit = out.tdee - minimo;
-    // Un target richiesto sotto zero non si scrive come numero: «−1.062 kcal» non vuol dire
-    // niente a chi legge, e fa sembrare rotta la pagina invece di dire quel che è davvero
-    // successo — che in quei giorni quel peso non ci si arriva, nemmeno digiunando.
-    out.avvisi.push(out.kcalRichiesta <= 0
-      ? `In ${out.giorniRimasti} ${out.giorniRimasti === 1 ? 'giorno' : 'giorni'} quei ${fmtKg(out.kgDaPerdere)} kg non si perdono: servirebbe più di quanto il corpo consuma in un giorno. Il target è fermo a ${minimo} kcal — la data di fine va spostata in «Ti pisasti?».`
-      : `Il ritmo richiesto porterebbe il target a ${fmtKcal(out.kcalRichiesta)} kcal: troppo poco. È stato fermato a ${minimo} kcal, ma così la data di fine non si raggiunge — meglio spostare i traguardi in «Ti pisasti?».`);
+  // ⚠️ Nessun taglio: solo un avviso. Il numero resta quello che il piano chiede — anche negativo,
+  // che è il modo più chiaro di dire che in quei giorni quel peso non ci si arriva nemmeno
+  // digiunando. Spostare i traguardi è una decisione, e la prende chi legge.
+  const soglia = sogliaAvviso(p.sex);
+  if (out.kcal <= 0) {
+    out.sottoSoglia = true;
+    out.avvisi.push(`Il piano chiede più di quanto il corpo consuma in un giorno: il target esce negativo (${fmtKcal(out.kcal)} kcal). In ${out.giorniRimasti} ${out.giorniRimasti === 1 ? 'giorno' : 'giorni'} quei ${fmtKg(out.kgDaPerdere)} kg non si perdono — la data di fine va spostata in «Ti pisasti?».`);
+  } else if (out.kcal < soglia) {
+    out.sottoSoglia = true;
+    out.avvisi.push(`Target sotto le ${soglia} kcal: è poco, e quasi sempre vuol dire che i traguardi sono troppo ravvicinati. Il numero non è stato ritoccato — se lo vuoi più largo, allarga il piano in «Ti pisasti?».`);
   } else if (out.deficit > 1000) {
     out.avvisi.push(`Il piano chiede un deficit di ${fmtKcal(out.deficit)} kcal al giorno, cioè oltre un chilo a settimana. È tanto: se non regge, sposta la data di fine invece di saltare i pasti.`);
   }
   out.ok = true;
+  return out;
+}
+
+/* La stima delle calorie tratto per tratto: quanto chiederà ciascun periodo del piano.
+
+   ⚠️ Ogni tratto si calcola SUL PESO CHE IL PIANO PREVEDE lì, non su quello di oggi: il
+   metabolismo basale cala col peso, quindi l'ultimo tratto di un dimagrimento chiede meno
+   calorie a parità di ritmo, e usare il peso di oggi per tutti darebbe numeri troppo alti verso
+   la fine. Si prende il peso MEDIO del tratto (fra il traguardo che lo apre e quello che lo
+   chiude), che è la media del basale su quel periodo.
+
+   ⚠️ Qui il recupero dello scarto NON entra: questi sono i numeri «se stai sul piano». Metterlo
+   nel solo tratto in corso renderebbe una riga incomparabile con le altre, e nei tratti futuri
+   sarebbe un'invenzione — lo scarto di domani non si conosce. Il conto vero di oggi, recupero
+   compreso, sta nel riquadro del Diario. */
+function stimaTratti() {
+  const ms = S.milestones;
+  const p = S.profile;
+  if (!ms || ms.length < 2 || !p?.birth_date || !p?.height_cm || !p?.sex) return [];
+  const oggi = oggiStr();
+  const out = [];
+  for (let i = 0; i < ms.length - 1; i++) {
+    const a = ms[i], b = ms[i + 1];
+    const giorni = giorniFra(a.date, b.date);
+    if (!giorni) continue;
+    const pesoMedio = (+a.weight + +b.weight) / 2;
+    const bmr = metabolismoBasale(pesoMedio, a.date);
+    const tdee = bmr == null ? null : bmr * (+p.activity || 1.375);
+    const kgAlGiorno = (+a.weight - +b.weight) / giorni;
+    const deficit = kgAlGiorno * KCAL_PER_KG;
+    out.push({
+      numero: i + 1, inizio: a.date, fine: b.date, giorni,
+      pesoInizio: +a.weight, pesoFine: +b.weight, kg: +a.weight - +b.weight,
+      kgAlGiorno, pesoMedio, bmr, tdee,
+      deficit, target: tdee == null ? null : tdee - deficit,
+      corrente: oggi >= a.date && oggi < b.date,
+      passato: oggi >= b.date,
+    });
+  }
   return out;
 }
 
@@ -1426,30 +1464,73 @@ function renderImpostazioni() {
     <button class="btn btn-primary" data-action="salva-profilo">💾 Salva</button>
   </div>`;
 
-  // ── Il conto di oggi, per intero ──
+  // ── Stima delle calorie: il riepilogo e poi tratto per tratto ──
   h += `<div class="card">
-    <div class="card-title">Il conto di oggi</div>`;
+    <div class="card-title">📐 Stima delle calorie</div>`;
   if (!c.ok) {
     h += `<div class="note-box is-warn">Non si può ancora calcolare: ${esc(spiegaMotivo(c.motivo))}.</div>`;
   } else {
+    const tratti = stimaTratti();
+    const kgTot = (ob && S.milestones.length >= 2)
+      ? +S.milestones[0].weight - +S.milestones[S.milestones.length - 1].weight : null;
+    const giorniTot = (ob && S.milestones.length >= 2)
+      ? giorniFra(S.milestones[0].date, S.milestones[S.milestones.length - 1].date) : null;
+
+    // ── Riepilogo ──
     h += `<div class="table-wrap"><table class="table"><tbody>
-      <tr><td>Età</td><td class="text-right mono">${etaAl(oggi) ?? '—'} anni</td></tr>
-      <tr><td>Peso di riferimento</td><td class="text-right mono">${fmtKg(c.peso)} kg</td></tr>
-      <tr><td>Metabolismo basale <span class="text-muted text-xs">(Mifflin-St Jeor)</span></td><td class="text-right mono">${fmtKcal(c.bmr)} kcal</td></tr>
-      <tr><td>× attività ${(+(p.activity || 1.375)).toLocaleString('it-IT')} = consumo stimato</td><td class="text-right mono">${fmtKcal(c.tdee)} kcal</td></tr>
-      ${c.segmento && c.deficitPiano != null ? `
-      <tr><td>− ritmo del tratto ${c.segmento.numero}/${c.segmento.quanti}
-        <span class="text-muted text-xs">(${esc(fmtDataBreve(c.segmento.inizio))} → ${esc(fmtDataBreve(c.segmento.fine))}, ${fmtRitmo(c.segmento.kgAlGiorno * 7)} kg a settimana)</span></td>
-        <td class="text-right mono neg">−${fmtKcal(c.deficitPiano)} kcal</td></tr>
-      <tr><td>${c.scartoKg >= 0 ? '− recupero dello scarto' : '+ vantaggio sul piano'}
-        <span class="text-muted text-xs">(${c.scartoKg >= 0 ? 'indietro' : 'avanti'} di ${fmtKg(Math.abs(c.scartoKg || 0))} kg su ${c.giorniRimasti} giorni)</span></td>
-        <td class="text-right mono ${c.scartoKg >= 0 ? 'neg' : 'pos'}">${c.scartoKg >= 0 ? '−' : '+'}${fmtKcal(Math.abs(c.recupero || 0))} kcal</td></tr>
-      ${c.deficit === 0 ? '<tr><td class="text-muted">il deficit non scende sotto zero</td><td class="text-right mono">0 kcal</td></tr>' : ''}
-      ` : `
-      <tr><td>− deficit per l'obiettivo</td><td class="text-right mono neg">${c.deficit ? '−' + fmtKcal(c.deficit) : '0'} kcal</td></tr>`}
+      <tr><td>Peso di oggi</td><td class="text-right mono">${fmtKg(c.peso)} kg</td></tr>
+      ${c.pesoPiano != null ? `<tr><td>Peso che il piano chiede oggi</td><td class="text-right mono text-muted">${fmtKg(c.pesoPiano)} kg</td></tr>
+      <tr><td>Scarto sulla curva</td><td class="text-right mono ${c.scartoKg > 0.05 ? 'neg' : c.scartoKg < -0.05 ? 'pos' : ''}">${c.scartoKg == null ? '—' : (c.scartoKg > 0 ? 'indietro di ' : c.scartoKg < 0 ? 'avanti di ' : '') + fmtKg(Math.abs(c.scartoKg)) + ' kg'}</td></tr>` : ''}
+      ${c.pesoFinale != null ? `<tr><td>Peso finale</td><td class="text-right mono">${fmtKg(c.pesoFinale)} kg</td></tr>` : ''}
+      ${kgTot != null ? `<tr><td>Kg del piano <span class="text-muted text-xs">(dal primo all'ultimo traguardo, ${giorniTot} giorni)</span></td><td class="text-right mono">${fmtKg(kgTot)} kg</td></tr>` : ''}
+      <tr><td>Kg che mancano oggi</td><td class="text-right mono">${c.kgDaPerdere == null ? '—' : fmtKg(c.kgDaPerdere) + ' kg'}</td></tr>
+      <tr><td>Giorni che restano</td><td class="text-right mono">${c.giorniRimasti ?? '—'}</td></tr>
+      <tr><td>Metabolismo basale oggi <span class="text-muted text-xs">(Mifflin-St Jeor, ${etaAl(oggi) ?? '—'} anni)</span></td><td class="text-right mono">${fmtKcal(c.bmr)} kcal</td></tr>
+      <tr><td>Consumo stimato oggi <span class="text-muted text-xs">(× attività ${(+(p.activity || 1.375)).toLocaleString('it-IT')})</span></td><td class="text-right mono">${fmtKcal(c.tdee)} kcal</td></tr>
       <tr><td class="fw-700">Target di oggi</td><td class="text-right mono fw-700">${fmtKcal(c.kcal)} kcal</td></tr>
     </tbody></table></div>`;
     if (c.avvisi.length) h += c.avvisi.map(a => `<div class="note-box is-danger mt-12">⚠️ ${esc(a)}</div>`).join('');
+
+    // ── I tratti, uno per uno ──
+    if (tratti.length) {
+      /* ⚠️ L'ordine delle colonne è quello di lettura, non quello del conto: sul telefono la
+         tabella scorre dentro il suo riquadro, e quel che resta fuori è quel che sta a destra.
+         Il TARGET — la risposta per cui questa tabella esiste — viene subito dopo i pesi; ritmo,
+         deficit e consumo sono la spiegazione e possono uscire dal bordo. Per la stessa ragione
+         kg e giorni non hanno una colonna loro: si ricavano dalle due che li contengono già, e
+         stanno lì sotto in piccolo. */
+      h += `<div class="card-title mt-16">I tratti del piano</div>
+      <div class="table-wrap"><table class="table"><thead><tr>
+        <th>Tratto</th><th>Periodo</th><th class="text-right">Peso</th><th class="text-right">Target</th>
+        <th class="text-right">Ritmo</th><th class="text-right">Deficit</th><th class="text-right">Consumo</th>
+      </tr></thead><tbody>`;
+      tratti.forEach(t => {
+        // Il tratto in corso si evidenzia, quelli già passati si sbiadiscono: la riga che serve
+        // adesso deve trovarsi senza contare le righe.
+        const stile = t.corrente ? ' style="background:#f0fdf4"' : t.passato ? ' class="text-muted"' : '';
+        h += `<tr${stile}>
+          <td class="nowrap">${t.corrente ? '▶ ' : ''}${t.numero}<span class="text-muted">/${tratti.length}</span></td>
+          <td class="nowrap"><div class="text-sm">${esc(fmtDataBreve(t.inizio))} → ${esc(fmtDataBreve(t.fine))}</div>
+            <div class="text-xs text-muted">${t.giorni} giorni</div></td>
+          <td class="text-right nowrap"><div class="mono">${fmtKg(t.pesoInizio)} → ${fmtKg(t.pesoFine)}</div>
+            <div class="text-xs text-muted mono">${t.kg > 0 ? '−' : t.kg < 0 ? '+' : ''}${fmtKg(Math.abs(t.kg))} kg</div></td>
+          <td class="text-right mono fw-700 nowrap">${fmtKcal(t.target)}</td>
+          <td class="text-right mono nowrap">${fmtRitmo(t.kgAlGiorno * 7)} kg/sett</td>
+          <td class="text-right mono neg nowrap">${t.deficit > 0 ? '−' + fmtKcal(t.deficit) : fmtKcal(0)}</td>
+          <td class="text-right mono text-muted nowrap">${fmtKcal(t.tdee)}</td>
+        </tr>`;
+      });
+      h += `</tbody></table></div>
+      <div class="note-box mt-12">Ogni tratto è calcolato sul <strong>peso medio che il piano prevede lì</strong>,
+        non su quello di oggi: il metabolismo basale cala col peso, quindi a parità di ritmo l'ultimo tratto
+        chiede meno calorie del primo, e usare il peso di oggi darebbe numeri troppo alti verso la fine.
+        Sono i valori <strong>se stai sul piano</strong>: il recupero dello scarto non c'è —
+        nei tratti futuri sarebbe un'invenzione, perché lo scarto di domani non si conosce.
+        Il conto di oggi per intero, recupero compreso, è nel riquadro del 📓 Diario.</div>`;
+    } else if (ob) {
+      h += `<div class="note-box is-warn mt-12">Il piano ha meno di due traguardi, quindi non ci sono tratti:
+        il deficit è la media fino alla fine. Aggiungendo traguardi in «Ti pisasti?» ogni periodo avrà il suo target.</div>`;
+    }
   }
   h += '</div>';
 

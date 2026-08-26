@@ -452,10 +452,22 @@ tratto che ne chiedeva 770: il ritmo del piano non si sentiva affatto.
 ⚠️ `pesoPianoAl()` è la copia di `getInterpolatedTarget()` di `weight-quest.html`: **se cambia
 là va cambiata anche qui**, o le due pagine daranno due traguardi diversi per lo stesso giorno.
 
-⚠️ **Sotto una soglia il target si ferma** (`KCAL_MINIME`, 1500 M / 1200 F) e la pagina **lo
-dice**, col numero che sarebbe servito accanto: un traguardo troppo ravvicinato produce un target
-negativo, e «−1.062 kcal» non è un obiettivo aggressivo, è un conto sbagliato che nessuno seguirà.
-Nascondere il taglio farebbe credere di essere in pari mentre la data di fine si allontana.
+⚠️ **Il target non ha pavimenti: è quello che il piano richiede, per basso che sia** — anche
+negativo, che è il modo più chiaro di dire che in quei giorni quel peso non ci si arriva nemmeno
+digiunando. `KCAL_ATTENZIONE` (1500 M / 1200 F) fa comparire un **avviso** e nient'altro: la
+decisione di allargare il piano è di chi legge, non della pagina. Fino alla v1.1.0 era un
+pavimento vero e il target ci si fermava sopra.
+
+In ⚙️ Impostazioni il riquadro **📐 Stima delle calorie** è in due parti: il riepilogo (peso di
+oggi, peso di piano, scarto, kg e giorni che restano, basale, consumo, target di oggi) e la
+tabella dei **tratti**, una riga per coppia di traguardi, con periodo, pesi di partenza e fine,
+target, ritmo, deficit e consumo. ⚠️ Ogni tratto si calcola sul **peso medio che il piano prevede
+lì** e non su quello di oggi — il basale cala col peso, quindi a parità di ritmo l'ultimo tratto
+chiede meno del primo — e **senza il recupero dello scarto**: sono i valori «se stai sul piano»,
+e nei tratti futuri lo scarto sarebbe un'invenzione. Il conto vero di oggi, recupero compreso,
+sta nel riquadro del Diario. ⚠️ L'ordine delle colonne è quello di lettura: sul telefono la
+tabella scorre dentro il suo riquadro, quindi il **target** viene subito dopo i pesi e ritmo,
+deficit e consumo possono uscire dal bordo.
 
 `al_days` è la stessa scelta di `ps_weight_tracking.target_weight`, per la stessa ragione: il
 target si **congela** alla prima riga segnata quel giorno, e spostare un traguardo in «Ti pisasti?»
