@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.3.0</title>
+  <title>Calorie v1.4.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -283,8 +283,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.3.0';
-var BUILD_TIME  = '2026-08-26T18:00:00Z';
+var APP_VERSION = 'v1.4.0';
+var BUILD_TIME  = '2026-08-26T20:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -837,6 +837,11 @@ async function reload() {
    TESTUALE sta intorno alle 10 al minuto. Cercare a ogni tasto premuto fa bandire l'indirizzo IP,
    quindi la ricerca parte solo dopo una pausa di digitazione (vedi RITARDO_RICERCA). */
 const OFF_BASE = 'https://it.openfoodfacts.org';
+// ⚠️ La ricerca TESTUALE non passa più da qui. `/cgi/search.pl` è deprecato e da aprile 2026
+// risponde 503 a livello globale: Open Food Facts ha spostato la ricerca su Search-a-licious,
+// un servizio a parte (Elasticsearch). La lettura di un singolo prodotto per codice a barre
+// resta invece su `/api/v2/product/<code>.json`, che non è deprecata e funziona.
+const OFF_RICERCA = 'https://search.openfoodfacts.org/search';
 const OFF_CAMPI = 'code,product_name,product_name_it,generic_name,brands,quantity,serving_quantity,nutriments';
 const RITARDO_RICERCA = 700;
 
@@ -866,12 +871,16 @@ function daOFF(p) {
   if (kcal == null && num(n['energy_100g']) != null) {
     kcal = (n.energy_unit === 'kcal') ? +n['energy_100g'] : +n['energy_100g'] / 4.184;
   }
-  const nome = (p.product_name_it || p.product_name || p.generic_name || '').trim();
+  // ⚠️ Su Search-a-licious i campi di testo sono indicizzati PER LINGUA, quindi `product_name`
+  // può arrivare come oggetto ({it: …, en: …, main: …}) invece che come stringa. Dall'API v2 dei
+  // prodotti arriva invece come stringa. Si accettano tutt'e due: dare per scontata la stringa
+  // farebbe comparire «[object Object]» al posto del nome, e solo su una delle due strade.
+  const nome = (testoOff(p.product_name_it) || testoOff(p.product_name) || testoOff(p.generic_name) || '').trim();
   if (!nome || kcal == null) return null;
   return {
     barcode: p.code || null,
     name: nome,
-    brand: (p.brands || '').split(',')[0].trim() || null,
+    brand: (testoOff(p.brands) || '').split(',')[0].trim() || null,
     source: 'off',
     kcal_100g: Math.round(kcal * 10) / 10,
     proteins_100g: num(n.proteins_100g),
@@ -886,12 +895,63 @@ function daOFF(p) {
   };
 }
 
+// Un campo di testo di Open Food Facts, che a seconda della strada è una stringa o un oggetto
+// per lingua. L'italiano prima, poi il campo principale, poi quel che c'è.
+function testoOff(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') return v.it || v.main || v.en || Object.values(v).find(x => typeof x === 'string' && x.trim()) || '';
+  return String(v);
+}
+
+// Una stringa di sole cifre lunga come un codice a barre è un codice a barre, non un nome: si
+// legge il prodotto invece di cercare un testo. Copre l'incollare un codice nella ricerca.
+const paresBarcode = q => /^\d{8,14}$/.test((q || '').trim());
+
+/* La ricerca per nome.
+
+   ⚠️ Due strade, provate in quest'ordine: prima Search-a-licious (`search.openfoodfacts.org`),
+   che è dove Open Food Facts ha spostato la ricerca testuale; poi, solo se quella non risponde,
+   il vecchio `/cgi/search.pl`. Il vecchio da aprile 2026 dà 503 quasi sempre, quindi non è un
+   ripiego che ci si aspetta funzioni — è lì perché una delle due potrebbe essere giù in un dato
+   momento, e provare la seconda costa una richiesta sola e solo quando la prima è già fallita.
+
+   La forma della risposta non si dà per scontata: Search-a-licious risponde con `hits`
+   (è Elasticsearch sotto), l'API vecchia con `products`. Si accettano tutt'e due più l'array
+   nudo, perché un cambio di chiave non deve tornare «nessun risultato» invece di un errore. */
+function prodottiDaRisposta(d) {
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.hits)) return d.hits;
+  if (Array.isArray(d?.products)) return d.products;
+  if (Array.isArray(d?.results)) return d.results;
+  return [];
+}
+
 async function offCerca(q) {
-  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=${OFF_CAMPI}&${offIdent()}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('Open Food Facts: HTTP ' + r.status);
-  const d = await r.json();
-  return (d.products || []).map(daOFF).filter(Boolean);
+  if (paresBarcode(q)) {
+    const uno = await offProdotto(q.trim());
+    return uno ? [uno] : [];
+  }
+  const errori = [];
+  const url = `${OFF_RICERCA}?q=${encodeURIComponent(q)}&langs=it,en&page_size=20&fields=${OFF_CAMPI}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const ris = prodottiDaRisposta(await r.json()).map(daOFF).filter(Boolean);
+    if (ris.length) return ris;
+    errori.push('la ricerca non ha trovato niente');
+  } catch (e) { errori.push('ricerca: ' + e.message); }
+
+  // Ripiego sul vecchio endpoint, che di solito è 503 ma non costa niente provare.
+  try {
+    const vecchio = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=${OFF_CAMPI}&${offIdent()}`;
+    const r = await fetch(vecchio);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return prodottiDaRisposta(await r.json()).map(daOFF).filter(Boolean);
+  } catch (e) { errori.push('ripiego: ' + e.message); }
+
+  if (errori.length && !errori[0].startsWith('la ricerca non ha')) throw new Error(errori.join(' · '));
+  return [];
 }
 
 async function offProdotto(barcode) {
@@ -1736,6 +1796,21 @@ function renderImpostazioni() {
   }
   h += '</div>';
 
+  // ── Diagnostica di Open Food Facts ──
+  // Un servizio esterno che smette di rispondere si vede solo come «non trova niente», che è
+  // indistinguibile da «quel prodotto non c'è». Questo riquadro chiede alle due strade cosa
+  // rispondono e lo scrive per esteso: è l'unico modo per sapere se il problema è la rete, il
+  // servizio o la ricerca.
+  h += `<div class="card">
+    <div class="card-header-row">
+      <div class="card-title">🔌 Open Food Facts</div>
+      <button class="btn btn-outline btn-sm" data-action="prova-off">Prova la connessione</button>
+    </div>
+    <div class="text-sm text-muted">Da qui arrivano i prodotti confezionati. La lettura di un codice a
+      barre e la ricerca per nome passano da due indirizzi diversi, e possono rompersi una per volta.</div>
+    <div id="off-esito" class="mt-12"></div>
+  </div>`;
+
   // ── Zona pericolosa ──
   h += `<div class="card card-danger">
     <div class="card-title">Zona pericolosa</div>
@@ -2222,6 +2297,47 @@ document.addEventListener('click', async e => {
 
     else if (action === 'apri-scanner-cat') { S.scanPer = 'catalogo'; apriScanner(); }
     else if (action === 'barcode-catalogo') { S.scanPer = 'catalogo'; barcodeAMano(); }
+
+    else if (action === 'prova-off') {
+      btn.disabled = true;
+      setHtml('off-esito', '<div class="search-note">Provo…</div>');
+      const righe = [];
+      // Un prodotto notissimo e stabile: se questo non torna, non è «quel prodotto non c'è».
+      const CODICE_PROVA = '3017620422003';   // Nutella 400 g
+      try {
+        const t0 = Date.now();
+        const r = await fetch(`${OFF_BASE}/api/v2/product/${CODICE_PROVA}.json?fields=code,product_name&${offIdent()}`);
+        const d = await r.json().catch(() => ({}));
+        righe.push([`Codice a barre <span class="text-muted text-xs">(${OFF_BASE})</span>`,
+          r.ok && d.status === 1 ? `✅ risponde — «${esc(testoOff(d.product?.product_name) || '?')}»` : `⚠️ HTTP ${r.status}, status ${d.status ?? '?'}`,
+          Date.now() - t0]);
+      } catch (e) { righe.push(['Codice a barre', `❌ ${esc(e.message)}`, null]); }
+      try {
+        const t0 = Date.now();
+        const r = await fetch(`${OFF_RICERCA}?q=nutella&langs=it,en&page_size=3&fields=code,product_name`);
+        const d = await r.json().catch(() => ({}));
+        const n = prodottiDaRisposta(d).length;
+        righe.push([`Ricerca per nome <span class="text-muted text-xs">(search.openfoodfacts.org)</span>`,
+          r.ok ? `${n ? '✅' : '⚠️'} HTTP ${r.status} — ${n} risultati` : `⚠️ HTTP ${r.status}`, Date.now() - t0]);
+      } catch (e) { righe.push(['Ricerca per nome', `❌ ${esc(e.message)}`, null]); }
+      try {
+        const t0 = Date.now();
+        const r = await fetch(`${OFF_BASE}/cgi/search.pl?search_terms=nutella&search_simple=1&action=process&json=1&page_size=3&fields=code&${offIdent()}`);
+        const d = await r.json().catch(() => ({}));
+        righe.push([`Ricerca vecchia <span class="text-muted text-xs">(cgi/search.pl, deprecata)</span>`,
+          r.ok ? `${prodottiDaRisposta(d).length ? '✅' : '⚠️'} HTTP ${r.status}` : `⚠️ HTTP ${r.status}`, Date.now() - t0]);
+      } catch (e) { righe.push(['Ricerca vecchia', `❌ ${esc(e.message)}`, null]); }
+
+      setHtml('off-esito', `<div class="table-wrap"><table class="table"><tbody>
+        ${righe.map(([che, esito, ms]) => `<tr><td>${che}</td><td class="text-right">${esito}
+          ${ms == null ? '' : `<span class="text-muted text-xs">· ${ms} ms</span>`}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="note-box mt-12">«❌ Failed to fetch» vuol dire che il browser non è arrivato al
+        servizio: rete, blocco o CORS. Un «⚠️ HTTP 503» vuol dire che il servizio c'è ma è giù.
+        La <strong>ricerca vecchia</strong> è deprecata e da aprile 2026 dà 503 quasi sempre: qui è
+        solo un ripiego, e va bene che sia rossa finché quella nuova è verde.</div>`);
+      btn.disabled = false;
+    }
 
     else if (action === 'salva-pasti') {
       const scelti = PASTI_BASE

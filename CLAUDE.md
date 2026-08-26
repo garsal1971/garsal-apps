@@ -1896,6 +1896,30 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   (`'base'`, seminate dalla migration), i prodotti confezionati letti da **Open Food Facts** col
   codice a barre o cercandoli per nome, e quelli scritti a mano. È lo stesso alimento visto da tre
   parti: tre tabelle vorrebbero dire tre ricerche per rispondere a «quante calorie ha».
+- ⚠️ **La ricerca per nome e la lettura di un codice a barre passano da due servizi diversi**, e
+  si rompono una per volta:
+
+  | Cosa | Dove | Stato |
+  |---|---|---|
+  | Prodotto per codice a barre | `it.openfoodfacts.org/api/v2/product/<code>.json` | in servizio |
+  | Ricerca per nome | `search.openfoodfacts.org/search` (Search-a-licious) | in servizio |
+  | Ricerca per nome, vecchia | `/cgi/search.pl` | ⚠️ **deprecata, 503 globale da aprile 2026** |
+
+  Fino alla v1.3.0 la ricerca per nome passava dalla vecchia, ed è la ragione per cui non
+  trovava mai niente. Ora si prova Search-a-licious e **solo se non risponde** si ripiega sulla
+  vecchia: costa una richiesta in più e solo quando la prima è già fallita, e serve a coprire il
+  caso in cui sia il servizio nuovo a essere giù.
+- ⚠️ **La forma della risposta non si dà per scontata**: Search-a-licious risponde con `hits`
+  (è Elasticsearch sotto), l'API vecchia con `products` — `prodottiDaRisposta()` accetta tutt'e
+  due più l'array nudo, perché un cambio di chiave deve dare un errore, non «nessun risultato».
+  Per la stessa ragione i campi di testo passano da `testoOff()`: su Search-a-licious
+  `product_name` è indicizzato **per lingua** e arriva come oggetto (`{it, en, main}`), dall'API
+  dei prodotti come stringa.
+- Una stringa di **sole cifre lunga come un codice a barre** non viene cercata come testo: si
+  legge il prodotto. Copre l'incollare un codice nel campo di ricerca.
+- In ⚙️ Impostazioni c'è **🔌 Open Food Facts → Prova la connessione**: interroga i tre indirizzi
+  e scrive HTTP e tempi. Un servizio esterno che smette di rispondere si vede altrimenti solo
+  come «non trova niente», che è indistinguibile da «quel prodotto non c'è».
 - ⚠️ **Open Food Facts limita le ricerche testuali a una decina al minuto** (la lettura di un
   singolo prodotto molto meno): cercare a ogni tasto premuto fa **bandire l'indirizzo IP**, quindi
   la chiamata parte solo dopo una pausa di digitazione (`RITARDO_RICERCA`). Da browser lo
