@@ -392,6 +392,49 @@ sulla stessa stellina**. Ora il DB è la fonte di verità e il locale resta cach
 l'unica colonna sul «Mangiato !!!» — niente booleano accanto alla data, che sarebbe un secondo modo
 di dire la stessa cosa.
 
+### Diario alimentare (`al_`)
+| Table | Purpose |
+|---|---|
+| `al_profile` | Una riga per utente: `birth_date`, `height_cm`, `sex`, `activity` (fattore LAF) |
+| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'manuale'`; valori **per 100 g** |
+| `al_log` | Le righe del diario: `day`, `meal`, `grams`, e i valori per 100 g **congelati sulla riga** |
+| `al_days` | Il target di calorie di una giornata, **congelato**, con gli ingredienti del conto (`weight_kg`, `bmr`, `tdee`, `deficit_kcal`) |
+
+⚠️ **Il target non si archivia in nessuna impostazione, si ricava.** `calorie.html` legge
+l'ultimo obiettivo **attivo** di `ps_objectives` e le sue milestone, e ne ricava:
+
+```
+basale (Mifflin-St Jeor su età, altezza, peso, sesso)
+  × al_profile.activity                       = consumo stimato
+  − (peso di oggi − peso finale) × 7700 / giorni che restano
+                                              = target del giorno
+```
+
+⚠️ Il deficit si calcola sul **peso vero** e sui giorni che restano, **non sulla pendenza del
+piano**: se si resta indietro il target si stringe da sé, se si è avanti si allarga. La pendenza
+darebbe lo stesso numero il giorno che si è avanti di due chili e quello che si è indietro di
+due — cioè proprio quando serve che cambi. La curva del piano si mostra lo stesso, come scarto
+(«sei indietro di 0,4 kg»), che è l'informazione che quella pendenza porta davvero.
+
+⚠️ `pesoPianoAl()` è la copia di `getInterpolatedTarget()` di `weight-quest.html`: **se cambia
+là va cambiata anche qui**, o le due pagine daranno due traguardi diversi per lo stesso giorno.
+
+⚠️ **Sotto una soglia il target si ferma** (`KCAL_MINIME`, 1500 M / 1200 F) e la pagina **lo
+dice**, col numero che sarebbe servito accanto: un traguardo troppo ravvicinato produce un target
+negativo, e «−1.062 kcal» non è un obiettivo aggressivo, è un conto sbagliato che nessuno seguirà.
+Nascondere il taglio farebbe credere di essere in pari mentre la data di fine si allontana.
+
+`al_days` è la stessa scelta di `ps_weight_tracking.target_weight`, per la stessa ragione: il
+target si **congela** alla prima riga segnata quel giorno, e spostare un traguardo in «Ti pisasti?»
+domani non deve riscrivere il giudizio su un giorno già passato. Si ricalcola **solo su richiesta
+esplicita**, un giorno per volta. Per lo stesso motivo `al_log` porta i valori nutrizionali sulla
+riga e non solo `food_id`: correggere un alimento non riscrive quel che si è mangiato il mese
+scorso, e cancellarlo non fa sparire le calorie già contate (`food_id` va a NULL, la riga resta).
+
+⚠️ **Una casella vuota resta vuota e non vale zero**, né in `al_foods` né in `al_log`: «non so
+quante fibre ha» e «non ha fibre» sono due cose diverse, e uno zero falso farebbe sembrare magro
+un alimento di cui non si sa niente. È la stessa scelta di `fnz_income` e delle misure di Memo.
+
 ### Spese Ada (`ada_`)
 | Table | Purpose |
 |---|---|
@@ -1779,6 +1822,40 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   il biglietto scrive quando. È **reversibile** (`↺ Non l'ho ancora mangiato`), perché un tocco
   per sbaglio non deve costare un cannolo. ⚠️ Stesso pulsante nell'app nativa, sulla stessa riga
   del database.
+
+### `calorie.html` — Calorie
+- Il **diario alimentare** e il target di calorie che ne discende. Si apre dalla voce 🍽️ **Calorie**
+  nella barra di `weight-quest.html` (in tutt'e due le barre: quella a icone e quella laterale).
+- **Non decide niente sull'obiettivo**: quello sta in «Ti pisasti?» e qui si legge — nessun numero
+  da riscrivere di qua, i traguardi si spostano di là. Senza obiettivo attivo il target è il
+  semplice **mantenimento**, e la pagina lo dice invece di far finta che ci sia un piano.
+- **Il riquadro spiega sempre da dove esce il target**, per intero (basale × attività − deficit,
+  coi chili che mancano e i giorni che restano): un numero calcolato da quattro grandezze che
+  nessuno vede è un numero di cui non ci si fida, e alla prima sorpresa si smette di seguirlo.
+- Quattro schede: 📓 **Diario** (giorno per giorno, con i sei pasti), 📈 **Andamento** (colonne
+  delle calorie contro la linea del target, più peso e curva del piano), 🍎 **Alimenti**,
+  ⚙️ **Impostazioni** (profilo, il conto di oggi riga per riga, l'obiettivo letto da «Ti pisasti?»).
+- Gli alimenti arrivano da tre parti, in **una tabella sola**: le voci generiche di partenza
+  (`'base'`, seminate dalla migration), i prodotti confezionati letti da **Open Food Facts** col
+  codice a barre o cercandoli per nome, e quelli scritti a mano. È lo stesso alimento visto da tre
+  parti: tre tabelle vorrebbero dire tre ricerche per rispondere a «quante calorie ha».
+- ⚠️ **Open Food Facts limita le ricerche testuali a una decina al minuto** (la lettura di un
+  singolo prodotto molto meno): cercare a ogni tasto premuto fa **bandire l'indirizzo IP**, quindi
+  la chiamata parte solo dopo una pausa di digitazione (`RITARDO_RICERCA`). Da browser lo
+  `User-Agent` non si può impostare e OFF chiede di identificarsi: si usano `app_name` /
+  `app_version` / `app_uuid` in query string, che è il sostituto previsto apposta.
+- ⚠️ **Le calorie non sono sempre dove ci si aspetta**: `energy-kcal_100g` c'è quasi sempre, ma
+  dove l'etichetta è stata inserita in kJ si converte, e `energy_100g` senza suffisso è ambiguo —
+  si guarda `energy_unit` invece di dare per scontato che siano kJ. Un prodotto senza nessuna delle
+  tre **non è un prodotto a zero calorie**: torna `null` e la pagina lo dice.
+- Un prodotto trovato in rete **si archivia solo insieme alla riga del diario**, non appena lo si
+  apre: aprire un risultato per sbaglio riempirebbe il catalogo di prodotti mai mangiati.
+- Lo **scanner del codice a barre** usa `BarcodeDetector` dove c'è (Chrome e la WebView di
+  Android) e altrove chiede il codice a mano — nessuna libreria dal CDN: mezzo megabyte per una
+  funzione che non tutti i browser possono usare non vale il peso della pagina.
+- Nel grafico un giorno **senza colonna è un giorno non segnato, non un giorno a zero**, e per la
+  stessa ragione il saldo del periodo somma i soli giorni segnati: contarci i giorni saltati come
+  digiuni darebbe un deficit enorme e falso.
 
 ### `memo.html` — Memorandum
 - Schede con testo formattato, foto con OCR, categorie condivise, colore e 📌 in evidenza.
