@@ -1877,9 +1877,21 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Il riquadro spiega sempre da dove esce il target**, per intero (basale × attività − deficit,
   coi chili che mancano e i giorni che restano): un numero calcolato da quattro grandezze che
   nessuno vede è un numero di cui non ci si fida, e alla prima sorpresa si smette di seguirlo.
-- Quattro schede: 📓 **Diario** (giorno per giorno, con i sei pasti), 📈 **Andamento** (colonne
+- Quattro schede: 📓 **Diario** (giorno per giorno, coi pasti configurati), 📈 **Andamento** (colonne
   delle calorie contro la linea del target, più peso e curva del piano), 🍎 **Alimenti**,
-  ⚙️ **Impostazioni** (profilo, il conto di oggi riga per riga, l'obiettivo letto da «Ti pisasti?»).
+  ⚙️ **Impostazioni** (dati anagrafici, attività, pasti, stima delle calorie, obiettivo).
+- **Quanti pasti al giorno lo decide l'utente** (⚙️ Impostazioni → 🍽️ I pasti della giornata):
+  si spuntano i momenti in cui si mangia davvero e si rinominano. La configurazione sta in
+  `cm_settings`, chiave `al_pasti`, come JSON — così è la stessa dal PC e dal telefono, dove
+  `localStorage` sarebbe di quel browser e basta. ⚠️ **Gli id dei sei momenti sono fissi**
+  (`colazione`, `spuntino_mattina`, `pranzo`, `spuntino_pomeriggio`, `cena`, `fuori_pasto`):
+  `al_log.meal` ha un CHECK con esattamente quei valori, quindi si configura *quali* dei sei si
+  usano e *come* si chiamano, non l'insieme dei valori possibili — per un settimo serve una
+  migration. ⚠️ **Togliere un pasto non cancella niente**: le righe già segnate lì dentro restano,
+  contano nel totale della giornata e si vedono marcate «pasto tolto» (senza il ➕), ed è la stessa
+  regola della *misura tolta* nei diari di Memo — sparire dallo schermo restando nel conto sarebbe
+  il modo peggiore di nasconderle. Il pasto già scelto compare sempre nella tendina anche se
+  spento, o riaprire una riga vecchia la sposterebbe di pasto al primo salvataggio.
 - Gli alimenti arrivano da tre parti, in **una tabella sola**: le voci generiche di partenza
   (`'base'`, seminate dalla migration), i prodotti confezionati letti da **Open Food Facts** col
   codice a barre o cercandoli per nome, e quelli scritti a mano. È lo stesso alimento visto da tre
@@ -1893,8 +1905,17 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   dove l'etichetta è stata inserita in kJ si converte, e `energy_100g` senza suffisso è ambiguo —
   si guarda `energy_unit` invece di dare per scontato che siano kJ. Un prodotto senza nessuna delle
   tre **non è un prodotto a zero calorie**: torna `null` e la pagina lo dice.
-- Un prodotto trovato in rete **si archivia solo insieme alla riga del diario**, non appena lo si
-  apre: aprire un risultato per sbaglio riempirebbe il catalogo di prodotti mai mangiati.
+- **Quel che il catalogo non ha, la pagina va a prenderlo.** Dal 📓 Diario si cerca un alimento e,
+  passata la pausa di digitazione, ai risultati locali si aggiungono quelli di Open Food Facts;
+  scegliendone uno il prodotto entra in `al_foods` **insieme alla riga del diario**, non appena lo
+  si apre — aprire un risultato per sbaglio riempirebbe il catalogo di prodotti mai mangiati. Da
+  🍎 **Alimenti** la stessa ricerca ha invece un *➕ Aggiungi* che archivia e basta: lì si mette in
+  dispensa prima di mangiarlo. Aggiungendone uno gli altri risultati **restano** — da una ricerca
+  sola se ne prendono spesso due o tre, e azzerarla costerebbe una chiamata in più a OFF, che le
+  ricerche le conta.
+- Il **codice a barre** porta a due posti diversi a seconda di dove si parte (`S.scanPer`): dal
+  diario finisce sulla porzione, dal catalogo archivia la voce e basta. La finestra dello scanner
+  è la stessa.
 - Lo **scanner del codice a barre** usa `BarcodeDetector` dove c'è (Chrome e la WebView di
   Android) e altrove chiede il codice a mano — nessuna libreria dal CDN: mezzo megabyte per una
   funzione che non tutti i browser possono usare non vale il peso della pagina.

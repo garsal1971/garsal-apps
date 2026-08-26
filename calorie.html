@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.2.0</title>
+  <title>Calorie v1.3.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -283,8 +283,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.2.0';
-var BUILD_TIME  = '2026-08-26T16:00:00Z';
+var APP_VERSION = 'v1.3.0';
+var BUILD_TIME  = '2026-08-26T18:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -315,7 +315,16 @@ const CORREZIONE_SESSO = { M: 5, F: -161 };
 const correzioneSesso = sesso => CORREZIONE_SESSO[sesso] ?? (5 + -161) / 2;
 const sogliaAvviso = sesso => KCAL_ATTENZIONE[sesso] ?? 1500;
 
-const PASTI = [
+/* I sei momenti della giornata in cui si può mangiare, in ordine di orario.
+
+   ⚠️ Gli `id` sono FISSI e non si inventano: `al_log.meal` ha un CHECK con esattamente questi
+   sei valori, e una riga con un id diverso verrebbe rifiutata dal database. Quello che si
+   configura è QUALI dei sei si usano e COME si chiamano — che è «quanti pasti al giorno» —
+   non l'insieme dei valori possibili. Per averne un settimo serve una migration.
+
+   `oraFino` serve solo a proporre il pasto giusto in base all'ora, e resta legato allo slot:
+   rinominare «Merenda» in «Aperitivo» non sposta l'ora in cui si propone da sé. */
+const PASTI_BASE = [
   { id: 'colazione',           label: '🌅 Colazione',   oraFino: 10 },
   { id: 'spuntino_mattina',    label: '🍎 Spuntino',    oraFino: 12 },
   { id: 'pranzo',              label: '🍝 Pranzo',      oraFino: 15 },
@@ -323,6 +332,36 @@ const PASTI = [
   { id: 'cena',                label: '🌙 Cena',        oraFino: 22 },
   { id: 'fuori_pasto',         label: '🍫 Fuori pasto', oraFino: 24 },
 ];
+
+// La chiave in cm_settings, la tabella chiave/valore della suite: così la configurazione dei
+// pasti è la stessa dal PC e dal telefono. In localStorage sarebbe di quel browser e basta.
+const CHIAVE_PASTI = 'al_pasti';
+
+const pastoBase = id => PASTI_BASE.find(p => p.id === id) || null;
+
+/* I pasti configurati, in ordine di orario. `S.pasti` è l'elenco degli id attivi con l'etichetta
+   scelta; se non è mai stato configurato valgono tutti e sei. */
+function pastiAttivi() {
+  if (!S.pasti || !S.pasti.length) return PASTI_BASE.slice();
+  return PASTI_BASE
+    .filter(b => S.pasti.some(p => p.id === b.id))
+    .map(b => ({ ...b, label: (S.pasti.find(p => p.id === b.id).label || '').trim() || b.label }));
+}
+
+/* I pasti da disegnare per un giorno: quelli attivi, PIÙ quelli spenti che però quel giorno
+   hanno delle righe. ⚠️ Spegnere un pasto non cancella quel che ci si era segnato dentro: le
+   righe restano e si vedono, marcate come pasto tolto — è la stessa regola della misura tolta
+   nei diari di Memo. Farle sparire vorrebbe dire calorie contate nel totale ma invisibili. */
+function pastiDelGiorno(giorno) {
+  const attivi = pastiAttivi();
+  const usati = new Set(righeDelGiorno(giorno).map(r => r.meal));
+  const spentiUsati = PASTI_BASE
+    .filter(b => usati.has(b.id) && !attivi.some(a => a.id === b.id))
+    .map(b => ({ ...b, tolto: true }));
+  return PASTI_BASE
+    .map(b => attivi.find(a => a.id === b.id) || spentiUsati.find(x => x.id === b.id))
+    .filter(Boolean);
+}
 
 const ATTIVITA = [
   { v: 1.20,  label: 'Sedentario — ufficio, niente sport' },
@@ -348,10 +387,15 @@ const S = {
   logs: [],               // al_log (ultimi mesi)
   days: {},               // al_days indicizzato per giorno
   day: null,              // il giorno che si sta guardando
+  pasti: null,            // i pasti configurati: [{id, label}] — null = mai configurati
   charts: {},
   periodo: 30,            // giorni mostrati in Andamento
   ricerca: { q: '', locali: [], off: [], stato: '' },
   cercaAlimenti: '',
+  // La ricerca su Open Food Facts fatta dalla pagina 🍎 Alimenti: quel che il catalogo non ha
+  // ancora, si va a prenderlo lì e si aggiunge.
+  cercaOff: { q: '', risultati: [], stato: '' },
+  scanPer: null,          // 'diario' | 'catalogo': dove deve finire il codice a barre letto
 };
 
 /* ── Supabase REST ──────────────────────────────────────────── */
@@ -701,7 +745,7 @@ const GIORNI_STORICO = 120;
 async function loadData() {
   const da = piuGiorni(oggiStr(), -GIORNI_STORICO);
 
-  const [profile, comune, objectives, weights, foods, logs, days] = await Promise.all([
+  const [profile, comune, objectives, weights, foods, logs, days, pasti] = await Promise.all([
     sbQ('al_profile', 'select=*&limit=1'),
     sbQ('cm_profile', 'select=data_nascita,altezza_cm,sesso,nome&limit=1'),
     // L'ultimo obiettivo ATTIVO: è quello su cui si sta lavorando adesso. Gli obiettivi chiusi
@@ -711,6 +755,9 @@ async function loadData() {
     sbQ('al_foods', 'select=*&order=favorite.desc,times_used.desc,name.asc&limit=2000'),
     sbQ('al_log', `day=gte.${da}&order=day.desc,created_at.asc&limit=5000`),
     sbQ('al_days', `day=gte.${da}&limit=500`),
+    // cm_settings è la tabella chiave/valore della suite. Se la riga non c'è valgono tutti e sei
+    // i pasti: l'app funziona senza essere configurata, e la configurazione è una preferenza.
+    sbQ('cm_settings', `key=eq.${CHIAVE_PASTI}&select=value&limit=1`).catch(() => []),
   ]);
 
   S.cmProfile = comune?.[0] || null;
@@ -722,6 +769,7 @@ async function loadData() {
   S.logs = logs || [];
   S.days = {};
   (days || []).forEach(d => { S.days[d.day] = d; });
+  S.pasti = leggiPasti(pasti?.[0]?.value);
 }
 
 // `milestones` è archiviata come stringa JSON da weight-quest.html, ma una colonna jsonb può
@@ -747,6 +795,28 @@ function fondiProfilo(comune, mio) {
     sex:        comune?.sesso || null,
     activity:   num(mio?.activity) || 1.375,
   };
+}
+
+/* La configurazione dei pasti archiviata come JSON in cm_settings.value.
+
+   Si scartano gli id che non sono fra i sei di PASTI_BASE: un valore rimasto lì da una versione
+   futura o scritto a mano finirebbe in `al_log.meal` e il CHECK del database rifiuterebbe la
+   riga — cioè si scoprirebbe salvando, non aprendo. Una configurazione vuota o illeggibile vale
+   come «non configurato», e allora si usano tutti e sei. */
+function leggiPasti(valore) {
+  if (!valore) return null;
+  let v = valore;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return null; } }
+  if (!Array.isArray(v)) return null;
+  const buoni = v.filter(p => p && pastoBase(p.id))
+                 .map(p => ({ id: p.id, label: (p.label || '').trim() || pastoBase(p.id).label }));
+  return buoni.length ? buoni : null;
+}
+
+async function salvaPasti(elenco) {
+  await sbIns('cm_settings?on_conflict=key',
+    [{ key: CHIAVE_PASTI, value: JSON.stringify(elenco) }],
+    { 'Prefer': 'resolution=merge-duplicates,return=minimal' });
 }
 
 async function reload() {
@@ -956,11 +1026,27 @@ function spiegaMotivo(motivo) {
   return 'dato mancante';
 }
 
+/* Le opzioni della tendina dei pasti. Il pasto già scelto compare SEMPRE, anche se nel
+   frattempo è stato spento: aprire una riga vecchia e trovare la tendina su un pasto diverso
+   da quello in cui la riga sta la sposterebbe al primo salvataggio, senza che nessuno l'abbia
+   chiesto. */
+function opzioniPasto(scelto) {
+  const voci = pastiAttivi();
+  if (scelto && !voci.some(v => v.id === scelto)) {
+    const b = pastoBase(scelto);
+    if (b) voci.push({ ...b, label: b.label + ' (pasto tolto)' });
+  }
+  return voci.map(p => `<option value="${p.id}" ${p.id === scelto ? 'selected' : ''}>${esc(p.label)}</option>`).join('');
+}
+
 // Il pasto proposto in base all'ora: si segna quel che si è appena mangiato, e alle 13 è il
 // pranzo nove volte su dieci. Resta cambiabile — è una proposta, non una regola.
 function pastoDellOra() {
   const h = new Date().getHours();
-  return (PASTI.find(p => h < p.oraFino) || PASTI[PASTI.length - 1]).id;
+  // Fra i soli pasti attivi: proporre un pasto che l'utente ha spento vorrebbe dire aprire la
+  // finestra su una voce che nella tendina non c'è.
+  const att = pastiAttivi();
+  return (att.find(p => h < p.oraFino) || att[att.length - 1]).id;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1031,7 +1117,7 @@ function renderDiario() {
   h += '<div class="card-header-row mt-16"><div class="card-title">I pasti</div>'
      + `<button class="btn btn-primary btn-sm" data-action="aggiungi" data-meal="${pastoDellOra()}">➕ Aggiungi alimento</button></div>`;
 
-  PASTI.forEach(p => {
+  pastiDelGiorno(giorno).forEach(p => {
     const rp = righe.filter(r => r.meal === p.id);
     // Un pasto vuoto in un giorno passato è rumore: si mostra solo se ha qualcosa dentro, o se
     // il giorno è oggi — dove il riquadro vuoto è l'invito a riempirlo.
@@ -1039,9 +1125,9 @@ function renderDiario() {
     const k = rp.reduce((s, r) => s + kcalDi(r), 0);
     h += `<div class="meal">
       <div class="meal-head">
-        <span class="meal-name grow">${p.label}</span>
+        <span class="meal-name grow">${p.label}${p.tolto ? ' <span class="badge badge-none">pasto tolto</span>' : ''}</span>
         <span class="meal-kcal">${fmtKcal(k)} kcal</span>
-        <button class="btn-icon" data-action="aggiungi" data-meal="${p.id}" title="Aggiungi a ${esc(p.label)}">➕</button>
+        ${p.tolto ? '' : `<button class="btn-icon" data-action="aggiungi" data-meal="${p.id}" title="Aggiungi a ${esc(p.label)}">➕</button>`}
       </div>
       <div class="meal-rows">`;
     if (!rp.length) {
@@ -1354,8 +1440,15 @@ function renderAlimenti() {
     <button class="btn btn-primary btn-sm" data-action="nuovo-alimento">➕ Nuovo alimento</button>
   </div>`;
 
+  const scanner = ('BarcodeDetector' in window);
   h += `<div class="card">
-    <input type="search" class="form-input" data-action="cerca-alimenti" placeholder="Cerca fra i tuoi alimenti…" value="${esc(S.cercaAlimenti)}" />
+    <div class="hstack gap-8">
+      <input type="search" class="form-input grow" data-action="cerca-alimenti" placeholder="Cerca un alimento — se non ce l'hai lo cerco in rete…" value="${esc(S.cercaAlimenti)}" />
+      <button class="btn btn-outline btn-sm" data-action="${scanner ? 'apri-scanner-cat' : 'barcode-catalogo'}" title="Codice a barre">📷</button>
+    </div>
+    <div id="scanner-wrap"><video id="scanner-video" playsinline muted></video>
+      <div class="text-xs text-muted mt-8">Inquadra il codice a barre. <button class="btn-icon" data-action="chiudi-scanner">chiudi</button></div>
+    </div>
     <div class="table-wrap mt-12">
       <table class="table"><thead><tr>
         <th></th><th>Alimento</th><th class="text-right">kcal</th><th class="text-right">Grassi</th>
@@ -1382,6 +1475,7 @@ function renderAlimenti() {
   }
   h += `</tbody></table></div>
     ${elenco.length > 400 ? '<div class="text-xs text-muted mt-8">Mostrati i primi 400: restringi la ricerca.</div>' : ''}
+    ${renderRisultatiOff()}
   </div>
   <div class="note-box">Gli alimenti «base» sono valori indicativi presi dalle tabelle di composizione pubbliche
     (per l'Italia il riferimento è il CREA): dove un numero conta davvero, confrontalo con la tabella e correggilo —
@@ -1389,6 +1483,63 @@ function renderAlimenti() {
     via <strong>Open Food Facts</strong>, e li scrivono i suoi collaboratori: capita che manchino o siano sbagliati.</div>`;
 
   setHtml('view-alimenti', h);
+}
+
+/* Quel che il catalogo non ha: si va a cercarlo su Open Food Facts e da lì si aggiunge con un
+   tocco. È la stessa banca dati che il diario consulta quando si segna un alimento — la
+   differenza è solo il momento: lì l'alimento entra in archivio insieme alla riga del diario,
+   qui si mette in dispensa prima di mangiarlo. */
+function renderRisultatiOff() {
+  const { q, risultati, stato } = S.cercaOff;
+  const cercato = (S.cercaAlimenti || '').trim();
+  if (cercato.length < 3) return '';
+  if (stato === 'cerco') {
+    return `<div class="search-note mt-12">🔎 Cerco «${esc(cercato)}» su Open Food Facts…</div>`;
+  }
+  if (q !== cercato) return '';
+  if (!risultati.length) {
+    return `<div class="search-note mt-12">${esc(stato || 'Open Food Facts non ha «' + cercato + '».')}
+      Puoi scriverlo a mano con <strong>➕ Nuovo alimento</strong>.</div>`;
+  }
+  return `<div class="card-title mt-16">🌐 Su Open Food Facts <span class="text-muted text-xs">— non ancora nel tuo catalogo</span></div>
+    <div class="search-results">
+      ${risultati.map((a, i) => `<div class="search-row" style="cursor:default">
+        <span class="grow">
+          <span class="fw-600">${esc(a.name)}</span>${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
+          <span class="food-sub">${fmtKcal(a.kcal_100g)} kcal · grassi ${fmtG(a.fat_100g)} g · zuccheri ${fmtG(a.sugars_100g)} g per 100 g</span>
+        </span>
+        <button class="btn btn-outline btn-sm" data-action="aggiungi-al-catalogo" data-off="${i}">➕ Aggiungi</button>
+      </div>`).join('')}
+    </div>`;
+}
+
+// La ricerca in rete aspetta la pausa di digitazione: Open Food Facts limita le ricerche
+// testuali a una decina al minuto, e a ogni tasto premuto si fa bandire l'indirizzo IP.
+function cercaOffCatalogo(q) {
+  const ql = (q || '').trim();
+  clearTimeout(window._timerOff);
+  if (ql.length < 3) { S.cercaOff = { q: '', risultati: [], stato: '' }; return; }
+  S.cercaOff = { q: '', risultati: [], stato: 'cerco' };
+  renderAlimenti();
+  window._timerOff = setTimeout(async () => {
+    let ris = [], stato = '';
+    try {
+      // Quel che è già in catalogo non si ripropone: sarebbe la stessa cosa due volte, e la
+      // seconda senza id. Il confronto è sul codice a barre, che è l'unica identità certa.
+      const noti = new Set(S.foods.map(f => f.barcode).filter(Boolean));
+      const nomi = new Set(S.foods.map(f => (f.name || '').toLowerCase()));
+      ris = (await offCerca(ql))
+        .filter(a => (!a.barcode || !noti.has(a.barcode)) && !nomi.has(a.name.toLowerCase()))
+        .slice(0, 12);
+    } catch (err) {
+      stato = 'Open Food Facts non risponde: ' + err.message;
+    }
+    if ((S.cercaAlimenti || '').trim() !== ql) return;   // nel frattempo si è scritto altro
+    S.cercaOff = { q: ql, risultati: ris, stato };
+    renderAlimenti();
+    const i = document.querySelector('[data-action="cerca-alimenti"]');
+    if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+  }, RITARDO_RICERCA);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1462,6 +1613,33 @@ function renderImpostazioni() {
         quanto si consuma davvero in una giornata. Nel Profilo di AppSphere non c'è.</div>
     </div>
     <button class="btn btn-primary" data-action="salva-profilo">💾 Salva</button>
+  </div>`;
+
+  // ── I pasti della giornata ──
+  const attivi = pastiAttivi();
+  const usati = new Set(S.logs.map(r => r.meal));
+  h += `<div class="card">
+    <div class="card-title">🍽️ I pasti della giornata</div>
+    <div class="text-sm text-muted mb-16">Spunta i momenti in cui mangi davvero e chiamali come vuoi.
+      Il diario mostrerà solo questi, nell'ordine dell'orologio.</div>
+    ${PASTI_BASE.map(b => {
+      const conf = attivi.find(a => a.id === b.id);
+      const haRighe = usati.has(b.id);
+      return `<div class="hstack gap-12 mb-8 wrap">
+        <label class="hstack gap-8" style="min-width:150px">
+          <input type="checkbox" data-pasto-attivo="${b.id}" ${conf ? 'checked' : ''} />
+          <span class="text-sm">${esc(b.label)}</span>
+        </label>
+        <input class="form-input grow" style="min-width:160px" data-pasto-nome="${b.id}"
+               value="${esc(conf ? conf.label : b.label)}" placeholder="${esc(b.label)}" />
+        ${haRighe ? '<span class="text-xs text-muted">ha righe in archivio</span>' : ''}
+      </div>`;
+    }).join('')}
+    <button class="btn btn-primary mt-8" data-action="salva-pasti">💾 Salva i pasti</button>
+    <div class="note-box mt-12">Togliere un pasto <strong>non cancella niente</strong>: le righe già
+      segnate lì dentro restano, continuano a contare nel totale della giornata e si vedono marcate
+      come «pasto tolto» — sparire dallo schermo restando nel conto sarebbe il modo peggiore di
+      nasconderle. I sei momenti sono fissi: per averne un settimo serve una modifica al database.</div>
   </div>`;
 
   // ── Stima delle calorie: il riepilogo e poi tratto per tratto ──
@@ -1593,7 +1771,7 @@ function openAggiungi(meal) {
     <div class="form-group">
       <label class="form-label" for="add-meal">Pasto</label>
       <select class="form-input form-select" id="add-meal">
-        ${PASTI.map(p => `<option value="${p.id}" ${p.id === meal ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+        ${opzioniPasto(meal)}
       </select>
     </div>
     <div class="form-group">
@@ -1703,7 +1881,7 @@ function openPorzione(alimento, meal, foodId) {
     <div class="form-group">
       <label class="form-label" for="por-meal">Pasto</label>
       <select class="form-input form-select" id="por-meal">
-        ${PASTI.map(p => `<option value="${p.id}" ${p.id === meal ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+        ${opzioniPasto(meal)}
       </select>
     </div>
     <div class="note-box" id="por-anteprima"></div>
@@ -1833,12 +2011,19 @@ function barcodeAMano() {
   if (codice && codice.trim()) cercaBarcode(codice.trim());
 }
 
+/* Il codice a barre porta a due posti diversi a seconda di dove si è partiti: dal diario si
+   finisce sulla porzione (si sta segnando quel che si mangia), dal catalogo si mette la voce in
+   dispensa e basta. `S.scanPer` dice quale delle due, perché la finestra dello scanner è la
+   stessa. */
 async function cercaBarcode(codice) {
-  const meal = $('add-meal')?.value || pastoDellOra();
-  // Se il prodotto è già in archivio non si disturba la rete: è la stessa riga, e offline
-  // funziona lo stesso.
+  const perCatalogo = S.scanPer === 'catalogo';
+  S.scanPer = null;
   const mio = S.foods.find(f => f.barcode === codice);
-  if (mio) { openPorzione(mio, meal, mio.id); return; }
+  if (mio) {
+    if (perCatalogo) { showToast(`«${mio.name}» è già nel tuo catalogo`); return; }
+    openPorzione(mio, $('add-meal')?.value || pastoDellOra(), mio.id);
+    return;
+  }
   showToast('🔎 Cerco il prodotto…');
   try {
     const a = await offProdotto(codice);
@@ -1847,7 +2032,14 @@ async function cercaBarcode(codice) {
       openFormAlimento(null);
       return;
     }
-    openPorzione(a, meal, null);
+    if (perCatalogo) {
+      // Dal catalogo si archivia subito: è esattamente quel che si è chiesto scansionandolo.
+      await salvaAlimentoOff(a);
+      showToast(`➕ «${a.name}» aggiunto al tuo catalogo`);
+      await reload();
+      return;
+    }
+    openPorzione(a, $('add-meal')?.value || pastoDellOra(), null);
   } catch (err) {
     alert('Errore: ' + err.message);
   }
@@ -1903,9 +2095,9 @@ document.addEventListener('click', async e => {
 
     else if (action === 'aggiungi') { openAggiungi(btn.dataset.meal || pastoDellOra()); }
 
-    else if (action === 'apri-scanner') { apriScanner(); }
+    else if (action === 'apri-scanner') { S.scanPer = 'diario'; apriScanner(); }
     else if (action === 'chiudi-scanner') { fermaScanner(); }
-    else if (action === 'barcode-a-mano') { barcodeAMano(); }
+    else if (action === 'barcode-a-mano') { S.scanPer = 'diario'; barcodeAMano(); }
 
     else if (action === 'scegli') {
       const meal = $('add-meal')?.value || pastoDellOra();
@@ -1931,13 +2123,18 @@ document.addEventListener('click', async e => {
       const meal = $('por-meal')?.value || pastoDellOra();
       btn.disabled = true;
       let foodId = p.foodId;
+      let nuovoInCatalogo = false;
       if (!foodId && p.alimento.source === 'off') {
+        // L'alimento preso dalla rete entra nel catalogo ADESSO, insieme alla riga del diario:
+        // la prossima volta è già lì e non serve nessuna ricerca.
         const salvato = await salvaAlimentoOff(p.alimento);
         foodId = salvato?.id || null;
+        nuovoInCatalogo = !!foodId;
       }
       await aggiungiAlDiario({ giorno: S.day, meal, alimento: p.alimento, grammi: g, foodId });
       closeModal();
-      showToast(`➕ ${p.alimento.name} · ${fmtKcal(p.alimento.kcal_100g * g / 100)} kcal`);
+      showToast(`➕ ${p.alimento.name} · ${fmtKcal(p.alimento.kcal_100g * g / 100)} kcal`
+                + (nuovoInCatalogo ? ' · aggiunto al catalogo' : ''));
       await reload();
     }
 
@@ -2010,6 +2207,33 @@ document.addEventListener('click', async e => {
       await reload();
     }
 
+    else if (action === 'aggiungi-al-catalogo') {
+      const a = S.cercaOff.risultati[+btn.dataset.off];
+      if (!a) return;
+      btn.disabled = true;
+      await salvaAlimentoOff(a);
+      showToast(`➕ «${a.name}» aggiunto al tuo catalogo`);
+      // Si toglie dai risultati solo quello aggiunto: gli altri restano, perché da una ricerca
+      // sola se ne aggiungono spesso due o tre, e azzerarla costringerebbe a riscriverla ogni
+      // volta — con una chiamata in più a Open Food Facts, che le ricerche le conta.
+      S.cercaOff.risultati = S.cercaOff.risultati.filter((_, i) => i !== +btn.dataset.off);
+      await reload();
+    }
+
+    else if (action === 'apri-scanner-cat') { S.scanPer = 'catalogo'; apriScanner(); }
+    else if (action === 'barcode-catalogo') { S.scanPer = 'catalogo'; barcodeAMano(); }
+
+    else if (action === 'salva-pasti') {
+      const scelti = PASTI_BASE
+        .filter(b => document.querySelector(`[data-pasto-attivo="${b.id}"]`)?.checked)
+        .map(b => ({ id: b.id, label: (document.querySelector(`[data-pasto-nome="${b.id}"]`)?.value || '').trim() || b.label }));
+      // Zero pasti non è una configurazione, è un diario in cui non si può segnare niente.
+      if (!scelti.length) { alert('Serve almeno un pasto: senza, nel diario non si può segnare niente.'); return; }
+      await salvaPasti(scelti);
+      showToast(`💾 ${scelti.length} ${scelti.length === 1 ? 'pasto' : 'pasti'} al giorno`);
+      await reload();
+    }
+
     else if (action === 'svuota-diario') {
       const q = prompt('Questo cancella TUTTE le righe del diario, per sempre.\nScrivi CANCELLA per confermare:');
       if (q !== 'CANCELLA') return;
@@ -2029,6 +2253,7 @@ document.addEventListener('input', e => {
   else if (el.id === 'por-g') aggiornaAnteprimaPorzione();
   else if (el.matches('[data-action="cerca-alimenti"]')) {
     S.cercaAlimenti = el.value;
+    cercaOffCatalogo(el.value);   // la rete si consulta da sé, dopo la pausa di digitazione
     clearTimeout(window._timerAlimenti);
     window._timerAlimenti = setTimeout(() => {
       renderAlimenti();
