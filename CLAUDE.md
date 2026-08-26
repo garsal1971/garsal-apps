@@ -1856,6 +1856,16 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - Nel grafico un giorno **senza colonna è un giorno non segnato, non un giorno a zero**, e per la
   stessa ragione il saldo del periodo somma i soli giorni segnati: contarci i giorni saltati come
   digiuni darebbe un deficit enorme e falso.
+- Ha una **bolla in AppSphere** (`20260826120000_calorie_app_bolla.sql`, ambra `#d97706`). Il suo
+  numero è la **striscia di giorni di fila chiusi dentro il target**, e ⚠️ **non è un punteggio**:
+  sta in `APP_SENZA_PUNTI` / `AppSenzaPunti`, quindi non si scrive sotto il nome e non entra nel
+  totale che paga i premi — un giorno sforato che *abbassasse* il saldo spendibile sarebbe un
+  premio che va e viene da sé. Dimensiona però la bolla, che è il punto: cresce finché il diario
+  regge e si sgonfia al primo sforo. **Non «le calorie che restano oggi»**: `sizeOf()` normalizza
+  sul punteggio più alto fra tutte le app, e un numero sulle migliaia schiaccerebbe ogni altra
+  bolla al minimo di 6 cm². La striscia **si ferma a ieri** — alle nove del mattino si è dentro
+  il target per forza, e contarlo direbbe che è andata bene una giornata che deve ancora andare —
+  e un giorno senza righe la interrompe come un giorno sforato.
 
 ### `memo.html` — Memorandum
 - Schede con testo formattato, foto con OCR, categorie condivise, colore e 📌 in evidenza.
