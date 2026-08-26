@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.0.1</title>
+  <title>Calorie v1.1.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -256,15 +256,26 @@
 
      basale (Mifflin-St Jeor su età, altezza, peso, sesso)
        × fattore di attività  =  quanto si consuma stando in piedi
-       − il deficit che serve per arrivare al peso finale nel tempo
-         che resta                                      = target
+       − deficit                                        = target
 
-   ⚠️ Il deficit si ricalcola sul PESO VERO di oggi, non sulla
-   pendenza del piano: se si rimane indietro il target si stringe
-   da sé, e se si è avanti si allarga. Un deficit fisso preso dalla
-   curva darebbe lo stesso numero il giorno che si è avanti di due
-   chili e quello che si è indietro di due — cioè proprio quando
-   servirebbe che cambiasse.
+   ⚠️ IL DEFICIT È LA SOMMA DI DUE ADDENDI, e la separazione è la
+   funzionalità, non un dettaglio:
+
+     1. il RITMO DEL TRATTO di piano in cui si è oggi. I traguardi
+        di un obiettivo non sono equidistanti: chi ne mette tre nel
+        primo mese e uno nei due successivi vuole perdere in fretta
+        e poi tenere. Spalmare la perdita residua su tutto il tempo
+        residuo dà lo stesso numero nei due tratti, e fa restare
+        indietro proprio dove il piano correva;
+     2. il RECUPERO dello scarto già accumulato, spalmato sui giorni
+        che restano IN TUTTO, non su quelli del tratto. È l'addendo
+        che stringe il target da sé quando si è indietro e lo allarga
+        quando si è avanti. Nel solo tratto in corso sarebbe feroce a
+        ridosso di un traguardo: due chili in cinque giorni non sono
+        un obiettivo.
+
+   Senza il primo il piano non si sente, senza il secondo non ci si
+   accorge di essere rimasti indietro.
 
    ⚠️ Il target di una giornata si CONGELA in al_days la prima volta
    che si segna qualcosa. Spostare un traguardo domani non deve
@@ -272,8 +283,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.1';
-var BUILD_TIME  = '2026-08-26T12:00:00Z';
+var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-08-26T14:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -410,6 +421,9 @@ const num = n => (n == null || isNaN(n)) ? null : +n;
 const fmtKcal = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('it-IT');
 const fmtG = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 10) / 10).toLocaleString('it-IT');
 const fmtKg = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 10) / 10).toLocaleString('it-IT', { minimumFractionDigits: 1 });
+// Il ritmo di un tratto va a due decimali: a uno solo, 0,12 kg a settimana diventa «0,1» e un
+// tratto lento è indistinguibile da un tratto fermo.
+const fmtRitmo = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 100) / 100).toLocaleString('it-IT', { minimumFractionDigits: 2 });
 
 // La data locale, non quella UTC: alle 01:30 di notte toUTCString() direbbe ancora ieri, e la
 // riga finirebbe nel giorno sbagliato. È lo stesso motivo per cui le RPC dei task vogliono
@@ -493,13 +507,43 @@ function pesoPianoAl(giorno) {
   return null;
 }
 
+/* Il TRATTO del piano che contiene un giorno: le due milestone che lo racchiudono e il ritmo
+   che chiedono. È il pezzo che rende diversi i target di due periodi dello stesso obiettivo —
+   un piano che chiede 3 kg nel primo mese e 1 kg nei due successivi non può dare lo stesso
+   numero in entrambi.
+
+   Torna null quando il piano non c'è (meno di due traguardi) o è finito: in quei casi il conto
+   ripiega sulla media fino alla fine, che è quel che si può dire senza una curva. */
+function segmentoDi(giorno) {
+  const ms = S.milestones;
+  if (!ms || ms.length < 2) return null;
+  if (giorno >= ms[ms.length - 1].date) return null;   // il piano è finito
+  let i = 0;
+  for (let k = 0; k < ms.length - 1; k++) {
+    if (giorno >= ms[k].date && giorno < ms[k + 1].date) { i = k; break; }
+  }
+  const a = ms[i], b = ms[i + 1];
+  const giorni = giorniFra(a.date, b.date);
+  if (!giorni) return null;
+  return {
+    inizio: a.date, fine: b.date, pesoInizio: +a.weight, pesoFine: +b.weight, giorni,
+    numero: i + 1, quanti: ms.length - 1,
+    // positivo = si deve perdere. Il ritmo del tratto, non della media dell'obiettivo.
+    kgAlGiorno: (+a.weight - +b.weight) / giorni,
+  };
+}
+
 /* Il conto vero e proprio. Torna sempre un oggetto: `ok` false dice PERCHÉ manca il numero,
    perché «non lo so» e «zero» sono due cose diverse — un target a zero farebbe sembrare
    sforata ogni giornata. */
 function calcolaTarget(giorno) {
   const out = { ok: false, motivo: null, kcal: null, bmr: null, tdee: null, deficit: 0,
                 peso: null, pesoPiano: null, pesoFinale: null, giorniRimasti: null,
-                kgDaPerdere: null, kcalRichiesta: null, frenata: false, avvisi: [] };
+                kgDaPerdere: null, kcalRichiesta: null, frenata: false, avvisi: [],
+                // Il deficit in due addendi: il ritmo che il tratto di piano chiede, e il
+                // recupero dello scarto accumulato. Servono a schermo, perché un numero solo
+                // non direbbe se oggi è più stretto perché il piano corre o perché si è indietro.
+                segmento: null, deficitPiano: null, scartoKg: null, recupero: null };
 
   const p = S.profile;
   if (!p || !p.birth_date || !p.height_cm || !p.sex) { out.motivo = 'profilo'; return out; }
@@ -522,7 +566,10 @@ function calcolaTarget(giorno) {
   }
 
   out.pesoPiano = pesoPianoAl(giorno);
-  const finale = S.milestones.length ? +S.milestones[S.milestones.length - 1].weight : num(ob.end_weight);
+  // ⚠️ L'ultimo traguardo vale come peso finale solo se i traguardi sono almeno DUE: uno solo è
+  // il punto di partenza, non la meta, e prenderlo per tale fa credere l'obiettivo già raggiunto
+  // (peso di oggi ≤ «finale») e azzera il deficit senza dire niente.
+  const finale = S.milestones.length >= 2 ? +S.milestones[S.milestones.length - 1].weight : num(ob.end_weight);
   out.pesoFinale = finale;
 
   const fine = ob.end_date || (S.milestones.length ? S.milestones[S.milestones.length - 1].date : null);
@@ -537,7 +584,38 @@ function calcolaTarget(giorno) {
   }
 
   out.kgDaPerdere = Math.max(0, peso - finale);
-  out.deficit = out.kgDaPerdere * KCAL_PER_KG / out.giorniRimasti;
+
+  /* ⚠️ IL DEFICIT È LA SOMMA DI DUE COSE, e vanno tenute separate.
+
+     1. il RITMO DEL TRATTO in cui si è oggi. Un obiettivo con i traguardi ravvicinati all'inizio
+        e radi dopo chiede molto adesso e poco poi: spalmare tutta la perdita residua su tutto il
+        tempo residuo — che è quel che faceva la v1.0.1 — dà lo stesso numero nei due tratti, e
+        quindi fa restare indietro proprio dove il piano correva. Un piano che chiede 0,70 kg a
+        settimana vuole ~770 kcal al giorno, non i 322 della media.
+     2. il RECUPERO dello scarto già accumulato, spalmato sui giorni che restano **in tutto** e
+        non su quelli del tratto. È questo addendo che tiene la proprietà per cui il target si
+        stringe da sé quando si resta indietro; metterlo nel solo tratto in corso lo renderebbe
+        feroce a ridosso di un traguardo — due chili da recuperare in cinque giorni non sono un
+        obiettivo, sono il pavimento delle kcal minime tutti i giorni.
+
+     Senza il primo addendo il piano non si sente; senza il secondo non ci si accorge di essere
+     rimasti indietro. Servono tutti e due. */
+  const seg = segmentoDi(giorno);
+  out.segmento = seg;
+
+  if (seg && out.pesoPiano != null) {
+    out.deficitPiano = seg.kgAlGiorno * KCAL_PER_KG;
+    out.scartoKg = peso - out.pesoPiano;
+    out.recupero = out.scartoKg * KCAL_PER_KG / out.giorniRimasti;
+    // Mai sotto zero: essere avanti sul piano allenta il target fino al mantenimento, non oltre.
+    // Un deficit negativo sarebbe l'app che invita a mangiare di più per tornare sulla curva.
+    out.deficit = Math.max(0, out.deficitPiano + out.recupero);
+  } else {
+    // Nessuna curva (meno di due traguardi) o piano già finito: resta la media fino alla fine,
+    // che è tutto quel che si può dire senza sapere come il piano voleva distribuirla.
+    out.deficit = out.kgDaPerdere * KCAL_PER_KG / out.giorniRimasti;
+  }
+
   out.kcalRichiesta = out.tdee - out.deficit;
   out.kcal = out.kcalRichiesta;
   out.motivo = out.kgDaPerdere > 0 ? 'obiettivo' : 'raggiunto';
@@ -999,22 +1077,41 @@ function renderSpiegazioneTarget(t, giorno) {
           + (t.peso != null ? `, sul peso di ${fmtKg(t.peso)} kg.` : '.');
   } else {
     testo = `Consumo stimato ${fmtKcal(t.tdee)} kcal (basale ${fmtKcal(t.bmr)} × attività ${(+S.profile.activity).toLocaleString('it-IT')}) `
-          + `− ${fmtKcal(t.deficit)} kcal di deficit = <strong>${fmtKcal(t.kcal)} kcal</strong>. `
-          + `Il deficit sono i ${fmtKg(t.kgDaPerdere)} kg che mancano al peso finale (${fmtKg(t.pesoFinale)} kg) `
-          + `spalmati sui ${t.giorniRimasti} giorni che restano.`;
+          + `− ${fmtKcal(t.deficit)} kcal di deficit = <strong>${fmtKcal(t.kcal)} kcal</strong>.`;
   }
-  let scarto = '';
-  if (t.pesoPiano != null && t.peso != null) {
-    const d = t.peso - t.pesoPiano;
-    scarto = Math.abs(d) < 0.05
-      ? ' Sei esattamente sulla curva del piano.'
-      : ` Rispetto alla curva del piano sei <strong>${d > 0 ? 'indietro' : 'avanti'} di ${fmtKg(Math.abs(d))} kg</strong>.`;
-  }
+  const scarto = t.motivo === 'obiettivo' ? spiegaDeficit(t) : '';
   const avvisi = (t.avvisi || []).map(a => `<div class="note-box is-danger mt-8">⚠️ ${esc(a)}</div>`).join('');
   const puoRicalcolare = t.congelato && S.days[giorno];
   return `<div class="note-box mt-12">${testo}${scarto}
       ${puoRicalcolare ? `<div class="mt-8"><button class="btn btn-outline btn-sm" data-action="ricalcola" data-day="${giorno}">🔄 Ricalcola questa giornata</button></div>` : ''}
     </div>${avvisi}`;
+}
+
+/* Da dove viene il deficit: il ritmo del tratto e il recupero dello scarto. Due frasi e non un
+   numero solo, perché «oggi il target è più stretto» ha due cause diverse — il piano che corre in
+   questo tratto, e l'essere rimasti indietro — e sapere quale delle due è cambia cosa si fa. */
+function spiegaDeficit(t) {
+  const seg = t.segmento;
+  if (!seg || t.deficitPiano == null) {
+    // Nessuna curva o piano finito: resta la media fino alla fine.
+    return ` Il deficit sono i ${fmtKg(t.kgDaPerdere)} kg che mancano al peso finale `
+         + `(${fmtKg(t.pesoFinale)} kg) spalmati sui ${t.giorniRimasti} giorni che restano.`;
+  }
+  const settimana = seg.kgAlGiorno * 7;
+  let h = ` <br><br>Il deficit viene da due cose. <strong>Il tratto ${seg.numero} di ${seg.quanti}</strong> del piano `
+        + `(${esc(fmtDataBreve(seg.inizio))} → ${esc(fmtDataBreve(seg.fine))}) chiede `
+        + `<strong>${fmtRitmo(settimana)} kg a settimana</strong>, cioè ${fmtKcal(t.deficitPiano)} kcal al giorno`;
+  if (t.scartoKg == null || Math.abs(t.scartoKg) < 0.05) {
+    h += `; sei esattamente sulla curva del piano, quindi non c'è niente da recuperare.`;
+  } else {
+    const indietro = t.scartoKg > 0;
+    h += `. Sei <strong>${indietro ? 'indietro' : 'avanti'} di ${fmtKg(Math.abs(t.scartoKg))} kg</strong> sulla curva: `
+       + `${indietro ? '+' : '−'}${fmtKcal(Math.abs(t.recupero))} kcal per ${indietro ? 'recuperarli' : 'tenerne conto'}, `
+       + `spalmati sui ${t.giorniRimasti} giorni che restano fino alla fine — non su quelli del tratto, `
+       + `o a ridosso di un traguardo il recupero diventerebbe feroce.`;
+  }
+  if (t.deficit === 0) h += ` Con questo vantaggio il deficit si ferma a zero: oggi basta il mantenimento.`;
+  return h;
 }
 
 function disegnaMacro(tot) {
@@ -1340,7 +1437,16 @@ function renderImpostazioni() {
       <tr><td>Peso di riferimento</td><td class="text-right mono">${fmtKg(c.peso)} kg</td></tr>
       <tr><td>Metabolismo basale <span class="text-muted text-xs">(Mifflin-St Jeor)</span></td><td class="text-right mono">${fmtKcal(c.bmr)} kcal</td></tr>
       <tr><td>× attività ${(+(p.activity || 1.375)).toLocaleString('it-IT')} = consumo stimato</td><td class="text-right mono">${fmtKcal(c.tdee)} kcal</td></tr>
-      <tr><td>− deficit per l'obiettivo</td><td class="text-right mono neg">${c.deficit ? '−' + fmtKcal(c.deficit) : '0'} kcal</td></tr>
+      ${c.segmento && c.deficitPiano != null ? `
+      <tr><td>− ritmo del tratto ${c.segmento.numero}/${c.segmento.quanti}
+        <span class="text-muted text-xs">(${esc(fmtDataBreve(c.segmento.inizio))} → ${esc(fmtDataBreve(c.segmento.fine))}, ${fmtRitmo(c.segmento.kgAlGiorno * 7)} kg a settimana)</span></td>
+        <td class="text-right mono neg">−${fmtKcal(c.deficitPiano)} kcal</td></tr>
+      <tr><td>${c.scartoKg >= 0 ? '− recupero dello scarto' : '+ vantaggio sul piano'}
+        <span class="text-muted text-xs">(${c.scartoKg >= 0 ? 'indietro' : 'avanti'} di ${fmtKg(Math.abs(c.scartoKg || 0))} kg su ${c.giorniRimasti} giorni)</span></td>
+        <td class="text-right mono ${c.scartoKg >= 0 ? 'neg' : 'pos'}">${c.scartoKg >= 0 ? '−' : '+'}${fmtKcal(Math.abs(c.recupero || 0))} kcal</td></tr>
+      ${c.deficit === 0 ? '<tr><td class="text-muted">il deficit non scende sotto zero</td><td class="text-right mono">0 kcal</td></tr>' : ''}
+      ` : `
+      <tr><td>− deficit per l'obiettivo</td><td class="text-right mono neg">${c.deficit ? '−' + fmtKcal(c.deficit) : '0'} kcal</td></tr>`}
       <tr><td class="fw-700">Target di oggi</td><td class="text-right mono fw-700">${fmtKcal(c.kcal)} kcal</td></tr>
     </tbody></table></div>`;
     if (c.avvisi.length) h += c.avvisi.map(a => `<div class="note-box is-danger mt-12">⚠️ ${esc(a)}</div>`).join('');
@@ -1362,9 +1468,12 @@ function renderImpostazioni() {
       <tr><td>Peso di partenza → finale</td><td class="text-right mono">${fmtKg(ob.start_weight)} → ${fmtKg(finale)} kg</td></tr>
       <tr><td>Traguardi</td><td class="text-right mono">${S.milestones.length}</td></tr>
     </tbody></table></div>
-    <div class="note-box mt-12">Il target si ricalcola sul <strong>peso vero</strong> e sui giorni che restano, non sulla
-      pendenza del piano: se rimani indietro si stringe da sé, se sei avanti si allarga. Per cambiarlo si spostano
-      i traguardi in «Ti pisasti?», non c'è nessun numero da riscrivere qui.</div>`;
+    <div class="note-box mt-12">Il target segue il <strong>tratto di piano</strong> in cui sei: un obiettivo con i
+      traguardi fitti all'inizio chiede molto adesso e poco dopo, e i due periodi hanno due target diversi.
+      Sopra c'è il ritmo che il tratto in corso richiede. Al ritmo si somma il <strong>recupero dello scarto</strong>
+      sul peso vero, quindi se rimani indietro il target si stringe da sé e se sei avanti si allarga —
+      fino al mantenimento, mai oltre. Per cambiarlo si spostano i traguardi in «Ti pisasti?»:
+      qui non c'è nessun numero da riscrivere.</div>`;
   }
   h += '</div>';
 
