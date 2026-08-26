@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calorie v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font-sans: 'DM Sans', system-ui, sans-serif;
+      --font-mono: 'DM Mono', ui-monospace, monospace;
+      --c-bg:        #f4f7f4;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8e2;
+      --c-text:      #1e2b1e;
+      --c-muted:     #64756b;
+      --c-primary:   #16a34a;
+      --c-primary-h: #15803d;
+      --c-success:   #16a34a;
+      --c-danger:    #dc2626;
+      --c-warning:   #d97706;
+      --radius-sm: 6px;
+      --radius:    12px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+    }
+    body { font-family: var(--font-sans); background: var(--c-bg); color: var(--c-text); min-height: 100dvh; -webkit-font-smoothing: antialiased; padding-top: 56px; }
+    .hidden { display: none !important; }
+    .mono   { font-family: var(--font-mono); }
+    .pos    { color: var(--c-success); }
+    .neg    { color: var(--c-danger); }
+    .warn   { color: var(--c-warning); }
+    .text-muted { color: var(--c-muted); }
+    .text-sm    { font-size: .82rem; }
+    .text-xs    { font-size: .74rem; }
+    .fw-600  { font-weight: 600; }
+    .fw-700  { font-weight: 700; }
+    .text-right  { text-align: right; }
+    .text-center { text-align: center; }
+    .hstack  { display: flex; align-items: center; }
+    .gap-6   { gap: 6px; }
+    .gap-8   { gap: 8px; }
+    .gap-12  { gap: 12px; }
+    .mt-4    { margin-top: 4px; }
+    .mt-8    { margin-top: 8px; }
+    .mt-12   { margin-top: 12px; }
+    .mt-16   { margin-top: 16px; }
+    .mb-8    { margin-bottom: 8px; }
+    .mb-16   { margin-bottom: 16px; }
+    .wrap    { flex-wrap: wrap; }
+    .grow    { flex: 1; min-width: 0; }
+    #loading-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--c-bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--c-border); border-top-color: var(--c-primary); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #screen-app { display: none; flex-direction: column; min-height: 100dvh; }
+    #garsal-top-bar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #0081C8; display: flex; align-items: center; padding: 0 20px; gap: 10px; z-index: 3000; }
+    #garsal-top-bar-text { font-family: 'Darker Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.2px; }
+    .topbar-spacer { flex: 1; }
+    .app-layout { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 200px; flex-shrink: 0; border-right: 1px solid var(--c-border); background: var(--c-surface); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
+    .nav-item.active { background: #dcfce7; color: var(--c-primary); }
+    .nav-sep { height: 1px; background: var(--c-border); margin: 10px 4px 4px; }
+    .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .page-title { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+    .page-sub { color: var(--c-muted); font-size: .84rem; margin-top: 2px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .88rem; font-weight: 500; cursor: pointer; border: none; transition: background .15s, color .15s, border-color .15s; }
+    .btn-primary { background: var(--c-primary); color: #fff; }
+    .btn-primary:hover { background: var(--c-primary-h); }
+    .btn-outline { background: var(--c-surface); color: var(--c-text); border: 1.5px solid var(--c-border); }
+    .btn-outline:hover { border-color: #aab8ac; background: #f8faf8; }
+    .btn-danger { background: #fee2e2; color: var(--c-danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 6px 12px; font-size: .82rem; }
+    .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--c-muted); font-size: .9rem; line-height: 1; transition: background .12s, color .12s; }
+    .btn-icon:hover { background: var(--c-bg); color: var(--c-text); }
+    .btn-icon-danger:hover { background: #fee2e2; color: var(--c-danger); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+    .kpi-label { font-size: .74rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -.03em; text-align: right; }
+    .kpi-note { font-size: .72rem; color: var(--c-muted); text-align: right; margin-top: 2px; }
+    .card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 18px 22px; box-shadow: var(--shadow-sm); margin-bottom: 14px; }
+    .card-title { font-size: .96rem; font-weight: 600; margin-bottom: 14px; }
+    .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+    .card-header-row .card-title { margin-bottom: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+    .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
+    .table td { padding: 9px 10px; border-top: 1px solid var(--c-border); }
+    .table td.nowrap { white-space: nowrap; }
+    .table tbody tr:hover td { background: #fafbfa; }
+    .cell-link { background: none; border: none; padding: 0; font: inherit; color: var(--c-primary); cursor: pointer; text-align: left; }
+    .cell-link:hover { text-decoration: underline; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .badge-src-off  { background: #e0f2fe; color: #075985; }
+    .badge-src-base { background: #dcfce7; color: #166534; }
+    .badge-src-manuale { background: #f1f5f9; color: #475569; }
+    .chart-wrap { height: 260px; }
+    .chart-wrap canvas { max-height: 260px; }
+    .chart-wrap-sm { height: 200px; }
+    .chart-wrap-sm canvas { max-height: 200px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: .82rem; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+    .form-input { width: 100%; padding: 9px 12px; border: 1.5px solid var(--c-border); border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: .9rem; color: var(--c-text); outline: none; transition: border-color .15s; background: var(--c-surface); }
+    .form-input:focus { border-color: var(--c-primary); }
+    .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364756b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .form-hint { font-size: .74rem; color: var(--c-muted); margin-top: 4px; }
+    #modal-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px); }
+    #modal-card { background: var(--c-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); width: 100%; max-width: 560px; max-height: 90dvh; overflow-y: auto; }
+    #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--c-border); }
+    #modal-header h3 { font-size: 1.05rem; font-weight: 700; }
+    #modal-close { background: none; border: none; font-size: 1.1rem; color: var(--c-muted); cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
+    #modal-close:hover { background: var(--c-bg); color: var(--c-text); }
+    #modal-body { padding: 18px 22px 22px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--c-border); margin-top: 18px; }
+    .card-danger { border-color: #fecaca; background: #fff8f8; }
+    .empty-state { text-align: center; padding: 40px 24px; color: var(--c-muted); }
+    .empty-icon { font-size: 2.4rem; margin-bottom: 12px; }
+    .empty-state p { font-size: .88rem; line-height: 1.6; }
+    .version-bar { border-top: 1px solid var(--c-border); padding: 7px 22px; font-size: .7rem; color: var(--c-muted); display: flex; align-items: center; gap: 7px; background: var(--c-surface); }
+    #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(160%); background: var(--c-text); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: .85rem; box-shadow: var(--shadow); z-index: 4000; transition: transform .22s ease; max-width: 90vw; text-align: center; }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    .btn-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 8px; flex-direction: column; gap: 5px; flex-shrink: 0; }
+    .btn-hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+    #mobile-nav-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,.35); z-index: 98; }
+    #mobile-nav-overlay.open { display: block; }
+
+    /* ── Barra del consumo: quanto del target è già stato mangiato ── */
+    .bar-track { height: 12px; border-radius: 999px; background: #e8ede8; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width .3s ease; }
+    .bar-legend { display: flex; justify-content: space-between; font-size: .74rem; color: var(--c-muted); margin-top: 6px; }
+
+    /* ── Giorno: navigazione fra le date ── */
+    .day-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .day-nav .form-input { width: auto; }
+
+    /* ── Pasti ── */
+    .meal { border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-surface); margin-bottom: 10px; overflow: hidden; }
+    .meal-head { display: flex; align-items: center; gap: 8px; padding: 11px 16px; background: #fafbfa; border-bottom: 1px solid var(--c-border); }
+    .meal-name { font-weight: 600; font-size: .9rem; }
+    .meal-kcal { font-family: var(--font-mono); font-size: .84rem; color: var(--c-muted); }
+    .meal-rows { padding: 4px 0; }
+    .food-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+    .food-row + .food-row { border-top: 1px solid #f1f5f1; }
+    .food-name { font-size: .88rem; }
+    .food-sub { font-size: .74rem; color: var(--c-muted); }
+    .food-kcal { font-family: var(--font-mono); font-size: .88rem; font-weight: 600; white-space: nowrap; }
+    .meal-empty { padding: 10px 16px; font-size: .8rem; color: var(--c-muted); }
+
+    /* ── Ricerca alimenti ── */
+    .search-results { max-height: 320px; overflow-y: auto; border: 1px solid var(--c-border); border-radius: var(--radius-sm); margin-top: 8px; }
+    .search-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+    .search-row + .search-row { border-top: 1px solid #f1f5f1; }
+    .search-row:hover { background: #f4f7f4; }
+    .search-note { font-size: .74rem; color: var(--c-muted); padding: 9px 12px; }
+    #scanner-wrap { display: none; margin-top: 10px; }
+    #scanner-wrap.open { display: block; }
+    #scanner-video { width: 100%; max-height: 260px; border-radius: var(--radius-sm); background: #000; object-fit: cover; }
+
+    .macro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+    .macro-box { border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 9px 11px; }
+    .macro-label { font-size: .7rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .macro-value { font-family: var(--font-mono); font-weight: 600; font-size: .95rem; margin-top: 2px; }
+
+    .note-box { border-left: 3px solid var(--c-primary); background: #f0fdf4; padding: 10px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: .82rem; line-height: 1.6; }
+    .note-box.is-warn { border-left-color: var(--c-warning); background: #fffbeb; }
+    .note-box.is-danger { border-left-color: var(--c-danger); background: #fef2f2; }
+
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; align-items: center; }
+      .sidebar { position: fixed; top: 56px; left: 0; z-index: 99; height: calc(100dvh - 56px); transform: translateX(-100%); transition: transform .25s ease; display: flex; box-shadow: 4px 0 20px rgba(0,0,0,.12); }
+      .sidebar.open { transform: translateX(0); }
+      .app-main { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+      .kpi-card { padding: 10px 12px; }
+      .kpi-label { font-size: .62rem; margin-bottom: 3px; }
+      .kpi-value { font-size: 1.05rem; }
+      .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="garsal-top-bar">
+  <a href="weight-quest.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
+    <span style="width:22px;height:22px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🍽️</span>
+    <div id="garsal-top-bar-text">Calorie</div>
+  </a>
+  <button id="btn-hamburger" class="btn-hamburger" aria-label="Apri menu"><span></span><span></span><span></span></button>
+</div>
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <span class="text-muted text-sm">Caricamento…</span>
+</div>
+
+<div id="screen-app">
+  <div id="mobile-nav-overlay"></div>
+  <div class="app-layout">
+    <nav class="sidebar" id="sidebar">
+      <button class="nav-item active" data-action="nav" data-view="diario">📓 Diario</button>
+      <button class="nav-item" data-action="nav" data-view="andamento">📈 Andamento</button>
+      <button class="nav-item" data-action="nav" data-view="alimenti">🍎 Alimenti</button>
+      <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
+      <div class="nav-sep"></div>
+      <a class="nav-item" href="weight-quest.html" style="text-decoration:none">← Torna a ⚖️ Ti pisasti?</a>
+      <a class="nav-item" href="/" style="text-decoration:none">🏠 AppSphere</a>
+    </nav>
+    <main class="app-main">
+      <div id="view-diario" class="view active"></div>
+      <div id="view-andamento" class="view"></div>
+      <div id="view-alimenti" class="view"></div>
+      <div id="view-impostazioni" class="view"></div>
+    </main>
+  </div>
+  <footer class="version-bar">
+    Calorie · <span class="mono" id="footer-version"></span>
+    <span class="topbar-spacer"></span>
+    <span id="footer-info"></span>
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<div id="modal-overlay" class="hidden">
+  <div id="modal-card">
+    <div id="modal-header">
+      <h3 id="modal-title"></h3>
+      <button id="modal-close" data-action="close-modal">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   CALORIE — il diario alimentare, e quante calorie servono davvero.
+
+   Non decide niente sull'obiettivo: quello sta in «Ti pisasti?»
+   (ps_objectives + le sue milestone) e qui si legge. Il target del
+   giorno è la conseguenza di tre cose:
+
+     basale (Mifflin-St Jeor su età, altezza, peso, sesso)
+       × fattore di attività  =  quanto si consuma stando in piedi
+       − il deficit che serve per arrivare al peso finale nel tempo
+         che resta                                      = target
+
+   ⚠️ Il deficit si ricalcola sul PESO VERO di oggi, non sulla
+   pendenza del piano: se si rimane indietro il target si stringe
+   da sé, e se si è avanti si allarga. Un deficit fisso preso dalla
+   curva darebbe lo stesso numero il giorno che si è avanti di due
+   chili e quello che si è indietro di due — cioè proprio quando
+   servirebbe che cambiasse.
+
+   ⚠️ Il target di una giornata si CONGELA in al_days la prima volta
+   che si segna qualcosa. Spostare un traguardo domani non deve
+   riscrivere il giudizio su un giorno già passato: è la stessa
+   scelta di ps_weight_tracking.target_weight.
+   ═══════════════════════════════════════════════════════════════ */
+
+var APP_VERSION = 'v1.0.0';
+var BUILD_TIME  = '2026-08-26T10:00:00Z';
+console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
+    'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
+    'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
+
+const SUPABASE_URL = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
+
+/* Un chilo di grasso corporeo vale circa 7700 kcal: è la costante che trasforma
+   «mi mancano 4 kg in 90 giorni» in «devo togliere 342 kcal al giorno». È una
+   stima, non una legge fisica — vale come ordine di grandezza, ed è la ragione
+   per cui la pagina mostra sempre gli ingredienti del conto e non solo il totale. */
+const KCAL_PER_KG = 7700;
+
+/* Sotto queste soglie non si scende, per quanto un traguardo sia ambizioso: un
+   target di 900 kcal non è un obiettivo aggressivo, è un conto sbagliato che
+   nessuno seguirà. Quando il freno interviene la pagina lo DICE, con accanto il
+   numero che sarebbe servito: nascondere il taglio farebbe credere di essere in
+   pari mentre la data di fine si allontana. */
+const KCAL_MINIME = { M: 1500, F: 1200 };
+
+const PASTI = [
+  { id: 'colazione',           label: '🌅 Colazione',   oraFino: 10 },
+  { id: 'spuntino_mattina',    label: '🍎 Spuntino',    oraFino: 12 },
+  { id: 'pranzo',              label: '🍝 Pranzo',      oraFino: 15 },
+  { id: 'spuntino_pomeriggio', label: '☕ Merenda',     oraFino: 18 },
+  { id: 'cena',                label: '🌙 Cena',        oraFino: 22 },
+  { id: 'fuori_pasto',         label: '🍫 Fuori pasto', oraFino: 24 },
+];
+
+const ATTIVITA = [
+  { v: 1.20,  label: 'Sedentario — ufficio, niente sport' },
+  { v: 1.375, label: 'Leggero — camminate, 1-3 allenamenti a settimana' },
+  { v: 1.55,  label: 'Moderato — 3-5 allenamenti a settimana' },
+  { v: 1.725, label: 'Intenso — 6-7 allenamenti a settimana' },
+  { v: 1.90,  label: 'Molto intenso — lavoro fisico o doppi allenamenti' },
+];
+
+const S = {
+  session: null, view: 'diario',
+  profile: null,          // al_profile
+  objective: null,        // ps_objectives, l'ultimo attivo
+  milestones: [],         // [{date, weight}] dell'obiettivo
+  weights: [],            // ps_weight_tracking (ultimi mesi)
+  foods: [],              // al_foods
+  logs: [],               // al_log (ultimi mesi)
+  days: {},               // al_days indicizzato per giorno
+  day: null,              // il giorno che si sta guardando
+  charts: {},
+  periodo: 30,            // giorni mostrati in Andamento
+  ricerca: { q: '', locali: [], off: [], stato: '' },
+  cercaAlimenti: '',
+};
+
+/* ── Supabase REST ──────────────────────────────────────────── */
+const tok = () => S.session?.access_token || SUPABASE_ANON_KEY;
+// L'id dell'utente serve agli upsert: PostgREST vuole nel payload le colonne su cui fa
+// ON CONFLICT. Se la sessione non ce l'ha, la chiave sparisce da JSON.stringify e resta il
+// DEFAULT auth.uid() della colonna — che è comunque lo stesso valore.
+const uid = () => S.session?.user?.id || undefined;
+function sbH(extra = {}) {
+  return { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${tok()}`, 'Content-Type': 'application/json', ...extra };
+}
+async function sbQ(table, params = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, { headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbIns(table, body, extraHeaders = {}) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST', headers: sbH({ 'Prefer': 'return=representation', ...extraHeaders }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json().catch(() => []);
+}
+async function sbUpd(table, filter, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method: 'PATCH', headers: sbH({ 'Prefer': 'return=representation' }), body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.json();
+}
+async function sbDel(table, filter) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: sbH() });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+}
+
+/* ── Sessione ───────────────────────────────────────────────── */
+const loadSession = () => { try { return JSON.parse(localStorage.getItem('garsal_session')); } catch { return null; } };
+async function initFromSbToken(token) {
+  try {
+    const user = await (await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token}` },
+    })).json();
+    if (user?.id) return { access_token: token, refresh_token: null, expires_at: Date.now() + 3600_000, user };
+  } catch {}
+  return null;
+}
+async function refreshSession(session) {
+  if (!session?.refresh_token) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST', headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const ns = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: Date.now() + d.expires_in * 1000, user: d.user };
+    localStorage.setItem('garsal_session', JSON.stringify(ns));
+    return ns;
+  } catch { return null; }
+}
+
+/* ── Formattazione e date ───────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const setHtml = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+const esc = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const num = n => (n == null || isNaN(n)) ? null : +n;
+const fmtKcal = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('it-IT');
+const fmtG = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 10) / 10).toLocaleString('it-IT');
+const fmtKg = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 10) / 10).toLocaleString('it-IT', { minimumFractionDigits: 1 });
+
+// La data locale, non quella UTC: alle 01:30 di notte toUTCString() direbbe ancora ieri, e la
+// riga finirebbe nel giorno sbagliato. È lo stesso motivo per cui le RPC dei task vogliono
+// p_today dal client.
+function oggiStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const dataDa = s => new Date(s + 'T12:00:00');   // mezzogiorno: nessun fuso può spostare il giorno
+const giorniFra = (a, b) => Math.round((dataDa(b) - dataDa(a)) / 86400000);
+function piuGiorni(s, n) { const d = dataDa(s); d.setDate(d.getDate() + n); return oggiStr(d); }
+const fmtData = s => s ? dataDa(s).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'long' }) : '—';
+const fmtDataBreve = s => s ? dataDa(s).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—';
+
+function showToast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   IL CONTO DELLE CALORIE
+   ═══════════════════════════════════════════════════════════════ */
+
+// L'età compiuta a una certa data. Dalla data di nascita e non da un numero scritto a mano:
+// un'età archiviata è giusta un anno solo, poi comincia a mentire senza dirlo.
+function etaAl(giorno) {
+  if (!S.profile?.birth_date) return null;
+  const n = dataDa(S.profile.birth_date), d = dataDa(giorno);
+  let e = d.getFullYear() - n.getFullYear();
+  const m = d.getMonth() - n.getMonth();
+  if (m < 0 || (m === 0 && d.getDate() < n.getDate())) e--;
+  return e;
+}
+
+// Mifflin-St Jeor, che è la formula che le linee guida preferiscono a Harris-Benedict:
+//   uomo:  10×kg + 6.25×cm − 5×età + 5
+//   donna: 10×kg + 6.25×cm − 5×età − 161
+function metabolismoBasale(pesoKg, giorno) {
+  const p = S.profile;
+  if (!p || !p.height_cm || !p.sex || !p.birth_date || !pesoKg) return null;
+  const eta = etaAl(giorno);
+  if (eta == null || eta < 10 || eta > 110) return null;
+  const base = 10 * pesoKg + 6.25 * (+p.height_cm) - 5 * eta;
+  return p.sex === 'M' ? base + 5 : base - 161;
+}
+
+// Il peso di un giorno: il MINIMO delle pesate di quel giorno, come fa «Ti pisasti?» — ci si
+// pesa più volte e quella che conta è la più bassa. Se quel giorno non c'è nessuna pesata si
+// ripiega sull'ultima nota PRIMA di quel giorno: il peso di domani non può entrare nel conto
+// di ieri, o un giorno passato cambierebbe verdetto ogni volta che si sale sulla bilancia.
+function pesoAl(giorno) {
+  const delGiorno = S.weights.filter(w => w.date === giorno && num(w.weight) != null);
+  if (delGiorno.length) return Math.min(...delGiorno.map(w => +w.weight));
+  const prima = S.weights.filter(w => w.date < giorno && num(w.weight) != null);
+  if (!prima.length) return null;
+  const ultimo = prima.reduce((a, b) => (a.date >= b.date ? a : b));
+  return +ultimo.weight;
+}
+
+// Il peso che il piano dell'obiettivo chiede per una certa data: interpolazione lineare fra le
+// due milestone che la contengono. Ricalcata da getInterpolatedTarget() di weight-quest.html —
+// ⚠️ se cambia là, va cambiata anche qui, o le due pagine daranno due traguardi diversi per lo
+// stesso giorno.
+function pesoPianoAl(giorno) {
+  const ms = S.milestones;
+  if (!ms || ms.length < 2) return null;
+  if (giorno <= ms[0].date) return +ms[0].weight;
+  const ultima = ms[ms.length - 1];
+  if (giorno >= ultima.date) return +ultima.weight;
+  for (let i = 0; i < ms.length - 1; i++) {
+    const a = ms[i], b = ms[i + 1];
+    if (giorno >= a.date && giorno <= b.date) {
+      const tot = giorniFra(a.date, b.date);
+      if (!tot) return +a.weight;
+      const q = giorniFra(a.date, giorno) / tot;
+      return Math.round((+a.weight + (+b.weight - +a.weight) * q) * 100) / 100;
+    }
+  }
+  return null;
+}
+
+/* Il conto vero e proprio. Torna sempre un oggetto: `ok` false dice PERCHÉ manca il numero,
+   perché «non lo so» e «zero» sono due cose diverse — un target a zero farebbe sembrare
+   sforata ogni giornata. */
+function calcolaTarget(giorno) {
+  const out = { ok: false, motivo: null, kcal: null, bmr: null, tdee: null, deficit: 0,
+                peso: null, pesoPiano: null, pesoFinale: null, giorniRimasti: null,
+                kgDaPerdere: null, kcalRichiesta: null, frenata: false, avvisi: [] };
+
+  const p = S.profile;
+  if (!p || !p.birth_date || !p.height_cm || !p.sex) { out.motivo = 'profilo'; return out; }
+
+  const peso = pesoAl(giorno);
+  if (peso == null) { out.motivo = 'peso'; return out; }
+  out.peso = peso;
+
+  const bmr = metabolismoBasale(peso, giorno);
+  if (bmr == null) { out.motivo = 'profilo'; return out; }
+  out.bmr = bmr;
+  out.tdee = bmr * (+p.activity || 1.375);
+
+  const ob = S.objective;
+  if (!ob) {
+    // Senza obiettivo attivo non si inventa un dimagrimento: il target è il mantenimento, e la
+    // pagina lo dice invece di far finta che ci sia un piano.
+    out.ok = true; out.kcal = out.tdee; out.motivo = 'mantenimento';
+    return out;
+  }
+
+  out.pesoPiano = pesoPianoAl(giorno);
+  const finale = S.milestones.length ? +S.milestones[S.milestones.length - 1].weight : num(ob.end_weight);
+  out.pesoFinale = finale;
+
+  const fine = ob.end_date || (S.milestones.length ? S.milestones[S.milestones.length - 1].date : null);
+  // Almeno un giorno: a fine obiettivo la divisione per zero darebbe un deficit infinito, e a
+  // obiettivo scaduto un deficit negativo — cioè un invito a mangiare di più proprio il giorno
+  // in cui il tempo è finito.
+  out.giorniRimasti = fine ? Math.max(1, giorniFra(giorno, fine)) : null;
+
+  if (finale == null || out.giorniRimasti == null) {
+    out.ok = true; out.kcal = out.tdee; out.motivo = 'mantenimento';
+    return out;
+  }
+
+  out.kgDaPerdere = Math.max(0, peso - finale);
+  out.deficit = out.kgDaPerdere * KCAL_PER_KG / out.giorniRimasti;
+  out.kcalRichiesta = out.tdee - out.deficit;
+  out.kcal = out.kcalRichiesta;
+  out.motivo = out.kgDaPerdere > 0 ? 'obiettivo' : 'raggiunto';
+
+  const minimo = KCAL_MINIME[p.sex] || 1200;
+  if (out.kcal < minimo) {
+    out.frenata = true;
+    out.kcal = minimo;
+    out.deficit = out.tdee - minimo;
+    // Un target richiesto sotto zero non si scrive come numero: «−1.062 kcal» non vuol dire
+    // niente a chi legge, e fa sembrare rotta la pagina invece di dire quel che è davvero
+    // successo — che in quei giorni quel peso non ci si arriva, nemmeno digiunando.
+    out.avvisi.push(out.kcalRichiesta <= 0
+      ? `In ${out.giorniRimasti} ${out.giorniRimasti === 1 ? 'giorno' : 'giorni'} quei ${fmtKg(out.kgDaPerdere)} kg non si perdono: servirebbe più di quanto il corpo consuma in un giorno. Il target è fermo a ${minimo} kcal — la data di fine va spostata in «Ti pisasti?».`
+      : `Il ritmo richiesto porterebbe il target a ${fmtKcal(out.kcalRichiesta)} kcal: troppo poco. È stato fermato a ${minimo} kcal, ma così la data di fine non si raggiunge — meglio spostare i traguardi in «Ti pisasti?».`);
+  } else if (out.deficit > 1000) {
+    out.avvisi.push(`Il piano chiede un deficit di ${fmtKcal(out.deficit)} kcal al giorno, cioè oltre un chilo a settimana. È tanto: se non regge, sposta la data di fine invece di saltare i pasti.`);
+  }
+  out.ok = true;
+  return out;
+}
+
+// Il target da mostrare per un giorno: quello congelato se c'è, altrimenti quello calcolato ora.
+// La riga congelata vince sempre — è il senso stesso del congelamento.
+function targetDelGiorno(giorno) {
+  const riga = S.days[giorno];
+  if (riga && num(riga.kcal_target) != null) {
+    return { ok: true, congelato: true, kcal: +riga.kcal_target, bmr: num(riga.bmr), tdee: num(riga.tdee),
+             deficit: num(riga.deficit_kcal) || 0, peso: num(riga.weight_kg),
+             pesoPiano: pesoPianoAl(giorno), motivo: 'congelato', avvisi: [] };
+  }
+  const c = calcolaTarget(giorno);
+  c.congelato = false;
+  return c;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARICAMENTO DATI
+   ═══════════════════════════════════════════════════════════════ */
+
+// Quanto indietro si guarda. Il diario e le pesate servono per il grafico e per il peso di
+// riferimento; tre mesi bastano e tengono la pagina leggera.
+const GIORNI_STORICO = 120;
+
+async function loadData() {
+  const da = piuGiorni(oggiStr(), -GIORNI_STORICO);
+
+  const [profile, objectives, weights, foods, logs, days] = await Promise.all([
+    sbQ('al_profile', 'select=*&limit=1'),
+    // L'ultimo obiettivo ATTIVO: è quello su cui si sta lavorando adesso. Gli obiettivi chiusi
+    // restano in archivio ma non devono dettare il target di oggi.
+    sbQ('ps_objectives', 'status=eq.active&order=created_at.desc&limit=1'),
+    sbQ('ps_weight_tracking', `date=gte.${da}&order=date.asc&limit=2000`),
+    sbQ('al_foods', 'select=*&order=favorite.desc,times_used.desc,name.asc&limit=2000'),
+    sbQ('al_log', `day=gte.${da}&order=day.desc,created_at.asc&limit=5000`),
+    sbQ('al_days', `day=gte.${da}&limit=500`),
+  ]);
+
+  S.profile = profile?.[0] || null;
+  S.objective = objectives?.[0] || null;
+  S.milestones = leggiMilestones(S.objective);
+  S.weights = weights || [];
+  S.foods = foods || [];
+  S.logs = logs || [];
+  S.days = {};
+  (days || []).forEach(d => { S.days[d.day] = d; });
+}
+
+// `milestones` è archiviata come stringa JSON da weight-quest.html, ma una colonna jsonb può
+// tornare già come array: si accettano tutt'e due invece di dare per scontato quale delle due
+// arriva. In ordine di data, perché l'interpolazione lo dà per scontato.
+function leggiMilestones(ob) {
+  if (!ob) return [];
+  let ms = ob.milestones;
+  if (typeof ms === 'string') { try { ms = JSON.parse(ms); } catch { ms = null; } }
+  if (!Array.isArray(ms)) return [];
+  return ms.filter(m => m && m.date && m.weight != null)
+           .map(m => ({ date: String(m.date).slice(0, 10), weight: +m.weight }))
+           .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function reload() {
+  await loadData();
+  render();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OPEN FOOD FACTS — i prodotti confezionati
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ⚠️ Da browser lo User-Agent non si può impostare, e Open Food Facts chiede di identificarsi:
+   per questo ci sono app_name / app_version / app_uuid in query string, che è il sostituto
+   previsto apposta. Senza, si finisce nel mucchio del traffico anonimo — che è quello che viene
+   limitato per primo.
+
+   ⚠️ I limiti sono diversi per tipo di chiamata: la lettura di un prodotto è larga, la RICERCA
+   TESTUALE sta intorno alle 10 al minuto. Cercare a ogni tasto premuto fa bandire l'indirizzo IP,
+   quindi la ricerca parte solo dopo una pausa di digitazione (vedi RITARDO_RICERCA). */
+const OFF_BASE = 'https://it.openfoodfacts.org';
+const OFF_CAMPI = 'code,product_name,product_name_it,generic_name,brands,quantity,serving_quantity,nutriments';
+const RITARDO_RICERCA = 700;
+
+function offIdent() {
+  // Un identificativo stabile per questo browser: serve a Open Food Facts per distinguere le
+  // chiamate, non a noi per riconoscere l'utente — non ci finisce dentro niente di personale.
+  let uuid = localStorage.getItem('al_off_uuid');
+  if (!uuid) {
+    uuid = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+    localStorage.setItem('al_off_uuid', uuid);
+  }
+  return `app_name=garsal-calorie&app_version=${encodeURIComponent(APP_VERSION)}&app_uuid=${encodeURIComponent(uuid)}`;
+}
+
+/* Da prodotto di Open Food Facts ad alimento nostro.
+
+   ⚠️ Le calorie non sono sempre dove ci si aspetta: `energy-kcal_100g` c'è quasi sempre, ma su
+   parecchi prodotti l'etichetta è stata inserita in kJ e allora si converte (1 kcal = 4,184 kJ).
+   `energy_100g` senza suffisso è ambiguo — dipende da `energy_unit` — quindi si guarda l'unità
+   invece di dare per scontato che siano kJ. Un prodotto senza nessuna delle tre non è un prodotto
+   a zero calorie: è un prodotto di cui non si sa niente, e torna null perché la pagina possa
+   dirlo invece di archiviare uno zero falso. */
+function daOFF(p) {
+  const n = p?.nutriments || {};
+  let kcal = num(n['energy-kcal_100g']);
+  if (kcal == null && num(n['energy-kj_100g']) != null) kcal = +n['energy-kj_100g'] / 4.184;
+  if (kcal == null && num(n['energy_100g']) != null) {
+    kcal = (n.energy_unit === 'kcal') ? +n['energy_100g'] : +n['energy_100g'] / 4.184;
+  }
+  const nome = (p.product_name_it || p.product_name || p.generic_name || '').trim();
+  if (!nome || kcal == null) return null;
+  return {
+    barcode: p.code || null,
+    name: nome,
+    brand: (p.brands || '').split(',')[0].trim() || null,
+    source: 'off',
+    kcal_100g: Math.round(kcal * 10) / 10,
+    proteins_100g: num(n.proteins_100g),
+    fat_100g: num(n.fat_100g),
+    sat_fat_100g: num(n['saturated-fat_100g']),
+    carbs_100g: num(n.carbohydrates_100g),
+    sugars_100g: num(n.sugars_100g),
+    fiber_100g: num(n.fiber_100g),
+    salt_100g: num(n.salt_100g),
+    default_grams: num(p.serving_quantity) || null,
+    quantita: p.quantity || null,
+  };
+}
+
+async function offCerca(q) {
+  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=${OFF_CAMPI}&${offIdent()}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Open Food Facts: HTTP ' + r.status);
+  const d = await r.json();
+  return (d.products || []).map(daOFF).filter(Boolean);
+}
+
+async function offProdotto(barcode) {
+  const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${OFF_CAMPI}&${offIdent()}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Open Food Facts: HTTP ' + r.status);
+  const d = await r.json();
+  if (d.status !== 1 || !d.product) return null;
+  return daOFF(d.product);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCRITTURE
+   ═══════════════════════════════════════════════════════════════ */
+
+const CAMPI_NUTRIENTI = ['kcal_100g', 'proteins_100g', 'fat_100g', 'sat_fat_100g',
+                         'carbs_100g', 'sugars_100g', 'fiber_100g', 'salt_100g'];
+
+/* Congela il target del giorno la prima volta che ci si scrive qualcosa.
+
+   `resolution=ignore-duplicates` e non un upsert: se la riga c'è già NON si tocca, ed è tutto
+   il punto — un upsert la riscriverebbe col peso di oggi ogni volta che si aggiunge un alimento,
+   cioè il congelamento non esisterebbe. */
+async function congelaGiorno(giorno) {
+  if (S.days[giorno]) return S.days[giorno];
+  const c = calcolaTarget(giorno);
+  if (!c.ok) return null;
+  try {
+    await sbIns('al_days?on_conflict=user_id,day', [{
+      user_id: uid(),
+      day: giorno,
+      kcal_target: Math.round(c.kcal),
+      weight_kg: c.peso,
+      bmr: c.bmr == null ? null : Math.round(c.bmr),
+      tdee: c.tdee == null ? null : Math.round(c.tdee),
+      deficit_kcal: Math.round(c.deficit || 0),
+      objective_id: S.objective?.id || null,
+    }], { 'Prefer': 'resolution=ignore-duplicates,return=representation' });
+  } catch (err) {
+    // Un target non congelato non impedisce di segnare quel che si è mangiato: la riga del
+    // diario è il dato, il target è il commento. Si riprova alla prossima apertura.
+    console.warn('congelaGiorno:', err.message);
+  }
+  const righe = await sbQ('al_days', `day=eq.${giorno}&limit=1`);
+  if (righe?.[0]) S.days[giorno] = righe[0];
+  return S.days[giorno] || null;
+}
+
+// Ricalcola il target di UN giorno, su richiesta esplicita. Solo così: automatico riscriverebbe
+// il passato, che è esattamente ciò che il congelamento evita.
+async function ricalcolaGiorno(giorno) {
+  const c = calcolaTarget(giorno);
+  if (!c.ok) { alert('Non si può ricalcolare: ' + spiegaMotivo(c.motivo)); return; }
+  await sbUpd('al_days', `day=eq.${giorno}`, {
+    kcal_target: Math.round(c.kcal), weight_kg: c.peso,
+    bmr: c.bmr == null ? null : Math.round(c.bmr),
+    tdee: c.tdee == null ? null : Math.round(c.tdee),
+    deficit_kcal: Math.round(c.deficit || 0),
+    objective_id: S.objective?.id || null,
+    updated_at: new Date().toISOString(),
+  });
+  showToast('🔄 Target del giorno ricalcolato');
+  await reload();
+}
+
+/* Salva un alimento trovato su Open Food Facts nel catalogo, così la seconda volta è già lì e
+   non serve nessuna ricerca. Se il codice a barre c'è già si aggiorna quella riga: lo stesso
+   prodotto non deve comparire due volte nell'elenco. */
+async function salvaAlimentoOff(a) {
+  const esistente = a.barcode ? S.foods.find(f => f.barcode === a.barcode) : null;
+  const payload = {
+    name: a.name, brand: a.brand, barcode: a.barcode, source: 'off',
+    kcal_100g: a.kcal_100g, proteins_100g: a.proteins_100g, fat_100g: a.fat_100g,
+    sat_fat_100g: a.sat_fat_100g, carbs_100g: a.carbs_100g, sugars_100g: a.sugars_100g,
+    fiber_100g: a.fiber_100g, salt_100g: a.salt_100g, default_grams: a.default_grams,
+    updated_at: new Date().toISOString(),
+  };
+  if (esistente) {
+    const [r] = await sbUpd('al_foods', `id=eq.${esistente.id}`, payload);
+    return r;
+  }
+  const [r] = await sbIns('al_foods', [payload]);
+  return r;
+}
+
+// Aggiunge una riga al diario. I valori per 100 g si copiano SULLA RIGA: correggere domani le
+// calorie di un alimento non deve riscrivere quel che si è mangiato oggi.
+async function aggiungiAlDiario({ giorno, meal, alimento, grammi, foodId }) {
+  const riga = {
+    day: giorno, meal, food_id: foodId || null,
+    name: alimento.name, brand: alimento.brand || null, grams: grammi,
+  };
+  CAMPI_NUTRIENTI.forEach(c => { riga[c] = num(alimento[c]); });
+  await congelaGiorno(giorno);
+  await sbIns('al_log', [riga]);
+  if (foodId) {
+    const f = S.foods.find(x => x.id === foodId);
+    if (f) await sbUpd('al_foods', `id=eq.${foodId}`, { times_used: (f.times_used || 0) + 1 }).catch(() => {});
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONTI SULLE RIGHE DEL DIARIO
+   ═══════════════════════════════════════════════════════════════ */
+
+// Una riga porta i valori per 100 g e i grammi: le calorie sono la moltiplicazione. Si fa qui e
+// in un posto solo, così non c'è modo che due schermate diano due numeri per la stessa riga.
+const perRiga = (r, campo) => (num(r[campo]) == null ? null : +r[campo] * (+r.grams) / 100);
+const kcalDi = r => perRiga(r, 'kcal_100g') || 0;
+
+function righeDelGiorno(giorno) {
+  return S.logs.filter(r => r.day === giorno);
+}
+function totaliDi(righe) {
+  const t = { kcal: 0, proteine: 0, grassi: 0, saturi: 0, carbo: 0, zuccheri: 0, fibre: 0, sale: 0 };
+  righe.forEach(r => {
+    t.kcal     += kcalDi(r);
+    t.proteine += perRiga(r, 'proteins_100g') || 0;
+    t.grassi   += perRiga(r, 'fat_100g') || 0;
+    t.saturi   += perRiga(r, 'sat_fat_100g') || 0;
+    t.carbo    += perRiga(r, 'carbs_100g') || 0;
+    t.zuccheri += perRiga(r, 'sugars_100g') || 0;
+    t.fibre    += perRiga(r, 'fiber_100g') || 0;
+    t.sale     += perRiga(r, 'salt_100g') || 0;
+  });
+  return t;
+}
+
+function spiegaMotivo(motivo) {
+  if (motivo === 'profilo') return 'manca il profilo — vai in ⚙️ Impostazioni e scrivi data di nascita, altezza e sesso';
+  if (motivo === 'peso') return 'manca una pesata — segnane una in «Ti pisasti?», il target si calcola sul peso';
+  return 'dato mancante';
+}
+
+// Il pasto proposto in base all'ora: si segna quel che si è appena mangiato, e alle 13 è il
+// pranzo nove volte su dieci. Resta cambiabile — è una proposta, non una regola.
+function pastoDellOra() {
+  const h = new Date().getHours();
+  return (PASTI.find(p => h < p.oraFino) || PASTI[PASTI.length - 1]).id;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISTA: DIARIO
+   ═══════════════════════════════════════════════════════════════ */
+
+function renderDiario() {
+  const giorno = S.day;
+  const oggi = oggiStr();
+  const t = targetDelGiorno(giorno);
+  const righe = righeDelGiorno(giorno);
+  const tot = totaliDi(righe);
+  const mangiate = tot.kcal;
+  const restano = t.ok ? t.kcal - mangiate : null;
+  const quota = t.ok && t.kcal > 0 ? Math.min(100, (mangiate / t.kcal) * 100) : 0;
+  const sforato = t.ok && mangiate > t.kcal;
+  const colore = !t.ok ? 'var(--c-muted)' : sforato ? 'var(--c-danger)' : quota > 85 ? 'var(--c-warning)' : 'var(--c-primary)';
+
+  let h = `
+  <div class="view-header">
+    <div>
+      <div class="page-title">📓 Diario</div>
+      <div class="page-sub">${esc(fmtData(giorno))}${giorno === oggi ? ' · oggi' : ''}</div>
+    </div>
+    <div class="day-nav">
+      <button class="btn btn-outline btn-sm" data-action="giorno-prec">‹</button>
+      <input type="date" class="form-input" id="day-picker" value="${giorno}" max="${oggi}" />
+      <button class="btn btn-outline btn-sm" data-action="giorno-succ" ${giorno >= oggi ? 'disabled' : ''}>›</button>
+      ${giorno !== oggi ? '<button class="btn btn-outline btn-sm" data-action="giorno-oggi">Oggi</button>' : ''}
+    </div>
+  </div>`;
+
+  // ── I quattro numeri che si guardano per primi ──
+  h += `<div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Target</div>
+      <div class="kpi-value">${t.ok ? fmtKcal(t.kcal) : '—'}</div>
+      <div class="kpi-note">${t.ok ? 'kcal' + (t.congelato ? ' · congelato' : '') : 'da calcolare'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mangiate</div>
+      <div class="kpi-value">${fmtKcal(mangiate)}</div>
+      <div class="kpi-note">${righe.length} ${righe.length === 1 ? 'riga' : 'righe'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">${sforato ? 'Sforate' : 'Restano'}</div>
+      <div class="kpi-value" style="color:${colore}">${restano == null ? '—' : fmtKcal(Math.abs(restano))}</div>
+      <div class="kpi-note">${restano == null ? '' : 'kcal'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Peso</div>
+      <div class="kpi-value">${t.peso == null ? '—' : fmtKg(t.peso)}</div>
+      <div class="kpi-note">${t.peso == null ? 'nessuna pesata' : 'kg' + (t.pesoPiano != null ? ' · piano ' + fmtKg(t.pesoPiano) : '')}</div>
+    </div>
+  </div>`;
+
+  // ── La barra: quanto del target è già stato mangiato ──
+  h += `<div class="card">
+    <div class="bar-track"><div class="bar-fill" style="width:${quota}%;background:${colore}"></div></div>
+    <div class="bar-legend">
+      <span>${fmtKcal(mangiate)} kcal</span>
+      <span>${t.ok ? 'target ' + fmtKcal(t.kcal) + ' kcal' : 'target non calcolabile'}</span>
+    </div>
+    ${renderSpiegazioneTarget(t, giorno)}
+  </div>`;
+
+  // ── I pasti ──
+  h += '<div class="card-header-row mt-16"><div class="card-title">I pasti</div>'
+     + `<button class="btn btn-primary btn-sm" data-action="aggiungi" data-meal="${pastoDellOra()}">➕ Aggiungi alimento</button></div>`;
+
+  PASTI.forEach(p => {
+    const rp = righe.filter(r => r.meal === p.id);
+    // Un pasto vuoto in un giorno passato è rumore: si mostra solo se ha qualcosa dentro, o se
+    // il giorno è oggi — dove il riquadro vuoto è l'invito a riempirlo.
+    if (!rp.length && giorno !== oggi) return;
+    const k = rp.reduce((s, r) => s + kcalDi(r), 0);
+    h += `<div class="meal">
+      <div class="meal-head">
+        <span class="meal-name grow">${p.label}</span>
+        <span class="meal-kcal">${fmtKcal(k)} kcal</span>
+        <button class="btn-icon" data-action="aggiungi" data-meal="${p.id}" title="Aggiungi a ${esc(p.label)}">➕</button>
+      </div>
+      <div class="meal-rows">`;
+    if (!rp.length) {
+      h += '<div class="meal-empty">Niente ancora.</div>';
+    } else {
+      rp.forEach(r => {
+        h += `<div class="food-row">
+          <div class="grow">
+            <div class="food-name">${esc(r.name)}${r.brand ? ' <span class="text-muted text-xs">' + esc(r.brand) + '</span>' : ''}</div>
+            <div class="food-sub">${fmtG(r.grams)} g · ${fmtKcal(r.kcal_100g)} kcal/100 g</div>
+          </div>
+          <span class="food-kcal">${fmtKcal(kcalDi(r))}</span>
+          <button class="btn-icon" data-action="modifica-riga" data-id="${r.id}" title="Cambia i grammi">✏️</button>
+          <button class="btn-icon btn-icon-danger" data-action="elimina-riga" data-id="${r.id}" title="Elimina">🗑</button>
+        </div>`;
+      });
+    }
+    h += '</div></div>';
+  });
+
+  // ── I macro della giornata ──
+  if (righe.length) {
+    h += `<div class="card mt-16">
+      <div class="card-title">Cosa c'era dentro</div>
+      <div class="macro-grid">
+        ${boxMacro('Proteine', tot.proteine, 'g')}
+        ${boxMacro('Grassi', tot.grassi, 'g')}
+        ${boxMacro('di cui saturi', tot.saturi, 'g')}
+        ${boxMacro('Carboidrati', tot.carbo, 'g')}
+        ${boxMacro('di cui zuccheri', tot.zuccheri, 'g')}
+        ${boxMacro('Fibre', tot.fibre, 'g')}
+        ${boxMacro('Sale', tot.sale, 'g')}
+      </div>
+      <div class="grid-2 mt-16">
+        <div><div class="card-title text-sm">Da dove vengono le calorie</div><div class="chart-wrap-sm"><canvas id="ch-macro"></canvas></div></div>
+        <div class="text-sm text-muted" style="align-self:center">
+          I grammi si contano solo dove l'alimento li dichiara: un prodotto senza fibre nell'etichetta
+          conta zero fibre, che non vuol dire che non ne abbia.
+          <div class="mt-8">Proteine e carboidrati valgono 4 kcal al grammo, i grassi 9: è per questo che
+          un cucchiaio d'olio pesa poco e conta tanto.</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  setHtml('view-diario', h);
+  if (righe.length) disegnaMacro(tot);
+}
+
+function boxMacro(label, valore, unita) {
+  return `<div class="macro-box"><div class="macro-label">${esc(label)}</div>
+    <div class="macro-value">${fmtG(valore)} ${unita}</div></div>`;
+}
+
+/* Il riquadro che spiega da dove esce il target. Non è decorazione: un numero calcolato da
+   quattro grandezze che nessuno vede è un numero di cui non ci si può fidare, e alla prima
+   sorpresa si smette di seguirlo. */
+function renderSpiegazioneTarget(t, giorno) {
+  if (!t.ok) {
+    return `<div class="note-box is-warn mt-12">Il target di oggi non si può calcolare: ${esc(spiegaMotivo(t.motivo))}.</div>`;
+  }
+  let testo = '';
+  if (t.motivo === 'mantenimento') {
+    testo = `Nessun obiettivo attivo in «Ti pisasti?»: il target è il <strong>mantenimento</strong> — `
+          + `basale ${fmtKcal(t.bmr)} × attività = ${fmtKcal(t.tdee)} kcal.`;
+  } else if (t.motivo === 'raggiunto') {
+    testo = `Il peso finale è già raggiunto: il target torna al mantenimento, ${fmtKcal(t.tdee)} kcal.`;
+  } else if (t.motivo === 'congelato') {
+    testo = `Target congelato per questa giornata: ${fmtKcal(t.kcal)} kcal`
+          + (t.tdee ? ` (consumo stimato ${fmtKcal(t.tdee)} − deficit ${fmtKcal(t.deficit)})` : '')
+          + (t.peso != null ? `, sul peso di ${fmtKg(t.peso)} kg.` : '.');
+  } else {
+    testo = `Consumo stimato ${fmtKcal(t.tdee)} kcal (basale ${fmtKcal(t.bmr)} × attività ${(+S.profile.activity).toLocaleString('it-IT')}) `
+          + `− ${fmtKcal(t.deficit)} kcal di deficit = <strong>${fmtKcal(t.kcal)} kcal</strong>. `
+          + `Il deficit sono i ${fmtKg(t.kgDaPerdere)} kg che mancano al peso finale (${fmtKg(t.pesoFinale)} kg) `
+          + `spalmati sui ${t.giorniRimasti} giorni che restano.`;
+  }
+  let scarto = '';
+  if (t.pesoPiano != null && t.peso != null) {
+    const d = t.peso - t.pesoPiano;
+    scarto = Math.abs(d) < 0.05
+      ? ' Sei esattamente sulla curva del piano.'
+      : ` Rispetto alla curva del piano sei <strong>${d > 0 ? 'indietro' : 'avanti'} di ${fmtKg(Math.abs(d))} kg</strong>.`;
+  }
+  const avvisi = (t.avvisi || []).map(a => `<div class="note-box is-danger mt-8">⚠️ ${esc(a)}</div>`).join('');
+  const puoRicalcolare = t.congelato && S.days[giorno];
+  return `<div class="note-box mt-12">${testo}${scarto}
+      ${puoRicalcolare ? `<div class="mt-8"><button class="btn btn-outline btn-sm" data-action="ricalcola" data-day="${giorno}">🔄 Ricalcola questa giornata</button></div>` : ''}
+    </div>${avvisi}`;
+}
+
+function disegnaMacro(tot) {
+  // Le fette sono in CALORIE e non in grammi: in grammi i grassi sembrerebbero una fetta piccola
+  // pur essendo spesso la metà dell'energia, che è l'unica cosa che questa torta deve dire.
+  const kProt = (tot.proteine || 0) * 4, kCarb = (tot.carbo || 0) * 4, kGras = (tot.grassi || 0) * 9;
+  if (kProt + kCarb + kGras <= 0) return;
+  drawChart('ch-macro', {
+    type: 'doughnut',
+    data: {
+      labels: ['Proteine', 'Carboidrati', 'Grassi'],
+      datasets: [{ data: [kProt, kCarb, kGras].map(v => Math.round(v)),
+                   backgroundColor: ['#0891b2', '#d97706', '#dc2626'], borderWidth: 0 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11 } },
+        tooltip: { callbacks: { label: c => `${c.label}: ${fmtKcal(c.parsed)} kcal` } },
+      },
+    },
+  });
+}
+
+function drawChart(id, config) {
+  if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
+  const canvas = $(id);
+  if (!canvas) return;
+  S.charts[id] = new Chart(canvas.getContext('2d'), config);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISTA: ANDAMENTO
+   ═══════════════════════════════════════════════════════════════ */
+
+// I giorni del periodo, dal più vecchio a oggi. Si parte dall'elenco dei GIORNI e non da quello
+// delle righe del diario: un giorno saltato deve vedersi come una colonna vuota, non sparire
+// dal grafico facendo sembrare che il diario sia stato tenuto tutti i giorni.
+function giorniDelPeriodo() {
+  const oggi = oggiStr();
+  const out = [];
+  for (let i = S.periodo - 1; i >= 0; i--) {
+    const g = piuGiorni(oggi, -i);
+    const righe = righeDelGiorno(g);
+    const t = targetDelGiorno(g);
+    out.push({
+      giorno: g,
+      kcal: righe.length ? totaliDi(righe).kcal : null,   // null = non segnato, ≠ zero calorie
+      target: t.ok ? t.kcal : null,
+      peso: pesoAl(g),
+      pesoPiano: pesoPianoAl(g),
+      righe: righe.length,
+    });
+  }
+  return out;
+}
+
+function renderAndamento() {
+  const gg = giorniDelPeriodo();
+  const segnati = gg.filter(g => g.kcal != null);
+  const conTarget = segnati.filter(g => g.target != null);
+  const media = segnati.length ? segnati.reduce((s, g) => s + g.kcal, 0) / segnati.length : null;
+  const dentro = conTarget.filter(g => g.kcal <= g.target).length;
+  // Il saldo è la somma degli scarti sui soli giorni SEGNATI: sommarci i giorni non segnati come
+  // se fossero a zero calorie darebbe un deficit enorme e falso — un giorno non segnato non è un
+  // giorno di digiuno.
+  const saldo = conTarget.reduce((s, g) => s + (g.kcal - g.target), 0);
+
+  let h = `
+  <div class="view-header">
+    <div>
+      <div class="page-title">📈 Andamento</div>
+      <div class="page-sub">Quanto si è mangiato contro quanto si doveva</div>
+    </div>
+    <select class="form-input form-select" data-action="periodo" style="width:auto">
+      ${[14, 30, 60, 90].map(n => `<option value="${n}" ${S.periodo === n ? 'selected' : ''}>Ultimi ${n} giorni</option>`).join('')}
+    </select>
+  </div>`;
+
+  h += `<div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Media al giorno</div>
+      <div class="kpi-value">${fmtKcal(media)}</div>
+      <div class="kpi-note">kcal · su ${segnati.length} ${segnati.length === 1 ? 'giorno segnato' : 'giorni segnati'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Dentro il target</div>
+      <div class="kpi-value">${conTarget.length ? dentro + '/' + conTarget.length : '—'}</div>
+      <div class="kpi-note">${conTarget.length ? Math.round(dentro / conTarget.length * 100) + '%' : ''}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Saldo del periodo</div>
+      <div class="kpi-value ${saldo > 0 ? 'neg' : 'pos'}">${saldo === 0 ? '0' : (saldo > 0 ? '+' : '−') + fmtKcal(Math.abs(saldo))}</div>
+      <div class="kpi-note">kcal ${saldo > 0 ? 'di troppo' : 'in meno'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Vale circa</div>
+      <div class="kpi-value ${saldo > 0 ? 'neg' : 'pos'}">${saldo === 0 ? '0' : (saldo > 0 ? '+' : '−') + fmtKg(Math.abs(saldo) / KCAL_PER_KG)}</div>
+      <div class="kpi-note">kg rispetto al piano</div></div>
+  </div>`;
+
+  h += `<div class="card">
+    <div class="card-title">Calorie al giorno</div>
+    <div class="chart-wrap"><canvas id="ch-kcal"></canvas></div>
+    <div class="text-xs text-muted mt-8">Le colonne sono le calorie segnate, la linea il target di quel giorno.
+      Un giorno senza colonna è un giorno non segnato, non un giorno a zero.</div>
+  </div>`;
+
+  if (gg.some(g => g.peso != null)) {
+    h += `<div class="card">
+      <div class="card-title">Peso e curva del piano</div>
+      <div class="chart-wrap"><canvas id="ch-peso"></canvas></div>
+      <div class="text-xs text-muted mt-8">Il peso viene da «Ti pisasti?» — qui si legge e basta.</div>
+    </div>`;
+  }
+
+  // ── La tabella, per chi vuole il numero e non la forma ──
+  h += `<div class="card"><div class="card-title">Giorno per giorno</div><div class="table-wrap">
+    <table class="table"><thead><tr>
+      <th>Giorno</th><th class="text-right">Mangiate</th><th class="text-right">Target</th>
+      <th class="text-right">Scarto</th><th class="text-right">Peso</th>
+    </tr></thead><tbody>`;
+  gg.slice().reverse().forEach(g => {
+    const scarto = (g.kcal != null && g.target != null) ? g.kcal - g.target : null;
+    h += `<tr>
+      <td class="nowrap"><button class="cell-link btn-icon" data-action="vai-giorno" data-day="${g.giorno}" style="color:var(--c-primary)">${esc(fmtDataBreve(g.giorno))}</button></td>
+      <td class="text-right mono">${g.kcal == null ? '<span class="text-muted">—</span>' : fmtKcal(g.kcal)}</td>
+      <td class="text-right mono text-muted">${fmtKcal(g.target)}</td>
+      <td class="text-right mono ${scarto == null ? '' : scarto > 0 ? 'neg' : 'pos'}">${scarto == null ? '—' : (scarto > 0 ? '+' : '') + fmtKcal(scarto)}</td>
+      <td class="text-right mono text-muted">${g.peso == null ? '—' : fmtKg(g.peso)}</td>
+    </tr>`;
+  });
+  h += '</tbody></table></div></div>';
+
+  setHtml('view-andamento', h);
+  disegnaAndamento(gg);
+}
+
+function disegnaAndamento(gg) {
+  const etichette = gg.map(g => fmtDataBreve(g.giorno));
+  drawChart('ch-kcal', {
+    type: 'bar',
+    data: {
+      labels: etichette,
+      datasets: [
+        {
+          label: 'Mangiate', type: 'bar', data: gg.map(g => g.kcal == null ? null : Math.round(g.kcal)),
+          // Verde entro il target, rosso sopra: il colore dice il verdetto senza doverlo cercare
+          // confrontando la colonna con la linea.
+          backgroundColor: gg.map(g => (g.target != null && g.kcal != null && g.kcal > g.target) ? '#dc262690' : '#16a34a90'),
+          borderColor: gg.map(g => (g.target != null && g.kcal != null && g.kcal > g.target) ? '#dc2626' : '#16a34a'),
+          borderWidth: 1.5, order: 2,
+        },
+        {
+          label: 'Target', type: 'line', data: gg.map(g => g.target == null ? null : Math.round(g.target)),
+          borderColor: '#1e2b1e', borderWidth: 2, pointRadius: 0, tension: .2, spanGaps: true, order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11 } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtKcal(c.parsed.y)} kcal` } },
+      },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString('it-IT') } } },
+    },
+  });
+
+  if (!gg.some(g => g.peso != null)) return;
+  drawChart('ch-peso', {
+    type: 'line',
+    data: {
+      labels: etichette,
+      datasets: [
+        { label: 'Peso', data: gg.map(g => g.peso), borderColor: '#16a34a', backgroundColor: '#16a34a20',
+          borderWidth: 2.5, pointRadius: 2, tension: .25, spanGaps: true, fill: true },
+        { label: 'Piano', data: gg.map(g => g.pesoPiano), borderColor: '#64756b', borderWidth: 2,
+          borderDash: [5, 4], pointRadius: 0, tension: .1, spanGaps: true },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { family: "'DM Sans'", size: 11 }, boxWidth: 11 } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtKg(c.parsed.y)} kg` } },
+      },
+      scales: { y: { ticks: { callback: v => fmtKg(v) } } },
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISTA: ALIMENTI
+   ═══════════════════════════════════════════════════════════════ */
+
+const ETICHETTA_FONTE = { base: 'base', off: 'Open Food Facts', manuale: 'a mano' };
+
+function renderAlimenti() {
+  const q = (S.cercaAlimenti || '').trim().toLowerCase();
+  const elenco = S.foods.filter(f => !q || (f.name || '').toLowerCase().includes(q) || (f.brand || '').toLowerCase().includes(q));
+
+  let h = `
+  <div class="view-header">
+    <div>
+      <div class="page-title">🍎 Alimenti</div>
+      <div class="page-sub">${S.foods.length} in archivio · i valori sono per 100 g</div>
+    </div>
+    <button class="btn btn-primary btn-sm" data-action="nuovo-alimento">➕ Nuovo alimento</button>
+  </div>`;
+
+  h += `<div class="card">
+    <input type="search" class="form-input" data-action="cerca-alimenti" placeholder="Cerca fra i tuoi alimenti…" value="${esc(S.cercaAlimenti)}" />
+    <div class="table-wrap mt-12">
+      <table class="table"><thead><tr>
+        <th></th><th>Alimento</th><th class="text-right">kcal</th><th class="text-right">Grassi</th>
+        <th class="text-right">Zuccheri</th><th class="text-right">Proteine</th><th>Fonte</th><th></th>
+      </tr></thead><tbody>`;
+  if (!elenco.length) {
+    h += '<tr><td colspan="8" class="text-center text-muted" style="padding:26px">Nessun alimento.</td></tr>';
+  } else {
+    elenco.slice(0, 400).forEach(f => {
+      h += `<tr>
+        <td><button class="btn-icon" data-action="preferito" data-id="${f.id}" title="Preferito">${f.favorite ? '⭐' : '☆'}</button></td>
+        <td><div class="fw-600">${esc(f.name)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
+        <td class="text-right mono">${fmtKcal(f.kcal_100g)}</td>
+        <td class="text-right mono text-muted">${fmtG(f.fat_100g)}</td>
+        <td class="text-right mono text-muted">${fmtG(f.sugars_100g)}</td>
+        <td class="text-right mono text-muted">${fmtG(f.proteins_100g)}</td>
+        <td><span class="badge badge-src-${esc(f.source)}">${esc(ETICHETTA_FONTE[f.source] || f.source)}</span></td>
+        <td class="nowrap text-right">
+          <button class="btn-icon" data-action="modifica-alimento" data-id="${f.id}" title="Modifica">✏️</button>
+          <button class="btn-icon btn-icon-danger" data-action="elimina-alimento" data-id="${f.id}" title="Elimina">🗑</button>
+        </td>
+      </tr>`;
+    });
+  }
+  h += `</tbody></table></div>
+    ${elenco.length > 400 ? '<div class="text-xs text-muted mt-8">Mostrati i primi 400: restringi la ricerca.</div>' : ''}
+  </div>
+  <div class="note-box">Gli alimenti «base» sono valori indicativi presi dalle tabelle di composizione pubbliche
+    (per l'Italia il riferimento è il CREA): dove un numero conta davvero, confrontalo con la tabella e correggilo —
+    si modificano come tutti gli altri. I prodotti confezionati arrivano invece dall'etichetta,
+    via <strong>Open Food Facts</strong>, e li scrivono i suoi collaboratori: capita che manchino o siano sbagliati.</div>`;
+
+  setHtml('view-alimenti', h);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISTA: IMPOSTAZIONI
+   ═══════════════════════════════════════════════════════════════ */
+
+// La voce di attività più vicina al valore archiviato. Non l'uguaglianza esatta: un decimale che
+// passa da PostgREST può tornare arrotondato, e con `===` la tendina si riaprirebbe sulla prima
+// voce — cioè cambiando il fattore in silenzio ogni volta che si salva il profilo.
+function attivitaScelta(v) {
+  const n = +v;
+  if (!n || isNaN(n)) return 1.375;
+  return ATTIVITA.reduce((a, b) => (Math.abs(b.v - n) < Math.abs(a.v - n) ? b : a)).v;
+}
+
+function renderImpostazioni() {
+  const p = S.profile || {};
+  const oggi = oggiStr();
+  const c = calcolaTarget(oggi);
+  const ob = S.objective;
+
+  let h = `
+  <div class="view-header">
+    <div>
+      <div class="page-title">⚙️ Impostazioni</div>
+      <div class="page-sub">Quel che serve per calcolare il target</div>
+    </div>
+  </div>`;
+
+  h += `<div class="card">
+    <div class="card-title">Il tuo profilo</div>
+    <div class="form-row-2">
+      <div class="form-group">
+        <label class="form-label" for="p-birth">Data di nascita</label>
+        <input type="date" class="form-input" id="p-birth" value="${p.birth_date || ''}" />
+        <div class="form-hint">Non l'età: quella si ricava, e così non invecchia da sola una volta l'anno.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="p-height">Altezza (cm)</label>
+        <input type="number" class="form-input" id="p-height" step="0.5" min="100" max="230" value="${p.height_cm ?? ''}" />
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group">
+        <label class="form-label" for="p-sex">Sesso</label>
+        <select class="form-input form-select" id="p-sex">
+          <option value="">—</option>
+          <option value="M" ${p.sex === 'M' ? 'selected' : ''}>Uomo</option>
+          <option value="F" ${p.sex === 'F' ? 'selected' : ''}>Donna</option>
+        </select>
+        <div class="form-hint">Entra nella formula del metabolismo basale, non è un'etichetta.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="p-activity">Attività fisica</label>
+        <select class="form-input form-select" id="p-activity">
+          ${ATTIVITA.map(a => `<option value="${a.v}" ${a.v === attivitaScelta(p.activity) ? 'selected' : ''}>${esc(a.label)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" data-action="salva-profilo">💾 Salva</button>
+  </div>`;
+
+  // ── Il conto di oggi, per intero ──
+  h += `<div class="card">
+    <div class="card-title">Il conto di oggi</div>`;
+  if (!c.ok) {
+    h += `<div class="note-box is-warn">Non si può ancora calcolare: ${esc(spiegaMotivo(c.motivo))}.</div>`;
+  } else {
+    h += `<div class="table-wrap"><table class="table"><tbody>
+      <tr><td>Età</td><td class="text-right mono">${etaAl(oggi) ?? '—'} anni</td></tr>
+      <tr><td>Peso di riferimento</td><td class="text-right mono">${fmtKg(c.peso)} kg</td></tr>
+      <tr><td>Metabolismo basale <span class="text-muted text-xs">(Mifflin-St Jeor)</span></td><td class="text-right mono">${fmtKcal(c.bmr)} kcal</td></tr>
+      <tr><td>× attività ${(+(p.activity || 1.375)).toLocaleString('it-IT')} = consumo stimato</td><td class="text-right mono">${fmtKcal(c.tdee)} kcal</td></tr>
+      <tr><td>− deficit per l'obiettivo</td><td class="text-right mono neg">${c.deficit ? '−' + fmtKcal(c.deficit) : '0'} kcal</td></tr>
+      <tr><td class="fw-700">Target di oggi</td><td class="text-right mono fw-700">${fmtKcal(c.kcal)} kcal</td></tr>
+    </tbody></table></div>`;
+    if (c.avvisi.length) h += c.avvisi.map(a => `<div class="note-box is-danger mt-12">⚠️ ${esc(a)}</div>`).join('');
+  }
+  h += '</div>';
+
+  // ── L'obiettivo letto da Ti pisasti? ──
+  h += `<div class="card">
+    <div class="card-title">L'obiettivo — da «Ti pisasti?»</div>`;
+  if (!ob) {
+    h += `<div class="note-box is-warn">Nessun obiettivo attivo. Senza, il target è il semplice mantenimento del peso.
+      L'obiettivo si crea in <a href="weight-quest.html">⚖️ Ti pisasti?</a> — questa pagina lo legge e basta.</div>`;
+  } else {
+    const finale = S.milestones.length ? S.milestones[S.milestones.length - 1].weight : ob.end_weight;
+    h += `<div class="table-wrap"><table class="table"><tbody>
+      <tr><td>Nome</td><td class="text-right">${esc(ob.objective_name || '—')}</td></tr>
+      <tr><td>Tipo</td><td class="text-right">${esc(ob.objective_type || 'perdere')}</td></tr>
+      <tr><td>Periodo</td><td class="text-right mono">${esc(fmtDataBreve(ob.start_date))} → ${esc(fmtDataBreve(ob.end_date))}</td></tr>
+      <tr><td>Peso di partenza → finale</td><td class="text-right mono">${fmtKg(ob.start_weight)} → ${fmtKg(finale)} kg</td></tr>
+      <tr><td>Traguardi</td><td class="text-right mono">${S.milestones.length}</td></tr>
+    </tbody></table></div>
+    <div class="note-box mt-12">Il target si ricalcola sul <strong>peso vero</strong> e sui giorni che restano, non sulla
+      pendenza del piano: se rimani indietro si stringe da sé, se sei avanti si allarga. Per cambiarlo si spostano
+      i traguardi in «Ti pisasti?», non c'è nessun numero da riscrivere qui.</div>`;
+  }
+  h += '</div>';
+
+  // ── Zona pericolosa ──
+  h += `<div class="card card-danger">
+    <div class="card-title">Zona pericolosa</div>
+    <div class="text-sm text-muted mb-16">Cancella tutte le righe del diario. Alimenti, profilo e target congelati restano.</div>
+    <button class="btn btn-danger btn-sm" data-action="svuota-diario">🗑 Cancella tutto il diario</button>
+  </div>`;
+
+  setHtml('view-impostazioni', h);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FINESTRE
+   ═══════════════════════════════════════════════════════════════ */
+
+function openModal(titolo, corpo) {
+  $('modal-title').textContent = titolo;
+  setHtml('modal-body', corpo);
+  $('modal-overlay').classList.remove('hidden');
+}
+function closeModal() {
+  fermaScanner();
+  $('modal-overlay').classList.add('hidden');
+  setHtml('modal-body', '');
+}
+
+/* ── Aggiungi un alimento al diario ────────────────────────────
+   Una finestra sola per le due strade — «ce l'ho già» e «è un prodotto del supermercato» —
+   perché quel che si fa dopo averlo trovato non cambia: grammi, e via. */
+function openAggiungi(meal) {
+  S.ricerca = { q: '', locali: [], off: [], stato: '' };
+  const scanner = ('BarcodeDetector' in window);
+  openModal('Aggiungi un alimento', `
+    <div class="form-group">
+      <label class="form-label" for="add-meal">Pasto</label>
+      <select class="form-input form-select" id="add-meal">
+        ${PASTI.map(p => `<option value="${p.id}" ${p.id === meal ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="add-q">Alimento o prodotto</label>
+      <div class="hstack gap-8">
+        <input type="search" class="form-input grow" id="add-q" placeholder="pasta, yogurt greco, Nutella…" autocomplete="off" />
+        <button class="btn btn-outline btn-sm" data-action="${scanner ? 'apri-scanner' : 'barcode-a-mano'}" title="Codice a barre">📷</button>
+      </div>
+      <div class="form-hint">Cerca prima fra i tuoi alimenti; dopo una pausa di digitazione cerca anche
+        i prodotti confezionati su Open Food Facts.</div>
+    </div>
+    <div id="scanner-wrap"><video id="scanner-video" playsinline muted></video>
+      <div class="text-xs text-muted mt-8">Inquadra il codice a barre. <button class="btn-icon" data-action="chiudi-scanner">chiudi</button></div>
+    </div>
+    <div id="add-results"></div>
+  `);
+  setTimeout(() => $('add-q')?.focus(), 50);
+  renderRisultati();
+}
+
+function renderRisultati() {
+  const { q, locali, off, stato } = S.ricerca;
+  let h = '';
+  if (!q) {
+    // A campo vuoto si propongono i preferiti e i più usati: nove volte su dieci quel che si sta
+    // per segnare è già lì, e cercarlo sarebbe scrivere per niente.
+    const prop = S.foods.slice(0, 12);
+    if (prop.length) {
+      h += '<div class="search-results">' + prop.map(a => rigaRisultato(a)).join('') + '</div>';
+      h += '<div class="search-note">I tuoi preferiti e i più usati. Scrivi per cercare altro.</div>';
+    }
+  } else {
+    h += '<div class="search-results">';
+    if (locali.length) h += locali.map(a => rigaRisultato(a)).join('');
+    if (off.length) h += off.map((a, i) => rigaRisultato(a, i)).join('');
+    if (!locali.length && !off.length) h += `<div class="search-note">${stato === 'cerco' ? 'Cerco…' : 'Niente trovato. Puoi scriverlo a mano.'}</div>`;
+    h += '</div>';
+    if (stato) h += `<div class="search-note">${esc(stato === 'cerco' ? '🔎 Cerco su Open Food Facts…' : stato)}</div>`;
+    h += `<div class="mt-8"><button class="btn btn-outline btn-sm" data-action="nuovo-alimento" data-nome="${esc(q)}">✏️ Scrivilo a mano</button></div>`;
+  }
+  setHtml('add-results', h);
+}
+
+// Una riga di risultato. `indiceOff` distingue i prodotti appena arrivati dalla rete (che non
+// hanno ancora un id nostro) da quelli già in archivio.
+function rigaRisultato(a, indiceOff) {
+  const attr = indiceOff == null ? `data-food-id="${a.id}"` : `data-off="${indiceOff}"`;
+  const fonte = indiceOff == null ? (ETICHETTA_FONTE[a.source] || a.source) : 'Open Food Facts';
+  return `<button class="search-row" data-action="scegli" ${attr}>
+    <span class="grow">
+      <span class="fw-600">${esc(a.name)}</span>
+      ${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
+      <span class="food-sub">${fmtKcal(a.kcal_100g)} kcal/100 g · ${esc(fonte)}</span>
+    </span>
+    ${indiceOff == null && a.favorite ? '<span>⭐</span>' : ''}
+  </button>`;
+}
+
+// La ricerca locale è immediata; quella in rete aspetta la pausa di digitazione, perché Open
+// Food Facts limita le ricerche testuali a una decina al minuto e cercare a ogni tasto premuto
+// fa bandire l'indirizzo IP.
+function cercaAlimento(q) {
+  S.ricerca.q = q;
+  const ql = q.trim().toLowerCase();
+  S.ricerca.locali = ql
+    ? S.foods.filter(f => (f.name || '').toLowerCase().includes(ql) || (f.brand || '').toLowerCase().includes(ql)).slice(0, 12)
+    : [];
+  S.ricerca.off = [];
+  S.ricerca.stato = ql.length >= 3 ? 'cerco' : '';
+  renderRisultati();
+
+  clearTimeout(window._timerRicerca);
+  if (ql.length < 3) return;
+  window._timerRicerca = setTimeout(async () => {
+    try {
+      const res = await offCerca(ql);
+      if (S.ricerca.q.trim().toLowerCase() !== ql) return;   // nel frattempo si è scritto altro
+      // Un prodotto già in archivio non si ripropone come risultato di rete: sarebbe la stessa
+      // cosa due volte, una delle quali senza id.
+      const noti = new Set(S.foods.map(f => f.barcode).filter(Boolean));
+      S.ricerca.off = res.filter(a => !a.barcode || !noti.has(a.barcode)).slice(0, 15);
+      S.ricerca.stato = S.ricerca.off.length ? '' : 'Open Food Facts non ha trovato niente.';
+    } catch (err) {
+      S.ricerca.off = [];
+      S.ricerca.stato = 'Open Food Facts non risponde: ' + err.message;
+    }
+    renderRisultati();
+  }, RITARDO_RICERCA);
+}
+
+/* ── La porzione ───────────────────────────────────────────── */
+function openPorzione(alimento, meal, foodId) {
+  const g = alimento.default_grams || 100;
+  openModal('Quanto ne hai mangiato?', `
+    <div class="mb-16">
+      <div class="fw-700">${esc(alimento.name)}</div>
+      ${alimento.brand ? '<div class="text-sm text-muted">' + esc(alimento.brand) + '</div>' : ''}
+      <div class="text-sm text-muted mt-4">${fmtKcal(alimento.kcal_100g)} kcal per 100 g${alimento.quantita ? ' · confezione ' + esc(alimento.quantita) : ''}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="por-g">Peso (grammi)</label>
+      <input type="number" class="form-input" id="por-g" step="1" min="1" max="5000" value="${g}" />
+      <div class="hstack gap-6 wrap mt-8">
+        ${[30, 50, 100, 125, 150, 200, 250].map(v => `<button class="btn btn-outline btn-sm" data-action="grammi" data-g="${v}">${v} g</button>`).join('')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="por-meal">Pasto</label>
+      <select class="form-input form-select" id="por-meal">
+        ${PASTI.map(p => `<option value="${p.id}" ${p.id === meal ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="note-box" id="por-anteprima"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button class="btn btn-primary" data-action="conferma-porzione">➕ Aggiungi</button>
+    </div>
+  `);
+  window._porzione = { alimento, foodId: foodId || null };
+  aggiornaAnteprimaPorzione();
+  setTimeout(() => { const i = $('por-g'); if (i) { i.focus(); i.select(); } }, 50);
+}
+
+function aggiornaAnteprimaPorzione() {
+  const p = window._porzione;
+  const el = $('por-anteprima');
+  if (!p || !el) return;
+  const g = parseFloat($('por-g')?.value) || 0;
+  const q = c => (num(p.alimento[c]) == null ? null : +p.alimento[c] * g / 100);
+  el.innerHTML = `<strong>${fmtKcal(q('kcal_100g'))} kcal</strong> per ${fmtG(g)} g`
+    + ` · grassi ${fmtG(q('fat_100g'))} g · zuccheri ${fmtG(q('sugars_100g'))} g · proteine ${fmtG(q('proteins_100g'))} g`;
+}
+
+/* ── Alimento scritto a mano / modifica ───────────────────────── */
+function openFormAlimento(f) {
+  const v = f || {};
+  openModal(f ? 'Modifica alimento' : 'Nuovo alimento', `
+    <div class="form-row-2">
+      <div class="form-group"><label class="form-label" for="f-name">Nome</label>
+        <input class="form-input" id="f-name" value="${esc(v.name || '')}" placeholder="Pasta al pomodoro" /></div>
+      <div class="form-group"><label class="form-label" for="f-brand">Marca <span class="text-muted text-xs">(facoltativa)</span></label>
+        <input class="form-input" id="f-brand" value="${esc(v.brand || '')}" /></div>
+    </div>
+    <div class="text-sm text-muted mb-8">Valori <strong>per 100 g</strong>, come sull'etichetta.</div>
+    <div class="form-row-3">
+      <div class="form-group"><label class="form-label" for="f-kcal">kcal</label>
+        <input type="number" class="form-input" id="f-kcal" step="1" min="0" max="900" value="${v.kcal_100g ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-prot">Proteine (g)</label>
+        <input type="number" class="form-input" id="f-prot" step="0.1" min="0" value="${v.proteins_100g ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-fat">Grassi (g)</label>
+        <input type="number" class="form-input" id="f-fat" step="0.1" min="0" value="${v.fat_100g ?? ''}" /></div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group"><label class="form-label" for="f-sat">di cui saturi (g)</label>
+        <input type="number" class="form-input" id="f-sat" step="0.1" min="0" value="${v.sat_fat_100g ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-carb">Carboidrati (g)</label>
+        <input type="number" class="form-input" id="f-carb" step="0.1" min="0" value="${v.carbs_100g ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-sug">di cui zuccheri (g)</label>
+        <input type="number" class="form-input" id="f-sug" step="0.1" min="0" value="${v.sugars_100g ?? ''}" /></div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group"><label class="form-label" for="f-fib">Fibre (g)</label>
+        <input type="number" class="form-input" id="f-fib" step="0.1" min="0" value="${v.fiber_100g ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-salt">Sale (g)</label>
+        <input type="number" class="form-input" id="f-salt" step="0.01" min="0" value="${v.salt_100g ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-porz">Porzione abituale (g)</label>
+        <input type="number" class="form-input" id="f-porz" step="1" min="0" value="${v.default_grams ?? ''}" /></div>
+    </div>
+    <div class="form-hint">Una casella lasciata vuota resta vuota e non conta zero: «non lo so» e «zero grammi»
+      sono due cose diverse, e uno zero falso farebbe sembrare senza grassi un alimento di cui non si sa niente.</div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" data-action="close-modal">Annulla</button>
+      <button class="btn btn-primary" data-action="salva-alimento" ${f ? `data-id="${f.id}"` : ''}>💾 Salva</button>
+    </div>
+  `);
+  setTimeout(() => $('f-name')?.focus(), 50);
+}
+
+function leggiFormAlimento() {
+  const v = id => { const el = $(id); const n = el && el.value !== '' ? parseFloat(el.value) : null; return (n == null || isNaN(n)) ? null : n; };
+  const name = ($('f-name')?.value || '').trim();
+  const kcal = v('f-kcal');
+  if (!name) { alert('Serve un nome.'); return null; }
+  if (kcal == null) { alert('Servono almeno le calorie per 100 g: senza, la riga non conterebbe niente.'); return null; }
+  return {
+    name, brand: ($('f-brand')?.value || '').trim() || null,
+    kcal_100g: kcal, proteins_100g: v('f-prot'), fat_100g: v('f-fat'), sat_fat_100g: v('f-sat'),
+    carbs_100g: v('f-carb'), sugars_100g: v('f-sug'), fiber_100g: v('f-fib'), salt_100g: v('f-salt'),
+    default_grams: v('f-porz'),
+  };
+}
+
+/* ── Lo scanner del codice a barre ─────────────────────────────
+   Solo dove il browser ha BarcodeDetector (Chrome e la WebView di Android): altrove il codice si
+   scrive a mano. Nessuna libreria dal CDN — un lettore di codici a barre da mezzo megabyte per
+   una funzione che non tutti i browser possono usare non vale il peso della pagina. */
+let _scanner = null;
+
+async function apriScanner() {
+  const wrap = $('scanner-wrap'), video = $('scanner-video');
+  if (!wrap || !video) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = stream;
+    await video.play();
+    wrap.classList.add('open');
+    const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+    _scanner = { stream, timer: setInterval(async () => {
+      try {
+        const codici = await detector.detect(video);
+        if (codici && codici.length) {
+          const codice = codici[0].rawValue;
+          fermaScanner();
+          await cercaBarcode(codice);
+        }
+      } catch {}
+    }, 400) };
+  } catch (err) {
+    fermaScanner();
+    alert('Non riesco ad aprire la fotocamera: ' + err.message + '\nPuoi scrivere il codice a mano.');
+    barcodeAMano();
+  }
+}
+
+function fermaScanner() {
+  if (!_scanner) return;
+  clearInterval(_scanner.timer);
+  _scanner.stream.getTracks().forEach(t => t.stop());
+  _scanner = null;
+  $('scanner-wrap')?.classList.remove('open');
+  const v = $('scanner-video');
+  if (v) v.srcObject = null;
+}
+
+function barcodeAMano() {
+  const codice = prompt('Codice a barre del prodotto (le 13 cifre sotto le righe):');
+  if (codice && codice.trim()) cercaBarcode(codice.trim());
+}
+
+async function cercaBarcode(codice) {
+  const meal = $('add-meal')?.value || pastoDellOra();
+  // Se il prodotto è già in archivio non si disturba la rete: è la stessa riga, e offline
+  // funziona lo stesso.
+  const mio = S.foods.find(f => f.barcode === codice);
+  if (mio) { openPorzione(mio, meal, mio.id); return; }
+  showToast('🔎 Cerco il prodotto…');
+  try {
+    const a = await offProdotto(codice);
+    if (!a) {
+      alert(`Il codice ${codice} non è su Open Food Facts, o il prodotto non ha i valori nutrizionali.\nPuoi scriverlo a mano.`);
+      openFormAlimento(null);
+      return;
+    }
+    openPorzione(a, meal, null);
+  } catch (err) {
+    alert('Errore: ' + err.message);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGAZIONE E DISEGNO
+   ═══════════════════════════════════════════════════════════════ */
+
+function navigate(view) {
+  S.view = view;
+  document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+  $('sidebar').classList.remove('open');
+  $('mobile-nav-overlay').classList.remove('open');
+  render();
+}
+
+function render() {
+  if (S.view === 'diario') renderDiario();
+  else if (S.view === 'andamento') renderAndamento();
+  else if (S.view === 'alimenti') renderAlimenti();
+  else if (S.view === 'impostazioni') renderImpostazioni();
+  $('footer-version').textContent = APP_VERSION;
+  $('footer-info').textContent = S.objective
+    ? `obiettivo: ${S.objective.objective_name || '—'}`
+    : 'nessun obiettivo attivo';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EVENTI
+   ═══════════════════════════════════════════════════════════════ */
+
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+
+  try {
+    if (action === 'nav') { navigate(btn.dataset.view); }
+
+    else if (action === 'close-modal') { closeModal(); }
+
+    else if (action === 'giorno-prec') { S.day = piuGiorni(S.day, -1); render(); }
+    else if (action === 'giorno-succ') { if (S.day < oggiStr()) { S.day = piuGiorni(S.day, 1); render(); } }
+    else if (action === 'giorno-oggi') { S.day = oggiStr(); render(); }
+    else if (action === 'vai-giorno') { S.day = btn.dataset.day; navigate('diario'); }
+
+    else if (action === 'ricalcola') {
+      if (!confirm('Ricalcolare il target di questa giornata sui dati di adesso?\n\nIl valore congelato verrà sostituito: se la giornata è passata, cambia il giudizio già dato.')) return;
+      await ricalcolaGiorno(btn.dataset.day);
+    }
+
+    else if (action === 'aggiungi') { openAggiungi(btn.dataset.meal || pastoDellOra()); }
+
+    else if (action === 'apri-scanner') { apriScanner(); }
+    else if (action === 'chiudi-scanner') { fermaScanner(); }
+    else if (action === 'barcode-a-mano') { barcodeAMano(); }
+
+    else if (action === 'scegli') {
+      const meal = $('add-meal')?.value || pastoDellOra();
+      if (btn.dataset.off != null) {
+        // L'alimento di rete NON si salva ancora in archivio: si salva insieme alla riga del
+        // diario, altrimenti aprire un risultato per sbaglio riempirebbe il catalogo di prodotti
+        // mai mangiati.
+        openPorzione(S.ricerca.off[+btn.dataset.off], meal, null);
+      } else {
+        const f = S.foods.find(x => x.id === btn.dataset.foodId);
+        if (f) openPorzione(f, meal, f.id);
+      }
+    }
+
+    else if (action === 'grammi') {
+      const i = $('por-g'); if (i) { i.value = btn.dataset.g; aggiornaAnteprimaPorzione(); }
+    }
+
+    else if (action === 'conferma-porzione') {
+      const p = window._porzione;
+      const g = parseFloat($('por-g')?.value);
+      if (!p || !g || g <= 0) { alert('Scrivi quanti grammi.'); return; }
+      const meal = $('por-meal')?.value || pastoDellOra();
+      btn.disabled = true;
+      let foodId = p.foodId;
+      if (!foodId && p.alimento.source === 'off') {
+        const salvato = await salvaAlimentoOff(p.alimento);
+        foodId = salvato?.id || null;
+      }
+      await aggiungiAlDiario({ giorno: S.day, meal, alimento: p.alimento, grammi: g, foodId });
+      closeModal();
+      showToast(`➕ ${p.alimento.name} · ${fmtKcal(p.alimento.kcal_100g * g / 100)} kcal`);
+      await reload();
+    }
+
+    else if (action === 'modifica-riga') {
+      const r = S.logs.find(x => x.id === btn.dataset.id);
+      if (!r) return;
+      const g = prompt(`${r.name}\nQuanti grammi?`, r.grams);
+      if (g == null) return;
+      const n = parseFloat(String(g).replace(',', '.'));
+      if (!n || n <= 0) { alert('Grammi non validi.'); return; }
+      await sbUpd('al_log', `id=eq.${r.id}`, { grams: n });
+      await reload();
+    }
+
+    else if (action === 'elimina-riga') {
+      const r = S.logs.find(x => x.id === btn.dataset.id);
+      if (!r || !confirm(`Togliere «${r.name}» dal diario?`)) return;
+      await sbDel('al_log', `id=eq.${r.id}`);
+      await reload();
+    }
+
+    else if (action === 'nuovo-alimento') {
+      closeModal();
+      openFormAlimento(btn.dataset.nome ? { name: btn.dataset.nome } : null);
+    }
+    else if (action === 'modifica-alimento') {
+      openFormAlimento(S.foods.find(f => f.id === btn.dataset.id));
+    }
+    else if (action === 'salva-alimento') {
+      const dati = leggiFormAlimento();
+      if (!dati) return;
+      if (btn.dataset.id) {
+        await sbUpd('al_foods', `id=eq.${btn.dataset.id}`, { ...dati, updated_at: new Date().toISOString() });
+      } else {
+        await sbIns('al_foods', [{ ...dati, source: 'manuale' }]);
+      }
+      closeModal();
+      showToast('💾 Alimento salvato');
+      await reload();
+    }
+    else if (action === 'elimina-alimento') {
+      const f = S.foods.find(x => x.id === btn.dataset.id);
+      if (!f) return;
+      // Le righe del diario restano: portano i loro valori congelati e `food_id` diventa NULL.
+      // Cancellare un alimento non deve riscrivere quel che si è mangiato.
+      if (!confirm(`Eliminare «${f.name}» dall'archivio?\n\nLe righe già segnate nel diario restano come sono.`)) return;
+      await sbDel('al_foods', `id=eq.${f.id}`);
+      await reload();
+    }
+    else if (action === 'preferito') {
+      const f = S.foods.find(x => x.id === btn.dataset.id);
+      if (!f) return;
+      await sbUpd('al_foods', `id=eq.${f.id}`, { favorite: !f.favorite });
+      await reload();
+    }
+
+    else if (action === 'salva-profilo') {
+      const h = parseFloat($('p-height')?.value);
+      const body = {
+        user_id: uid(),
+        birth_date: $('p-birth')?.value || null,
+        height_cm: (h && !isNaN(h)) ? h : null,
+        sex: $('p-sex')?.value || null,
+        activity: parseFloat($('p-activity')?.value) || 1.375,
+        updated_at: new Date().toISOString(),
+      };
+      // Una riga per utente: l'upsert sulla chiave primaria è l'unico modo perché salvare due
+      // volte non crei due profili con due basali diversi.
+      await sbIns('al_profile?on_conflict=user_id', [body], { 'Prefer': 'resolution=merge-duplicates,return=representation' });
+      showToast('💾 Profilo salvato');
+      await reload();
+    }
+
+    else if (action === 'svuota-diario') {
+      const q = prompt('Questo cancella TUTTE le righe del diario, per sempre.\nScrivi CANCELLA per confermare:');
+      if (q !== 'CANCELLA') return;
+      await sbDel('al_log', 'id=not.is.null');
+      showToast('🗑 Diario svuotato');
+      await reload();
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Errore: ' + err.message);
+  }
+});
+
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'add-q') cercaAlimento(el.value);
+  else if (el.id === 'por-g') aggiornaAnteprimaPorzione();
+  else if (el.matches('[data-action="cerca-alimenti"]')) {
+    S.cercaAlimenti = el.value;
+    clearTimeout(window._timerAlimenti);
+    window._timerAlimenti = setTimeout(() => {
+      renderAlimenti();
+      const i = document.querySelector('[data-action="cerca-alimenti"]');
+      if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+    }, 220);
+  }
+});
+
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'day-picker') { S.day = el.value || oggiStr(); render(); }
+  else if (el.matches('[data-action="periodo"]')) { S.periodo = parseInt(el.value, 10) || 30; renderAndamento(); }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('modal-overlay').classList.contains('hidden')) closeModal();
+});
+
+$('btn-hamburger').addEventListener('click', () => {
+  $('sidebar').classList.toggle('open');
+  $('mobile-nav-overlay').classList.toggle('open');
+});
+$('mobile-nav-overlay').addEventListener('click', () => {
+  $('sidebar').classList.remove('open');
+  $('mobile-nav-overlay').classList.remove('open');
+});
+$('modal-close').addEventListener('click', closeModal);
+$('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+/* ═══════════════════════════════════════════════════════════════
+   AVVIO
+   ═══════════════════════════════════════════════════════════════ */
+
+async function init() {
+  S.day = oggiStr();
+
+  let session = null;
+  const sbToken = localStorage.getItem('sb_token');
+  if (sbToken) session = await initFromSbToken(sbToken);
+  if (!session) {
+    session = loadSession();
+    if (session && session.expires_at < Date.now()) session = await refreshSession(session);
+  }
+  if (!session) { location.href = '/'; return; }
+  S.session = session;
+
+  const _authChannel = new BroadcastChannel('appsphere_auth');
+  _authChannel.onmessage = ev => {
+    if (!ev.data) return;
+    if (ev.data.type === 'LOGOUT') { localStorage.removeItem('sb_token'); location.href = '/'; }
+    else if (ev.data.type === 'TOKEN_REFRESH' && ev.data.sbToken) {
+      localStorage.setItem('sb_token', ev.data.sbToken);
+      if (S.session) S.session.access_token = ev.data.sbToken;
+    }
+  };
+
+  try {
+    await loadData();
+  } catch (err) {
+    console.error('Errore caricamento dati:', err);
+    alert('Errore nel caricamento dei dati: ' + err.message);
+  }
+
+  $('screen-app').style.display = 'flex';
+  $('loading-overlay').classList.add('hidden');
+  navigate('diario');
+
+  // Il profilo è la prima cosa senza la quale non esce nessun numero: se manca, si apre lì
+  // invece di mostrare un diario di trattini che non si spiega da sé.
+  if (!S.profile || !S.profile.birth_date || !S.profile.height_cm || !S.profile.sex) {
+    navigate('impostazioni');
+    showToast('👤 Compila il profilo: senza, il target non si può calcolare');
+  }
+}
+
+init();
+</script>
+</body>
+</html>
