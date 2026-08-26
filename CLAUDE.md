@@ -139,6 +139,7 @@ Tables are namespaced by app prefix:
 |---|---|
 | `cm_apps` | App registry for the launcher (title, description, html_file, score_query, active) |
 | `cm_categories` | Shared category taxonomy used by Tasks and Habit Tracker |
+| `cm_profile` | La scheda personale, **una riga per utente**: `nome`, `cognome`, `data_nascita`, `sesso` (`M`\|`F`\|`Altro`), `altezza_cm`, più patologie, farmaci e note mediche. Si compila da AppSphere → ☰ → 👤 Profilo, o direttamente da **`/#profilo`** |
 | `cm_institutions` | Censimento di banche e broker. `connectable = false` per chi non è nel catalogo Enable Banking (broker senza PSD2): sta in anagrafica ma non si collega |
 | `cm_bank_connections` | Un conto per riga, nato da un consenso. `uses text[]` dice a cosa serve |
 | `cm_sync_log` | Storico delle sincronizzazioni bancarie |
@@ -395,10 +396,26 @@ di dire la stessa cosa.
 ### Diario alimentare (`al_`)
 | Table | Purpose |
 |---|---|
-| `al_profile` | Una riga per utente: `birth_date`, `height_cm`, `sex`, `activity` (fattore LAF) |
+| `al_profile` | Una riga per utente. ⚠️ Di questa tabella si usa **solo `activity`** (fattore LAF): data di nascita, altezza e sesso si leggono da `cm_profile` |
 | `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'manuale'`; valori **per 100 g** |
 | `al_log` | Le righe del diario: `day`, `meal`, `grams`, e i valori per 100 g **congelati sulla riga** |
 | `al_days` | Il target di calorie di una giornata, **congelato**, con gli ingredienti del conto (`weight_kg`, `bmr`, `tdee`, `deficit_kcal`) |
+
+⚠️ **I dati anagrafici stanno in `cm_profile` e da qui si leggono soltanto.** Chiederli di nuovo
+in ogni app che ne ha bisogno vuol dire due altezze diverse il giorno che una delle due si
+corregge, e nessun modo di sapere quale è quella giusta. La pagina li mostra in sola lettura con
+il pulsante che apre la scheda (`/#profilo`, che `index.html` intercetta all'avvio per aprire il
+modale invece di lasciare sulla home); `al_profile.activity` resta di qua perché è una scelta di
+questa pagina e in `cm_profile` non c'è. Le colonne `birth_date`, `height_cm` e `sex` di
+`al_profile` non vengono più né lette né scritte — restano lì in attesa di una migration che le
+tolga.
+
+⚠️ `cm_profile.sesso` ammette anche `'Altro'`, che Mifflin-St Jeor non prevede: le sue due
+varianti differiscono di una costante (+5 contro −161), quindi lì si usa la **via di mezzo** e la
+pagina lo scrive nella spiegazione del target, col pavimento più alto dei due (1500). Fermare il
+conto sarebbe la scelta pulita e inservibile — l'app non calcolerebbe più niente per un campo che
+non cambia l'ordine di grandezza del risultato. La casella **vuota** invece ferma il conto per
+davvero: non dice quale variante usare.
 
 ⚠️ **Il target non si archivia in nessuna impostazione, si ricava.** `calorie.html` legge
 l'ultimo obiettivo **attivo** di `ps_objectives` e le sue milestone, e ne ricava:

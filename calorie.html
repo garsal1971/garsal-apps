@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.0.0</title>
+  <title>Calorie v1.0.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -272,8 +272,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-08-26T10:00:00Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-08-26T12:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -294,6 +294,16 @@ const KCAL_PER_KG = 7700;
    pari mentre la data di fine si allontana. */
 const KCAL_MINIME = { M: 1500, F: 1200 };
 
+/* cm_profile ammette anche `sesso = 'Altro'`, che Mifflin-St Jeor non prevede: le sue due
+   varianti differiscono di una costante (+5 contro −161), quindi lì si usa la via di mezzo e la
+   pagina lo scrive nella spiegazione del target. Fermare il conto sarebbe la scelta pulita e
+   inservibile — l'app non calcolerebbe più niente per un campo che non cambia l'ordine di
+   grandezza del risultato. Il pavimento in quel caso è il più alto dei due, che è il verso
+   prudente: un freno che interviene prima non fa danni, uno che interviene dopo sì. */
+const CORREZIONE_SESSO = { M: 5, F: -161 };
+const correzioneSesso = sesso => CORREZIONE_SESSO[sesso] ?? (5 + -161) / 2;
+const kcalMinime = sesso => KCAL_MINIME[sesso] ?? 1500;
+
 const PASTI = [
   { id: 'colazione',           label: '🌅 Colazione',   oraFino: 10 },
   { id: 'spuntino_mattina',    label: '🍎 Spuntino',    oraFino: 12 },
@@ -313,7 +323,13 @@ const ATTIVITA = [
 
 const S = {
   session: null, view: 'diario',
-  profile: null,          // al_profile
+  // ⚠️ Il profilo viene da DUE righe e non da una: data di nascita, altezza e sesso stanno in
+  // cm_profile — la scheda che si apre da AppSphere → ☰ → 👤 Profilo, condivisa con le altre app —
+  // e qui si LEGGONO soltanto. Chiedere di nuovo l'altezza in ogni app che ne ha bisogno vuol dire
+  // due altezze diverse il giorno che una delle due si corregge. Di al_profile resta il solo
+  // `activity`, che è una scelta di questa pagina e in cm_profile non c'è.
+  profile: null,          // { birth_date, height_cm, sex, activity } — la fusione delle due
+  cmProfile: null,        // la riga di cm_profile com'è, per mostrarla e dire cosa manca
   objective: null,        // ps_objectives, l'ultimo attivo
   milestones: [],         // [{date, weight}] dell'obiettivo
   weights: [],            // ps_weight_tracking (ultimi mesi)
@@ -439,7 +455,7 @@ function metabolismoBasale(pesoKg, giorno) {
   const eta = etaAl(giorno);
   if (eta == null || eta < 10 || eta > 110) return null;
   const base = 10 * pesoKg + 6.25 * (+p.height_cm) - 5 * eta;
-  return p.sex === 'M' ? base + 5 : base - 161;
+  return base + correzioneSesso(p.sex);
 }
 
 // Il peso di un giorno: il MINIMO delle pesate di quel giorno, come fa «Ti pisasti?» — ci si
@@ -526,7 +542,7 @@ function calcolaTarget(giorno) {
   out.kcal = out.kcalRichiesta;
   out.motivo = out.kgDaPerdere > 0 ? 'obiettivo' : 'raggiunto';
 
-  const minimo = KCAL_MINIME[p.sex] || 1200;
+  const minimo = kcalMinime(p.sex);
   if (out.kcal < minimo) {
     out.frenata = true;
     out.kcal = minimo;
@@ -569,8 +585,9 @@ const GIORNI_STORICO = 120;
 async function loadData() {
   const da = piuGiorni(oggiStr(), -GIORNI_STORICO);
 
-  const [profile, objectives, weights, foods, logs, days] = await Promise.all([
+  const [profile, comune, objectives, weights, foods, logs, days] = await Promise.all([
     sbQ('al_profile', 'select=*&limit=1'),
+    sbQ('cm_profile', 'select=data_nascita,altezza_cm,sesso,nome&limit=1'),
     // L'ultimo obiettivo ATTIVO: è quello su cui si sta lavorando adesso. Gli obiettivi chiusi
     // restano in archivio ma non devono dettare il target di oggi.
     sbQ('ps_objectives', 'status=eq.active&order=created_at.desc&limit=1'),
@@ -580,7 +597,8 @@ async function loadData() {
     sbQ('al_days', `day=gte.${da}&limit=500`),
   ]);
 
-  S.profile = profile?.[0] || null;
+  S.cmProfile = comune?.[0] || null;
+  S.profile = fondiProfilo(S.cmProfile, profile?.[0] || null);
   S.objective = objectives?.[0] || null;
   S.milestones = leggiMilestones(S.objective);
   S.weights = weights || [];
@@ -601,6 +619,18 @@ function leggiMilestones(ob) {
   return ms.filter(m => m && m.date && m.weight != null)
            .map(m => ({ date: String(m.date).slice(0, 10), weight: +m.weight }))
            .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/* I dati anagrafici da cm_profile, il fattore di attività da al_profile. Se cm_profile non c'è
+   ancora, il profilo resta incompleto e la pagina lo dice mandando al 👤 Profilo di AppSphere:
+   non li richiede qui, o diventerebbero due verità sulla stessa altezza. */
+function fondiProfilo(comune, mio) {
+  return {
+    birth_date: comune?.data_nascita || null,
+    height_cm:  num(comune?.altezza_cm),
+    sex:        comune?.sesso || null,
+    activity:   num(mio?.activity) || 1.375,
+  };
 }
 
 async function reload() {
@@ -805,7 +835,7 @@ function totaliDi(righe) {
 }
 
 function spiegaMotivo(motivo) {
-  if (motivo === 'profilo') return 'manca il profilo — vai in ⚙️ Impostazioni e scrivi data di nascita, altezza e sesso';
+  if (motivo === 'profilo') return 'mancano i dati anagrafici — si compilano in AppSphere → ☰ → 👤 Profilo (data di nascita, altezza, sesso)';
   if (motivo === 'peso') return 'manca una pesata — segnane una in «Ti pisasti?», il target si calcola sul peso';
   return 'dato mancante';
 }
@@ -1230,6 +1260,14 @@ function renderAlimenti() {
    VISTA: IMPOSTAZIONI
    ═══════════════════════════════════════════════════════════════ */
 
+// Le tre voci che cm_profile ammette. 'Altro' è legittimo e il conto lo regge (vedi
+// correzioneSesso): quel che non regge è la casella vuota, che non dice quale variante usare.
+const SESSI = { M: 'Uomo', F: 'Donna', Altro: 'Altro' };
+
+// «data di nascita, altezza e sesso» invece di «data di nascita, altezza, sesso»: l'elenco si
+// legge, non si scandisce.
+const elencoIt = v => v.length <= 1 ? (v[0] || '') : v.slice(0, -1).join(', ') + ' e ' + v[v.length - 1];
+
 // La voce di attività più vicina al valore archiviato. Non l'uguaglianza esatta: un decimale che
 // passa da PostgREST può tornare arrotondato, e con `===` la tendina si riaprirebbe sulla prima
 // voce — cioè cambiando il fattore in silenzio ogni volta che si salva il profilo.
@@ -1253,35 +1291,40 @@ function renderImpostazioni() {
     </div>
   </div>`;
 
+  // ── I dati anagrafici: si leggono, non si scrivono ──
+  // Stanno in cm_profile, la scheda condivisa con le altre app. Riproporli in un form qui
+  // vorrebbe dire due altezze diverse il giorno che una delle due si corregge.
+  const mancanti = [
+    !p.birth_date && 'data di nascita',
+    !p.height_cm && 'altezza',
+    !SESSI[p.sex] && 'sesso',
+  ].filter(Boolean);
+
   h += `<div class="card">
-    <div class="card-title">Il tuo profilo</div>
-    <div class="form-row-2">
-      <div class="form-group">
-        <label class="form-label" for="p-birth">Data di nascita</label>
-        <input type="date" class="form-input" id="p-birth" value="${p.birth_date || ''}" />
-        <div class="form-hint">Non l'età: quella si ricava, e così non invecchia da sola una volta l'anno.</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="p-height">Altezza (cm)</label>
-        <input type="number" class="form-input" id="p-height" step="0.5" min="100" max="230" value="${p.height_cm ?? ''}" />
-      </div>
+    <div class="card-header-row">
+      <div class="card-title">I tuoi dati — dal 👤 Profilo di AppSphere</div>
+      <a class="btn btn-outline btn-sm" href="/#profilo">✏️ Apri il Profilo</a>
     </div>
-    <div class="form-row-2">
-      <div class="form-group">
-        <label class="form-label" for="p-sex">Sesso</label>
-        <select class="form-input form-select" id="p-sex">
-          <option value="">—</option>
-          <option value="M" ${p.sex === 'M' ? 'selected' : ''}>Uomo</option>
-          <option value="F" ${p.sex === 'F' ? 'selected' : ''}>Donna</option>
-        </select>
-        <div class="form-hint">Entra nella formula del metabolismo basale, non è un'etichetta.</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="p-activity">Attività fisica</label>
-        <select class="form-input form-select" id="p-activity">
-          ${ATTIVITA.map(a => `<option value="${a.v}" ${a.v === attivitaScelta(p.activity) ? 'selected' : ''}>${esc(a.label)}</option>`).join('')}
-        </select>
-      </div>
+    <div class="table-wrap"><table class="table"><tbody>
+      <tr><td>Data di nascita</td><td class="text-right mono">${p.birth_date ? esc(fmtDataBreve(p.birth_date)) + '/' + p.birth_date.slice(0, 4) : '<span class="warn">da compilare</span>'}</td></tr>
+      <tr><td>Altezza</td><td class="text-right mono">${p.height_cm ? fmtG(p.height_cm) + ' cm' : '<span class="warn">da compilare</span>'}</td></tr>
+      <tr><td>Sesso</td><td class="text-right">${SESSI[p.sex] || '<span class="warn">da compilare</span>'}</td></tr>
+    </tbody></table></div>
+    ${mancanti.length
+      ? `<div class="note-box is-warn mt-12">Manca ${esc(elencoIt(mancanti))}: senza, il metabolismo basale non si calcola e il target non esce.
+           Si compila in <strong>AppSphere → ☰ → 👤 Profilo</strong>, ed è lo stesso profilo che usano le altre app.</div>`
+      : `<div class="note-box mt-12">Questi tre valori si cambiano solo dal Profilo di AppSphere. Qui si leggono:
+           un'altezza scritta in due posti diventa due altezze diverse il giorno che se ne corregge una.</div>`}
+  </div>`;
+
+  h += `<div class="card">
+    <div class="card-title">Attività fisica</div>
+    <div class="form-group">
+      <select class="form-input form-select" id="p-activity">
+        ${ATTIVITA.map(a => `<option value="${a.v}" ${a.v === attivitaScelta(p.activity) ? 'selected' : ''}>${esc(a.label)}</option>`).join('')}
+      </select>
+      <div class="form-hint">È il solo dato che vive qui: moltiplica il metabolismo basale e dice
+        quanto si consuma davvero in una giornata. Nel Profilo di AppSphere non c'è.</div>
     </div>
     <button class="btn btn-primary" data-action="salva-profilo">💾 Salva</button>
   </div>`;
@@ -1328,7 +1371,7 @@ function renderImpostazioni() {
   // ── Zona pericolosa ──
   h += `<div class="card card-danger">
     <div class="card-title">Zona pericolosa</div>
-    <div class="text-sm text-muted mb-16">Cancella tutte le righe del diario. Alimenti, profilo e target congelati restano.</div>
+    <div class="text-sm text-muted mb-16">Cancella tutte le righe del diario. Alimenti e target congelati restano.</div>
     <button class="btn btn-danger btn-sm" data-action="svuota-diario">🗑 Cancella tutto il diario</button>
   </div>`;
 
@@ -1762,19 +1805,18 @@ document.addEventListener('click', async e => {
     }
 
     else if (action === 'salva-profilo') {
-      const h = parseFloat($('p-height')?.value);
+      // Solo l'attività: data di nascita, altezza e sesso vivono in cm_profile e da qui non si
+      // toccano. al_profile resta per questo campo solo — le sue colonne birth_date, height_cm
+      // e sex non vengono più né lette né scritte.
       const body = {
         user_id: uid(),
-        birth_date: $('p-birth')?.value || null,
-        height_cm: (h && !isNaN(h)) ? h : null,
-        sex: $('p-sex')?.value || null,
         activity: parseFloat($('p-activity')?.value) || 1.375,
         updated_at: new Date().toISOString(),
       };
       // Una riga per utente: l'upsert sulla chiave primaria è l'unico modo perché salvare due
-      // volte non crei due profili con due basali diversi.
+      // volte non crei due righe con due fattori diversi.
       await sbIns('al_profile?on_conflict=user_id', [body], { 'Prefer': 'resolution=merge-duplicates,return=representation' });
-      showToast('💾 Profilo salvato');
+      showToast('💾 Attività salvata');
       await reload();
     }
 
@@ -1865,11 +1907,13 @@ async function init() {
   $('loading-overlay').classList.add('hidden');
   navigate('diario');
 
-  // Il profilo è la prima cosa senza la quale non esce nessun numero: se manca, si apre lì
-  // invece di mostrare un diario di trattini che non si spiega da sé.
-  if (!S.profile || !S.profile.birth_date || !S.profile.height_cm || !S.profile.sex) {
+  // I dati anagrafici sono la prima cosa senza la quale non esce nessun numero: se mancano si
+  // apre su Impostazioni, dove c'è scritto dove si compilano e il pulsante che ci porta, invece
+  // di mostrare un diario di trattini che non si spiega da sé.
+  const p = S.profile;
+  if (!p.birth_date || !p.height_cm || !SESSI[p.sex]) {
     navigate('impostazioni');
-    showToast('👤 Compila il profilo: senza, il target non si può calcolare');
+    showToast('👤 Completa il Profilo di AppSphere: senza, il target non si calcola');
   }
 }
 
