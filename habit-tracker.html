@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.80</title>
+    <title>Habit Stack Tracker v9.3.81</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1705,8 +1705,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.80';
-        const BUILD_TIME  = '2026-08-25T12:15:00Z';
+        const APP_VERSION = 'v9.3.81';
+        const BUILD_TIME  = '2026-08-27T10:20:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -5720,7 +5720,47 @@
         // data di ripartenza si sceglie — come nel «Ricomincia» del game over —
         // e il riquadro dice quanto costerebbe quella scelta prima di
         // confermarla, invece di farlo scoprire dopo.
+        //
+        // La finestra si apre sul **giorno dopo l'ultima spunta**: è lì che
+        // l'abitudine si era fermata davvero, ed è la data che rimette in fila
+        // i giorni senza saltarne nessuno. Resta una proposta — si cambia, e il
+        // riquadro rifà il conto.
         let resumeHabitTargetId = null;
+
+        // L'ultima spunta di un'abitudine, come stringa `YYYY-MM-DD`.
+        //
+        // ⚠️ Le righe `missed` non contano: non le ha messe nessuno, le scrive
+        // la riconciliazione sui giorni dovuti e mai spuntati. Prendendole per
+        // spunte, «il giorno dopo l'ultima spunta» diventerebbe il giorno dopo
+        // l'interruzione — cioè il punto in cui l'abitudine si era già fermata,
+        // non quello in cui la si stava ancora seguendo.
+        function lastCheckDateStr(habitId) {
+            let ultima = null;
+            for (const c of completions) {
+                if (c.habit_id !== habitId || c.status === 'missed' || !c.completed_at) continue;
+                const giorno = c.completed_at.slice(0, 10);
+                if (!ultima || giorno > ultima) ultima = giorno;
+            }
+            return ultima;
+        }
+
+        // La data da cui proporre la ripartenza: **il giorno dopo l'ultima
+        // spunta**, che è dove l'abitudine si era fermata davvero.
+        //
+        // Due limiti, entrambi necessari: senza nessuna spunta si ripiega su
+        // oggi (non c'è un «dopo» di niente), e in nessun caso si va oltre
+        // oggi — un `started_at` nel futuro è un'abitudine che non cade mai,
+        // quindi ripresa oggi e muta fino a domani.
+        function defaultResumeDateStr(habitId) {
+            const oggi = localDateStr();
+            const ultima = lastCheckDateStr(habitId);
+            if (!ultima) return oggi;
+            const dopo = parseDateLocal(ultima);
+            if (!dopo) return oggi;
+            dopo.setDate(dopo.getDate() + 1);
+            const dopoStr = localDateStr(dopo);
+            return dopoStr > oggi ? oggi : dopoStr;
+        }
 
         function showResumeHabitModal(habitId) {
             const habit = habits.find(h => h.id === habitId);
@@ -5728,12 +5768,18 @@
             resumeHabitTargetId = habitId;
 
             document.getElementById('resumeHabitName').textContent = habit.name;
-            document.getElementById('resumeStartDate').value = localDateStr();
+            document.getElementById('resumeStartDate').value = defaultResumeDateStr(habitId);
 
+            // Le due date che spiegano quella proposta: da dove era partita e
+            // fin dove era arrivata.
             const orig = parseDateLocal(habit.started_at);
-            document.getElementById('resumeOriginalStart').textContent = orig
-                ? `Era partita il ${orig.toLocaleDateString('it-IT')}`
-                : '';
+            const ultima = parseDateLocal(lastCheckDateStr(habitId));
+            document.getElementById('resumeOriginalStart').textContent = [
+                orig ? `Era partita il ${orig.toLocaleDateString('it-IT')}` : '',
+                ultima
+                    ? `ultima spunta il ${ultima.toLocaleDateString('it-IT')}`
+                    : 'nessuna spunta finora',
+            ].filter(Boolean).join(' · ');
 
             updateResumePreview();
             document.getElementById('resumeHabitModal').classList.add('active');

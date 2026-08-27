@@ -1424,7 +1424,8 @@ un'interrotta la **modifica non si offre** — quel che serve è rimetterla in m
 stanno in una `RigaScorrevole` con le larghezze misurate su **tutte e quattro** le etichette
 possibili, comprese quelle che quella scheda non mostra.
 
-⚠️ **Riprendere chiede da quale data ripartire e riscrive `started_at`** (default oggi), esattamente
+⚠️ **Riprendere chiede da quale data ripartire e riscrive `started_at`** (proposta: il **giorno
+dopo l'ultima spunta**), esattamente
 come nel web: con la data originale il primo `hb_reconcile` marcherebbe `missed` ogni giorno passato
 dall'interruzione — guarda da `started_at` a ieri — i jolly finirebbero sul posto e il game over
 scatterebbe prima ancora di rivedere la scheda. Quanto costa la data scelta lo dice
@@ -1762,7 +1763,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   non passano dall'archivio: un'abitudine interrotta resta in `hb_habits` con tutte le sue spunte,
   ma esce dalla dashboard e dalla riconciliazione, quindi da lì in poi non genera `missed`, non
   consuma jolly e non può né vincere né fallire.
-  ⚠️ **Riprendere chiede da quale data ripartire e riscrive `started_at`** (default oggi). Con la
+  ⚠️ **Riprendere chiede da quale data ripartire e riscrive `started_at`**. La finestra si apre sul
+  **giorno dopo l'ultima spunta** (`defaultResumeDateStr()` / `AbituatiState.ripartenzaSuggerita()`),
+  che è dove l'abitudine si era fermata davvero; le righe `missed` non contano come spunte — le
+  scrive la riconciliazione, non l'utente — senza nessuna spunta si ripiega su oggi, e la proposta
+  **non va mai oltre oggi**, perché uno `started_at` nel futuro è un'abitudine che non cade mai.
+  Con la
   data originale, `checkMissedDays` — che guarda da `started_at` a ieri — marcherebbe `missed` ogni
   giorno passato dall'interruzione: i jolly finirebbero sul posto e il game over scatterebbe prima
   ancora di rivedere la scheda. La finestra conta quei giorni **prima** di scrivere
