@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.1.0</title>
+    <title>Obiettivi v1.2.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -253,6 +253,73 @@
         .vote-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
         .vote-val { font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700; color: var(--secondary); }
 
+        /* ── AZIONI ── */
+        .filters {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.75rem; margin-bottom: 1.25rem;
+            padding: 1rem; background: var(--card-bg); border: 2px solid var(--border);
+        }
+        .filter-group .form-label { margin-bottom: 0.25rem; }
+
+        .act-section { margin-bottom: 1.5rem; }
+        .act-section-head {
+            display: flex; align-items: baseline; gap: 0.5rem;
+            font-family: 'Space Mono', monospace; font-size: 0.78rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            padding-bottom: 0.35rem; margin-bottom: 0.6rem;
+            border-bottom: 2px solid var(--border);
+        }
+        .act-count { color: var(--muted); font-weight: 400; }
+
+        .act-card {
+            display: flex; gap: 0.75rem; align-items: flex-start;
+            background: var(--card-bg); border: 2px solid var(--border);
+            border-left-width: 6px; padding: 0.75rem 0.9rem; margin-bottom: 0.6rem;
+        }
+        .act-body { flex: 1; min-width: 0; }
+        .act-title { font-size: 1.1rem; font-weight: 700; cursor: pointer; }
+        .act-meta {
+            font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted);
+            margin-top: 0.15rem;
+        }
+        .act-desc { font-size: 0.95rem; color: var(--muted); margin-top: 0.3rem; }
+        .act-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+        .act-tag {
+            font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700;
+            padding: 0.1rem 0.35rem; color: #fff; text-transform: uppercase;
+        }
+        .act-buttons { display: flex; flex-direction: column; gap: 0.35rem; flex-shrink: 0; }
+        .act-late { color: var(--danger); font-weight: 700; }
+
+        /* ── CHIP (giorni, categorie, date) ── */
+        .chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .chip {
+            font-family: 'Space Mono', monospace; font-size: 0.8rem;
+            padding: 0.35rem 0.6rem; border: 2px solid var(--border);
+            background: var(--input-bg); cursor: pointer; user-select: none;
+        }
+        .chip.on { background: var(--secondary); border-color: var(--secondary); color: #fff; }
+        .chip .chip-x { margin-left: 0.4rem; opacity: 0.7; }
+        .date-adder {
+            display: grid; grid-template-columns: 1fr auto; gap: 0.5rem;
+            align-items: center; margin-bottom: 0.5rem;
+        }
+
+        /* ── STEP DI UN WORKFLOW ── */
+        .wf-step {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+        }
+        .wf-step:last-child { border-bottom: none; }
+        .wf-state { font-size: 1.1rem; flex-shrink: 0; }
+        .wf-name { flex: 1; min-width: 0; }
+        .wf-dep { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted); }
+        .wf-editor-row {
+            display: grid; grid-template-columns: 1fr 36px; gap: 0.5rem;
+            align-items: center; margin-bottom: 0.4rem;
+        }
+        .wf-editor-deps { grid-column: 1 / -1; margin: 0.1rem 0 0.6rem 0; }
+
         /* ── TASK LINK ── */
         .link-row {
             display: flex; align-items: center; gap: 0.6rem;
@@ -469,6 +536,8 @@
                  onclick="showPage('obiettivi'); setNavActive(this)">🎯</div>
             <div class="nav-item" data-text="Rilevazioni" data-section="rilevazioni"
                  onclick="showPage('rilevazioni'); setNavActive(this)">📈</div>
+            <div class="nav-item" data-text="Azioni" data-section="azioni"
+                 onclick="showPage('azioni'); setNavActive(this)">✅</div>
             <div class="nav-item" data-text="Archivio" data-section="archivio"
                  onclick="showPage('archivio'); setNavActive(this)">📦</div>
             <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
@@ -498,6 +567,55 @@
                 se cambi il metro, la serie storica non è più confrontabile.
             </div>
             <div id="metricsList"></div>
+        </section>
+
+        <!-- PAGE: AZIONI -->
+        <section class="page" id="page-azioni">
+            <div class="page-header">
+                <div class="page-title">Azioni</div>
+                <button class="btn btn-accent" onclick="openActionEditor(null,null)">+ Azione</button>
+            </div>
+            <div class="page-hint">
+                Le cose da fare per arrivare all'obiettivo. Sono di quest'app — non task
+                collegati altrove — e ogni azione conclusa muove la barra «esecuzione»
+                del suo obiettivo.
+            </div>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label class="form-label">Cerca</label>
+                    <input type="text" class="form-input" id="fltText" placeholder="titolo o descrizione"
+                           oninput="renderActionsPage()">
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Obiettivo</label>
+                    <select class="form-select" id="fltObj" onchange="renderActionsPage()"></select>
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-select" id="fltType" onchange="renderActionsPage()">
+                        <option value="">tutti</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Priorità</label>
+                    <select class="form-select" id="fltPriority" onchange="renderActionsPage()"></select>
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Categoria</label>
+                    <select class="form-select" id="fltCategory" onchange="renderActionsPage()"></select>
+                </div>
+                <div class="filter-group">
+                    <label class="form-label">Stato</label>
+                    <select class="form-select" id="fltStatus" onchange="renderActionsPage()">
+                        <option value="vive">in corso</option>
+                        <option value="terminated">concluse</option>
+                        <option value="">tutte</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="actionsList"></div>
         </section>
 
         <!-- PAGE: ARCHIVIO -->
@@ -751,30 +869,214 @@
     </div>
 </div>
 
-<!-- ══════════════ MODAL: COLLEGA AZIONE ══════════════ -->
-<div class="modal" id="linkModal">
+<!-- ══════════════ MODAL: EDITOR AZIONE ══════════════ -->
+<div class="modal" id="actionModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="actionModalTitle">Nuova azione</div>
+            <button class="modal-close" onclick="closeModal('actionModal')">&times;</button>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Titolo</label>
+            <input type="text" class="form-input" id="aTitle" placeholder="es. Lezione di conversazione">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Descrizione</label>
+            <textarea class="form-textarea" id="aDesc" placeholder="facoltativa"></textarea>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Obiettivo</label>
+                <select class="form-select" id="aObjective"></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Tipo</label>
+                <select class="form-select" id="aType" onchange="onActionTypeChange()"></select>
+                <div class="form-hint" id="aTypeHint"></div>
+            </div>
+        </div>
+
+        <div class="form-row" id="aWhenRow">
+            <div class="form-group">
+                <label class="form-label">Data di inizio</label>
+                <input type="date" class="form-input" id="aStartDate">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ora</label>
+                <input type="time" class="form-input" id="aStartTime" value="09:00">
+                <div class="form-hint">L'orario resta lo stesso a ogni occorrenza.</div>
+            </div>
+        </div>
+
+        <!-- single -->
+        <div class="form-group" id="aDeadlineGroup">
+            <label class="form-label">Scadenza</label>
+            <input type="date" class="form-input" id="aDeadline">
+            <div class="form-hint">Facoltativa. Completandola dopo, l'azione vale i punti «in ritardo».</div>
+        </div>
+
+        <!-- simple_recurring -->
+        <div class="form-group" id="aRepeatGroup">
+            <label class="form-label">Si ripete ogni</label>
+            <input type="number" class="form-input" id="aRepeatDays" min="1" value="7">
+            <div class="form-hint">Giorni dopo l'ultima volta che l'hai chiusa.</div>
+        </div>
+
+        <!-- recurring -->
+        <div id="aRecurringGroup">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Frequenza</label>
+                    <select class="form-select" id="aFreq" onchange="onActionFreqChange()">
+                        <option value="daily">Giornaliera</option>
+                        <option value="weekly">Settimanale</option>
+                        <option value="monthly">Mensile</option>
+                        <option value="yearly">Annuale</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ogni</label>
+                    <input type="number" class="form-input" id="aInterval" min="1" value="1">
+                    <div class="form-hint" id="aIntervalHint">giorni</div>
+                </div>
+            </div>
+            <div class="form-group" id="aDowGroup">
+                <label class="form-label">Giorni della settimana</label>
+                <div class="chip-row" id="aDow"></div>
+            </div>
+            <div class="form-group" id="aDomGroup">
+                <label class="form-label">Giorni del mese</label>
+                <div class="chip-row" id="aDom"></div>
+            </div>
+            <div class="form-group" id="aDatesGroup">
+                <label class="form-label">Ricorrenze annuali</label>
+                <div class="date-adder">
+                    <input type="date" class="form-input" id="aYearDate">
+                    <button class="btn btn-ghost btn-small" onclick="addYearlyDate()">+ Aggiungi</button>
+                </div>
+                <div class="chip-row" id="aDatesList"></div>
+                <div class="form-hint">Conta il giorno e il mese: l'anno lo mette la ricorrenza.</div>
+            </div>
+        </div>
+
+        <!-- multiple -->
+        <div class="form-group" id="aMultiGroup">
+            <label class="form-label">Le date</label>
+            <div class="date-adder">
+                <input type="date" class="form-input" id="aMultiDate">
+                <button class="btn btn-ghost btn-small" onclick="addMultipleDate()">+ Aggiungi</button>
+            </div>
+            <div class="chip-row" id="aMultiList"></div>
+            <div class="form-hint">Ogni volta che la chiudi, l'azione passa alla data successiva.</div>
+        </div>
+
+        <!-- workflow -->
+        <div id="aWorkflowGroup">
+            <div class="section-title">
+                Step del workflow
+                <button class="btn btn-ghost btn-small" onclick="wfAddStepRow()">+ Step</button>
+            </div>
+            <div class="form-hint" style="margin-bottom:0.75rem;">
+                Ogni step può dipendere da quelli sopra: finché le sue dipendenze non sono
+                chiuse resta bloccato. Servono almeno due step — con uno solo è una singola
+                scritta in modo complicato.
+            </div>
+            <div id="wfStepList"></div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Priorità</label>
+                <select class="form-select" id="aPriority"></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Stato</label>
+                <select class="form-select" id="aStatus">
+                    <option value="started">In corso</option>
+                    <option value="completed">Completata</option>
+                    <option value="skipped">Saltata</option>
+                    <option value="failed">Fallita</option>
+                    <option value="terminated">Conclusa</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Categorie</label>
+            <div class="chip-row" id="aCategories"></div>
+        </div>
+
+        <div class="section-title">Punti</div>
+        <div class="form-row" id="aPointsRow">
+            <div class="form-group">
+                <label class="form-label">Successo</label>
+                <input type="number" class="form-input" id="aPtSuccess" value="10">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Fallimento</label>
+                <input type="number" class="form-input" id="aPtFailure" value="-5">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Salto</label>
+                <input type="number" class="form-input" id="aPtSkip" value="-2">
+            </div>
+            <div class="form-group" id="aPtLateGroup">
+                <label class="form-label">In ritardo</label>
+                <input type="number" class="form-input" id="aPtLate" value="3">
+            </div>
+        </div>
+        <div class="form-row" id="aWfPointsRow">
+            <div class="form-group">
+                <label class="form-label">Step riuscito</label>
+                <input type="number" class="form-input" id="aPtStepOk" value="5">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Step fallito</label>
+                <input type="number" class="form-input" id="aPtStepKo" value="-3">
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-danger"    id="aDeleteBtn" onclick="deleteAction()" style="margin-right:auto;">Elimina</button>
+            <button class="btn btn-secondary" onclick="closeModal('actionModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="saveAction()">Salva</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: STEP DI UN WORKFLOW ══════════════ -->
+<div class="modal" id="wfModal">
     <div class="modal-content narrow">
         <div class="modal-header">
-            <div class="modal-title">Collega un'azione</div>
-            <button class="modal-close" onclick="closeModal('linkModal')">&times;</button>
+            <div class="modal-title" id="wfModalTitle">Workflow</div>
+            <button class="modal-close" onclick="closeModal('wfModal')">&times;</button>
         </div>
-        <div class="page-hint" style="margin-bottom:1rem;">
-            Le azioni restano task e abitudini veri, gestiti nelle loro app. Qui si collegano soltanto.
+        <div id="wfBody"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('wfModal')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ MODAL: SALTA DI N GIORNI ══════════════ -->
+<div class="modal" id="skipModal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <div class="modal-title">Sposta l'azione</div>
+            <button class="modal-close" onclick="closeModal('skipModal')">&times;</button>
         </div>
         <div class="form-group">
-            <label class="form-label">Tipo</label>
-            <select class="form-select" id="linkKind" onchange="renderLinkOptions()">
-                <option value="task">Task (Tasks)</option>
-                <option value="habit">Abitudine (Habit Tracker)</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Elemento</label>
-            <select class="form-select" id="linkTarget"></select>
+            <label class="form-label">Di quanti giorni</label>
+            <input type="number" class="form-input" id="skipDays" min="1" value="1">
+            <div class="form-hint" id="skipHint"></div>
         </div>
         <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="closeModal('linkModal')">Annulla</button>
-            <button class="btn btn-success"   onclick="saveLink()">Collega</button>
+            <button class="btn btn-secondary" onclick="closeModal('skipModal')">Annulla</button>
+            <button class="btn btn-success"   onclick="confirmSkip()">Sposta</button>
         </div>
     </div>
 </div>
@@ -783,8 +1085,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.1.0';
-var BUILD_TIME  = '2026-08-27T11:00:00Z';
+var APP_VERSION = 'v1.2.0';
+var BUILD_TIME  = '2026-08-27T19:30:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -815,9 +1117,10 @@ let objectives   = [];   // ob_objectives
 let metrics      = [];   // ob_metrics
 let milestones   = [];   // ob_milestones
 let measurements = [];   // ob_measurements
-let taskLinks    = [];   // ob_task_links
-let tasksRef     = [];   // ts_tasks (per il picker)
-let habitsRef    = [];   // hb_habits (per il picker)
+let actions      = [];   // ob_actions
+let actionHistory = [];  // ob_action_history
+let categories   = [];   // cm_categories (condivise con Tasks)
+let priorities   = [];   // cm_priorities (condivise con Tasks)
 let progress     = {};   // { objective_id: risultato RPC }
 
 // stato editor
@@ -828,8 +1131,15 @@ let editingMetricObjId = null;
 let editingMsId     = null;
 let editingMsObjId  = null;
 let measuringMetricId = null;
-let linkingObjId    = null;
-let toastTimer      = null;
+let editingActionId   = null;
+let editingActionObjId = null;
+let skippingActionId  = null;
+let wfActionId        = null;
+let wfSteps           = [];   // step in modifica dentro l'editor
+let actCategories     = [];   // categorie scelte nell'editor
+let yearlyDates       = [];   // 'DD-MM' del tipo annuale
+let multiDates        = [];   // 'YYYY-MM-DD' del tipo multiplo
+let toastTimer        = null;
 
 // ════════════════════════════════════════════════════════════
 // AUTH
@@ -911,27 +1221,39 @@ async function startApp() {
 }
 
 async function loadAll() {
-    const [o, m, ms, meas, links] = await Promise.all([
+    const [o, m, ms, meas, act, hist, cat, pri] = await Promise.all([
         sb.from('ob_objectives').select('*').order('sort_order').order('due_date'),
         sb.from('ob_metrics').select('*').order('sort_order'),
         sb.from('ob_milestones').select('*').order('due_date'),
         sb.from('ob_measurements').select('*').order('measured_on'),
-        sb.from('ob_task_links').select('*')
+        sb.from('ob_actions').select('*').order('sort_order'),
+        sb.from('ob_action_history').select('*').order('timestamp', { ascending: false }),
+        sb.from('cm_categories').select('*'),
+        sb.from('cm_priorities').select('*').order('value', { ascending: false })
     ]);
 
-    for (const r of [o, m, ms, meas, links]) {
+    for (const r of [o, m, ms, meas, act, hist]) {
         if (r.error) { if (handleAuthError(r.error)) return; console.error(r.error); showToast('❌ ' + r.error.message); return; }
     }
+    // Categorie e priorità sono condivise e non stanno in nessuna migration: se
+    // mancano l'app resta usabile senza, invece di non aprirsi affatto.
+    if (cat.error) console.warn('cm_categories non leggibile:', cat.error.message);
+    if (pri.error) console.warn('cm_priorities non leggibile:', pri.error.message);
 
-    objectives   = o.data     || [];
-    metrics      = m.data     || [];
-    milestones   = ms.data    || [];
-    measurements = meas.data  || [];
-    taskLinks    = links.data || [];
+    objectives    = o.data    || [];
+    metrics       = m.data    || [];
+    milestones    = ms.data   || [];
+    measurements  = meas.data || [];
+    actions       = act.data  || [];
+    actionHistory = hist.data || [];
+    categories    = cat.data  || [];
+    priorities    = pri.data  || [];
 
     await loadProgress();
+    fillActionFilters();
     renderObjectives();
     renderMetricsPage();
+    renderActionsPage();
     renderArchive();
 }
 
@@ -945,17 +1267,6 @@ async function loadProgress() {
         if (r.error) { console.error('progress', objectives[i].id, r.error); return; }
         if (r.data && r.data.ok) progress[objectives[i].id] = r.data;
     });
-}
-
-// riferimenti per il picker azioni — caricati solo quando servono
-async function loadActionRefs() {
-    if (tasksRef.length || habitsRef.length) return;
-    const [t, h] = await Promise.all([
-        sb.from('ts_tasks').select('id,title,status').order('title'),
-        sb.from('hb_habits').select('id,name').order('name')
-    ]);
-    if (!t.error) tasksRef  = t.data || [];
-    if (!h.error) habitsRef = h.data || [];
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1002,7 +1313,8 @@ const KIND_LABEL = { autovalutazione: 'autovalutazione', automisurazione: 'autom
 function metricsOf(objId)    { return metrics.filter(m => m.objective_id === objId); }
 function measuresOf(metId)   { return measurements.filter(m => m.metric_id === metId); }
 function milestonesOf(objId) { return milestones.filter(m => m.objective_id === objId); }
-function linksOf(objId)      { return taskLinks.filter(l => l.objective_id === objId); }
+function actionsOf(objId)    { return actions.filter(a => a.objective_id === objId); }
+function historyOf(objId)    { return actionHistory.filter(h => h.objective_id === objId); }
 function childrenOf(objId)   { return objectives.filter(o => o.parent_id === objId); }
 function primaryOf(objId)    { return metricsOf(objId).find(m => m.role === 'primary') || null; }
 
@@ -1113,8 +1425,12 @@ function renderObjectiveCard(obj) {
                     </div>
                     <div class="bar-track"><div class="bar-fill execution" style="width:${execution || 0}%"></div></div>
                     <div class="bar-sub">${execution !== null
-                        ? (p.children_done + '/' + p.children_total + ' sotto-obiettivi · ' + p.milestones_hit + '/' + p.milestones_total + ' milestone')
-                        : 'nessun sotto-obiettivo'}</div>
+                        ? [
+                            p.children_total ? p.children_done + '/' + p.children_total + ' sotto-obiettivi' : '',
+                            p.milestones_total ? p.milestones_hit + '/' + p.milestones_total + ' milestone' : '',
+                            p.actions_total ? p.actions_done + '/' + p.actions_total + ' azioni' : ''
+                          ].filter(Boolean).join(' · ')
+                        : 'niente da eseguire: né sotto-obiettivi, né milestone, né azioni'}</div>
                 </div>
             </div>
 
@@ -1244,11 +1560,10 @@ async function openDetail(objId) {
     const obj = objectives.find(o => o.id === objId);
     if (!obj) return;
     // i nomi di task e abitudini servono già al primo render dei collegamenti
-    await loadActionRefs();
     const p    = progress[objId] || {};
     const mets = metricsOf(objId);
     const ms   = milestonesOf(objId);
-    const lks  = linksOf(objId);
+    const acts = actionsOf(objId);
     const kids = childrenOf(objId);
 
     document.getElementById('detailTitle').textContent = obj.title;
@@ -1336,21 +1651,25 @@ async function openDetail(objId) {
             </div>`).join('')
         : `<div class="form-hint">Nessuna. Le milestone sono la curva attesa: senza, il semaforo non ha riferimento.</div>`;
 
-    // AZIONI COLLEGATE
-    html += `<div class="section-title">Azioni collegate
-        <button class="btn btn-ghost btn-small" onclick="openLinkModal('${objId}')">+ Collega</button></div>`;
-    html += lks.length
-        ? lks.map(l => {
-            const name = l.task_id
-                ? (tasksRef.find(t => t.id === l.task_id)?.title || '(task)')
-                : (habitsRef.find(h => h.id === l.habit_id)?.name || '(abitudine)');
-            return `<div class="link-row">
-                <span class="link-kind">${l.task_id ? 'task' : 'abitudine'}</span>
-                <span class="link-name">${esc(name)}</span>
-                <button class="btn btn-ghost btn-small" onclick="removeLink('${l.id}')">Scollega</button>
-            </div>`;
-          }).join('')
-        : `<div class="form-hint">Nessuna. Le azioni restano task e abitudini veri nelle loro app: qui si collegano soltanto.</div>`;
+    // AZIONI
+    html += `<div class="section-title">Azioni
+        <button class="btn btn-ghost btn-small" onclick="closeModal('detailModal');openActionEditor('${objId}',null)">+ Azione</button></div>`;
+    html += acts.length
+        ? acts.map(a => renderActionCard(a, { showObjective: false })).join('')
+        : `<div class="form-hint">Nessuna. Le azioni sono il «cosa faccio» dell'obiettivo:
+             ogni azione conclusa muove la barra dell'esecuzione.</div>`;
+
+    // STORICO DELLE AZIONI — le ultime 12, che è quanto si legge davvero
+    const hist = historyOf(objId).slice(0, 12);
+    if (hist.length) {
+        html += `<div class="section-title">Storico delle azioni</div>`;
+        html += hist.map(h => `<div class="hist-row">
+            <div class="hist-date">${fmtDate(String(h.timestamp).slice(0,10))}</div>
+            <div class="hist-note">${esc(h.action_title || '')}</div>
+            <div class="hist-val">${ACTION_LABEL[h.action] || esc(h.action)}</div>
+            <div class="hist-val">${h.points > 0 ? '+' : ''}${h.points}</div>
+        </div>`).join('');
+    }
 
     html += `<div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal('detailModal');openObjectiveEditor('${objId}',null)">Modifica obiettivo</button>
@@ -1716,66 +2035,689 @@ async function deleteMilestone() {
 }
 
 // ════════════════════════════════════════════════════════════
-// AZIONI COLLEGATE
+// AZIONI — il «cosa faccio» dell'obiettivo
+//
+// Sono di quest'app, su tabelle proprie (ob_actions / ob_action_history), e non
+// un collegamento a un task che vive altrove: da qui si creano, si chiudono e
+// si vede come sono andate.
+//
+// ⚠️ Il ciclo di vita passa SOLO dalle RPC ob_action_complete / _skip / _fail,
+// esattamente come i task passano da task_complete / task_skip / task_fail. Qui
+// non si calcola nessuna prossima occorrenza: due implementazioni della stessa
+// ricorrenza sono due date diverse il giorno che una delle due cambia.
 // ════════════════════════════════════════════════════════════
-async function openLinkModal(objId) {
-    linkingObjId = objId;
-    await loadActionRefs();
-    renderLinkOptions();
+const TYPE_LABEL = {
+    single:           'singola',
+    recurring:        'ricorrente',
+    simple_recurring: 'ogni N giorni',
+    multiple:         'date multiple',
+    free_repeat:      'libera ripetizione',
+    workflow:         'workflow'
+};
+const TYPE_HINT = {
+    single:           'Si fa una volta e finisce. Con una scadenza, completandola dopo vale i punti «in ritardo».',
+    recurring:        'Torna secondo un calendario: ogni giorno, certi giorni della settimana o del mese, certe date dell\'anno.',
+    simple_recurring: 'Torna N giorni dopo l\'ultima volta che l\'hai chiusa, non a calendario fisso.',
+    multiple:         'Un elenco di date decise a mano. Ogni volta che la chiudi passa alla successiva.',
+    free_repeat:      'Si può rifare quando vuoi: non ha una prossima volta, quindi non si salta e non si fallisce.',
+    workflow:         'Più step con dipendenze: uno resta bloccato finché quelli da cui dipende non sono chiusi.'
+};
+const ACTION_LABEL = {
+    completed:      '✅ completata',
+    completed_late: '🐌 completata in ritardo',
+    skipped:        '⏭ saltata',
+    failed:         '❌ fallita',
+    terminated:     '🏁 conclusa'
+};
+const DOW_LABEL = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+
+// Quali pulsanti ha un tipo, e sono le stesse regole dei task: si salta e si
+// fallisce solo ciò che ha una prossima volta a cui rimandare.
+const PUO_SALTARE  = ['recurring', 'simple_recurring', 'multiple', 'single'];
+const PUO_FALLIRE  = ['single', 'recurring', 'simple_recurring', 'multiple', 'workflow'];
+
+// Il giorno di un'istante, letto in ora locale: slice(0,10) darebbe il giorno
+// UTC, e un'azione della mezzanotte finirebbe nel giorno prima.
+function localDay(ts) {
+    if (!ts) return null;
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts).slice(0, 10);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+                           + '-' + String(d.getDate()).padStart(2, '0');
+}
+function localTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+// Data + ora locali → ISO con fuso: andata e ritorno restituiscono l'ora scritta.
+function localToISO(dateStr, timeStr) {
+    const [y, m, d] = String(dateStr).split('-').map(Number);
+    const [hh, mm]  = String(timeStr || '09:00').split(':').map(Number);
+    return new Date(y, m - 1, d, hh || 0, mm || 0, 0).toISOString();
+}
+
+// Quando cade un'azione: la prossima occorrenza, o la partenza se non ce l'ha.
+function actionDay(a) { return localDay(a.next_occurrence_date || a.start_date); }
+
+function actionIsAlive(a) { return a.status !== 'terminated'; }
+
+function categoryById(id) { return categories.find(c => c.id === id) || null; }
+function priorityById(id) { return priorities.find(p => p.id === id) || null; }
+
+// ── filtri ────────────────────────────────────────────────────────────────
+function fillActionFilters() {
+    const keep = (sel, html) => {
+        const el = document.getElementById(sel);
+        if (!el) return;
+        const cur = el.value;
+        el.innerHTML = html;
+        el.value = cur;
+    };
+    keep('fltObj', '<option value="">tutti</option>' +
+        objectives.map(o => `<option value="${o.id}">${esc(o.title)}</option>`).join(''));
+    keep('fltType', '<option value="">tutti</option>' +
+        Object.keys(TYPE_LABEL).map(t => `<option value="${t}">${TYPE_LABEL[t]}</option>`).join(''));
+    keep('fltPriority', '<option value="">tutte</option>' +
+        priorities.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(''));
+    keep('fltCategory', '<option value="">tutte</option>' +
+        categories.map(c => `<option value="${c.id}">${esc((c.icon || '') + ' ' + c.name)}</option>`).join(''));
+}
+
+function filteredActions() {
+    const txt  = (document.getElementById('fltText')?.value || '').trim().toLowerCase();
+    const obj  = document.getElementById('fltObj')?.value || '';
+    const typ  = document.getElementById('fltType')?.value || '';
+    const pri  = document.getElementById('fltPriority')?.value || '';
+    const cat  = document.getElementById('fltCategory')?.value || '';
+    const stat = document.getElementById('fltStatus')?.value ?? 'vive';
+
+    return actions.filter(a => {
+        if (obj && a.objective_id !== obj) return false;
+        if (typ && a.type !== typ) return false;
+        if (pri && a.priority_id !== pri) return false;
+        if (cat && !(a.categories || []).includes(cat)) return false;
+        if (stat === 'vive' && !actionIsAlive(a)) return false;
+        if (stat === 'terminated' && actionIsAlive(a)) return false;
+        if (txt) {
+            const hay = ((a.title || '') + ' ' + (a.description || '')).toLowerCase();
+            if (!hay.includes(txt)) return false;
+        }
+        return true;
+    });
+}
+
+// ── elenco ────────────────────────────────────────────────────────────────
+function renderActionsPage() {
+    const host = document.getElementById('actionsList');
+    if (!host) return;
+    const rows = filteredActions();
+
+    if (!rows.length) {
+        host.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div>
+            <div class="empty-title">Nessuna azione</div>
+            <div class="empty-desc">Un obiettivo senza azioni è un desiderio: aggiungi la prima cosa da fare.</div></div>`;
+        return;
+    }
+
+    const oggi = todayISO();
+    const gruppi = [
+        { key: 'scadute',  titolo: '⚠️ Scadute',            righe: [] },
+        { key: 'oggi',     titolo: '🎯 Oggi',                righe: [] },
+        { key: 'prossime', titolo: '📅 Prossime',            righe: [] },
+        { key: 'libere',   titolo: '🔄 A libera ripetizione', righe: [] },
+        { key: 'concluse', titolo: '🏁 Concluse',            righe: [] }
+    ];
+    const g = k => gruppi.find(x => x.key === k).righe;
+
+    rows.forEach(a => {
+        if (!actionIsAlive(a))          { g('concluse').push(a); return; }
+        if (a.type === 'free_repeat')   { g('libere').push(a);   return; }
+        const d = actionDay(a);
+        if (!d)         g('prossime').push(a);
+        else if (d < oggi) g('scadute').push(a);
+        else if (d === oggi) g('oggi').push(a);
+        else g('prossime').push(a);
+    });
+
+    // dentro ogni gruppo: prima quelle che cadono prima, senza data in fondo
+    gruppi.forEach(gr => gr.righe.sort((x, y) => {
+        const dx = actionDay(x) || '9999', dy = actionDay(y) || '9999';
+        return dx === dy ? (x.title || '').localeCompare(y.title || '') : dx.localeCompare(dy);
+    }));
+
+    host.innerHTML = gruppi.filter(gr => gr.righe.length).map(gr => `
+        <div class="act-section">
+            <div class="act-section-head">
+                <span>${gr.titolo}</span>
+                <span class="act-count">${gr.righe.length}</span>
+            </div>
+            ${gr.righe.map(a => renderActionCard(a, { showObjective: true })).join('')}
+        </div>`).join('');
+}
+
+function renderActionCard(a, opts) {
+    const obj  = objectives.find(o => o.id === a.objective_id);
+    const pri  = priorityById(a.priority_id);
+    const cats = (a.categories || []).map(categoryById).filter(Boolean);
+    const day  = actionDay(a);
+    const ora  = localTime(a.next_occurrence_date || a.start_date);
+    const late = day && day < todayISO() && actionIsAlive(a) && a.type !== 'free_repeat';
+    const colore = pri ? pri.color : (obj?.color || '#6C5CE7');
+
+    // Il workflow si chiude dai suoi step, non da un pulsante «Completa»:
+    // completandolo di forza si salterebbero gli step ancora aperti.
+    const isWf  = a.type === 'workflow';
+    const vivo  = actionIsAlive(a);
+    const bottoni = !vivo ? '' : `
+        ${isWf
+            ? `<button class="btn btn-accent btn-small" onclick="openWorkflow('${a.id}')">Step</button>`
+            : `<button class="btn btn-success btn-small" onclick="completeAction('${a.id}')">Completa</button>`}
+        ${PUO_SALTARE.includes(a.type) ? `<button class="btn btn-ghost btn-small" onclick="openSkip('${a.id}')">Salta</button>` : ''}
+        ${PUO_FALLIRE.includes(a.type) ? `<button class="btn btn-ghost btn-small" onclick="failAction('${a.id}')">Fallisci</button>` : ''}`;
+
+    const stepInfo = isWf && Array.isArray(a.workflow_steps)
+        ? ` · ${a.workflow_steps.filter(x => x.status === 'completed' || x.status === 'failed').length}/${a.workflow_steps.length} step`
+        : '';
+
+    return `
+    <div class="act-card" style="border-left-color:${esc(colore)}">
+        <div class="act-body">
+            <div class="act-title" onclick="openActionEditor('${a.objective_id}','${a.id}')">${esc(a.title)}</div>
+            <div class="act-meta">
+                ${TYPE_LABEL[a.type] || esc(a.type)}${stepInfo}
+                ${day ? ' · <span class="' + (late ? 'act-late' : '') + '">' + fmtDate(day) + (ora ? ' ' + ora : '') + '</span>' : ''}
+                ${a.type === 'free_repeat' && a.last_completed_date ? ' · ultima: ' + fmtDate(localDay(a.last_completed_date)) : ''}
+                ${opts.showObjective && obj ? ' · ' + esc(obj.title) : ''}
+                ${vivo ? '' : ' · ' + (esitoDi(a.id) || 'conclusa')}
+            </div>
+            ${a.description ? `<div class="act-desc">${esc(a.description)}</div>` : ''}
+            ${(pri || cats.length) ? `<div class="act-tags">
+                ${pri ? `<span class="act-tag" style="background:${esc(pri.color || '#6C5CE7')}">🎯 ${esc(pri.name)}</span>` : ''}
+                ${cats.map(c => `<span class="act-tag" style="background:${esc(c.color || '#6B7280')}">${esc((c.icon || '') + ' ' + c.name)}</span>`).join('')}
+            </div>` : ''}
+        </div>
+        <div class="act-buttons">${bottoni}</div>
+    </div>`;
+}
+
+// Com'è finita: lo dice lo storico, che è il posto dove è scritto. Lo status
+// dice solo che è chiusa — `terminated` lo diventa anche fallendo.
+function esitoDi(actionId) {
+    const righe = actionHistory.filter(h => h.action_id === actionId
+                                         && h.action !== 'terminated');
+    if (!righe.length) return null;
+    return ACTION_LABEL[righe[0].action] || righe[0].action;
+}
+
+// ── ciclo di vita: tutto delegato alle RPC ────────────────────────────────
+async function runActionRpc(fn, args, verbo) {
+    const { data, error } = await sb.rpc(fn, args);
+    if (error)     { if (handleAuthError(error)) return null; showToast('❌ ' + error.message); return null; }
+    if (!data?.ok) { showToast('❌ ' + (data?.error || 'errore sconosciuto')); return null; }
+    const pt = data.points;
+    showToast(verbo + (pt !== undefined && pt !== null ? ' · ' + (pt > 0 ? '+' : '') + pt + ' pt' : ''));
+    await loadAll();
+    return data;
+}
+
+async function completeAction(id) {
+    await runActionRpc('ob_action_complete', { p_action_id: id, p_today: todayISO() }, '✅ Completata');
+}
+
+async function failAction(id) {
+    const a = actions.find(x => x.id === id);
+    if (!await customConfirm(`Segno «${a ? a.title : 'l\'azione'}» come fallita?`)) return;
+    await runActionRpc('ob_action_fail', { p_action_id: id }, '❌ Fallita');
+}
+
+// Il salto: p_days conta solo per le singole. Per gli altri tipi la prossima
+// occorrenza è quella che il tipo stesso prevede — spostarla di N giorni
+// sfaserebbe la ricorrenza per sempre — e la finestra lo dice.
+function openSkip(id) {
+    const a = actions.find(x => x.id === id);
+    if (!a) return;
+    skippingActionId = id;
+    document.getElementById('skipDays').value = 1;
+    document.getElementById('skipDays').disabled = a.type !== 'single';
+    document.getElementById('skipHint').textContent = a.type === 'single'
+        ? 'La sposto in avanti di questi giorni.'
+        : 'Questo tipo va alla sua prossima occorrenza: il numero di giorni non si applica.';
+    openModal('skipModal');
+}
+
+async function confirmSkip() {
+    const days = parseInt(document.getElementById('skipDays').value) || 1;
+    const id = skippingActionId;
+    closeModal('skipModal');
+    await runActionRpc('ob_action_skip', { p_action_id: id, p_days: days }, '⏭ Saltata');
+}
+
+// ── workflow: gli step ────────────────────────────────────────────────────
+function openWorkflow(id) {
+    const a = actions.find(x => x.id === id);
+    if (!a) return;
+    wfActionId = id;
+    document.getElementById('wfModalTitle').textContent = a.title;
+
+    const steps = Array.isArray(a.workflow_steps) ? a.workflow_steps : [];
+    const segno = { completed: '✅', failed: '❌', active: '▶️', locked: '🔒' };
+
+    document.getElementById('wfBody').innerHTML = steps.length
+        ? steps.map(st => {
+            const deps = (st.depends_on || []).map(d => steps.find(x => x.id === d)?.title).filter(Boolean);
+            return `<div class="wf-step">
+                <span class="wf-state">${segno[st.status] || '•'}</span>
+                <span class="wf-name">${esc(st.title)}
+                    ${deps.length ? `<div class="wf-dep">dopo: ${esc(deps.join(', '))}</div>` : ''}</span>
+                ${st.status === 'active' ? `
+                    <button class="btn btn-success btn-small" onclick="completeStep(${st.id})">Fatto</button>
+                    <button class="btn btn-ghost btn-small" onclick="failStep(${st.id})">Fallito</button>` : ''}
+            </div>`;
+          }).join('')
+        : `<div class="form-hint">Questo workflow non ha step.</div>`;
+
     closeModal('detailModal');
-    openModal('linkModal');
+    openModal('wfModal');
 }
 
-function renderLinkOptions() {
-    const kind = document.getElementById('linkKind').value;
-    const sel  = document.getElementById('linkTarget');
-    const existing = linksOf(linkingObjId);
-
-    const rows = kind === 'task'
-        ? tasksRef.filter(t => !existing.some(l => l.task_id === t.id))
-                  .map(t => ({ id: t.id, label: t.title }))
-        : habitsRef.filter(h => !existing.some(l => l.habit_id === h.id))
-                   .map(h => ({ id: h.id, label: h.name }));
-
-    sel.innerHTML = rows.length
-        ? rows.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join('')
-        : '<option value="">— niente da collegare —</option>';
+// Uno step chiuso sblocca chi dipendeva da lui — anche se è fallito: un
+// fallimento è un esito, non un'attesa, e il workflow deve poter proseguire.
+function wfUnlockSuccessors(steps, quando) {
+    steps.forEach(st => {
+        if (st.status === 'locked' && (st.depends_on || []).length) {
+            const pronti = st.depends_on.every(id => {
+                const dep = steps.find(d => d.id === id);
+                return dep && (dep.status === 'completed' || dep.status === 'failed');
+            });
+            if (pronti) { st.status = 'active'; st.start_date = quando; }
+        }
+    });
 }
 
-async function saveLink() {
-    const kind     = document.getElementById('linkKind').value;
-    const targetId = document.getElementById('linkTarget').value;
-    if (!targetId) { showToast('Niente da collegare'); return; }
+async function chiudiStep(stepId, esito) {
+    const a = actions.find(x => x.id === wfActionId);
+    if (!a || !Array.isArray(a.workflow_steps)) return;
 
-    const payload = { objective_id: linkingObjId };
-    if (kind === 'task') payload.task_id = targetId; else payload.habit_id = targetId;
+    const steps = JSON.parse(JSON.stringify(a.workflow_steps));
+    const st = steps.find(x => x.id === stepId);
+    if (!st || st.status !== 'active') return;
 
-    const res = await sb.from('ob_task_links').insert(payload);
+    const ora = new Date().toISOString();
+    const pts = a.workflow_points || {};
+    const punti = esito === 'completed'
+        ? (pts.step_success ?? 5)
+        : (pts.step_failure ?? -3);
+
+    st.status = esito;
+    st.completed_at = ora;
+    wfUnlockSuccessors(steps, ora);
+
+    // Lo storico dello step si scrive da qui: le RPC governano il ciclo di vita
+    // dell'azione, non il dentro di un workflow.
+    const h = await sb.from('ob_action_history').insert({
+        action_id: a.id, objective_id: a.objective_id, action_title: a.title + ' › ' + st.title,
+        from_status: 'active', to_status: esito, action: esito, points: punti
+    });
+    if (h.error) { showToast('❌ ' + h.error.message); return; }
+
+    const up = await sb.from('ob_actions').update({ workflow_steps: steps }).eq('id', a.id);
+    if (up.error) { showToast('❌ ' + up.error.message); return; }
+
+    // Poi si chiede alla RPC se il workflow è finito: la decisione resta sua.
+    const { data } = await sb.rpc('ob_action_complete', { p_action_id: a.id, p_today: todayISO() });
+    await loadAll();
+
+    if (data?.action === 'completed') {
+        closeModal('wfModal');
+        showToast('🎉 Workflow concluso · ' + (data.points > 0 ? '+' : '') + data.points + ' pt');
+    } else {
+        showToast((esito === 'completed' ? '✅ ' : '❌ ') + st.title + ' · ' + (punti > 0 ? '+' : '') + punti + ' pt');
+        openWorkflow(a.id);
+    }
+}
+
+function completeStep(stepId) { chiudiStep(stepId, 'completed'); }
+function failStep(stepId)     { chiudiStep(stepId, 'failed'); }
+
+// ── editor ────────────────────────────────────────────────────────────────
+function openActionEditor(objId, actionId) {
+    const a = actionId ? actions.find(x => x.id === actionId) : null;
+    editingActionId    = actionId;
+    editingActionObjId = objId || a?.objective_id || (objectives[0]?.id ?? null);
+
+    if (!objectives.length) { showToast('Prima serve un obiettivo'); return; }
+
+    document.getElementById('actionModalTitle').textContent = a ? 'Modifica azione' : 'Nuova azione';
+    document.getElementById('aDeleteBtn').style.display = a ? '' : 'none';
+
+    document.getElementById('aObjective').innerHTML =
+        objectives.map(o => `<option value="${o.id}">${esc(o.title)}</option>`).join('');
+    document.getElementById('aObjective').value = editingActionObjId;
+
+    // Il tipo di un'azione che esiste già non si cambia: decide quali colonne
+    // quell'azione ha, e cambiandolo resterebbero dietro quelle del tipo di
+    // prima — le date multiple su una ricorrente — che nessuno ripulisce.
+    const tipoSel = document.getElementById('aType');
+    tipoSel.innerHTML = Object.keys(TYPE_LABEL)
+        .map(t => `<option value="${t}">${TYPE_LABEL[t]}</option>`).join('');
+    tipoSel.value = a?.type || 'single';
+    tipoSel.disabled = !!a;
+
+    document.getElementById('aPriority').innerHTML = '<option value="">nessuna</option>' +
+        priorities.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+
+    document.getElementById('aTitle').value  = a?.title || '';
+    document.getElementById('aDesc').value   = a?.description || '';
+    document.getElementById('aStatus').value = a?.status || 'started';
+    document.getElementById('aPriority').value = a?.priority_id || '';
+
+    const quando = a?.start_date || null;
+    document.getElementById('aStartDate').value = quando ? localDay(quando) : todayISO();
+    document.getElementById('aStartTime').value = quando ? localTime(quando) : '09:00';
+    document.getElementById('aDeadline').value  = a?.deadline ? String(a.deadline).slice(0, 10) : '';
+
+    document.getElementById('aRepeatDays').value = a?.repeat_after_days ?? 7;
+    document.getElementById('aFreq').value       = a?.recurring_frequency || 'daily';
+    document.getElementById('aInterval').value   = a?.recurring_interval ?? 1;
+
+    document.getElementById('aPtSuccess').value = a?.success_points ?? 10;
+    document.getElementById('aPtFailure').value = a?.failure_points ?? -5;
+    document.getElementById('aPtSkip').value    = a?.skip_points ?? -2;
+    document.getElementById('aPtLate').value    = a?.late_points ?? 3;
+    const wfp = a?.workflow_points || {};
+    document.getElementById('aPtStepOk').value = wfp.step_success ?? 5;
+    document.getElementById('aPtStepKo').value = wfp.step_failure ?? -3;
+
+    actCategories = [...(a?.categories || [])];
+    yearlyDates   = [...(a?.recurring_dates || [])];
+    multiDates    = [...(a?.multiple_dates || [])];
+    wfSteps       = a?.workflow_steps ? JSON.parse(JSON.stringify(a.workflow_steps)) : [];
+
+    renderCategoryChips();
+    renderDowChips(a?.recurring_days_of_week || []);
+    renderDomChips(a?.recurring_day_of_month || []);
+    renderYearlyDates();
+    renderMultiDates();
+    renderStepEditor();
+
+    onActionTypeChange();
+    closeModal('detailModal');
+    openModal('actionModal');
+}
+
+function onActionTypeChange() {
+    const t = document.getElementById('aType').value;
+    const mostra = (id, si) => { const el = document.getElementById(id); if (el) el.style.display = si ? '' : 'none'; };
+
+    mostra('aWhenRow',       t !== 'free_repeat');
+    mostra('aDeadlineGroup', t === 'single');
+    mostra('aRepeatGroup',   t === 'simple_recurring');
+    mostra('aRecurringGroup', t === 'recurring');
+    mostra('aMultiGroup',    t === 'multiple');
+    mostra('aWorkflowGroup', t === 'workflow');
+    mostra('aPtLateGroup',   t === 'single');
+    mostra('aWfPointsRow',   t === 'workflow');
+    // Una libera ripetizione non si salta e non si fallisce: quei punti non
+    // verrebbero assegnati mai, e un campo che non fa niente è peggio che assente.
+    mostra('aPointsRow',     true);
+    document.getElementById('aPtFailure').parentElement.style.display = t === 'free_repeat' ? 'none' : '';
+    document.getElementById('aPtSkip').parentElement.style.display    = PUO_SALTARE.includes(t) ? '' : 'none';
+
+    document.getElementById('aTypeHint').textContent = TYPE_HINT[t] || '';
+    if (t === 'recurring') onActionFreqChange();
+}
+
+function onActionFreqChange() {
+    const f = document.getElementById('aFreq').value;
+    const mostra = (id, si) => { document.getElementById(id).style.display = si ? '' : 'none'; };
+    mostra('aDowGroup',   f === 'weekly');
+    mostra('aDomGroup',   f === 'monthly');
+    mostra('aDatesGroup', f === 'yearly');
+    document.getElementById('aIntervalHint').textContent =
+        { daily: 'giorni', weekly: 'settimane', monthly: 'mesi', yearly: 'anni' }[f];
+}
+
+// ⚠️ I giorni della settimana si mostrano da lunedì ma si salvano con la
+// numerazione di extract(dow) di Postgres (0 = domenica), che è quella che
+// ob_action_next_recurring_date confronta. Toccando una delle due parti senza
+// l'altra le ricorrenze scatterebbero il giorno sbagliato, senza nessun errore.
+function renderDowChips(scelti) {
+    const ordine = [1, 2, 3, 4, 5, 6, 0];   // lun → dom, valori dow
+    document.getElementById('aDow').innerHTML = ordine.map(d =>
+        `<span class="chip ${scelti.map(Number).includes(d) ? 'on' : ''}" data-dow="${d}"
+               onclick="this.classList.toggle('on')">${DOW_LABEL[d]}</span>`).join('');
+}
+function renderDomChips(scelti) {
+    let html = '';
+    for (let d = 1; d <= 31; d++) {
+        html += `<span class="chip ${scelti.map(Number).includes(d) ? 'on' : ''}" data-dom="${d}"
+                       onclick="this.classList.toggle('on')">${d}</span>`;
+    }
+    document.getElementById('aDom').innerHTML = html;
+}
+function renderCategoryChips() {
+    document.getElementById('aCategories').innerHTML = categories.length
+        ? categories.map(c => `<span class="chip ${actCategories.includes(c.id) ? 'on' : ''}"
+              onclick="toggleActCategory('${c.id}', this)">${esc((c.icon || '') + ' ' + c.name)}</span>`).join('')
+        : '<div class="form-hint">Nessuna categoria: si creano da AppSphere → Dati Comuni.</div>';
+}
+function toggleActCategory(id, el) {
+    const i = actCategories.indexOf(id);
+    if (i >= 0) actCategories.splice(i, 1); else actCategories.push(id);
+    el.classList.toggle('on');
+}
+
+function addYearlyDate() {
+    const v = document.getElementById('aYearDate').value;
+    if (!v) return;
+    const [, m, d] = v.split('-');
+    const chiave = d + '-' + m;                 // 'DD-MM', come vuole la RPC
+    if (!yearlyDates.includes(chiave)) yearlyDates.push(chiave);
+    yearlyDates.sort((x, y) => x.split('-').reverse().join().localeCompare(y.split('-').reverse().join()));
+    document.getElementById('aYearDate').value = '';
+    renderYearlyDates();
+}
+function renderYearlyDates() {
+    document.getElementById('aDatesList').innerHTML = yearlyDates.length
+        ? yearlyDates.map((v, i) => `<span class="chip on" onclick="removeYearlyDate(${i})">${esc(v.replace('-', '/'))}<span class="chip-x">✕</span></span>`).join('')
+        : '<div class="form-hint">Nessuna data.</div>';
+}
+function removeYearlyDate(i) { yearlyDates.splice(i, 1); renderYearlyDates(); }
+
+function addMultipleDate() {
+    const v = document.getElementById('aMultiDate').value;
+    if (!v) return;
+    if (!multiDates.includes(v)) multiDates.push(v);
+    multiDates.sort();
+    document.getElementById('aMultiDate').value = '';
+    renderMultiDates();
+}
+function renderMultiDates() {
+    document.getElementById('aMultiList').innerHTML = multiDates.length
+        ? multiDates.map((v, i) => `<span class="chip on" onclick="removeMultiDate(${i})">${fmtDate(v)}<span class="chip-x">✕</span></span>`).join('')
+        : '<div class="form-hint">Nessuna data.</div>';
+}
+function removeMultiDate(i) { multiDates.splice(i, 1); renderMultiDates(); }
+
+// ── step del workflow, nell'editor ────────────────────────────────────────
+function wfAddStepRow() {
+    // L'id è progressivo e non si riusa: le dipendenze lo citano, e riciclarlo
+    // farebbe puntare uno step a un altro che non è quello di prima.
+    const nuovo = wfSteps.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+    wfSteps.push({ id: nuovo, title: '', depends_on: [], status: 'active' });
+    renderStepEditor();
+}
+function wfRemoveStep(id) {
+    wfSteps = wfSteps.filter(s => s.id !== id);
+    wfSteps.forEach(s => { s.depends_on = (s.depends_on || []).filter(d => d !== id); });
+    renderStepEditor();
+}
+// ⚠️ Scrivendo il nome di uno step si aggiornano le pillole che lo citano come
+// dipendenza, ma **senza ridisegnare l'elenco**: il ridisegno sostituisce i
+// campi di testo, e chi sta scrivendo si vede sparire il cursore da sotto le
+// dita — quel che si stava battendo finisce in un campo che non esiste più.
+function wfSetStepTitle(id, val) {
+    const s = wfSteps.find(x => x.id === id);
+    if (!s) return;
+    s.title = val;
+    document.querySelectorAll(`#wfStepList .chip[data-dep="${id}"]`)
+            .forEach(c => { c.textContent = val.trim() || ('step ' + id); });
+}
+function wfToggleDep(id, depId, el) {
+    const s = wfSteps.find(x => x.id === id);
+    if (!s) return;
+    s.depends_on = s.depends_on || [];
+    const i = s.depends_on.indexOf(depId);
+    if (i >= 0) s.depends_on.splice(i, 1); else s.depends_on.push(depId);
+    // Senza dipendenze parte subito; con dipendenze aspetta.
+    s.status = s.depends_on.length ? 'locked' : 'active';
+    el.classList.toggle('on');
+}
+function renderStepEditor() {
+    const host = document.getElementById('wfStepList');
+    if (!host) return;
+    host.innerHTML = wfSteps.map((s, idx) => {
+        const prima = wfSteps.filter(x => x.id !== s.id);
+        return `
+        <div class="wf-editor-row">
+            <input type="text" class="form-input" placeholder="es. Studiare la grammatica"
+                   value="${esc(s.title)}" oninput="wfSetStepTitle(${s.id}, this.value)">
+            <button class="btn btn-ghost btn-small" onclick="wfRemoveStep(${s.id})">✕</button>
+        </div>
+        ${prima.length ? `<div class="wf-editor-deps">
+            <div class="form-hint" style="margin-bottom:0.25rem;">${idx === 0 ? 'Il primo step di solito non dipende da nessuno.' : 'Parte dopo:'}</div>
+            <div class="chip-row">${prima.map(pz => `
+                <span class="chip ${(s.depends_on || []).includes(pz.id) ? 'on' : ''}" data-dep="${pz.id}"
+                      onclick="wfToggleDep(${s.id}, ${pz.id}, this)">${esc(pz.title || 'step ' + pz.id)}</span>`).join('')}
+            </div></div>` : ''}`;
+    }).join('') || '<div class="form-hint">Nessuno step: servono almeno due.</div>';
+}
+
+// ── salvataggio ───────────────────────────────────────────────────────────
+// ⚠️ Scrivere un'azione è un insert/update diretto e NON una RPC, e non è
+// un'eccezione alla regola: le RPC governano il ciclo di vita — dove va la
+// prossima occorrenza — non com'è fatta l'azione. È la stessa divisione di
+// saveTask() nel web e di TaskForm nel nativo.
+async function saveAction() {
+    const title = document.getElementById('aTitle').value.trim();
+    if (!title) { showToast('Serve un titolo'); return; }
+
+    const type   = document.getElementById('aType').value;
+    const objId  = document.getElementById('aObjective').value;
+    const giorno = document.getElementById('aStartDate').value || todayISO();
+    const ora    = document.getElementById('aStartTime').value || '09:00';
+    const inizio = localToISO(giorno, ora);
+
+    const payload = {
+        objective_id: objId,
+        title,
+        description: document.getElementById('aDesc').value.trim() || null,
+        type,
+        status:      document.getElementById('aStatus').value,
+        priority_id: document.getElementById('aPriority').value || null,
+        categories:  actCategories,
+        start_date:  inizio,
+        success_points: parseInt(document.getElementById('aPtSuccess').value) || 0,
+        failure_points: parseInt(document.getElementById('aPtFailure').value) || 0,
+        skip_points:    parseInt(document.getElementById('aPtSkip').value) || 0,
+        late_points:    parseInt(document.getElementById('aPtLate').value) || 0,
+        // ogni tipo compila le sue colonne e azzera quelle degli altri: un
+        // residuo del tipo di prima resterebbe a far scattare la ricorrenza
+        // sbagliata senza che si veda da nessuna parte
+        deadline: null, next_occurrence_date: null,
+        recurring_frequency: null, recurring_interval: null,
+        recurring_days_of_week: null, recurring_day_of_month: null, recurring_dates: null,
+        repeat_after_days: null, multiple_dates: null, workflow_steps: null
+    };
+
+    if (type === 'single') {
+        payload.deadline = document.getElementById('aDeadline').value || null;
+        payload.next_occurrence_date = inizio;
+
+    } else if (type === 'simple_recurring') {
+        payload.repeat_after_days = parseInt(document.getElementById('aRepeatDays').value) || 7;
+        payload.next_occurrence_date = inizio;
+
+    } else if (type === 'recurring') {
+        const freq = document.getElementById('aFreq').value;
+        payload.recurring_frequency = freq;
+        payload.recurring_interval  = parseInt(document.getElementById('aInterval').value) || 1;
+        payload.next_occurrence_date = inizio;
+
+        if (freq === 'weekly') {
+            const gg = Array.from(document.querySelectorAll('#aDow .chip.on')).map(c => Number(c.dataset.dow));
+            if (!gg.length) { showToast('Scegli almeno un giorno della settimana'); return; }
+            payload.recurring_days_of_week = gg.sort((a, b) => a - b);
+        } else if (freq === 'monthly') {
+            const gg = Array.from(document.querySelectorAll('#aDom .chip.on')).map(c => Number(c.dataset.dom));
+            if (!gg.length) { showToast('Scegli almeno un giorno del mese'); return; }
+            payload.recurring_day_of_month = gg.sort((a, b) => a - b);
+        } else if (freq === 'yearly') {
+            if (!yearlyDates.length) { showToast('Aggiungi almeno una data'); return; }
+            payload.recurring_dates = yearlyDates;
+        }
+
+    } else if (type === 'multiple') {
+        if (!multiDates.length) { showToast('Aggiungi almeno una data'); return; }
+        payload.multiple_dates = [...multiDates].sort();
+        // la prossima occorrenza è la prima data, con l'orario scelto
+        payload.next_occurrence_date = localToISO(payload.multiple_dates[0], ora);
+
+    } else if (type === 'workflow') {
+        const steps = wfSteps.filter(s => (s.title || '').trim());
+        if (steps.length < 2) { showToast('Un workflow ha bisogno di almeno due step'); return; }
+        steps.forEach(s => {
+            s.title = s.title.trim();
+            s.depends_on = s.depends_on || [];
+            if (!s.status) s.status = s.depends_on.length ? 'locked' : 'active';
+        });
+        if (!steps.some(s => s.status === 'active')) {
+            showToast('Almeno uno step deve partire senza dipendenze');
+            return;
+        }
+        payload.workflow_steps  = steps;
+        payload.workflow_points = {
+            step_success: parseInt(document.getElementById('aPtStepOk').value) || 0,
+            step_failure: parseInt(document.getElementById('aPtStepKo').value) || 0,
+            task_success: parseInt(document.getElementById('aPtSuccess').value) || 0,
+            task_failure: parseInt(document.getElementById('aPtFailure').value) || 0
+        };
+        payload.next_occurrence_date = inizio;
+    }
+    // free_repeat: nessuna prossima occorrenza, per definizione
+
+    const res = editingActionId
+        ? await sb.from('ob_actions').update(payload).eq('id', editingActionId)
+        : await sb.from('ob_actions').insert(payload);
     if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
 
-    closeModal('linkModal');
-    showToast('✅ Azione collegata');
-    const objId = linkingObjId;
+    closeModal('actionModal');
+    showToast('✅ Azione salvata');
     await loadAll();
-    openDetail(objId);
 }
 
-async function removeLink(linkId) {
-    const link = taskLinks.find(l => l.id === linkId);
-    const res = await sb.from('ob_task_links').delete().eq('id', linkId);
+async function deleteAction() {
+    if (!editingActionId) return;
+    const a = actions.find(x => x.id === editingActionId);
+    if (!await customConfirm(`Elimino «${a ? a.title : 'l\'azione'}»? Lo storico e i punti già presi restano.`)) return;
+
+    const res = await sb.from('ob_actions').delete().eq('id', editingActionId);
     if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
-    showToast('Scollegata');
-    const objId = link?.objective_id;
+
+    closeModal('actionModal');
+    showToast('🗑 Azione eliminata');
     await loadAll();
-    if (objId) openDetail(objId);
 }
+
 
 // ════════════════════════════════════════════════════════════
 // BACKUP
 // ════════════════════════════════════════════════════════════
 function exportBackup() {
     const dump = { app: 'obiettivi', version: APP_VERSION, exported_at: new Date().toISOString(),
-                   objectives, metrics, milestones, measurements, taskLinks };
+                   objectives, metrics, milestones, measurements, actions, actionHistory };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
