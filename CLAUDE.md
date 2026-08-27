@@ -1804,6 +1804,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   ⚠️ Non ci si può appoggiare allo streak per chiudere: quello del web (`computeHabitStreak`) conta
   le righe di **qualunque** stato ma **salta il primo giorno** — riceve `started_at` a mezzogiorno e
   lo confronta con giorni a mezzanotte — quindi l'ultimo giorno vale sempre `goal - 1`.
+- ⚠️ **Il nuovo ciclo si propone da domani, non da oggi** — in tutt'e due le cerimonie (stack vinto
+  e game over) e in tutt'e due le implementazioni (`tomorrowDateStr()` nel web,
+  `LocalDate.now().plusDays(1)` in `Festa`/`GameOver`): la stecca che si è appena chiusa **si è
+  presa oggi** — l'ultimo giorno è proprio quello che l'ha chiusa — e un ciclo che ripartisse dallo
+  stesso giorno nascerebbe con la prima giornata già spesa, o già segnata dalla stecca di prima.
+  Resta una proposta, il campo si cambia.
 - ⚠️ **`hb_habits.frequency` ha tre valori e basta**: `daily`, `daily_multiple`, `weekly`. La
   tendina offriva anche *Personalizzata* (`custom`), che però **nessuna riga di codice leggeva** —
   la stringa compariva una volta sola, nell'`<option>`. Un'abitudine così cadeva nel ramo `else`
