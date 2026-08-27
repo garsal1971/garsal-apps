@@ -8,8 +8,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.LocalDate
@@ -17,10 +15,10 @@ import java.time.LocalDate
 /**
  * Letture e scritture di Obiettivi.
  *
- * ⚠️ Regola del CLAUDE.md rispettata alla lettera: **il calcolo del progresso e
- * la media pesata della rubrica vivono nelle RPC, non qui**. Il client legge
- * `ob_objective_progress` e manda a `ob_record_measurement` i punteggi per
- * criterio — per `kind='rubric'` non calcola e non invia mai il valore.
+ * ⚠️ Regola del CLAUDE.md rispettata alla lettera: **il calcolo del progresso
+ * vive nelle RPC, non qui**. Il client legge `ob_objective_progress` e scrive
+ * solo passando da `ob_record_measurement`, che è anche l'unica a decidere se
+ * un voto sta dentro la scala della metrica.
  */
 object ObiettiviRepository {
 
@@ -39,18 +37,11 @@ object ObiettiviRepository {
         db.from("ob_metrics")
             .select(
                 Columns.raw(
-                    "id,objective_id,name,role,kind,unit,direction,baseline,target,protocol,period,sort_order"
+                    "id,objective_id,name,role,kind,min_value,max_value," +
+                        "baseline,target,unit,descrizione,sort_order"
                 )
             ) { order("sort_order", Order.ASCENDING) }
             .decodeList<ObMetrica>()
-    }
-
-    suspend fun criteri(): List<ObCriterio> = withContext(Dispatchers.IO) {
-        db.from("ob_rubric_criteria")
-            .select(Columns.raw("id,metric_id,label,weight,sort_order")) {
-                order("sort_order", Order.ASCENDING)
-            }
-            .decodeList<ObCriterio>()
     }
 
     suspend fun milestone(): List<ObMilestone> = withContext(Dispatchers.IO) {
@@ -94,26 +85,22 @@ object ObiettiviRepository {
     /**
      * Registra una rilevazione.
      *
-     * Per `kind='rubric'` si passano **solo** i punteggi per criterio in
-     * `p_detail`: la media pesata la fa la RPC. Mandare anche un valore
-     * significherebbe avere due formule, e prima o poi divergerebbero.
+     * Un solo valore per tutt'e due i tipi: il voto dell'autovalutazione e il
+     * numero dell'automisurazione finiscono nella stessa colonna. È la RPC a
+     * rifiutare un voto fuori scala — qui un secondo controllo sarebbe una
+     * seconda regola da tenere allineata.
      */
     suspend fun registraRilevazione(
         metricaId: String,
-        valore: Double?,
-        punteggiPerCriterio: Map<String, Int>,
+        valore: Double,
         giorno: LocalDate,
         nota: String,
     ): ObEsitoRilevazione = withContext(Dispatchers.IO) {
-        val dettaglio: JsonObject = JsonObject(
-            punteggiPerCriterio.mapValues { JsonPrimitive(it.value) }
-        )
         db.rpc(
             "ob_record_measurement",
             buildJsonObject {
                 put("p_metric_id", metricaId)
-                if (valore != null) put("p_value", valore)
-                put("p_detail", dettaglio)
+                put("p_value", valore)
                 put("p_measured_on", giorno.toString())
                 put("p_note", nota)
             },

@@ -121,10 +121,9 @@ fun ObiettiviScreen(
     metricaDaRilevare?.let { metrica ->
         RilevazioneDialog(
             metrica = metrica,
-            criteri = stato.criteriDi(metrica.id),
             onAnnulla = { metricaDaRilevare = null },
-            onConferma = { valore, punteggi, giorno, nota ->
-                vm.registra(metrica, valore, punteggi, giorno, nota)
+            onConferma = { valore, giorno, nota ->
+                vm.registra(metrica, valore, giorno, nota)
                 metricaDaRilevare = null
             },
         )
@@ -254,9 +253,9 @@ private fun Metrica(metrica: ObMetrica, ultima: ObRilevazione?, onRileva: () -> 
             )
             TextButton(onClick = onRileva) { Text("Rileva") }
         }
+        val (da, a) = metrica.scala
         Text(
-            text = "da ${metrica.baseline} a ${metrica.target} ${metrica.unit.orEmpty()}".trim() +
-                " · ${metrica.kind}",
+            text = "da $da a $a ${metrica.unit.orEmpty()}".trim() + " · ${metrica.kind}",
             style = MaterialTheme.typography.bodySmall,
             color = Palette.muted,
         )
@@ -331,28 +330,29 @@ private fun segnoMilestone(stato: String) = when (stato) {
 /**
  * La finestra di rilevazione.
  *
- * Per `kind='rubric'` mostra uno slider 1-5 per criterio e **non calcola
- * niente**: i punteggi vanno alla RPC, che fa la media pesata. Per gli altri
- * kind c'è un campo numerico. Il protocollo è sempre in vista: è il modo in
- * cui si misura, e se cambia la serie storica non è più confrontabile.
+ * Un'**autovalutazione** si dà con lo slider, che vive dentro la scala della
+ * metrica: un voto fuori scala lo rifiuterebbe comunque `ob_record_measurement`,
+ * ma di qui non si può nemmeno comporre. Un'**automisurazione** ha un campo
+ * numerico. La descrizione — come votare, o cosa si misura — è sempre in vista:
+ * se cambia il metro la serie storica non è più confrontabile.
  */
 @Composable
 private fun RilevazioneDialog(
     metrica: ObMetrica,
-    criteri: List<ObCriterio>,
     onAnnulla: () -> Unit,
-    onConferma: (Double?, Map<String, Int>, LocalDate, String) -> Unit,
+    onConferma: (Double, LocalDate, String) -> Unit,
 ) {
-    val rubrica = metrica.kind == "rubric"
+    val voto = metrica.kind == "autovalutazione"
+    val minimo = metrica.minValue ?: 1.0
+    val massimo = metrica.maxValue ?: 10.0
+
+    var punteggio by remember { mutableStateOf(((minimo + massimo) / 2).roundToInt()) }
     var valore by remember { mutableStateOf("") }
     var nota by remember { mutableStateOf("") }
     var giorno by remember { mutableStateOf(LocalDate.now().toString()) }
-    var punteggi by remember {
-        mutableStateOf(criteri.associate { it.id to 3 })
-    }
 
     val giornoValido = runCatching { LocalDate.parse(giorno) }.isSuccess
-    val valoreValido = rubrica || valore.trim().toDoubleOrNull() != null
+    val valoreValido = voto || valore.trim().toDoubleOrNull() != null
 
     AlertDialog(
         onDismissRequest = onAnnulla,
@@ -362,9 +362,9 @@ private fun RilevazioneDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                metrica.protocol?.takeIf { it.isNotBlank() }?.let {
+                metrica.descrizione?.takeIf { it.isNotBlank() }?.let {
                     Text(
-                        "Protocollo: $it",
+                        (if (voto) "Come votare: " else "Cosa si misura: ") + it,
                         style = MaterialTheme.typography.bodySmall,
                         color = Palette.muted,
                         modifier = Modifier
@@ -375,39 +375,29 @@ private fun RilevazioneDialog(
                     )
                 }
 
-                if (rubrica) {
-                    if (criteri.isEmpty()) {
-                        Text(
-                            "Questa rubrica non ha criteri: vanno definiti prima di poter rilevare.",
-                            color = Palette.danger,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                if (voto) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Il tuo voto", style = MaterialTheme.typography.bodyMedium)
+                        Text("$punteggio", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
-                    criteri.forEach { criterio ->
-                        val punteggio = punteggi[criterio.id] ?: 3
-                        Column {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(criterio.label, style = MaterialTheme.typography.bodyMedium)
-                                Text("$punteggio", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            }
-                            Slider(
-                                value = punteggio.toFloat(),
-                                onValueChange = {
-                                    punteggi = punteggi + (criterio.id to it.roundToInt().coerceIn(1, 5))
-                                },
-                                valueRange = 1f..5f,
-                                steps = 3,
-                            )
-                        }
-                    }
-                    Text(
-                        "La media pesata la calcola il server: qui si danno solo i punteggi.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Palette.muted,
+                    Slider(
+                        value = punteggio.toFloat(),
+                        onValueChange = {
+                            punteggio = it.roundToInt()
+                                .coerceIn(minimo.roundToInt(), massimo.roundToInt())
+                        },
+                        valueRange = minimo.toFloat()..massimo.toFloat(),
                     )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("${minimo.roundToInt()}", style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                        Text("${massimo.roundToInt()}", style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                    }
                 } else {
                     OutlinedTextField(
                         value = valore,
@@ -437,11 +427,10 @@ private fun RilevazioneDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = giornoValido && valoreValido && !(rubrica && criteri.isEmpty()),
+                enabled = giornoValido && valoreValido,
                 onClick = {
                     onConferma(
-                        valore.trim().toDoubleOrNull(),
-                        if (rubrica) punteggi else emptyMap(),
+                        if (voto) punteggio.toDouble() else valore.trim().toDouble(),
                         LocalDate.parse(giorno),
                         nota,
                     )

@@ -12,7 +12,6 @@ import java.time.LocalDate
 data class ObiettiviState(
     val obiettivi: List<ObObiettivo> = emptyList(),
     val metriche: List<ObMetrica> = emptyList(),
-    val criteri: List<ObCriterio> = emptyList(),
     val milestone: List<ObMilestone> = emptyList(),
     val ultimeRilevazioni: Map<String, ObRilevazione> = emptyMap(),
     val avanzamenti: Map<String, ObAvanzamento> = emptyMap(),
@@ -26,8 +25,6 @@ data class ObiettiviState(
     fun figliDi(id: String): List<ObObiettivo> = obiettivi.filter { it.parentId == id }
 
     fun metricheDi(id: String): List<ObMetrica> = metriche.filter { it.objectiveId == id }
-
-    fun criteriDi(metricaId: String): List<ObCriterio> = criteri.filter { it.metricId == metricaId }
 
     fun milestoneDi(id: String): List<ObMilestone> = milestone.filter { it.objectiveId == id }
 }
@@ -47,7 +44,6 @@ class ObiettiviViewModel : ViewModel() {
                 _state.value = _state.value.copy(
                     obiettivi = obiettivi,
                     metriche = ObiettiviRepository.metriche(),
-                    criteri = ObiettiviRepository.criteri(),
                     milestone = ObiettiviRepository.milestone(),
                     ultimeRilevazioni = ObiettiviRepository.ultimeRilevazioni(),
                     avanzamenti = ObiettiviRepository.avanzamenti(obiettivi.map { it.id }),
@@ -66,14 +62,13 @@ class ObiettiviViewModel : ViewModel() {
     /**
      * Registra una rilevazione e ricarica gli avanzamenti.
      *
-     * Per la rubrica `valore` resta null di proposito: la media pesata la
-     * calcola `ob_record_measurement`, e il client non deve avere una seconda
-     * formula da tenere allineata.
+     * Il valore è uno solo — il voto o il numero misurato — e la validità
+     * rispetto alla scala la decide `ob_record_measurement`, non questo
+     * ViewModel: due controlli sono due regole che prima o poi divergono.
      */
     fun registra(
         metrica: ObMetrica,
-        valore: Double?,
-        punteggi: Map<String, Int>,
+        valore: Double,
         giorno: LocalDate,
         nota: String,
     ) {
@@ -81,8 +76,7 @@ class ObiettiviViewModel : ViewModel() {
             try {
                 val esito = ObiettiviRepository.registraRilevazione(
                     metricaId = metrica.id,
-                    valore = if (metrica.kind == "rubric") null else valore,
-                    punteggiPerCriterio = punteggi,
+                    valore = valore,
                     giorno = giorno,
                     nota = nota,
                 )
