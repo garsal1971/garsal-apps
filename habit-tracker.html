@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.81</title>
+    <title>Habit Stack Tracker v9.3.82</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1705,8 +1705,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.81';
-        const BUILD_TIME  = '2026-08-27T10:20:00Z';
+        const APP_VERSION = 'v9.3.82';
+        const BUILD_TIME  = '2026-08-27T14:05:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3050,6 +3050,43 @@
             }
         }
 
+        // Di quel giorno resta qualcosa in sospeso?
+        //
+        // «Risolto» non vuol dire «fatto»: vuol dire che ogni periodo di quel
+        // giorno ha la sua riga, comunque sia andata (✓, ✕ col jolly o
+        // `missed`). È la domanda che serve per sapere se si possono già tirare
+        // le somme, e non ha niente a che vedere con «il giorno è andato
+        // bene», che è quello che conta `countCompletedDaysInPeriod`.
+        //
+        // Un giorno che non era dovuto — il mercoledì di una settimanale che
+        // cade solo di lunedì — non è in sospeso: non c'era niente da segnare.
+        //
+        // ⚠️ Gemella di `hb_giorno_risolto()` in
+        // `20260827100000_hb_chiusura_ultimo_giorno.sql`, che è quella che usa
+        // l'app nativa: se cambia una, va cambiata l'altra.
+        function isDayResolved(habit, dateStr) {
+            if (habit.frequency === 'weekly') {
+                const giorni = (habit.weekdays || []).map(Number);
+                const dow = parseDateLocal(dateStr).getDay();
+                if (!giorni.includes(dow)) return true;
+            } else if (habit.frequency !== 'daily' && habit.frequency !== 'daily_multiple') {
+                return true;
+            }
+
+            const righe = completions.filter(c =>
+                c.habit_id === habit.id && c.completed_at.startsWith(dateStr)
+            );
+
+            if (habit.frequency === 'daily_multiple' && habit.daily_times && habit.daily_times.length > 0) {
+                return habit.daily_times.every(time => righe.some(c => (
+                    c.period_key
+                        ? c.period_key === buildPeriodKey('daily_multiple', dateStr, time)
+                        : c.completed_at.substring(11, 16) === time
+                )));
+            }
+            return righe.length > 0;
+        }
+
         async function checkExpiredStacks() {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -3065,7 +3102,21 @@
                 endDate.setDate(endDate.getDate() + Number(habit.goal) - 1);
                 endDate.setHours(0, 0, 0, 0);
 
-                if (today > endDate) {
+                // ⚠️ Il periodo è finito anche **l'ultimo giorno**, non solo
+                // dal giorno dopo — ma solo quando di quel giorno non resta
+                // niente in sospeso. Segnati tutti gli appuntamenti dell'ultimo
+                // giorno la stecca è finita, e farla aspettare fino a domani
+                // per dirlo è il difetto per cui «ho riempito o saltato tutto e
+                // non è successo niente»: i giorni saltati col jolly non
+                // entrano in `countCompletedDaysInPeriod`, quindi la strada
+                // dell'obiettivo raggiunto non scatta mai, e questa scattava un
+                // giorno tardi. Chiudere l'ultimo giorno a stecca ancora da
+                // segnare sarebbe però peggio del difetto: la archivierebbe
+                // come persa mentre c'è ancora tutto il tempo per finirla.
+                const periodoFinito = today > endDate ||
+                    (today.getTime() === endDate.getTime() && isDayResolved(habit, todayStr));
+
+                if (periodoFinito) {
                     // Usa conteggio giorni completati nel periodo (non lo streak che parte da oggi)
                     const completedDays = countCompletedDaysInPeriod(habit, endDate);
                     // completedDays >= goal viene già gestito da checkCompletedStacks

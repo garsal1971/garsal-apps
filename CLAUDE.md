@@ -1451,6 +1451,7 @@ formula, e in ballo ci sono punti e archivi. Sono invece scesi nel database
 | `hb_reconcile` | Il giro che il web fa a ogni disegno della dashboard: periodi passati senza riga → `missed`, jolly riallineati, stack completati archiviati, stack scaduti chiusi. Torna cosa è successo, perché il client mostri le sue cerimonie |
 | `hb_clona` / `hb_chiudi_stack` | Le due uscite del game over: *Ricomincia* e *Interrompi* |
 | `hb_giorni_da_recuperare` | Quanto costa **riprendere** un'abitudine interrotta da una certa data: un jolly per giorno dovuto senza spunta. Sola lettura, la chiamano tutt'e due i client |
+| `hb_giorno_risolto` | Di quel giorno resta qualcosa in sospeso? Ogni periodo dovuto ha la sua riga, comunque sia andata — **non** «è andato bene», che è `hb_giorno_fatto`. È la condizione che lascia chiudere uno stack già l'ultimo giorno |
 
 Tre cose che *sono* la funzionalità:
 
@@ -1787,6 +1788,22 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   memoria, non lavoro di oggi. Fino all'agosto 2026 la pagina non aveva l'eliminazione
   (`deleteHabit()` esisteva ma nessun pulsante la chiamava) e il nativo non aveva né interruzione né
   ripresa: erano due elenchi che facevano cose diverse sulla stessa tabella.
+- ⚠️ **Uno stack si chiude anche l'ultimo giorno, non solo il giorno dopo.** Le due strade per
+  chiuderlo si perdevano proprio il giorno in cui la stecca finisce, e su una **giornaliera a più
+  orari** si vedeva bene: segnati tutti gli appuntamenti dell'ultimo giorno — chi fatto, chi saltato
+  col jolly — non succedeva niente fino all'indomani. L'obiettivo raggiunto conta i soli giorni
+  **fatti per intero** (`countCompletedDaysInPeriod`, `hb_giorni_fatti`), e un giorno in cui un
+  appuntamento è stato saltato non ci entra: per quanti giorni si segnino, il conto non arriva mai
+  al traguardo. La scadenza del calendario, che i giorni saltati li copre coi jolly
+  (`completato_con_jolly`), scattava invece da `oggi > ultimo giorno`. Ora scatta **anche l'ultimo
+  giorno, ma solo quando di quel giorno non resta niente in sospeso** (`isDayResolved()` nel web,
+  `hb_giorno_risolto()` per il nativo): chiudere l'ultimo giorno a stecca ancora da segnare la
+  archivierebbe come persa mentre c'è tutto il tempo per finirla. ⚠️ «Risolto» non è «fatto»: vuol
+  dire che **ogni periodo di quel giorno ha la sua riga**, comunque sia andata (`completed`,
+  `failed`, `skipped`, `missed`); un giorno non dovuto è risolto per definizione.
+  ⚠️ Non ci si può appoggiare allo streak per chiudere: quello del web (`computeHabitStreak`) conta
+  le righe di **qualunque** stato ma **salta il primo giorno** — riceve `started_at` a mezzogiorno e
+  lo confronta con giorni a mezzanotte — quindi l'ultimo giorno vale sempre `goal - 1`.
 - ⚠️ **`hb_habits.frequency` ha tre valori e basta**: `daily`, `daily_multiple`, `weekly`. La
   tendina offriva anche *Personalizzata* (`custom`), che però **nessuna riga di codice leggeva** —
   la stringa compariva una volta sola, nell'`<option>`. Un'abitudine così cadeva nel ramo `else`
