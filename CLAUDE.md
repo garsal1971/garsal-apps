@@ -555,7 +555,8 @@ in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo 
 | `ob_metrics` | Metriche di un obiettivo (1..N) |
 | `ob_measurements` | Rilevazioni: `value` e `note`, una per metrica e per giorno |
 | `ob_milestones` | Curva attesa (`expected_value` per data) — base del semaforo |
-| `ob_task_links` | Collegamento a `ts_tasks` / `hb_habits` (le azioni restano nelle loro app) |
+| `ob_actions` | Le azioni: il «cosa faccio». Gemella di `ts_tasks`, stessi sei tipi |
+| `ob_action_history` | Storico e punti delle azioni. Gemella di `ts_history` |
 
 `ob_metrics.role` distingue **`primary`** (il risultato, alimenta la barra e il semaforo — **una sola per
 obiettivo**, vincolo `uq_ob_metrics_one_primary`), **`control`** (secondo riscontro lagging) e **`leading`**
@@ -587,6 +588,37 @@ pesata, e su una scala 1-5 resta quello che era: le rubriche sono diventate auto
 altre tre automisurazioni. `direction` in particolare era un secondo modo di dire quel che gli
 estremi già dicono, e poteva contraddirlo.
 
+#### Le azioni — tabelle proprie, non un collegamento a Tasks
+
+`ob_actions` è la gemella di `ts_tasks`: **gli stessi sei tipi** (`single`, `recurring`,
+`simple_recurring`, `multiple`, `free_repeat`, `workflow`), le stesse colonne nome per nome, gli
+stessi punti (successo / fallimento / salto / ritardo), le categorie `cm_categories` e le priorità
+`cm_priorities` **condivise con i task** — una terza tassonomia da tenere allineata a mano sarebbe
+il difetto, non la separazione.
+
+⚠️ **Tabelle separate e non un campo `objective_id` su `ts_tasks`**: i task sono letti da
+`tasks.html`, dal planner, dall'APK WebView, da AppSphere nativa e dalle notifiche Smart Block. Un
+campo da filtrare regge finché **ogni** query si ricorda di filtrarlo, ed è la stessa ragione per
+cui le spese di Ada stanno nelle `ada_*` e non nelle `ca_*`.
+
+⚠️ **Niente FOREIGN KEY verso `cm_categories` e `cm_priorities`**: quelle due tabelle non stanno in
+nessuna migration (nascono a mano in produzione), e una FK farebbe fallire il `db push` su un
+database nuovo. Se non si leggono, la pagina resta usabile senza invece di non aprirsi affatto.
+
+⚠️ **`ob_action_history.action_id` è `ON DELETE SET NULL`, non CASCADE**, e la riga porta con sé
+`action_title`: cancellare un'azione non deve riscrivere all'indietro i punti già presi, e una riga
+che resta senza dire di che cosa parlava non si legge più. È la stessa scelta di `al_log`, che porta
+i valori nutrizionali sulla riga invece del solo `food_id`.
+
+⚠️ **Com'è finita un'azione lo dice lo storico, non lo `status`**: `terminated` lo diventa anche
+fallendo (`ob_action_fail`). `esitoDi()` nella pagina legge l'ultima riga di storico che non sia
+`terminated`, ed è la stessa lettura che fa `ob_objective_progress` per la barra dell'esecuzione.
+
+`ob_task_links` — il collegamento a `ts_tasks` / `hb_habits` — **è stata eliminata**
+(`20260827130000_ob_actions.sql`) con i collegamenti già salvati. Diceva soltanto che un task
+esisteva altrove: da Obiettivi non si poteva né crearlo, né completarlo, né sapere com'era andato.
+I task e le abitudini che citava restano dove sono, intatti.
+
 ---
 
 ## Funzioni RPC Supabase — Task lifecycle
@@ -612,6 +644,29 @@ voto fuori dalla scala della metrica, non il client
 (`20260827110000_ob_metriche_semplificate.sql`), non il JS.
 `ob_metric_current` è invece volutamente `SECURITY INVOKER`: riceve una riga `ob_metrics` dal chiamante,
 quindi la RLS su `ob_measurements` deve restare attiva.
+
+E vale **anche per le azioni di Obiettivi**, che sono la copia dei task
+(`20260827130000_ob_actions.sql`):
+
+| Funzione | Gemella di | Descrizione |
+|---|---|---|
+| `ob_action_complete(p_action_id, p_today)` | `task_complete` | Completa un'azione, tipo per tipo |
+| `ob_action_skip(p_action_id, p_days)` | `task_skip` | La manda alla prossima volta |
+| `ob_action_fail(p_action_id)` | `task_fail` | La segna fallita |
+| `ob_action_next_recurring_date(p_action, p_base)` | `task_next_recurring_date` | Prossima data di una ricorrente |
+
+Il comportamento per tipo è quello dei task, riga per riga. Due differenze **volute**, da non
+"correggere" indietro:
+
+1. la riga si cerca con `AND user_id = auth.uid()`. Le `task_*` sono `SECURITY DEFINER` e la RLS
+   lì dentro non vale: senza quel filtro basta l'id di una riga altrui per completarla. Le `task_*`
+   quel controllo non ce l'hanno, ma non è un motivo per rifare lo stesso buco;
+2. non si tocca `cm_notification_rules`: le azioni non hanno (ancora) promemoria Smart Block, e
+   cancellare regole per `app = 'tasks'` da qui spegnerebbe le notifiche di un task che non c'entra.
+
+Scrivere un'azione è invece un `insert`/`update` diretto e **non** una RPC, e non è un'eccezione:
+le RPC governano il ciclo di vita — dove va la prossima occorrenza — non com'è fatta l'azione. È la
+stessa divisione di `saveTask()` nel web e di `TaskForm` nel nativo.
 
 Tutte le funzioni restituiscono `jsonb` con la struttura:
 ```json
@@ -1716,6 +1771,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   di una metrica si leggono da `ob_metric_scale`, ricalcata in `scaleOf()` e in `ObMetrica.scala`:
   se cambia il modo di ricavarli, va cambiato in tutt'e tre. Le due barre non si fondono mai in una
   media.
+  ⚠️ **Le azioni esistono solo nel web**: il gemello Kotlin non legge `ob_actions` e non le mostra.
+  La sua barra dell'esecuzione le conta lo stesso — il numero arriva dalla RPC — ma le etichette
+  sotto la barra parlano ancora dei soli sotto-obiettivi e milestone. Le due chiavi nuove della
+  risposta (`actions_total`, `actions_done`) non rompono il decoder perché `ignoreUnknownKeys` è
+  attivo nel serializer di supabase-kt. È una divergenza **nota e temporanea**: portare le azioni
+  in nativo è il pezzo che manca.
 - **Events Log** — le tabelle `el_*` non sono in nessuna migration: le colonne dei `data class`
   sono ricavate da come `events-log.html` le scrive. Gli eventi `DA_SELECT` registrano **solo se il
   conteggio è cresciuto** rispetto all'ultimo `count:N`. Il **registro mostra solo il gruppo
@@ -1878,6 +1939,37 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   rifiuterebbe comunque `ob_record_measurement`, ma di lì non si può nemmeno comporre.
 - Formula unica di avanzamento per tutt'e due i `kind`, e regge anche una scala che scende:
   `(corrente − da) / (a − da)` — es. pause, partenza 14 → obiettivo 3, corrente 6 ⇒ 73 %
+- **✅ Azioni** è una voce di menù a sé, oltre alla sezione dentro il dettaglio di ogni obiettivo.
+  L'elenco è raggruppato come la panoramica dei task — ⚠️ Scadute, 🎯 Oggi, 📅 Prossime,
+  🔄 A libera ripetizione, 🏁 Concluse — con i filtri per obiettivo, tipo, priorità, categoria,
+  stato e testo.
+- **Quali pulsanti compaiono è la regola dei task**: *Completa* sempre, *Fallisci* su tutto tranne
+  i `free_repeat`, *Salta* solo su ciò che ha una prossima volta a cui rimandare. ⚠️ Un `workflow`
+  mostra **Step** al posto di *Completa*: si chiude dai suoi step, e un pulsante che lo chiudesse
+  di forza salterebbe quelli ancora aperti.
+- ⚠️ **Il tipo di un'azione che esiste già non si cambia** (la tendina è bloccata in modifica):
+  decide quali colonne quell'azione ha, e cambiandolo resterebbero dietro quelle del tipo di prima
+  — le date multiple su una ricorrente — che nessuno ripulisce. È la stessa scelta di `TaskForm`
+  nel nativo.
+- ⚠️ **I giorni della settimana si mostrano da lunedì ma si salvano con la numerazione `extract(dow)`
+  di Postgres** (0 = domenica), che è quella che `ob_action_next_recurring_date` confronta. Toccando
+  una delle due parti senza l'altra le ricorrenze scatterebbero il giorno sbagliato, senza nessun
+  errore.
+- ⚠️ **Le date si scrivono e si rileggono in ora locale.** `localDay()` passa da `Date` invece di
+  tagliare la stringa ISO: `slice(0,10)` darebbe il giorno UTC, e un'azione di mezzanotte finirebbe
+  nel giorno prima. In salvataggio `localToISO()` fa il giro inverso, così l'ora scritta è quella
+  che si rilegge.
+- ⚠️ **Scrivendo il nome di uno step si aggiornano le pillole che lo citano, senza ridisegnare
+  l'elenco**: il ridisegno sostituisce i campi di testo e chi sta scrivendo si vede sparire il
+  cursore da sotto le dita.
+- **La barra «Esecuzione» conta anche le azioni** (`ob_objective_progress`):
+  `(sotto-obiettivi raggiunti + milestone centrate + azioni riuscite) / totale`. ⚠️ Entrano le
+  sole azioni che possono **finire** (`single`, `multiple`, `workflow`): una ricorrente e una a
+  libera ripetizione non finiscono mai, al denominatore resterebbero per sempre tenendo
+  l'esecuzione sotto il 100 % a piano concluso — e sarebbero un rimprovero per un'abitudine che
+  sta funzionando. ⚠️ Al numeratore ci va l'azione **riuscita**, non quella chiusa: `terminated`
+  lo diventa anche fallendo, e un piano fallito che riempie la barra direbbe il contrario di quel
+  che è successo.
 
 ### `weight-quest.html` — Weight Quest
 - Chart.js weight graph centred on today (30-day window, scrollable)
