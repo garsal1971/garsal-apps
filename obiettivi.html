@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.2.0</title>
+    <title>Obiettivi v1.3.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -289,6 +289,11 @@
             padding: 0.1rem 0.35rem; color: #fff; text-transform: uppercase;
         }
         .act-buttons { display: flex; flex-direction: column; gap: 0.35rem; flex-shrink: 0; }
+        /* la metrica non ha un colore suo: si distingue dalle categorie col bordo */
+        .act-tag-metric {
+            background: transparent !important; color: var(--secondary);
+            border: 1px solid var(--secondary);
+        }
         .act-late { color: var(--danger); font-weight: 700; }
 
         /* ── CHIP (giorni, categorie, date) ── */
@@ -606,6 +611,10 @@
                     <select class="form-select" id="fltCategory" onchange="renderActionsPage()"></select>
                 </div>
                 <div class="filter-group">
+                    <label class="form-label">Metrica</label>
+                    <select class="form-select" id="fltMetric" onchange="renderActionsPage()"></select>
+                </div>
+                <div class="filter-group">
                     <label class="form-label">Stato</label>
                     <select class="form-select" id="fltStatus" onchange="renderActionsPage()">
                         <option value="vive">in corso</option>
@@ -889,7 +898,7 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Obiettivo</label>
-                <select class="form-select" id="aObjective"></select>
+                <select class="form-select" id="aObjective" onchange="onActionObjectiveChange()"></select>
             </div>
             <div class="form-group">
                 <label class="form-label">Tipo</label>
@@ -1008,6 +1017,16 @@
             <div class="chip-row" id="aCategories"></div>
         </div>
 
+        <div class="form-group">
+            <label class="form-label">Metriche che questa azione dovrebbe muovere</label>
+            <div class="chip-row" id="aMetrics"></div>
+            <div class="form-hint">
+                Anche più d'una: una lezione di conversazione muove insieme la scioltezza e il
+                numero di pause. Si scelgono fra le metriche di questo obiettivo — cambiando
+                obiettivo i collegamenti di prima non varrebbero più, e vengono tolti.
+            </div>
+        </div>
+
         <div class="section-title">Punti</div>
         <div class="form-row" id="aPointsRow">
             <div class="form-group">
@@ -1085,8 +1104,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.2.0';
-var BUILD_TIME  = '2026-08-27T19:30:00Z';
+var APP_VERSION = 'v1.3.0';
+var BUILD_TIME  = '2026-08-27T20:15:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1119,6 +1138,7 @@ let milestones   = [];   // ob_milestones
 let measurements = [];   // ob_measurements
 let actions      = [];   // ob_actions
 let actionHistory = [];  // ob_action_history
+let actionMetrics = [];  // ob_action_metrics — quali metriche muove un'azione
 let categories   = [];   // cm_categories (condivise con Tasks)
 let priorities   = [];   // cm_priorities (condivise con Tasks)
 let progress     = {};   // { objective_id: risultato RPC }
@@ -1137,6 +1157,7 @@ let skippingActionId  = null;
 let wfActionId        = null;
 let wfSteps           = [];   // step in modifica dentro l'editor
 let actCategories     = [];   // categorie scelte nell'editor
+let actMetrics        = [];   // metriche collegate scelte nell'editor
 let yearlyDates       = [];   // 'DD-MM' del tipo annuale
 let multiDates        = [];   // 'YYYY-MM-DD' del tipo multiplo
 let toastTimer        = null;
@@ -1221,18 +1242,19 @@ async function startApp() {
 }
 
 async function loadAll() {
-    const [o, m, ms, meas, act, hist, cat, pri] = await Promise.all([
+    const [o, m, ms, meas, act, hist, amet, cat, pri] = await Promise.all([
         sb.from('ob_objectives').select('*').order('sort_order').order('due_date'),
         sb.from('ob_metrics').select('*').order('sort_order'),
         sb.from('ob_milestones').select('*').order('due_date'),
         sb.from('ob_measurements').select('*').order('measured_on'),
         sb.from('ob_actions').select('*').order('sort_order'),
         sb.from('ob_action_history').select('*').order('timestamp', { ascending: false }),
+        sb.from('ob_action_metrics').select('*'),
         sb.from('cm_categories').select('*'),
         sb.from('cm_priorities').select('*').order('value', { ascending: false })
     ]);
 
-    for (const r of [o, m, ms, meas, act, hist]) {
+    for (const r of [o, m, ms, meas, act, hist, amet]) {
         if (r.error) { if (handleAuthError(r.error)) return; console.error(r.error); showToast('❌ ' + r.error.message); return; }
     }
     // Categorie e priorità sono condivise e non stanno in nessuna migration: se
@@ -1246,6 +1268,7 @@ async function loadAll() {
     measurements  = meas.data || [];
     actions       = act.data  || [];
     actionHistory = hist.data || [];
+    actionMetrics = amet.data || [];
     categories    = cat.data  || [];
     priorities    = pri.data  || [];
 
@@ -1315,6 +1338,17 @@ function measuresOf(metId)   { return measurements.filter(m => m.metric_id === m
 function milestonesOf(objId) { return milestones.filter(m => m.objective_id === objId); }
 function actionsOf(objId)    { return actions.filter(a => a.objective_id === objId); }
 function historyOf(objId)    { return actionHistory.filter(h => h.objective_id === objId); }
+
+// Le metriche che un'azione dovrebbe muovere, e le azioni che dovrebbero
+// muovere una metrica: le due letture della stessa tabella di collegamento.
+function metricsOfAction(actionId) {
+    const ids = actionMetrics.filter(l => l.action_id === actionId).map(l => l.metric_id);
+    return metrics.filter(m => ids.includes(m.id));
+}
+function actionsOfMetric(metricId) {
+    const ids = actionMetrics.filter(l => l.metric_id === metricId).map(l => l.action_id);
+    return actions.filter(a => ids.includes(a.id));
+}
 function childrenOf(objId)   { return objectives.filter(o => o.parent_id === objId); }
 function primaryOf(objId)    { return metricsOf(objId).find(m => m.role === 'primary') || null; }
 
@@ -1601,6 +1635,12 @@ async function openDetail(objId) {
                         · ${fmtNum(da)} → ${fmtNum(a)} ${a >= da ? '↑' : '↓'}
                         ${m.unit ? ' ' + esc(m.unit) : ''}
                     </div>
+                    ${(() => {
+                        const az = actionsOfMetric(m.id);
+                        return az.length
+                            ? `<div class="metric-sub">✅ ${az.map(x => esc(x.title)).join(' · ')}</div>`
+                            : '';
+                    })()}
                 </div>
                 ${sparkline(m)}
                 <div class="metric-value">${fmtNum(cur)}<div class="metric-target">${pct}%</div></div>
@@ -2123,6 +2163,8 @@ function fillActionFilters() {
         priorities.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(''));
     keep('fltCategory', '<option value="">tutte</option>' +
         categories.map(c => `<option value="${c.id}">${esc((c.icon || '') + ' ' + c.name)}</option>`).join(''));
+    keep('fltMetric', '<option value="">tutte</option>' +
+        metrics.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join(''));
 }
 
 function filteredActions() {
@@ -2131,6 +2173,7 @@ function filteredActions() {
     const typ  = document.getElementById('fltType')?.value || '';
     const pri  = document.getElementById('fltPriority')?.value || '';
     const cat  = document.getElementById('fltCategory')?.value || '';
+    const met  = document.getElementById('fltMetric')?.value || '';
     const stat = document.getElementById('fltStatus')?.value ?? 'vive';
 
     return actions.filter(a => {
@@ -2138,6 +2181,7 @@ function filteredActions() {
         if (typ && a.type !== typ) return false;
         if (pri && a.priority_id !== pri) return false;
         if (cat && !(a.categories || []).includes(cat)) return false;
+        if (met && !actionMetrics.some(l => l.action_id === a.id && l.metric_id === met)) return false;
         if (stat === 'vive' && !actionIsAlive(a)) return false;
         if (stat === 'terminated' && actionIsAlive(a)) return false;
         if (txt) {
@@ -2201,6 +2245,7 @@ function renderActionCard(a, opts) {
     const obj  = objectives.find(o => o.id === a.objective_id);
     const pri  = priorityById(a.priority_id);
     const cats = (a.categories || []).map(categoryById).filter(Boolean);
+    const mets = metricsOfAction(a.id);
     const day  = actionDay(a);
     const ora  = localTime(a.next_occurrence_date || a.start_date);
     const late = day && day < todayISO() && actionIsAlive(a) && a.type !== 'free_repeat';
@@ -2233,9 +2278,10 @@ function renderActionCard(a, opts) {
                 ${vivo ? '' : ' · ' + (esitoDi(a.id) || 'conclusa')}
             </div>
             ${a.description ? `<div class="act-desc">${esc(a.description)}</div>` : ''}
-            ${(pri || cats.length) ? `<div class="act-tags">
+            ${(pri || cats.length || mets.length) ? `<div class="act-tags">
                 ${pri ? `<span class="act-tag" style="background:${esc(pri.color || '#6C5CE7')}">🎯 ${esc(pri.name)}</span>` : ''}
                 ${cats.map(c => `<span class="act-tag" style="background:${esc(c.color || '#6B7280')}">${esc((c.icon || '') + ' ' + c.name)}</span>`).join('')}
+                ${mets.map(m => `<span class="act-tag act-tag-metric">📈 ${esc(m.name)}</span>`).join('')}
             </div>` : ''}
         </div>
         <div class="act-buttons">${bottoni}</div>
@@ -2431,11 +2477,13 @@ function openActionEditor(objId, actionId) {
     document.getElementById('aPtStepKo').value = wfp.step_failure ?? -3;
 
     actCategories = [...(a?.categories || [])];
+    actMetrics    = a ? metricsOfAction(a.id).map(m => m.id) : [];
     yearlyDates   = [...(a?.recurring_dates || [])];
     multiDates    = [...(a?.multiple_dates || [])];
     wfSteps       = a?.workflow_steps ? JSON.parse(JSON.stringify(a.workflow_steps)) : [];
 
     renderCategoryChips();
+    renderMetricChips();
     renderDowChips(a?.recurring_days_of_week || []);
     renderDomChips(a?.recurring_day_of_month || []);
     renderYearlyDates();
@@ -2507,6 +2555,32 @@ function toggleActCategory(id, el) {
     const i = actCategories.indexOf(id);
     if (i >= 0) actCategories.splice(i, 1); else actCategories.push(id);
     el.classList.toggle('on');
+}
+
+// Si offrono le metriche del **solo** obiettivo scelto: una metrica di un altro
+// obiettivo non direbbe niente di questo, e il trigger a livello di database la
+// toglierebbe comunque.
+function renderMetricChips() {
+    const objId = document.getElementById('aObjective').value;
+    const mets  = metricsOf(objId);
+    document.getElementById('aMetrics').innerHTML = mets.length
+        ? mets.map(m => `<span class="chip ${actMetrics.includes(m.id) ? 'on' : ''}"
+              onclick="toggleActMetric('${m.id}', this)">${esc(m.name)}</span>`).join('')
+        : '<div class="form-hint">Questo obiettivo non ha ancora metriche.</div>';
+}
+function toggleActMetric(id, el) {
+    const i = actMetrics.indexOf(id);
+    if (i >= 0) actMetrics.splice(i, 1); else actMetrics.push(id);
+    el.classList.toggle('on');
+}
+
+// Cambiando obiettivo i collegamenti di prima parlano di metriche che con
+// l'obiettivo nuovo non c'entrano: si buttano qui, come li butterebbe il
+// trigger `trg_ob_action_metrics_pulisci` un livello sotto.
+function onActionObjectiveChange() {
+    const validi = metricsOf(document.getElementById('aObjective').value).map(m => m.id);
+    actMetrics = actMetrics.filter(id => validi.includes(id));
+    renderMetricChips();
 }
 
 function addYearlyDate() {
@@ -2688,14 +2762,32 @@ async function saveAction() {
     }
     // free_repeat: nessuna prossima occorrenza, per definizione
 
+    // Per un'azione nuova serve l'id che il database le assegna: i collegamenti
+    // alle metriche si scrivono subito dopo, e prima di salvarla non esiste.
     const res = editingActionId
-        ? await sb.from('ob_actions').update(payload).eq('id', editingActionId)
-        : await sb.from('ob_actions').insert(payload);
+        ? await sb.from('ob_actions').update(payload).eq('id', editingActionId).select('id').single()
+        : await sb.from('ob_actions').insert(payload).select('id').single();
     if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
+
+    const errMet = await salvaCollegamentiMetriche(res.data.id);
+    if (errMet) { showToast('❌ ' + errMet); return; }
 
     closeModal('actionModal');
     showToast('✅ Azione salvata');
     await loadAll();
+}
+
+// ⚠️ I collegamenti si **riscrivono da capo** a ogni salvataggio — si cancellano
+// tutti e si reinseriscono quelli scelti — come le categorie di una scheda in
+// Memo: senza la cancellazione una metrica tolta resterebbe attaccata per
+// sempre, e l'azione continuerebbe a dire di muovere qualcosa che non muove.
+async function salvaCollegamentiMetriche(actionId) {
+    const del = await sb.from('ob_action_metrics').delete().eq('action_id', actionId);
+    if (del.error) return del.error.message;
+    if (!actMetrics.length) return null;
+    const ins = await sb.from('ob_action_metrics')
+        .insert(actMetrics.map(metric_id => ({ action_id: actionId, metric_id })));
+    return ins.error ? ins.error.message : null;
 }
 
 async function deleteAction() {
@@ -2717,7 +2809,7 @@ async function deleteAction() {
 // ════════════════════════════════════════════════════════════
 function exportBackup() {
     const dump = { app: 'obiettivi', version: APP_VERSION, exported_at: new Date().toISOString(),
-                   objectives, metrics, milestones, measurements, actions, actionHistory };
+                   objectives, metrics, milestones, measurements, actions, actionHistory, actionMetrics };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

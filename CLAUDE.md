@@ -557,6 +557,7 @@ in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo 
 | `ob_milestones` | Curva attesa (`expected_value` per data) — base del semaforo |
 | `ob_actions` | Le azioni: il «cosa faccio». Gemella di `ts_tasks`, stessi sei tipi |
 | `ob_action_history` | Storico e punti delle azioni. Gemella di `ts_history` |
+| `ob_action_metrics` | Quali metriche un'azione dovrebbe muovere (anche più d'una) |
 
 `ob_metrics.role` distingue **`primary`** (il risultato, alimenta la barra e il semaforo — **una sola per
 obiettivo**, vincolo `uq_ob_metrics_one_primary`), **`control`** (secondo riscontro lagging) e **`leading`**
@@ -613,6 +614,31 @@ i valori nutrizionali sulla riga invece del solo `food_id`.
 ⚠️ **Com'è finita un'azione lo dice lo storico, non lo `status`**: `terminated` lo diventa anche
 fallendo (`ob_action_fail`). `esitoDi()` nella pagina legge l'ultima riga di storico che non sia
 `terminated`, ed è la stessa lettura che fa `ob_objective_progress` per la barra dell'esecuzione.
+
+#### Un'azione può muovere più metriche
+
+`ob_action_metrics` (`20260827150000_ob_action_metrics.sql`) collega un'azione alle metriche che
+la sua fatica dovrebbe spostare: **anche più d'una**, perché una lezione di conversazione muove
+insieme la scioltezza e il numero di pause. Serve a dire *cosa* dovrebbe cambiare, e nient'altro —
+non registra rilevazioni e non muove nessuna barra.
+
+Tabella di collegamento e **non** una colonna `metric_ids uuid[]` come `categories`: lì l'array è
+obbligato, perché `cm_categories` non sta in nessuna migration e una FK farebbe fallire il
+`db push`; `ob_metrics` invece c'è, quindi la chiave esterna si può avere davvero — e fa un lavoro
+vero, perché cancellando una metrica i suoi collegamenti spariscono da sé invece di restare come
+id che puntano al nulla.
+
+⚠️ **Si collegano le sole metriche del proprio obiettivo.** Il form offre solo quelle, ma
+l'obiettivo di un'azione si può cambiare, e in quel momento i collegamenti di prima parlano di
+metriche che non c'entrano più: il trigger `trg_ob_action_metrics_pulisci` **li toglie** invece di
+rifiutare la modifica — spostare un'azione sotto un altro obiettivo è legittimo, ed è il
+collegamento a non avere più senso, non lo spostamento. `onActionObjectiveChange()` fa lo stesso
+nella pagina, così quel che si vede è già quel che verrà salvato.
+
+⚠️ **I collegamenti si riscrivono da capo a ogni salvataggio** (`salvaCollegamentiMetriche`): si
+cancellano tutti quelli dell'azione e si reinseriscono quelli scelti. È la stessa scelta delle
+categorie di una scheda in Memo, per la stessa ragione — senza la cancellazione una metrica tolta
+resterebbe attaccata per sempre, e l'azione continuerebbe a dire di muovere qualcosa che non muove.
 
 `ob_task_links` — il collegamento a `ts_tasks` / `hb_habits` — **è stata eliminata**
 (`20260827130000_ob_actions.sql`) con i collegamenti già salvati. Diceva soltanto che un task
@@ -1962,6 +1988,11 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - ⚠️ **Scrivendo il nome di uno step si aggiornano le pillole che lo citano, senza ridisegnare
   l'elenco**: il ridisegno sostituisce i campi di testo e chi sta scrivendo si vede sparire il
   cursore da sotto le dita.
+- **Un'azione si collega alle metriche che dovrebbe muovere**, anche più d'una: si spuntano nel
+  form fra quelle dell'obiettivo, si vedono sulla scheda dell'azione (📈 col bordo, per non
+  confonderle con le categorie) e sotto ogni metrica nel dettaglio dell'obiettivo, e l'elenco
+  azioni si filtra per metrica. ⚠️ È **solo un collegamento**: non registra rilevazioni e non
+  muove nessuna barra — il numero lo si dà da 📈 Rilevazioni, come prima.
 - **La barra «Esecuzione» conta anche le azioni** (`ob_objective_progress`):
   `(sotto-obiettivi raggiunti + milestone centrate + azioni riuscite) / totale`. ⚠️ Entrano le
   sole azioni che possono **finire** (`single`, `multiple`, `workflow`): una ricorrente e una a
