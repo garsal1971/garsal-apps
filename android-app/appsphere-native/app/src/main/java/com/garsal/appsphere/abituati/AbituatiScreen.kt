@@ -258,6 +258,8 @@ fun AbituatiScreen(
     daRiprendere?.let { abitudine ->
         Riprendi(
             abitudine = abitudine,
+            proposta = stato.ripartenzaSuggerita(abitudine.id, oggi),
+            ultimaSpunta = stato.ultimaSpunta(abitudine.id),
             contaDaRecuperare = { da -> vm.giorniDaRecuperare(abitudine, da, oggi) },
             onRiprendi = { inizio ->
                 vm.riprendi(abitudine, inizio, oggi)
@@ -606,6 +608,9 @@ private fun GameOver(
 /**
  * RIPRENDI: rimette in moto un'abitudine interrotta, **da una data scelta**.
  *
+ * Si apre sul **giorno dopo l'ultima spunta** (`ripartenzaSuggerita`), che è
+ * dove l'abitudine si era fermata davvero; senza spunte, e mai oltre, oggi.
+ *
  * ⚠️ La data è il punto della finestra. Riprendendo con `started_at` fermo a
  * quando l'abitudine era partita, il primo giro di `hb_reconcile` marcherebbe
  * `missed` ogni giorno passato dall'interruzione: i jolly finirebbero sul posto
@@ -621,13 +626,15 @@ private fun GameOver(
 @Composable
 private fun Riprendi(
     abitudine: HbAbitudine,
+    proposta: LocalDate,
+    ultimaSpunta: LocalDate?,
     contaDaRecuperare: suspend (LocalDate) -> Int?,
     onRiprendi: (LocalDate) -> Unit,
     onChiudi: () -> Unit,
 ) {
     val context = LocalContext.current
     val jolly = abitudine.jollyMassimi.coerceAtLeast(1)
-    var inizio by remember(abitudine.id) { mutableStateOf(LocalDate.now()) }
+    var inizio by remember(abitudine.id) { mutableStateOf(proposta) }
     var mancati by remember(abitudine.id) { mutableStateOf<Int?>(null) }
     var inCorso by remember(abitudine.id) { mutableStateOf(true) }
 
@@ -667,13 +674,17 @@ private fun Riprendi(
                         .clickable { scegliData(context, inizio) { inizio = it } }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 )
-                abitudine.giornoInizio?.let {
-                    Text(
-                        text = "Era partita il ${dataItaliana(it)}",
-                        color = Palette.muted,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+                // Le due date che spiegano la proposta: da dove era partita e
+                // fin dove era arrivata.
+                Text(
+                    text = listOfNotNull(
+                        abitudine.giornoInizio?.let { "Era partita il ${dataItaliana(it)}" },
+                        ultimaSpunta?.let { "ultima spunta il ${dataItaliana(it)}" }
+                            ?: "nessuna spunta finora",
+                    ).joinToString(" · "),
+                    color = Palette.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Text(
                     text = avviso,
                     color = if (perso) Palette.danger else Palette.dark,

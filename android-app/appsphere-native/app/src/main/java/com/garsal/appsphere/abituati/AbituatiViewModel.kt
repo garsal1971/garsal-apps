@@ -39,6 +39,43 @@ data class AbituatiState(
         }?.stato
     }
 
+    /**
+     * L'ultima spunta di un'abitudine.
+     *
+     * ⚠️ Le righe `missed` non contano: non le ha messe nessuno, le scrive la
+     * riconciliazione sui giorni dovuti e mai spuntati. Prendendole per spunte,
+     * «il giorno dopo l'ultima spunta» diventerebbe il giorno dopo
+     * l'interruzione — cioè il punto in cui l'abitudine si era già fermata, non
+     * quello in cui la si stava ancora seguendo. Stessa regola di
+     * `lastCheckDateStr()` in `habit-tracker.html`.
+     */
+    fun ultimaSpunta(abitudineId: String): LocalDate? {
+        // Il massimo si cerca a mano: `LocalDate` è `Comparable<ChronoLocalDate>`
+        // e non `Comparable<LocalDate>`, quindi `maxOrNull()` qui non tornerebbe
+        // un `LocalDate`.
+        var ultima: LocalDate? = null
+        for (spunta in spunte) {
+            if (spunta.abitudineId != abitudineId || spunta.stato == "missed") continue
+            val giorno = runCatching { LocalDate.parse(spunta.giorno) }.getOrNull() ?: continue
+            if (ultima == null || giorno.isAfter(ultima)) ultima = giorno
+        }
+        return ultima
+    }
+
+    /**
+     * La data da cui proporre la ripartenza di un'abitudine interrotta: **il
+     * giorno dopo l'ultima spunta**, che è dove si era fermata davvero.
+     *
+     * Due limiti, entrambi necessari: senza nessuna spunta si ripiega su oggi
+     * (non c'è un «dopo» di niente), e in nessun caso si va oltre oggi — un
+     * `started_at` nel futuro è un'abitudine che non cade mai, quindi ripresa
+     * oggi e muta fino a domani. La stessa `defaultResumeDateStr()` del web.
+     */
+    fun ripartenzaSuggerita(abitudineId: String, oggi: LocalDate = LocalDate.now()): LocalDate {
+        val dopo = ultimaSpunta(abitudineId)?.plusDays(1) ?: return oggi
+        return if (dopo.isAfter(oggi)) oggi else dopo
+    }
+
     /** Le abitudini che oggi chiedono qualcosa, come la timeline del web. */
     fun diOggi(oggi: LocalDate = LocalDate.now()): List<HbAbitudine> =
         abitudini.filter { it.stato == "active" && it.cadeIl(oggi) }
