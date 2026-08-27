@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.0.0</title>
+    <title>Obiettivi v1.1.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -225,40 +225,33 @@
 
         .sparkline { width: 90px; height: 26px; flex-shrink: 0; }
 
-        /* ── PROTOCOLLO ── */
-        .protocol-box {
+        /* ── DESCRIZIONE (riletta prima di ogni rilevazione) ── */
+        .desc-box {
             background: #EFF6FF; border-left: 4px solid var(--accent);
             padding: 0.75rem 0.9rem; margin-bottom: 1.25rem;
             font-size: 1rem; line-height: 1.5;
         }
-        .protocol-box .protocol-label {
+        .desc-box .desc-label {
             font-family: 'Space Mono', monospace; font-size: 0.65rem; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent);
             display: block; margin-bottom: 0.3rem;
         }
 
-        /* ── RUBRICA ── */
-        .crit-row { margin-bottom: 0.9rem; }
-        .crit-head {
-            display: flex; justify-content: space-between; align-items: baseline;
-            margin-bottom: 0.2rem;
+        /* ── VOTO (autovalutazione) ── */
+        .vote-row { margin-bottom: 0.9rem; }
+        .vote-row input[type=range] { width: 100%; accent-color: var(--secondary); }
+        .vote-scale {
+            display: flex; justify-content: space-between;
+            font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted);
+            margin-top: 0.2rem;
         }
-        .crit-label { font-size: 1.05rem; font-weight: 500; }
-        .crit-score { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.05rem; }
-        .crit-weight { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted); }
-        .crit-row input[type=range] { width: 100%; accent-color: var(--secondary); }
-        .rubric-avg {
+        .vote-box {
             display: flex; justify-content: space-between; align-items: baseline;
             padding: 0.75rem 0.9rem; background: var(--input-bg);
             border: 2px solid var(--secondary); margin-top: 0.5rem;
         }
-        .rubric-avg-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-        .rubric-avg-val { font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700; color: var(--secondary); }
-
-        .crit-editor-row {
-            display: grid; grid-template-columns: 1fr 90px 36px; gap: 0.5rem;
-            margin-bottom: 0.5rem; align-items: center;
-        }
+        .vote-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .vote-val { font-family: 'Space Mono', monospace; font-size: 1.6rem; font-weight: 700; color: var(--secondary); }
 
         /* ── TASK LINK ── */
         .link-row {
@@ -500,9 +493,9 @@
                 <div class="page-title">Rilevazioni</div>
             </div>
             <div class="page-hint">
-                Le metriche in scadenza sono in cima. Il protocollo di misura viene sempre
-                riproposto prima di inserire un valore: se cambi il modo di misurare, la serie
-                storica non è più confrontabile.
+                Le metriche in scadenza sono in cima. La descrizione della metrica — come
+                votare, o cosa si misura — viene sempre riproposta prima di inserire un valore:
+                se cambi il metro, la serie storica non è più confrontabile.
             </div>
             <div id="metricsList"></div>
         </section>
@@ -625,7 +618,7 @@
 
         <div class="form-group">
             <label class="form-label">Nome</label>
-            <input type="text" class="form-input" id="mName" placeholder="es. Rubrica inglese parlato">
+            <input type="text" class="form-input" id="mName" placeholder="es. Quanto parlo inglese senza cercare le parole">
         </div>
 
         <div class="form-row">
@@ -641,72 +634,51 @@
             <div class="form-group">
                 <label class="form-label">Tipo</label>
                 <select class="form-select" id="mKind" onchange="onKindChange()">
-                    <option value="state">Stato — conta l'ultimo valore</option>
-                    <option value="cumulative">Cumulativa — si somma nel periodo</option>
-                    <option value="checklist">Checklist — completati su totale</option>
-                    <option value="rubric">Rubrica — autovalutazione 1-5</option>
+                    <option value="autovalutazione">Autovalutazione — ti dai un voto</option>
+                    <option value="automisurazione">Automisurazione — misuri un numero</option>
                 </select>
                 <div class="form-hint" id="kindHint"></div>
             </div>
         </div>
 
+        <!-- la scala: solo per l'autovalutazione -->
+        <div class="form-row" id="mScaleRow">
+            <div class="form-group">
+                <label class="form-label">Minimo</label>
+                <input type="number" step="any" class="form-input" id="mMin" value="1">
+                <div class="form-hint">Il voto più basso della scala.</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Massimo</label>
+                <input type="number" step="any" class="form-input" id="mMax" value="10">
+                <div class="form-hint">Il voto più alto: è il traguardo, il 100%.</div>
+            </div>
+        </div>
+
+        <!-- da dove a dove: solo per l'automisurazione -->
         <div class="form-row" id="mBaseTargetRow">
             <div class="form-group">
-                <label class="form-label">Baseline</label>
+                <label class="form-label">Punto di partenza</label>
                 <input type="number" step="any" class="form-input" id="mBaseline" value="0">
                 <div class="form-hint">Da dove parti oggi.</div>
             </div>
             <div class="form-group">
-                <label class="form-label">Target</label>
+                <label class="form-label">Valore obiettivo</label>
                 <input type="number" step="any" class="form-input" id="mTarget">
-                <div class="form-hint">Dove vuoi arrivare. Deve essere diverso dalla baseline.</div>
+                <div class="form-hint">Dove vuoi arrivare. Deve essere diverso dalla partenza.</div>
             </div>
         </div>
 
-        <div class="form-row">
-            <div class="form-group">
-                <label class="form-label">Unità</label>
-                <input type="text" class="form-input" id="mUnit" placeholder="es. min/settimana, pause, /5">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Direzione</label>
-                <select class="form-select" id="mDirection">
-                    <option value="increase">Deve salire ↑</option>
-                    <option value="decrease">Deve scendere ↓</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="form-group" id="mPeriodGroup" style="display:none;">
-            <label class="form-label">Finestra di accumulo</label>
-            <select class="form-select" id="mPeriod">
-                <option value="week">Settimanale — si azzera ogni lunedì</option>
-                <option value="month">Mensile</option>
-                <option value="quarter">Trimestrale</option>
-            </select>
+        <div class="form-group" id="mUnitGroup">
+            <label class="form-label">Unità</label>
+            <input type="text" class="form-input" id="mUnit" placeholder="es. kg, minuti/settimana, pause">
+            <div class="form-hint">Facoltativa, ma un numero senza unità fra tre mesi non si legge più.</div>
         </div>
 
         <div class="form-group">
-            <label class="form-label">Protocollo di misura</label>
-            <textarea class="form-textarea" id="mProtocol"
-                      placeholder="es. Mi registro mentre descrivo a voce per 3 minuti la mia giornata di ieri. Conto le pause sopra i 3 secondi."></textarea>
-            <div class="form-hint">
-                Come si misura, nel dettaglio. Verrà riproposto a ogni rilevazione: tra tre mesi
-                non te lo ricorderai, e se cambi metodo di misura la serie storica non vale più.
-            </div>
-        </div>
-
-        <!-- criteri rubrica -->
-        <div id="mRubricSection" style="display:none;">
-            <div class="section-title">
-                Criteri della rubrica
-                <button class="btn btn-ghost btn-small" onclick="addCriterionRow('', 1)">+ Criterio</button>
-            </div>
-            <div class="form-hint" style="margin-bottom:0.75rem;">
-                Ogni criterio si valuta 1-5. Il valore della metrica è la media pesata.
-                Con criteri espliciti il voto smette di dipendere dall'umore del giorno.
-            </div>
-            <div id="critEditorList"></div>
+            <label class="form-label" id="mDescLabel">Come votare</label>
+            <textarea class="form-textarea" id="mDesc"></textarea>
+            <div class="form-hint" id="mDescHint"></div>
         </div>
 
         <div class="modal-actions">
@@ -724,7 +696,7 @@
             <div class="modal-title" id="measureTitle"></div>
             <button class="modal-close" onclick="closeModal('measureModal')">&times;</button>
         </div>
-        <div id="measureProtocol"></div>
+        <div id="measureDesc"></div>
         <div class="form-group">
             <label class="form-label">Data</label>
             <input type="date" class="form-input" id="measDate">
@@ -811,8 +783,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-07-27T10:00:00Z';
+var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-08-27T11:00:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -841,7 +813,6 @@ let currentUserId = null;
 // ════════════════════════════════════════════════════════════
 let objectives   = [];   // ob_objectives
 let metrics      = [];   // ob_metrics
-let criteria     = [];   // ob_rubric_criteria
 let milestones   = [];   // ob_milestones
 let measurements = [];   // ob_measurements
 let taskLinks    = [];   // ob_task_links
@@ -940,22 +911,20 @@ async function startApp() {
 }
 
 async function loadAll() {
-    const [o, m, c, ms, meas, links] = await Promise.all([
+    const [o, m, ms, meas, links] = await Promise.all([
         sb.from('ob_objectives').select('*').order('sort_order').order('due_date'),
         sb.from('ob_metrics').select('*').order('sort_order'),
-        sb.from('ob_rubric_criteria').select('*').order('sort_order'),
         sb.from('ob_milestones').select('*').order('due_date'),
         sb.from('ob_measurements').select('*').order('measured_on'),
         sb.from('ob_task_links').select('*')
     ]);
 
-    for (const r of [o, m, c, ms, meas, links]) {
+    for (const r of [o, m, ms, meas, links]) {
         if (r.error) { if (handleAuthError(r.error)) return; console.error(r.error); showToast('❌ ' + r.error.message); return; }
     }
 
     objectives   = o.data     || [];
     metrics      = m.data     || [];
-    criteria     = c.data     || [];
     milestones   = ms.data    || [];
     measurements = meas.data  || [];
     taskLinks    = links.data || [];
@@ -1028,48 +997,36 @@ const STATUS_LABEL = {
 };
 
 const ROLE_LABEL = { primary: 'risultato', control: 'controllo', leading: 'sforzo' };
-const KIND_LABEL = { state: 'stato', cumulative: 'cumulativa', checklist: 'checklist', rubric: 'rubrica' };
-const PERIOD_LABEL = { week: 'settimana', month: 'mese', quarter: 'trimestre' };
+const KIND_LABEL = { autovalutazione: 'autovalutazione', automisurazione: 'automisurazione' };
 
 function metricsOf(objId)    { return metrics.filter(m => m.objective_id === objId); }
-function criteriaOf(metId)   { return criteria.filter(c => c.metric_id === metId); }
 function measuresOf(metId)   { return measurements.filter(m => m.metric_id === metId); }
 function milestonesOf(objId) { return milestones.filter(m => m.objective_id === objId); }
 function linksOf(objId)      { return taskLinks.filter(l => l.objective_id === objId); }
 function childrenOf(objId)   { return objectives.filter(o => o.parent_id === objId); }
 function primaryOf(objId)    { return metricsOf(objId).find(m => m.role === 'primary') || null; }
 
+// Da dove a dove va una metrica. I due tipi lo dicono in colonne diverse —
+// l'autovalutazione con la scala, l'automisurazione con partenza e obiettivo —
+// e questa è l'unica funzione che lo sa: è la copia della RPC ob_metric_scale.
+function scaleOf(metric) {
+    return metric.kind === 'autovalutazione'
+        ? { da: Number(metric.min_value), a: Number(metric.max_value) }
+        : { da: Number(metric.baseline),  a: Number(metric.target)    };
+}
+
 // valore corrente di una metrica, con la stessa semantica della RPC ob_metric_current
 function currentValue(metric) {
     const rows = measuresOf(metric.id);
-    if (metric.kind === 'cumulative') {
-        const from = periodStart(metric.period || 'week');
-        return rows.filter(r => r.measured_on >= from)
-                   .reduce((s, r) => s + Number(r.value), 0);
-    }
-    if (!rows.length) return Number(metric.baseline);
+    if (!rows.length) return scaleOf(metric).da;   // mai rilevata: sei alla partenza
     return Number(rows[rows.length - 1].value);
 }
 
-function periodStart(period) {
-    const d = new Date();
-    if (period === 'week') {
-        const dow = (d.getDay() + 6) % 7;          // lunedì = 0
-        d.setDate(d.getDate() - dow);
-    } else if (period === 'month') {
-        d.setDate(1);
-    } else {
-        d.setMonth(Math.floor(d.getMonth() / 3) * 3, 1);
-    }
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-
 function metricProgress(metric) {
-    const cur  = currentValue(metric);
-    const base = Number(metric.baseline);
-    const tgt  = Number(metric.target);
-    if (tgt === base) return 0;
-    return Math.max(0, Math.min(1, (cur - base) / (tgt - base)));
+    const { da, a } = scaleOf(metric);
+    const cur = currentValue(metric);
+    if (a === da) return 0;
+    return Math.max(0, Math.min(1, (cur - da) / (a - da)));
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1105,9 +1062,9 @@ function renderObjectiveCard(obj) {
     // posizione del marcatore "dove dovrei essere" sulla barra risultato
     let marker = '';
     if (primary && p.expected_value !== null && p.expected_value !== undefined) {
-        const base = Number(primary.baseline), tgt = Number(primary.target);
-        if (tgt !== base) {
-            const exp = Math.max(0, Math.min(1, (Number(p.expected_value) - base) / (tgt - base))) * 100;
+        const { da, a } = scaleOf(primary);
+        if (a !== da) {
+            const exp = Math.max(0, Math.min(1, (Number(p.expected_value) - da) / (a - da))) * 100;
             marker = `<div class="bar-expected"><div class="bar-marker" style="left:${exp}%" title="atteso: ${fmtNum(p.expected_value)}"></div></div>`;
         }
     }
@@ -1146,7 +1103,7 @@ function renderObjectiveCard(obj) {
                     ${marker}
                     <div class="bar-track"><div class="bar-fill result" style="width:${result || 0}%"></div></div>
                     <div class="bar-sub">${primary
-                        ? esc(primary.name) + ': ' + fmtNum(p.current_value) + (primary.unit ? ' ' + esc(primary.unit) : '') + ' → ' + fmtNum(primary.target)
+                        ? esc(primary.name) + ': ' + fmtNum(p.current_value) + (primary.unit ? ' ' + esc(primary.unit) : '') + ' → ' + fmtNum(scaleOf(primary).a)
                         : 'nessuna metrica primaria'}</div>
                 </div>
                 <div class="bar-block">
@@ -1245,14 +1202,13 @@ function renderMetricsPage() {
                 </div>
                 <div class="metric-sub">
                     ${esc(obj ? obj.title : '')} · ${KIND_LABEL[m.kind]}
-                    ${m.kind === 'cumulative' ? ' / ' + PERIOD_LABEL[m.period || 'week'] : ''}
                     · ultima: ${last ? fmtDate(last) + ' (' + age + 'g fa)' : 'mai'}
                 </div>
             </div>
             ${sparkline(m)}
             <div class="metric-value">
                 ${fmtNum(cur)}${m.unit ? ' <span class="metric-target">' + esc(m.unit) + '</span>' : ''}
-                <div class="metric-target">${pct}% · target ${fmtNum(m.target)}</div>
+                <div class="metric-target">${pct}% · ${m.kind === 'autovalutazione' ? 'su ' : 'target '}${fmtNum(scaleOf(m).a)}</div>
             </div>
             <button class="btn btn-accent btn-small" onclick="openMeasure('${m.id}')">Rileva</button>
         </div>`;
@@ -1271,7 +1227,9 @@ function sparkline(metric) {
         const y = h - 1 - ((v - min) / span) * (h - 2);
         return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
-    const good = metric.direction === 'increase'
+    // la direzione non è più una colonna: è già scritta negli estremi
+    const { da, a } = scaleOf(metric);
+    const good = a >= da
         ? vals[vals.length-1] >= vals[0]
         : vals[vals.length-1] <= vals[0];
     return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
@@ -1316,7 +1274,7 @@ async function openDetail(objId) {
         html += mets.map(m => {
             const cur = currentValue(m);
             const pct = Math.round(metricProgress(m) * 100);
-            const crits = m.kind === 'rubric' ? criteriaOf(m.id) : [];
+            const { da, a } = scaleOf(m);
             return `<div class="metric-row">
                 <div class="metric-main">
                     <div class="metric-name" style="cursor:pointer;" onclick="openMetricEditor('${objId}','${m.id}')">
@@ -1324,9 +1282,9 @@ async function openDetail(objId) {
                         ${esc(m.name)}
                     </div>
                     <div class="metric-sub">
-                        ${KIND_LABEL[m.kind]}${m.kind === 'cumulative' ? ' / ' + PERIOD_LABEL[m.period || 'week'] : ''}
-                        · ${fmtNum(m.baseline)} → ${fmtNum(m.target)} ${m.direction === 'increase' ? '↑' : '↓'}
-                        ${crits.length ? ' · ' + crits.length + ' criteri' : ''}
+                        ${KIND_LABEL[m.kind]}
+                        · ${fmtNum(da)} → ${fmtNum(a)} ${a >= da ? '↑' : '↓'}
+                        ${m.unit ? ' ' + esc(m.unit) : ''}
                     </div>
                 </div>
                 ${sparkline(m)}
@@ -1495,38 +1453,38 @@ function openMetricEditor(objId, metricId) {
 
     document.getElementById('mName').value      = m?.name      || '';
     document.getElementById('mRole').value      = m?.role      || (primaryOf(objId) ? 'leading' : 'primary');
-    document.getElementById('mKind').value      = m?.kind      || 'state';
+    document.getElementById('mKind').value      = m?.kind      || 'autovalutazione';
     document.getElementById('mUnit').value      = m?.unit      || '';
-    document.getElementById('mDirection').value = m?.direction || 'increase';
-    document.getElementById('mBaseline').value  = m ? m.baseline : 0;
-    document.getElementById('mTarget').value    = m ? m.target   : '';
-    document.getElementById('mProtocol').value  = m?.protocol  || '';
-    document.getElementById('mPeriod').value    = m?.period    || 'week';
-
-    document.getElementById('critEditorList').innerHTML = '';
-    if (m && m.kind === 'rubric') {
-        criteriaOf(m.id).forEach(c => addCriterionRow(c.label, c.weight));
-    }
+    document.getElementById('mMin').value       = m?.min_value ?? 1;
+    document.getElementById('mMax').value       = m?.max_value ?? 10;
+    document.getElementById('mBaseline').value  = m?.baseline  ?? 0;
+    document.getElementById('mTarget').value    = m?.target    ?? '';
+    document.getElementById('mDesc').value      = m?.descrizione || '';
 
     onKindChange();
-    renderMetricFormHints();
     closeModal('detailModal');
     openModal('metricModal');
 }
 
+// I due tipi chiedono cose diverse, e chiedere tutto sempre era il motivo per
+// cui il form spaventava: si vede la scala oppure partenza/obiettivo, mai
+// entrambe — è anche il vincolo ob_metrics_scala_per_tipo, un livello sotto.
 function onKindChange() {
     const kind = document.getElementById('mKind').value;
-    document.getElementById('mRubricSection').style.display = kind === 'rubric'  ? '' : 'none';
-    document.getElementById('mPeriodGroup').style.display   = kind === 'cumulative' ? '' : 'none';
+    const voto = kind === 'autovalutazione';
 
-    if (kind === 'rubric') {
-        // la rubrica ha una scala fissa 1-5: baseline/target si esprimono in quella scala
-        if (!document.getElementById('mTarget').value) document.getElementById('mTarget').value = 4;
-        if (!document.getElementById('mUnit').value)   document.getElementById('mUnit').value   = '/5';
-        if (!document.getElementById('critEditorList').children.length) {
-            addCriterionRow('', 1); addCriterionRow('', 1); addCriterionRow('', 1);
-        }
-    }
+    document.getElementById('mScaleRow').style.display      = voto ? '' : 'none';
+    document.getElementById('mBaseTargetRow').style.display = voto ? 'none' : '';
+    document.getElementById('mUnitGroup').style.display     = voto ? 'none' : '';
+
+    document.getElementById('mDescLabel').textContent = voto ? 'Come votare' : 'Cosa si misura';
+    document.getElementById('mDesc').placeholder = voto
+        ? 'es. 1 = non ho aperto bocca in tutto il giorno · 10 = ho sostenuto una conversazione senza cercare le parole'
+        : 'es. Mi registro mentre descrivo a voce per 3 minuti la mia giornata di ieri. Conto le pause sopra i 3 secondi.';
+    document.getElementById('mDescHint').textContent = voto
+        ? 'Che cosa vuol dire votare basso e che cosa votare alto. Ricompare a ogni voto: senza, fra un mese ti daresti un 7 con un metro diverso da oggi.'
+        : 'Come si misura, nel dettaglio. Ricompare a ogni rilevazione: se cambi metodo di misura la serie storica non vale più.';
+
     renderMetricFormHints();
 }
 
@@ -1542,58 +1500,48 @@ function renderMetricFormHints() {
     document.getElementById('roleHint').textContent = roleHints[role];
 
     const kindHints = {
-        state:      'Conta solo l\'ultimo valore rilevato: peso, punteggio di un test ripetibile.',
-        cumulative: 'I valori si sommano dentro la finestra scelta e poi ripartono da zero.',
-        checklist:  'Quanti elementi hai completato: baseline 0, target = totale (es. 40 lezioni).',
-        rubric:     'Più criteri valutati 1-5, media pesata. È ciò che rende misurabile un obiettivo senza numeri ovvi.'
+        autovalutazione: 'Ti dai un voto dentro una scala che scegli tu. È ciò che rende misurabile un obiettivo senza numeri ovvi.',
+        automisurazione: 'Misuri un numero vero: kg, minuti, pause, lezioni fatte. Il traguardo è il valore obiettivo.'
     };
     document.getElementById('kindHint').textContent = kindHints[kind];
 }
 
-function addCriterionRow(label, weight) {
-    const host = document.getElementById('critEditorList');
-    const div = document.createElement('div');
-    div.className = 'crit-editor-row';
-    div.innerHTML = `
-        <input type="text"   class="form-input crit-label-in"  placeholder="es. fluidità" value="${esc(label || '')}">
-        <input type="number" class="form-input crit-weight-in" step="0.5" min="0.5" value="${weight || 1}" title="peso">
-        <button class="btn btn-ghost btn-small" onclick="this.parentElement.remove()">✕</button>`;
-    host.appendChild(div);
-}
-
 async function saveMetric() {
-    const name   = document.getElementById('mName').value.trim();
-    const kind   = document.getElementById('mKind').value;
-    const target = document.getElementById('mTarget').value;
-    const base   = document.getElementById('mBaseline').value;
-
-    if (!name)            { showToast('Serve un nome'); return; }
-    if (target === '')    { showToast('Serve un target'); return; }
-    if (Number(target) === Number(base)) { showToast('Target e baseline devono essere diversi'); return; }
-
-    // criteri: raccolti prima, così un errore non lascia la metrica a metà
-    let crits = [];
-    if (kind === 'rubric') {
-        crits = Array.from(document.querySelectorAll('#critEditorList .crit-editor-row')).map((row, i) => ({
-            label:  row.querySelector('.crit-label-in').value.trim(),
-            weight: Number(row.querySelector('.crit-weight-in').value) || 1,
-            sort_order: i
-        })).filter(c => c.label);
-        if (!crits.length) { showToast('La rubrica ha bisogno di almeno un criterio'); return; }
-    }
+    const name = document.getElementById('mName').value.trim();
+    const kind = document.getElementById('mKind').value;
+    if (!name) { showToast('Serve un nome'); return; }
 
     const payload = {
         objective_id: editingMetricObjId,
         name,
-        role:      document.getElementById('mRole').value,
+        role:        document.getElementById('mRole').value,
         kind,
-        unit:      document.getElementById('mUnit').value.trim(),
-        direction: document.getElementById('mDirection').value,
-        baseline:  Number(base),
-        target:    Number(target),
-        protocol:  document.getElementById('mProtocol').value.trim(),
-        period:    kind === 'cumulative' ? document.getElementById('mPeriod').value : null
+        descrizione: document.getElementById('mDesc').value.trim()
     };
+
+    // Ogni tipo compila le sue colonne e azzera quelle dell'altro: lasciarci
+    // dentro i valori del tipo di prima farebbe rifiutare il salvataggio dal
+    // vincolo, e a schermo sembrerebbe un errore senza causa.
+    if (kind === 'autovalutazione') {
+        const min = document.getElementById('mMin').value;
+        const max = document.getElementById('mMax').value;
+        if (min === '' || max === '')       { showToast('Servono minimo e massimo'); return; }
+        if (Number(max) <= Number(min))     { showToast('Il massimo deve essere maggiore del minimo'); return; }
+        Object.assign(payload, {
+            min_value: Number(min), max_value: Number(max),
+            baseline: null, target: null, unit: null
+        });
+    } else {
+        const base   = document.getElementById('mBaseline').value;
+        const target = document.getElementById('mTarget').value;
+        if (target === '')  { showToast('Serve un valore obiettivo'); return; }
+        if (Number(target) === Number(base)) { showToast('Il valore obiettivo deve essere diverso dalla partenza'); return; }
+        Object.assign(payload, {
+            baseline: Number(base || 0), target: Number(target),
+            min_value: null, max_value: null,
+            unit: document.getElementById('mUnit').value.trim()
+        });
+    }
 
     // una sola primaria per obiettivo: intercettata qui per dare un messaggio
     // comprensibile invece dell'errore del vincolo unico
@@ -1605,24 +1553,10 @@ async function saveMetric() {
         }
     }
 
-    let metricId = editingMetricId;
-    if (metricId) {
-        const res = await sb.from('ob_metrics').update(payload).eq('id', metricId);
-        if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
-    } else {
-        const res = await sb.from('ob_metrics').insert(payload).select('id').single();
-        if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
-        metricId = res.data.id;
-    }
-
-    // i criteri si riscrivono per intero: sono pochi e l'ordine conta
-    if (kind === 'rubric') {
-        const del = await sb.from('ob_rubric_criteria').delete().eq('metric_id', metricId);
-        if (del.error) { showToast('❌ ' + del.error.message); return; }
-        const ins = await sb.from('ob_rubric_criteria')
-            .insert(crits.map(c => ({ ...c, metric_id: metricId })));
-        if (ins.error) { showToast('❌ ' + ins.error.message); return; }
-    }
+    const res = editingMetricId
+        ? await sb.from('ob_metrics').update(payload).eq('id', editingMetricId)
+        : await sb.from('ob_metrics').insert(payload);
+    if (res.error) { if (handleAuthError(res.error)) return; showToast('❌ ' + res.error.message); return; }
 
     closeModal('metricModal');
     showToast('✅ Metrica salvata');
@@ -1660,97 +1594,66 @@ function openMeasure(metricId) {
     document.getElementById('measDate').value = todayISO();
     document.getElementById('measNote').value = '';
 
-    // il protocollo va sempre riletto prima di misurare
-    document.getElementById('measureProtocol').innerHTML = m.protocol
-        ? `<div class="protocol-box"><span class="protocol-label">Protocollo di misura</span>${esc(m.protocol)}</div>`
-        : `<div class="protocol-box" style="background:#FEF3C7;border-left-color:var(--warning);">
-             <span class="protocol-label" style="color:#92400E;">Nessun protocollo</span>
-             Questa metrica non dice come si misura. Senza protocollo i valori di mesi diversi
-             non sono confrontabili: aprila in modifica e scrivilo.
+    // la descrizione va sempre riletta prima di misurare
+    const voto = m.kind === 'autovalutazione';
+    document.getElementById('measureDesc').innerHTML = m.descrizione
+        ? `<div class="desc-box"><span class="desc-label">${voto ? 'Come votare' : 'Cosa si misura'}</span>${esc(m.descrizione)}</div>`
+        : `<div class="desc-box" style="background:#FEF3C7;border-left-color:var(--warning);">
+             <span class="desc-label" style="color:#92400E;">Nessuna descrizione</span>
+             Questa metrica non dice ${voto ? 'che cosa vuol dire votare basso o alto' : 'come si misura'}.
+             Senza, i valori di mesi diversi non sono confrontabili: aprila in modifica e scrivilo.
            </div>`;
 
     const host = document.getElementById('measureInputs');
+    const last = measuresOf(m.id).slice(-1)[0];
 
-    if (m.kind === 'rubric') {
-        const crits = criteriaOf(m.id);
-        if (!crits.length) {
-            host.innerHTML = `<div class="form-hint">La rubrica non ha criteri. Modificala prima di rilevare.</div>`;
-            return;
-        }
-        host.innerHTML = crits.map(c => `
-            <div class="crit-row">
-                <div class="crit-head">
-                    <span class="crit-label">${esc(c.label)}
-                        ${Number(c.weight) !== 1 ? `<span class="crit-weight">×${fmtNum(c.weight)}</span>` : ''}</span>
-                    <span class="crit-score" id="score-${c.id}">3</span>
-                </div>
-                <input type="range" min="1" max="5" step="1" value="3"
-                       data-crit="${c.id}" data-weight="${c.weight}"
-                       oninput="onRubricSlide(this)">
-            </div>`).join('') + `
-            <div class="rubric-avg">
-                <span class="rubric-avg-label">Media pesata</span>
-                <span class="rubric-avg-val" id="rubricAvg">3.00</span>
+    if (voto) {
+        // Lo slider vive dentro la scala della metrica: un voto fuori scala
+        // lo rifiuterebbe comunque ob_record_measurement, ma qui non si può
+        // nemmeno comporre.
+        const min = Number(m.min_value), max = Number(m.max_value);
+        const val = last ? Number(last.value) : Math.round((min + max) / 2);
+        host.innerHTML = `
+            <div class="vote-row">
+                <input type="range" min="${min}" max="${max}" step="1" value="${val}"
+                       id="measValue" oninput="onVoteSlide(this)">
+                <div class="vote-scale"><span>${fmtNum(min)}</span><span>${fmtNum(max)}</span></div>
+            </div>
+            <div class="vote-box">
+                <span class="vote-label">Il tuo voto</span>
+                <span class="vote-val" id="voteVal">${val}</span>
             </div>`;
-        updateRubricAvg();
     } else {
-        const last = measuresOf(m.id).slice(-1)[0];
         host.innerHTML = `
             <div class="form-group">
                 <label class="form-label">Valore${m.unit ? ' (' + esc(m.unit) + ')' : ''}</label>
                 <input type="number" step="any" class="form-input" id="measValue"
                        value="${last ? last.value : ''}">
                 <div class="form-hint">
-                    ${m.kind === 'cumulative'
-                        ? 'Si somma agli altri valori della ' + PERIOD_LABEL[m.period || 'week'] + ' corrente.'
-                        : m.kind === 'checklist'
-                            ? 'Quanti ne hai completati in totale finora (non l\'incremento).'
-                            : 'Baseline ' + fmtNum(m.baseline) + ' → target ' + fmtNum(m.target) + '.'}
+                    Il totale di oggi, non l'incremento. Partenza ${fmtNum(m.baseline)} → obiettivo ${fmtNum(m.target)}.
                 </div>
             </div>`;
     }
     openModal('measureModal');
 }
 
-function onRubricSlide(el) {
-    document.getElementById('score-' + el.dataset.crit).textContent = el.value;
-    updateRubricAvg();
-}
-
-function updateRubricAvg() {
-    const sliders = document.querySelectorAll('#measureInputs input[type=range]');
-    let sw = 0, swv = 0;
-    sliders.forEach(s => {
-        const w = Number(s.dataset.weight) || 1;
-        sw += w; swv += w * Number(s.value);
-    });
-    const el = document.getElementById('rubricAvg');
-    if (el) el.textContent = sw ? (swv / sw).toFixed(2) : '—';
+function onVoteSlide(el) {
+    document.getElementById('voteVal').textContent = el.value;
 }
 
 async function saveMeasurement() {
     const m = metrics.find(x => x.id === measuringMetricId);
     if (!m) return;
 
-    const args = {
+    const v = document.getElementById('measValue').value;
+    if (v === '') { showToast('Serve un valore'); return; }
+
+    const { data, error } = await sb.rpc('ob_record_measurement', {
         p_metric_id:   m.id,
+        p_value:       Number(v),
         p_measured_on: document.getElementById('measDate').value || todayISO(),
         p_note:        document.getElementById('measNote').value.trim()
-    };
-
-    if (m.kind === 'rubric') {
-        const detail = {};
-        document.querySelectorAll('#measureInputs input[type=range]')
-            .forEach(s => { detail[s.dataset.crit] = Number(s.value); });
-        if (!Object.keys(detail).length) { showToast('Nessun criterio da registrare'); return; }
-        args.p_detail = detail;          // il valore lo calcola la RPC come media pesata
-    } else {
-        const v = document.getElementById('measValue').value;
-        if (v === '') { showToast('Serve un valore'); return; }
-        args.p_value = Number(v);
-    }
-
-    const { data, error } = await sb.rpc('ob_record_measurement', args);
+    });
     if (error)      { if (handleAuthError(error)) return; showToast('❌ ' + error.message); return; }
     if (!data?.ok)  { showToast('❌ ' + (data?.error || 'errore sconosciuto')); return; }
 
@@ -1872,7 +1775,7 @@ async function removeLink(linkId) {
 // ════════════════════════════════════════════════════════════
 function exportBackup() {
     const dump = { app: 'obiettivi', version: APP_VERSION, exported_at: new Date().toISOString(),
-                   objectives, metrics, criteria, milestones, measurements, taskLinks };
+                   objectives, metrics, milestones, measurements, taskLinks };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

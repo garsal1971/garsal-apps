@@ -24,29 +24,37 @@ data class ObMetrica(
     val name: String = "",
     /** `primary` = il risultato · `control` = riscontro lagging · `leading` = lo sforzo. */
     val role: String = "primary",
-    /** `state` | `cumulative` | `checklist` | `rubric`. */
-    val kind: String = "state",
-    val unit: String? = "",
-    val direction: String = "increase",
-    val baseline: Double = 0.0,
-    val target: Double = 0.0,
     /**
-     * Come si misura. Va riproposto a ogni rilevazione: se cambia il protocollo
-     * la serie storica non è più confrontabile.
+     * `autovalutazione` — ti dai un voto dentro la scala `min_value`..`max_value`
+     * `automisurazione` — misuri un numero, da `baseline` a `target`
+     *
+     * ⚠️ Le due coppie si escludono a vicenda (vincolo `ob_metrics_scala_per_tipo`):
+     * quella del tipo che non è vale sempre null. Per leggere gli estremi
+     * comunque sia fatta la metrica c'è [scala], che è la copia della RPC
+     * `ob_metric_scale`.
      */
-    val protocol: String? = "",
-    val period: String? = null,
+    val kind: String = "autovalutazione",
+    @SerialName("min_value") val minValue: Double? = null,
+    @SerialName("max_value") val maxValue: Double? = null,
+    val baseline: Double? = null,
+    val target: Double? = null,
+    val unit: String? = "",
+    /**
+     * Come votare (autovalutazione) o cosa si misura (automisurazione).
+     * Va riproposta a ogni rilevazione: se cambia il metro la serie storica
+     * non è più confrontabile.
+     */
+    val descrizione: String? = "",
     @SerialName("sort_order") val sortOrder: Int = 0,
-)
-
-@Serializable
-data class ObCriterio(
-    val id: String,
-    @SerialName("metric_id") val metricId: String,
-    val label: String = "",
-    val weight: Double = 1.0,
-    @SerialName("sort_order") val sortOrder: Int = 0,
-)
+) {
+    /** Da dove a dove va la metrica: la copia Kotlin di `ob_metric_scale`. */
+    val scala: Pair<Double, Double>
+        get() = if (kind == "autovalutazione") {
+            (minValue ?: 0.0) to (maxValue ?: 0.0)
+        } else {
+            (baseline ?: 0.0) to (target ?: 0.0)
+        }
+}
 
 @Serializable
 data class ObMilestone(

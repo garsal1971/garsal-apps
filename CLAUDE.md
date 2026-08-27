@@ -553,17 +553,39 @@ in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo 
 |---|---|
 | `ob_objectives` | Obiettivi, gerarchia a due livelli (`annual` → `quarterly`) via `parent_id` |
 | `ob_metrics` | Metriche di un obiettivo (1..N) |
-| `ob_rubric_criteria` | Criteri 1-5 delle metriche `kind='rubric'` |
-| `ob_measurements` | Rilevazioni; `detail` jsonb contiene i punteggi per criterio |
+| `ob_measurements` | Rilevazioni: `value` e `note`, una per metrica e per giorno |
 | `ob_milestones` | Curva attesa (`expected_value` per data) — base del semaforo |
 | `ob_task_links` | Collegamento a `ts_tasks` / `hb_habits` (le azioni restano nelle loro app) |
 
 `ob_metrics.role` distingue **`primary`** (il risultato, alimenta la barra e il semaforo — **una sola per
 obiettivo**, vincolo `uq_ob_metrics_one_primary`), **`control`** (secondo riscontro lagging) e **`leading`**
-(lo sforzo). `ob_metrics.kind` vale `state` | `cumulative` | `checklist` | `rubric`.
+(lo sforzo).
 
-`ob_metrics.protocol` descrive **come** si misura e viene riproposto a ogni rilevazione: se cambia il
-protocollo la serie storica non è più confrontabile.
+⚠️ **`ob_metrics.kind` ha due soli valori, e ciascuno compila le sue colonne**
+(`20260827110000_ob_metriche_semplificate.sql`):
+
+| `kind` | Colonne che compila | Colonne che lascia NULL |
+|---|---|---|
+| `autovalutazione` | `min_value`, `max_value` (di norma 1-10) | `baseline`, `target`, `unit` |
+| `automisurazione` | `baseline`, `target`, `unit` | `min_value`, `max_value` |
+
+Il vincolo `ob_metrics_scala_per_tipo` lo impone: senza, una metrica potrebbe portare una scala
+*e* un target, e quale dei due comanda sarebbe una scelta arbitraria dentro il codice. Gli estremi
+si leggono quindi **da un posto solo** — la RPC `ob_metric_scale`, ricalcata in `scaleOf()`
+(`obiettivi.html`) e in `ObMetrica.scala` (nativo) — e l'avanzamento resta la stessa formula per
+tutt'e due: `(corrente − da) / (a − da)`.
+
+`ob_metrics.descrizione` è **come votare** per un'autovalutazione (*1 = …, 10 = …*) e **cosa si
+misura** per un'automisurazione, e viene riproposta a ogni rilevazione: se cambia il metro la serie
+storica non è più confrontabile.
+
+⚠️ Prima c'erano quattro `kind` (`state`, `cumulative`, `checklist`, `rubric`), la colonna
+`direction`, la finestra `period`, `source_query` e una tabella di criteri pesati
+(`ob_rubric_criteria`) con i punteggi in `ob_measurements.detail`: **tutto cancellato**, insieme ai
+criteri e ai pesi che conteneva. Le rilevazioni no — il valore di una rubrica era già la media
+pesata, e su una scala 1-5 resta quello che era: le rubriche sono diventate autovalutazioni 1-5, le
+altre tre automisurazioni. `direction` in particolare era un secondo modo di dire quel che gli
+estremi già dicono, e poteva contraddirlo.
 
 ---
 
@@ -584,8 +606,10 @@ Le operazioni sul ciclo di vita dei task (complete, skip, fail) sono implementat
 | `task_fail` | `20260619110000_task_fail.sql` | `p_task_id uuid` | Segna un task come fallito |
 | `task_next_recurring_date` | `20260520110000_fix_task_next_recurring_date.sql` | `p_task ts_tasks, p_base date` | Calcola la prossima data per task `recurring` |
 
-Stessa regola per **Obiettivi**: il calcolo del progresso e la media pesata della rubrica vivono nelle RPC
-`ob_objective_progress` / `ob_record_measurement` (`20260727100000_ob_objectives_tables.sql`), non nel JS.
+Stessa regola per **Obiettivi**: il calcolo del progresso vive in `ob_objective_progress`, e
+`ob_record_measurement` è l'**unico punto di scrittura** di una rilevazione — è lei a rifiutare un
+voto fuori dalla scala della metrica, non il client
+(`20260827110000_ob_metriche_semplificate.sql`), non il JS.
 `ob_metric_current` è invece volutamente `SECURITY INVOKER`: riceve una riga `ob_metrics` dal chiamante,
 quindi la RLS su `ob_measurements` deve restare attiva.
 
@@ -1687,9 +1711,11 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Spuntiamola** — la chiusura della stecca scrive **prima** in `sp_stecche` e cancella **dopo**
   (`SpuntiamolaRepository.chiudiStecca`, come `dbCloseStecca()`); le spunte sono ottimistiche con
   rollback; frasi, emoji e messaggi dei traguardi sono copiati parola per parola.
-- **Obiettivi** — progresso e media pesata della rubrica restano nelle RPC
-  (`ob_objective_progress`, `ob_record_measurement`); per `kind='rubric'` il client **non calcola e
-  non invia mai il valore**. Le due barre non si fondono mai in una media.
+- **Obiettivi** — il progresso resta in `ob_objective_progress` e la scrittura in
+  `ob_record_measurement`, che è anche l'unica a dire se un voto sta dentro la scala. Gli estremi
+  di una metrica si leggono da `ob_metric_scale`, ricalcata in `scaleOf()` e in `ObMetrica.scala`:
+  se cambia il modo di ricavarli, va cambiato in tutt'e tre. Le due barre non si fondono mai in una
+  media.
 - **Events Log** — le tabelle `el_*` non sono in nessuna migration: le colonne dei `data class`
   sono ricavate da come `events-log.html` le scrive. Gli eventi `DA_SELECT` registrano **solo se il
   conteggio è cresciuto** rispetto all'ultimo `count:N`. Il **registro mostra solo il gruppo
@@ -1842,10 +1868,16 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   quando le due barre divergono di ≥ 25 punti l'app mostra un avviso esplicito, perché è il segnale
   che il piano viene eseguito ma il metodo non funziona.
 - Semaforo (`on_track` / `at_risk` / `off_track`) confrontando il risultato con l'ultima milestone scaduta
-- Rubrica multi-criterio per gli obiettivi senza numeri ovvi: slider 1-5, media pesata calcolata
-  **server-side** da `ob_record_measurement` (il client non invia mai il valore per `kind='rubric'`)
-- Formula unica di avanzamento per tutti i `kind`, regge entrambe le `direction`:
-  `(corrente − baseline) / (target − baseline)` — es. pause 14 → 3, corrente 6 ⇒ 73 %
+- **Una metrica chiede due cose, non otto**: un ruolo e un tipo. I due tipi sono i due modi veri di
+  rispondere a «come va?» — **autovalutazione**, dove ti dai un voto dentro una scala che scegli tu
+  (minimo e massimo, proposti 1-10) con scritto accanto cosa vuol dire votare basso e cosa alto; e
+  **automisurazione**, dove misuri un numero, con scritto cosa si misura, da dove parti e dove vuoi
+  arrivare. Il form mostra la scala *oppure* partenza/obiettivo, mai entrambe, com'è il vincolo un
+  livello sotto.
+- Il voto si dà con uno **slider che vive dentro la scala della metrica**: un voto fuori scala lo
+  rifiuterebbe comunque `ob_record_measurement`, ma di lì non si può nemmeno comporre.
+- Formula unica di avanzamento per tutt'e due i `kind`, e regge anche una scala che scende:
+  `(corrente − da) / (a − da)` — es. pause, partenza 14 → obiettivo 3, corrente 6 ⇒ 73 %
 
 ### `weight-quest.html` — Weight Quest
 - Chart.js weight graph centred on today (30-day window, scrollable)
