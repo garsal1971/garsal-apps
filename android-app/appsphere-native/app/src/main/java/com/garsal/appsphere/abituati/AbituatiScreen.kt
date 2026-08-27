@@ -532,7 +532,10 @@ private fun Archivio(righe: List<HbArchiviato>) {
 @Composable
 private fun Festa(esito: HbEsito, onRicomincia: (LocalDate) -> Unit, onChiudi: () -> Unit) {
     val context = LocalContext.current
-    var inizio by remember(esito.abitudineId) { mutableStateOf(LocalDate.now()) }
+    // Il nuovo ciclo parte da **domani**, come nel web: la stecca appena
+    // chiusa si è presa oggi, e un ciclo che ripartisse dallo stesso giorno
+    // nascerebbe con la prima giornata già spesa. Resta una proposta.
+    var inizio by remember(esito.abitudineId) { mutableStateOf(LocalDate.now().plusDays(1)) }
 
     AlertDialog(
         onDismissRequest = onChiudi,
@@ -570,7 +573,8 @@ private fun GameOver(
     onInterrompi: () -> Unit,
 ) {
     val context = LocalContext.current
-    var inizio by remember(esito.abitudineId) { mutableStateOf(LocalDate.now()) }
+    // Da domani, per la stessa ragione della `Festa` qui sopra.
+    var inizio by remember(esito.abitudineId) { mutableStateOf(LocalDate.now().plusDays(1)) }
 
     AlertDialog(
         onDismissRequest = onInterrompi,
