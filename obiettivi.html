@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.5.0</title>
+    <title>Obiettivi v1.6.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -295,6 +295,12 @@
             border: 1px solid var(--secondary);
         }
         .act-late { color: var(--danger); font-weight: 700; }
+
+        /* ── ZONA PERICOLOSA ── */
+        .zona-rossa {
+            border: 2px solid var(--danger); padding: 1rem;
+            background: #FEF2F2;
+        }
 
         /* ── ANDAMENTO ── */
         .kpi-row {
@@ -751,6 +757,18 @@
                 <button class="btn btn-ghost" onclick="loadAll()">🔄 Ricarica dati</button>
                 <button class="btn btn-ghost" onclick="exportBackup()">⬇️ Esporta JSON</button>
             </div>
+
+            <div class="section-title" style="color:var(--danger);border-color:var(--danger);">Zona pericolosa</div>
+            <div class="zona-rossa">
+                <div class="page-hint" style="margin:0 0 0.75rem;">
+                    Svuota <strong>tutti i dati di Obiettivi</strong>: obiettivi, metriche,
+                    rilevazioni, milestone, azioni, storico e collegamenti. Non tocca task,
+                    abitudini né nessun'altra app della suite — nemmeno le categorie e le
+                    priorità, che sono condivise con Tasks.
+                    <br>Di qui non si torna indietro: se ti serve, esporta prima il JSON.
+                </div>
+                <button class="btn btn-danger" onclick="openCancellaTutto()">🗑️ Cancella tutti i dati di Obiettivi</button>
+            </div>
         </section>
 
     </main>
@@ -1173,6 +1191,27 @@
     </div>
 </div>
 
+<!-- ══════════════ MODAL: CANCELLA TUTTO ══════════════ -->
+<div class="modal" id="wipeModal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <div class="modal-title" style="color:var(--danger);">Cancella tutti i dati di Obiettivi</div>
+            <button class="modal-close" onclick="closeModal('wipeModal')">&times;</button>
+        </div>
+        <div id="wipeBody"></div>
+        <div class="form-group">
+            <label class="form-label">Scrivi CANCELLA per confermare</label>
+            <input type="text" class="form-input" id="wipeWord" autocomplete="off"
+                   placeholder="CANCELLA" oninput="onWipeWord()">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost"     onclick="exportBackup()">⬇️ Esporta prima</button>
+            <button class="btn btn-secondary" onclick="closeModal('wipeModal')">Annulla</button>
+            <button class="btn btn-danger"    id="wipeGo" disabled onclick="eseguiCancellaTutto()">🗑️ Cancella</button>
+        </div>
+    </div>
+</div>
+
 <!-- ══════════════ MODAL: ANDAMENTO ══════════════ -->
 <div class="modal" id="trendModal">
     <div class="modal-content">
@@ -1239,8 +1278,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.5.0';
-var BUILD_TIME  = '2026-08-28T10:30:00Z';
+var APP_VERSION = 'v1.6.0';
+var BUILD_TIME  = '2026-08-28T11:30:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3274,6 +3313,94 @@ function exportBackup() {
     a.click();
     URL.revokeObjectURL(a.href);
     showToast('⬇️ Backup esportato');
+}
+
+// ════════════════════════════════════════════════════════════
+// ZONA PERICOLOSA — svuotare Obiettivi
+//
+// ⚠️ Le tabelle sono le sole `ob_*`: categorie e priorità sono **condivise con
+// Tasks** (`cm_categories`, `cm_priorities`) e cancellarle da qui lascerebbe i
+// task senza, che è un danno in un'app che non si sta nemmeno guardando.
+//
+// Si fa scrivere CANCELLA invece di un confirm() con l'OK a portata di clic:
+// di qui non si torna indietro, ed è la stessa scelta della zona pericolosa di
+// spese-personali.html e spese-ada.html.
+// ════════════════════════════════════════════════════════════
+
+// L'ordine è dal figlio al padre. Le chiavi esterne cancellerebbero in cascata
+// da sé partendo dagli obiettivi, ma una riga rimasta orfana — per un
+// collegamento che una cascata non copre — resterebbe lì senza che nessuno la
+// veda più: cancellarle una per una è l'unico modo di sapere che sono andate.
+const TABELLE_DA_SVUOTARE = [
+    ['ob_action_metrics', 'collegamenti azione-metrica'],
+    ['ob_action_history',  'righe di storico'],
+    ['ob_actions',         'azioni'],
+    ['ob_measurements',    'rilevazioni'],
+    ['ob_milestones',      'milestone'],
+    ['ob_metrics',         'metriche'],
+    ['ob_objectives',      'obiettivi']
+];
+
+function openCancellaTutto() {
+    const conti = [
+        [objectives.length,    'obiettivi'],
+        [metrics.length,       'metriche'],
+        [measurements.length,  'rilevazioni'],
+        [milestones.length,    'milestone'],
+        [actions.length,       'azioni'],
+        [actionHistory.length, 'righe di storico'],
+        [actionMetrics.length, 'collegamenti']
+    ].filter(([n]) => n > 0);
+
+    document.getElementById('wipeBody').innerHTML = conti.length
+        ? `<div class="page-hint" style="margin-bottom:1rem;">
+             Stai per cancellare:
+             <ul style="margin:0.5rem 0 0 1.1rem;">
+               ${conti.map(([n, che]) => `<li><strong>${n}</strong> ${esc(che)}</li>`).join('')}
+             </ul>
+             <p style="margin-top:0.75rem;">Categorie e priorità restano: sono condivise con Tasks.
+             L'operazione non si può annullare.</p>
+           </div>`
+        : `<div class="page-hint" style="margin-bottom:1rem;">Non c'è niente da cancellare.</div>`;
+
+    document.getElementById('wipeWord').value = '';
+    document.getElementById('wipeGo').disabled = true;
+    openModal('wipeModal');
+    document.getElementById('wipeWord').focus();
+}
+
+function onWipeWord() {
+    const parola = document.getElementById('wipeWord').value.trim().toUpperCase();
+    document.getElementById('wipeGo').disabled = parola !== 'CANCELLA';
+}
+
+async function eseguiCancellaTutto() {
+    if (document.getElementById('wipeWord').value.trim().toUpperCase() !== 'CANCELLA') return;
+    if (!currentUserId) { showToast('❌ Utente non riconosciuto'); return; }
+
+    const bottone = document.getElementById('wipeGo');
+    bottone.disabled = true;
+    document.getElementById('wipeBody').innerHTML = '<div class="page-hint">Cancello…</div>';
+
+    // Il filtro su user_id è ridondante rispetto alla RLS, ed è voluto: una
+    // DELETE senza filtro è una riga che, il giorno che una policy cambia,
+    // cancella più di quel che dice.
+    for (const [tabella, che] of TABELLE_DA_SVUOTARE) {
+        const res = await sb.from(tabella).delete().eq('user_id', currentUserId);
+        if (res.error) {
+            if (handleAuthError(res.error)) return;
+            document.getElementById('wipeBody').innerHTML =
+                `<div class="page-hint" style="color:var(--danger);">
+                   Errore cancellando ${esc(che)}: ${esc(res.error.message)}.<br>
+                   Quel che era già stato cancellato resta cancellato.</div>`;
+            bottone.disabled = false;
+            return;
+        }
+    }
+
+    closeModal('wipeModal');
+    showToast('🗑 Obiettivi svuotato');
+    await loadAll();
 }
 
 // ════════════════════════════════════════════════════════════
