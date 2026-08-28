@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.3.0</title>
+    <title>Obiettivi v1.4.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -295,6 +295,25 @@
             border: 1px solid var(--secondary);
         }
         .act-late { color: var(--danger); font-weight: 700; }
+
+        /* ── RILEVAZIONI DOPO IL COMPLETAMENTO ── */
+        .meas-multi {
+            padding: 0.75rem 0; border-bottom: 1px solid var(--border);
+        }
+        .meas-multi:last-child { border-bottom: none; }
+        .meas-multi-head {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 0.5rem; margin-bottom: 0.3rem;
+        }
+        .meas-multi-name { font-size: 1.05rem; font-weight: 700; }
+        .meas-multi-val {
+            font-family: 'Space Mono', monospace; font-weight: 700;
+            font-size: 1.15rem; color: var(--secondary);
+        }
+        .meas-multi input[type=range] { width: 100%; accent-color: var(--secondary); }
+        /* una misura saltata resta leggibile ma spenta: si vede che c'era */
+        .meas-multi.saltata { opacity: 0.45; }
+        .meas-skip { font-size: 0.7rem; padding: 0.15rem 0.45rem; }
 
         /* ── CHIP (giorni, categorie, date) ── */
         .chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -1081,6 +1100,34 @@
     </div>
 </div>
 
+<!-- ══════════════ MODAL: RILEVA DOPO AVER COMPLETATO ══════════════ -->
+<div class="modal" id="measMultiModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="measMultiTitle">Come è andata?</div>
+            <button class="modal-close" onclick="closeModal('measMultiModal')">&times;</button>
+        </div>
+        <div class="page-hint" style="margin-bottom:1rem;">
+            Hai appena chiuso l'azione: è il momento in cui il numero lo sai.
+            Quello che lasci indietro non viene registrato — «non l'ho misurata»
+            e «vale zero» sono due cose diverse.
+        </div>
+        <div class="form-group">
+            <label class="form-label">Data</label>
+            <input type="date" class="form-input" id="measMultiDate">
+        </div>
+        <div id="measMultiBody"></div>
+        <div class="form-group">
+            <label class="form-label">Nota</label>
+            <input type="text" class="form-input" id="measMultiNote" placeholder="facoltativa, vale per tutte">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('measMultiModal')">Non adesso</button>
+            <button class="btn btn-success"   onclick="salvaRilevazioniAzione()">Registra</button>
+        </div>
+    </div>
+</div>
+
 <!-- ══════════════ MODAL: SALTA DI N GIORNI ══════════════ -->
 <div class="modal" id="skipModal">
     <div class="modal-content narrow">
@@ -1104,8 +1151,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.3.0';
-var BUILD_TIME  = '2026-08-27T20:15:00Z';
+var APP_VERSION = 'v1.4.0';
+var BUILD_TIME  = '2026-08-28T09:00:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1154,6 +1201,7 @@ let measuringMetricId = null;
 let editingActionId   = null;
 let editingActionObjId = null;
 let skippingActionId  = null;
+let misurandoAzione   = null;   // azione appena chiusa, di cui si rilevano le metriche
 let wfActionId        = null;
 let wfSteps           = [];   // step in modifica dentro l'editor
 let actCategories     = [];   // categorie scelte nell'editor
@@ -2309,7 +2357,95 @@ async function runActionRpc(fn, args, verbo) {
 }
 
 async function completeAction(id) {
-    await runActionRpc('ob_action_complete', { p_action_id: id, p_today: todayISO() }, '✅ Completata');
+    const esito = await runActionRpc('ob_action_complete',
+        { p_action_id: id, p_today: todayISO() }, '✅ Completata');
+    // Solo se è andata bene davvero: un'azione fallita o saltata non è il
+    // momento di chiedere un numero.
+    if (esito && (esito.action === 'completed' || esito.action === 'completed_late')) {
+        chiediRilevazioni(id);
+    }
+}
+
+// ⚠️ Il popup si apre **dopo** che la RPC ha chiuso l'azione, non prima: il
+// ciclo di vita non deve dipendere dal fatto che uno si ricordi il numero. Se
+// lo si chiude senza registrare niente, l'azione resta completata lo stesso.
+function chiediRilevazioni(actionId) {
+    const a    = actions.find(x => x.id === actionId);
+    const mets = metricsOfAction(actionId);
+    if (!a || !mets.length) return;          // niente metriche, niente da chiedere
+
+    misurandoAzione = actionId;
+    document.getElementById('measMultiTitle').textContent = a.title;
+    document.getElementById('measMultiDate').value = todayISO();
+    document.getElementById('measMultiNote').value = '';
+
+    document.getElementById('measMultiBody').innerHTML = mets.map(m => {
+        const { da, a: fine } = scaleOf(m);
+        const ultima = measuresOf(m.id).slice(-1)[0];
+        const voto   = m.kind === 'autovalutazione';
+        const val    = ultima ? Number(ultima.value)
+                              : (voto ? Math.round((da + fine) / 2) : '');
+        return `
+        <div class="meas-multi" data-metric="${m.id}">
+            <div class="meas-multi-head">
+                <span class="meas-multi-name">${esc(m.name)}</span>
+                <span class="chip meas-skip" onclick="toggleSaltaMetrica(this)">non adesso</span>
+            </div>
+            ${m.descrizione ? `<div class="desc-box" style="margin:0.3rem 0 0.5rem;">
+                <span class="desc-label">${voto ? 'Come votare' : 'Cosa si misura'}</span>${esc(m.descrizione)}</div>` : ''}
+            ${voto
+                ? `<input type="range" min="${da}" max="${fine}" step="1" value="${val}"
+                          class="meas-input" oninput="this.closest('.meas-multi').querySelector('.meas-multi-val').textContent = this.value;">
+                   <div class="vote-scale"><span>${fmtNum(da)}</span>
+                        <span class="meas-multi-val">${val}</span><span>${fmtNum(fine)}</span></div>`
+                : `<input type="number" step="any" class="form-input meas-input" value="${val}"
+                          placeholder="${fmtNum(da)} → ${fmtNum(fine)}${m.unit ? ' ' + esc(m.unit) : ''}">
+                   <div class="form-hint">Da ${fmtNum(da)} a ${fmtNum(fine)}${m.unit ? ' ' + esc(m.unit) : ''}.</div>`}
+        </div>`;
+    }).join('');
+
+    openModal('measMultiModal');
+}
+
+function toggleSaltaMetrica(el) {
+    const riga = el.closest('.meas-multi');
+    riga.classList.toggle('saltata');
+    el.classList.toggle('on');
+    riga.querySelector('.meas-input').disabled = riga.classList.contains('saltata');
+}
+
+// Ogni metrica passa da ob_record_measurement, una chiamata per metrica: è
+// l'unico punto di scrittura di una rilevazione, ed è lei a rifiutare un voto
+// fuori scala. Le righe lasciate su «non adesso» non si toccano affatto.
+async function salvaRilevazioniAzione() {
+    const giorno = document.getElementById('measMultiDate').value || todayISO();
+    const nota   = document.getElementById('measMultiNote').value.trim();
+    const righe  = [...document.querySelectorAll('#measMultiBody .meas-multi:not(.saltata)')];
+
+    if (!righe.length) { closeModal('measMultiModal'); return; }
+
+    const errori = [];
+    let fatte = 0;
+    for (const riga of righe) {
+        const valore = riga.querySelector('.meas-input').value;
+        const nome   = riga.querySelector('.meas-multi-name').textContent;
+        if (valore === '') { errori.push(nome + ': valore mancante'); continue; }
+        const { data, error } = await sb.rpc('ob_record_measurement', {
+            p_metric_id:   riga.dataset.metric,
+            p_value:       Number(valore),
+            p_measured_on: giorno,
+            p_note:        nota
+        });
+        if (error)     { if (handleAuthError(error)) return; errori.push(nome + ': ' + error.message); }
+        else if (!data?.ok) errori.push(nome + ': ' + (data?.error || 'errore'));
+        else fatte++;
+    }
+
+    // Un errore su una metrica non deve buttare via le altre già registrate:
+    // la finestra resta aperta e dice quali non sono passate.
+    if (errori.length) { showToast('❌ ' + errori.join(' · '), 5000); }
+    else { closeModal('measMultiModal'); showToast('📈 ' + fatte + (fatte === 1 ? ' rilevazione registrata' : ' rilevazioni registrate')); }
+    await loadAll();
 }
 
 async function failAction(id) {
@@ -2418,6 +2554,7 @@ async function chiudiStep(stepId, esito) {
     if (data?.action === 'completed') {
         closeModal('wfModal');
         showToast('🎉 Workflow concluso · ' + (data.points > 0 ? '+' : '') + data.points + ' pt');
+        chiediRilevazioni(a.id);
     } else {
         showToast((esito === 'completed' ? '✅ ' : '❌ ') + st.title + ' · ' + (punti > 0 ? '+' : '') + punti + ' pt');
         openWorkflow(a.id);

@@ -1991,8 +1991,23 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Un'azione si collega alle metriche che dovrebbe muovere**, anche più d'una: si spuntano nel
   form fra quelle dell'obiettivo, si vedono sulla scheda dell'azione (📈 col bordo, per non
   confonderle con le categorie) e sotto ogni metrica nel dettaglio dell'obiettivo, e l'elenco
-  azioni si filtra per metrica. ⚠️ È **solo un collegamento**: non registra rilevazioni e non
-  muove nessuna barra — il numero lo si dà da 📈 Rilevazioni, come prima.
+  azioni si filtra per metrica.
+- **Completando un'azione con successo si apre la finestra delle rilevazioni** (`chiediRilevazioni`),
+  una riga per metrica collegata — slider per un'autovalutazione, casella per un'automisurazione —
+  con la descrizione della metrica sopra, una data e una nota per tutte. È il momento in cui il
+  numero lo si sa. Tre regole che sono la funzionalità:
+  - ⚠️ **si apre solo al successo** (`completed` / `completed_late`, e alla chiusura di un
+    workflow): dopo un fallimento o un salto non è il momento di chiedere un numero;
+  - ⚠️ **si apre DOPO che la RPC ha chiuso l'azione**, non prima: il ciclo di vita non deve
+    dipendere dal fatto che uno si ricordi il numero. Chiudendo la finestra senza registrare
+    niente, l'azione resta completata lo stesso;
+  - ⚠️ **una misura lasciata su «non adesso» non si registra**, e non si registra come zero — è la
+    stessa scelta delle misure di un diario in Memo e delle caselle vuote di `fnz_income`. La riga
+    resta visibile ma spenta, così si vede che c'era.
+  Ogni metrica passa da `ob_record_measurement`, una chiamata per metrica; se una fallisce le altre
+  restano registrate e la finestra resta aperta dicendo quali non sono passate. L'unicità
+  `(metric_id, measured_on)` fa sì che registrare due volte lo stesso giorno **corregga** invece di
+  aggiungere.
 - **La barra «Esecuzione» conta anche le azioni** (`ob_objective_progress`):
   `(sotto-obiettivi raggiunti + milestone centrate + azioni riuscite) / totale`. ⚠️ Entrano le
   sole azioni che possono **finire** (`single`, `multiple`, `workflow`): una ricorrente e una a
