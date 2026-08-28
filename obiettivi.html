@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.6.0</title>
+    <title>Obiettivi v1.7.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -24,7 +24,13 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* ⚠️ Coi caratteri di sistema molto grandi una parola sola può essere
+           più larga del riquadro che la contiene: `anywhere` la spezza invece
+           di lasciarla sbordare (e, a differenza di `break-word`, permette
+           anche a griglie e flex di stringersi davvero). Spezza solo quando
+           serve: a carattere normale non cambia niente. */
         body {
+            overflow-wrap: anywhere;
             font-family: 'Darker Grotesque', sans-serif;
             background: var(--light);
             color: var(--dark);
@@ -223,7 +229,6 @@
         }
         .metric-target { font-size: 0.7rem; color: var(--muted); font-weight: 400; }
 
-        .sparkline { width: 90px; height: 26px; flex-shrink: 0; }
 
         /* ── DESCRIZIONE (riletta prima di ogni rilevazione) ── */
         .desc-box {
@@ -255,7 +260,7 @@
 
         /* ── AZIONI ── */
         .filters {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
             gap: 0.75rem; margin-bottom: 1.25rem;
             padding: 1rem; background: var(--card-bg); border: 2px solid var(--border);
         }
@@ -304,7 +309,7 @@
 
         /* ── ANDAMENTO ── */
         .kpi-row {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
             gap: 0.6rem; margin-bottom: 0.5rem;
         }
         .kpi {
@@ -343,6 +348,9 @@
             font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted);
             cursor: pointer; padding: 0.2rem 0;
         }
+        /* ⚠️ Quel che è davvero largo scorre dentro il proprio riquadro: la
+           finestra non deve mai scorrere di lato per colpa di una tabella. */
+        .trend-scroll { overflow-x: auto; }
         .trend-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
         .trend-table th, .trend-table td {
             text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--border);
@@ -382,8 +390,9 @@
         .meas-multi:last-child { border-bottom: none; }
         .meas-multi-head {
             display: flex; justify-content: space-between; align-items: center;
-            gap: 0.5rem; margin-bottom: 0.3rem;
+            gap: 0.5rem; margin-bottom: 0.3rem; flex-wrap: wrap;
         }
+        .meas-multi-name { min-width: 0; overflow-wrap: anywhere; }
         .meas-multi-name { font-size: 1.05rem; font-weight: 700; }
         .meas-multi-val {
             font-family: 'Space Mono', monospace; font-weight: 700;
@@ -410,12 +419,12 @@
 
         /* ── STEP DI UN WORKFLOW ── */
         .wf-step {
-            display: flex; align-items: center; gap: 0.6rem;
+            display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
             padding: 0.5rem 0; border-bottom: 1px solid var(--border);
         }
         .wf-step:last-child { border-bottom: none; }
         .wf-state { font-size: 1.1rem; flex-shrink: 0; }
-        .wf-name { flex: 1; min-width: 0; }
+        .wf-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
         .wf-dep { font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted); }
         .wf-editor-row {
             display: grid; grid-template-columns: 1fr 36px; gap: 0.5rem;
@@ -452,6 +461,10 @@
             margin: 1.5rem 0 0.6rem; padding-bottom: 0.3rem;
             border-bottom: 2px solid var(--border);
             display: flex; justify-content: space-between; align-items: center;
+            /* ⚠️ Una riga sola è un'ipotesi, non un dato: coi caratteri di
+               sistema grandi l'etichetta e il suo pulsante non ci stanno, e il
+               pulsante sbordava. Va a capo invece di sfondare il riquadro. */
+            flex-wrap: wrap; gap: 0.4rem;
         }
         .section-title:first-child { margin-top: 0; }
 
@@ -500,23 +513,41 @@
             background: white; padding: 1.5rem;
             max-width: 780px; width: 96%; max-height: 92vh;
             overflow-y: auto; position: relative;
+            /* ⚠️ Esplicito, e non lasciato al valore calcolato: con
+               `overflow-y: auto` e `overflow-x: visible`, il CSS trasforma il
+               secondo in `auto` — e un solo pulsante troppo largo faceva
+               scorrere di lato l'intera finestra, che si apriva tagliata a
+               sinistra. Quel che è davvero largo (tabelle, grafici) ha già il
+               suo riquadro che scorre per conto proprio. */
+            overflow-x: hidden;
         }
         .modal-content.narrow { max-width: 520px; }
         .modal-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 1.25rem; gap: 1rem;
         }
-        .modal-title { font-size: 1.7rem; font-weight: 900; color: var(--accent); line-height: 1.15; }
+        /* min-width:0 o il titolo, come ogni elemento flex, non scende sotto la
+           propria larghezza minima e spinge la ✕ fuori dal riquadro */
+        .modal-title {
+            font-size: 1.7rem; font-weight: 900; color: var(--accent); line-height: 1.15;
+            min-width: 0; overflow-wrap: anywhere;
+        }
         .modal-close {
-            font-size: 1.8rem; cursor: pointer; color: var(--muted);
+            font-size: 1.8rem; cursor: pointer; color: var(--muted); flex-shrink: 0;
             transition: all 0.2s; line-height: 1; background: none; border: none;
         }
         .modal-close:hover { color: var(--danger); transform: rotate(90deg); }
         .modal-actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.5rem; flex-wrap: wrap; }
 
         /* ── FORM ── */
-        .form-group { margin-bottom: 1.1rem; }
-        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-group { margin-bottom: 1.1rem; min-width: 0; }
+        /* ⚠️ La soglia è in rem, non in px: così cresce insieme ai caratteri di
+           sistema e le due colonne diventano una sola quando il testo non ci
+           sta più — senza che serva una media query, che guarda lo schermo e
+           non la dimensione del testo. */
+        .form-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1rem;
+        }
         .form-label {
             display: block; margin-bottom: 0.4rem; font-weight: 700;
             font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
@@ -637,8 +668,6 @@
         <nav class="nav-menu">
             <div class="nav-item active" data-text="Obiettivi" data-section="obiettivi"
                  onclick="showPage('obiettivi'); setNavActive(this)">🎯</div>
-            <div class="nav-item" data-text="Rilevazioni" data-section="rilevazioni"
-                 onclick="showPage('rilevazioni'); setNavActive(this)">📈</div>
             <div class="nav-item" data-text="Azioni" data-section="azioni"
                  onclick="showPage('azioni'); setNavActive(this)">✅</div>
             <div class="nav-item" data-text="Archivio" data-section="archivio"
@@ -657,19 +686,6 @@
                 <button class="btn btn-accent" onclick="openObjectiveEditor(null, null)">+ Obiettivo annuale</button>
             </div>
             <div id="objectivesList"></div>
-        </section>
-
-        <!-- PAGE: RILEVAZIONI -->
-        <section class="page" id="page-rilevazioni">
-            <div class="page-header">
-                <div class="page-title">Rilevazioni</div>
-            </div>
-            <div class="page-hint">
-                Le metriche in scadenza sono in cima. La descrizione della metrica — come
-                votare, o cosa si misura — viene sempre riproposta prima di inserire un valore:
-                se cambi il metro, la serie storica non è più confrontabile.
-            </div>
-            <div id="metricsList"></div>
         </section>
 
         <!-- PAGE: AZIONI -->
@@ -922,30 +938,6 @@
             <button class="btn btn-danger"    id="mDeleteBtn" onclick="deleteMetric()" style="margin-right:auto;">Elimina</button>
             <button class="btn btn-secondary" onclick="closeModal('metricModal')">Annulla</button>
             <button class="btn btn-success"   onclick="saveMetric()">Salva</button>
-        </div>
-    </div>
-</div>
-
-<!-- ══════════════ MODAL: RILEVAZIONE ══════════════ -->
-<div class="modal" id="measureModal">
-    <div class="modal-content narrow">
-        <div class="modal-header">
-            <div class="modal-title" id="measureTitle"></div>
-            <button class="modal-close" onclick="closeModal('measureModal')">&times;</button>
-        </div>
-        <div id="measureDesc"></div>
-        <div class="form-group">
-            <label class="form-label">Data</label>
-            <input type="date" class="form-input" id="measDate">
-        </div>
-        <div id="measureInputs"></div>
-        <div class="form-group">
-            <label class="form-label">Nota</label>
-            <input type="text" class="form-input" id="measNote" placeholder="facoltativa">
-        </div>
-        <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="closeModal('measureModal')">Annulla</button>
-            <button class="btn btn-success"   onclick="saveMeasurement()">Registra</button>
         </div>
     </div>
 </div>
@@ -1278,8 +1270,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.6.0';
-var BUILD_TIME  = '2026-08-28T11:30:00Z';
+var APP_VERSION = 'v1.7.0';
+var BUILD_TIME  = '2026-08-28T12:30:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1451,7 +1443,6 @@ async function loadAll() {
     await loadProgress();
     fillActionFilters();
     renderObjectives();
-    renderMetricsPage();
     renderActionsPage();
     renderArchive();
 }
@@ -1695,76 +1686,6 @@ function renderArchive() {
 }
 
 // ════════════════════════════════════════════════════════════
-// RENDER — pagina rilevazioni
-// ════════════════════════════════════════════════════════════
-function renderMetricsPage() {
-    const host = document.getElementById('metricsList');
-    const activeIds = objectives.filter(o => o.status === 'active').map(o => o.id);
-    const rows = metrics.filter(m => activeIds.includes(m.objective_id));
-
-    if (!rows.length) {
-        host.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div>
-            <div class="empty-title">Nessuna metrica</div>
-            <div class="empty-desc">Apri un obiettivo e aggiungi la sua metrica primaria.</div></div>`;
-        return;
-    }
-
-    // le più "stantie" in cima: è lì che serve un promemoria
-    const withAge = rows.map(m => {
-        const rowsM = measuresOf(m.id);
-        const last  = rowsM.length ? rowsM[rowsM.length - 1].measured_on : null;
-        return { m, last, age: last ? daysBetween(last, todayISO()) : 9999 };
-    }).sort((a, b) => b.age - a.age);
-
-    host.innerHTML = withAge.map(({ m, last, age }) => {
-        const obj = objectives.find(o => o.id === m.objective_id);
-        const cur = currentValue(m);
-        const pct = Math.round(metricProgress(m) * 100);
-        return `
-        <div class="metric-row">
-            <div class="metric-main">
-                <div class="metric-name">
-                    <span class="role-tag role-${m.role}">${ROLE_LABEL[m.role]}</span>
-                    ${esc(m.name)}
-                </div>
-                <div class="metric-sub">
-                    ${esc(obj ? obj.title : '')} · ${KIND_LABEL[m.kind]}
-                    · ultima: ${last ? fmtDate(last) + ' (' + age + 'g fa)' : 'mai'}
-                </div>
-            </div>
-            ${sparkline(m)}
-            <div class="metric-value">
-                ${fmtNum(cur)}${m.unit ? ' <span class="metric-target">' + esc(m.unit) + '</span>' : ''}
-                <div class="metric-target">${pct}% · ${m.kind === 'autovalutazione' ? 'su ' : 'target '}${fmtNum(scaleOf(m).a)}</div>
-            </div>
-            <button class="btn btn-accent btn-small" onclick="openMeasure('${m.id}')">Rileva</button>
-        </div>`;
-    }).join('');
-}
-
-function sparkline(metric) {
-    const rows = measuresOf(metric.id);
-    if (rows.length < 2) return '<div class="sparkline"></div>';
-    const vals = rows.map(r => Number(r.value));
-    const min = Math.min(...vals), max = Math.max(...vals);
-    const span = (max - min) || 1;
-    const w = 90, h = 26;
-    const pts = vals.map((v, i) => {
-        const x = (i / (vals.length - 1)) * (w - 2) + 1;
-        const y = h - 1 - ((v - min) / span) * (h - 2);
-        return x.toFixed(1) + ',' + y.toFixed(1);
-    }).join(' ');
-    // la direzione non è più una colonna: è già scritta negli estremi
-    const { da, a } = scaleOf(metric);
-    const good = a >= da
-        ? vals[vals.length-1] >= vals[0]
-        : vals[vals.length-1] <= vals[0];
-    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-        <polyline points="${pts}" fill="none" stroke="${good ? '#00B894' : '#E74C3C'}" stroke-width="1.5"/>
-    </svg>`;
-}
-
-// ════════════════════════════════════════════════════════════
 // DETTAGLIO OBIETTIVO
 // ════════════════════════════════════════════════════════════
 async function openDetail(objId) {
@@ -1852,14 +1773,14 @@ async function openDetail(objId) {
             </div>`).join('')
         : `<div class="form-hint">Nessuna. Le milestone sono la curva attesa: senza, il semaforo non ha riferimento.</div>`;
 
-    // AZIONI — elencate, non eseguite: questa finestra è la definizione
-    // dell'obiettivo. Si creano e si chiudono da ✅ Azioni, si guardano in
-    // 📊 Andamento.
-    html += `<div class="section-title">Azioni</div>`;
+    // AZIONI — si aggiungono da qui, ma non si chiudono: definire il piano è
+    // parte della definizione dell'obiettivo, eseguirlo no. Le si completa da
+    // ✅ Azioni e le si guarda in 📊 Andamento.
+    html += `<div class="section-title">Azioni
+        <button class="btn btn-ghost btn-small" onclick="closeModal('detailModal');openActionEditor('${objId}',null)">+ Azione</button></div>`;
     html += acts.length
         ? acts.map(a => renderActionCard(a, { showObjective: false, soloDefinizione: true })).join('')
-        : `<div class="form-hint">Nessuna. Le azioni sono il «cosa faccio» dell'obiettivo,
-             e si aggiungono dalla pagina ✅ Azioni.</div>`;
+        : `<div class="form-hint">Nessuna. Le azioni sono il «cosa faccio» dell'obiettivo.</div>`;
 
     html += `<div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal('detailModal');openObjectiveEditor('${objId}',null)">Modifica obiettivo</button>
@@ -2092,86 +2013,6 @@ async function deleteMetric() {
 }
 
 // ════════════════════════════════════════════════════════════
-// RILEVAZIONE
-// ════════════════════════════════════════════════════════════
-function openMeasure(metricId) {
-    const m = metrics.find(x => x.id === metricId);
-    if (!m) return;
-    measuringMetricId = metricId;
-
-    document.getElementById('measureTitle').textContent = m.name;
-    document.getElementById('measDate').value = todayISO();
-    document.getElementById('measNote').value = '';
-
-    // la descrizione va sempre riletta prima di misurare
-    const voto = m.kind === 'autovalutazione';
-    document.getElementById('measureDesc').innerHTML = m.descrizione
-        ? `<div class="desc-box"><span class="desc-label">${voto ? 'Come votare' : 'Cosa si misura'}</span>${esc(m.descrizione)}</div>`
-        : `<div class="desc-box" style="background:#FEF3C7;border-left-color:var(--warning);">
-             <span class="desc-label" style="color:#92400E;">Nessuna descrizione</span>
-             Questa metrica non dice ${voto ? 'che cosa vuol dire votare basso o alto' : 'come si misura'}.
-             Senza, i valori di mesi diversi non sono confrontabili: aprila in modifica e scrivilo.
-           </div>`;
-
-    const host = document.getElementById('measureInputs');
-    const last = measuresOf(m.id).slice(-1)[0];
-
-    if (voto) {
-        // Lo slider vive dentro la scala della metrica: un voto fuori scala
-        // lo rifiuterebbe comunque ob_record_measurement, ma qui non si può
-        // nemmeno comporre.
-        const min = Number(m.min_value), max = Number(m.max_value);
-        const val = last ? Number(last.value) : Math.round((min + max) / 2);
-        host.innerHTML = `
-            <div class="vote-row">
-                <input type="range" min="${min}" max="${max}" step="1" value="${val}"
-                       id="measValue" oninput="onVoteSlide(this)">
-                <div class="vote-scale"><span>${fmtNum(min)}</span><span>${fmtNum(max)}</span></div>
-            </div>
-            <div class="vote-box">
-                <span class="vote-label">Il tuo voto</span>
-                <span class="vote-val" id="voteVal">${val}</span>
-            </div>`;
-    } else {
-        host.innerHTML = `
-            <div class="form-group">
-                <label class="form-label">Valore${m.unit ? ' (' + esc(m.unit) + ')' : ''}</label>
-                <input type="number" step="any" class="form-input" id="measValue"
-                       value="${last ? last.value : ''}">
-                <div class="form-hint">
-                    Il totale di oggi, non l'incremento. Partenza ${fmtNum(m.baseline)} → obiettivo ${fmtNum(m.target)}.
-                </div>
-            </div>`;
-    }
-    openModal('measureModal');
-}
-
-function onVoteSlide(el) {
-    document.getElementById('voteVal').textContent = el.value;
-}
-
-async function saveMeasurement() {
-    const m = metrics.find(x => x.id === measuringMetricId);
-    if (!m) return;
-
-    const v = document.getElementById('measValue').value;
-    if (v === '') { showToast('Serve un valore'); return; }
-
-    const { data, error } = await sb.rpc('ob_record_measurement', {
-        p_metric_id:   m.id,
-        p_value:       Number(v),
-        p_measured_on: document.getElementById('measDate').value || todayISO(),
-        p_note:        document.getElementById('measNote').value.trim()
-    });
-    if (error)      { if (handleAuthError(error)) return; showToast('❌ ' + error.message); return; }
-    if (!data?.ok)  { showToast('❌ ' + (data?.error || 'errore sconosciuto')); return; }
-
-    closeModal('measureModal');
-    showToast('✅ Rilevazione registrata: ' + fmtNum(data.value));
-    await loadAll();
-}
-
-// ════════════════════════════════════════════════════════════
 // MILESTONE
 // ════════════════════════════════════════════════════════════
 function openMilestoneEditor(objId, msId) {
@@ -2398,6 +2239,7 @@ function graficoMetrica(m) {
     </svg>
     <details class="trend-values">
         <summary>i ${righe.length} valori</summary>
+        <div class="trend-scroll">
         <table class="trend-table">
             <thead><tr><th>Giorno</th><th>Valore</th><th>Nota</th></tr></thead>
             <tbody>${righe.slice().reverse().map(r => `<tr>
@@ -2405,6 +2247,7 @@ function graficoMetrica(m) {
                 <td class="num">${fmtNum(r.value)}</td>
                 <td>${esc(r.note || '')}</td></tr>`).join('')}</tbody>
         </table>
+        </div>
     </details>
     </div>`;
 }
@@ -2448,7 +2291,8 @@ function barraAzioni(acts, hist) {
         </div>
     </div>
 
-    <table class="trend-table" style="margin-top:0.75rem;">
+    <div class="trend-scroll" style="margin-top:0.75rem;">
+    <table class="trend-table">
         <thead><tr><th>Tipo</th><th class="num">Totali</th><th class="num">Riuscite</th><th class="num">Aperte</th></tr></thead>
         <tbody>
             ${perTipo.map(({ t, righe }) => `<tr>
@@ -2463,7 +2307,8 @@ function barraAzioni(acts, hist) {
                 <td class="num">${acts.filter(a => actionIsAlive(a)).length}</td>
             </tr>
         </tbody>
-    </table>`;
+    </table>
+    </div>`;
 }
 
 // ════════════════════════════════════════════════════════════

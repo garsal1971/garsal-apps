@@ -1951,11 +1951,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 ### `obiettivi.html` — Obiettivi
 - Obiettivi annuali con sotto-obiettivi trimestrali (`parent_id`, due soli livelli)
 - ⚠️ **Dettaglio e Andamento sono due finestre con due mestieri**, e la separazione è la
-  funzionalità: **Dettaglio** dice *com'è definito* l'obiettivo (metriche, sotto-obiettivi,
-  milestone) e non ha né il pulsante *Rileva*, né *+ Azione*, né una riga di storico; le azioni si
-  vedono ma non si eseguono. **📊 Andamento** dice *come sta andando*. Rilevare si fa da
-  📈 Rilevazioni o dalla finestra che si apre chiudendo un'azione; le azioni si creano e si
-  chiudono da ✅ Azioni.
+  funzionalità: **Dettaglio** dice *com'è definito* l'obiettivo — metriche, sotto-obiettivi,
+  milestone e azioni, che da lì **si aggiungono** ma non si chiudono, e non ha né il pulsante
+  *Rileva* né una riga di storico. **📊 Andamento** dice *come sta andando*. Le azioni si
+  completano da ✅ Azioni.
+- ⚠️ **La Tab 📈 Rilevazioni non esiste più** (v1.7.0), e con lei `openMeasure()` e la finestra
+  della rilevazione singola: **un numero si registra chiudendo l'azione che dovrebbe muoverlo**, e
+  si guarda in 📊 Andamento. Una pagina che chiedeva un valore slegato da quel che si era fatto
+  invitava a inventarlo — e la data lì si sceglieva a mano, che è proprio ciò che
+  `giornoDiChiusura` toglie di mezzo.
 - **📊 Andamento** (pulsante accanto a *Dettaglio* sulla scheda): quattro numeri di testa
   (risultato, esecuzione, punti presi, giorni alla scadenza), **una curva per metrica** e lo stato
   delle azioni.
@@ -2033,6 +2037,27 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   voluto: una DELETE senza condizione è una riga che, il giorno che una policy cambia, cancella
   più di quel che dice. Le cascate basterebbero partendo da `ob_objectives`, ma una riga rimasta
   orfana resterebbe lì senza che nessuno la veda più.
+
+#### ⚠️ I caratteri di sistema grandi: il difetto che si vedeva solo sul telefono
+
+Il 28 agosto 2026 il Dettaglio si apriva **tagliato a sinistra** sul telefono, e da PC non si
+riproduceva. La causa erano due cose che si sommavano:
+
+1. `.section-title` è un flex `space-between` con l'etichetta e il suo pulsante: coi caratteri
+   ingranditi non ci stavano su una riga, e il pulsante sbordava. **`flex-wrap: wrap`** — «una riga
+   sola è un'ipotesi, non un dato»;
+2. `.modal-content` aveva `overflow-y: auto` e nessun `overflow-x`. ⚠️ Per specifica CSS, con uno
+   dei due su `visible` e l'altro no, il primo **si calcola `auto`**: bastava un pulsante largo e
+   l'intera finestra diventava scorrevole di lato. Ora `overflow-x: hidden` è scritto, e quel che è
+   davvero largo (le tabelle dell'Andamento) scorre **dentro il proprio riquadro** (`.trend-scroll`).
+
+Da lì la passata su tutto il resto, verificata a 220 % di carattere su 360 px: `min-width: 0` sul
+titolo del modale e `flex-shrink: 0` sulla ✕ (il titolo lungo la spingeva fuori); `.form-row` con
+**`minmax(9rem, 1fr)` invece di `1fr 1fr`** — la soglia in `rem` cresce col testo, quindi le due
+colonne diventano una sola da sé, senza una media query che guarda lo schermo invece del testo;
+`flex-wrap` sulle righe degli step e delle misure; e **`overflow-wrap: anywhere` su `body`**,
+perché a quella dimensione una parola sola può essere più larga del riquadro — spezzarla è meglio
+che tagliarla, e a carattere normale non cambia niente.
 
 #### I grafici dell'Andamento
 
