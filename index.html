@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.132</title>
+<title>AppSphere v1.5.133</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -179,6 +179,11 @@
     background: #EFF6FF;
     color: #1E3A8A;
     border-color: #BFDBFE;
+  }
+  .home-alert-chip.obiettivi {
+    background: #F5F3FF;
+    color: #4C1D95;
+    border-color: #DDD6FE;
   }
   .home-alert-close {
     display: flex;
@@ -1962,8 +1967,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.132';
-const BUILD_TIME  = '2026-08-26T12:00:00Z';
+const APP_VERSION = 'v1.5.133';
+const BUILD_TIME  = '2026-08-28T15:30:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2921,6 +2926,7 @@ let _homeAlertFinanza = [];
 let _homeAlertChallenges = [];
 let _homeAlertSpuntiamola = [];
 let _homeAlertHabits = [];
+let _homeAlertObiettivi = [];
 
 function alertDismissedToday() {
   return localStorage.getItem('appsphere_alert_dismissed_date') === new Date().toISOString().slice(0, 10);
@@ -3289,6 +3295,44 @@ async function loadHomeAlertHabits(headers) {
   }
 }
 
+// Obiettivi: le azioni da svolgere oggi — quelle che cadono oggi più quelle
+// rimaste indietro. ⚠️ Le prossime NON entrano: il fumetto è un promemoria di
+// quel che si può chiudere adesso, non l'agenda — quella è il Piano quotidiano
+// dentro l'app. Le azioni a libera ripetizione non hanno una data e restano
+// fuori per costruzione (`next_occurrence_date` nullo).
+async function loadHomeAlertObiettivi(headers) {
+  try {
+    const oggi = new Date();
+    const domani = new Date(oggi.getTime() + 86400000).toISOString().slice(0, 10);
+    const inizioOggi = oggi.toISOString().slice(0, 10);
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/ob_actions?select=id,title,next_occurrence_date` +
+      `&status=neq.terminated&next_occurrence_date=lt.${domani}` +
+      `&order=next_occurrence_date.asc`,
+      { headers }
+    );
+    if (!res.ok) return [];
+    const righe = await res.json();
+    return righe.map(a => {
+      // il giorno in ora locale: tagliare la stringa darebbe il giorno UTC, e
+      // un'azione di mezzanotte finirebbe nel giorno prima
+      const d = new Date(a.next_occurrence_date);
+      const giorno = isNaN(d.getTime()) ? inizioOggi
+        : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+          + '-' + String(d.getDate()).padStart(2, '0');
+      const arretrata = giorno < inizioOggi;
+      return {
+        title: (arretrata ? '⚠️ ' : '') + a.title,
+        hidden: false,
+        url: 'obiettivi.html'
+      };
+    });
+  } catch (e) {
+    console.warn('Avvisi obiettivi non disponibili:', e);
+    return [];
+  }
+}
+
 async function loadHomeAlerts() {
   if (_homeAlertDismissed) return;
   const token = localStorage.getItem('sb_token');
@@ -3298,13 +3342,14 @@ async function loadHomeAlerts() {
   if (!uid) return;
   const headers = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token };
 
-  const [decisions, tasks, finanza, challenges, spuntiamola, habits] = await Promise.all([
+  const [decisions, tasks, finanza, challenges, spuntiamola, habits, obiettivi] = await Promise.all([
     loadHomeAlertDecisions(uid, headers),
     loadHomeAlertUrgentTasks(headers),
     loadHomeAlertPortfolioTotal(headers),
     loadHomeAlertChallenges(headers),
     loadHomeAlertSpuntiamola(headers),
-    loadHomeAlertHabits(headers)
+    loadHomeAlertHabits(headers),
+    loadHomeAlertObiettivi(headers)
   ]);
   _homeAlertDecisions = decisions;
   _homeAlertTasks = tasks;
@@ -3312,6 +3357,7 @@ async function loadHomeAlerts() {
   _homeAlertChallenges = challenges;
   _homeAlertSpuntiamola = spuntiamola;
   _homeAlertHabits = habits;
+  _homeAlertObiettivi = obiettivi;
   renderHomeAlertBubble();
 }
 
@@ -3345,7 +3391,8 @@ function renderHomeAlertBubble() {
     renderAlertSection('💰 Finanza', _homeAlertFinanza, 'finanza') +
     renderAlertSection('🎯 Sfide di oggi', _homeAlertChallenges, 'sfide') +
     renderAlertSection('✅ Spuntiamola', _homeAlertSpuntiamola, 'spuntiamola') +
-    renderAlertSection('🔁 Abituati — da fare oggi', _homeAlertHabits, 'abitudini');
+    renderAlertSection('🔁 Abituati — da fare oggi', _homeAlertHabits, 'abitudini') +
+    renderAlertSection('🎯 Obiettivi — azioni di oggi', _homeAlertObiettivi, 'obiettivi');
   if (!sectionsHtml) return;
 
   // Tap fuori: chiude solo questa visualizzazione, ricompare al prossimo caricamento.

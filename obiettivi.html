@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.8.0</title>
+    <title>Obiettivi v1.9.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -77,6 +77,8 @@
             .nav-item::after { content: " " attr(data-text); }
         }
 
+        /* il + galleggiante sta sopra l'ultima scheda: l'elenco finisce prima */
+        .page { padding-bottom: 5.5rem; }
         .main-content { padding: 1.5rem; overflow-y: auto; }
         .page { display: none; }
         .page.active { display: block; }
@@ -666,7 +668,9 @@
 
     <aside class="sidebar" id="sidebar">
         <nav class="nav-menu">
-            <div class="nav-item active" data-text="Obiettivi" data-section="obiettivi"
+            <div class="nav-item active" data-text="Piano" data-section="piano"
+                 onclick="showPage('piano'); setNavActive(this)">📆</div>
+            <div class="nav-item" data-text="Obiettivi" data-section="obiettivi"
                  onclick="showPage('obiettivi'); setNavActive(this)">🎯</div>
             <div class="nav-item" data-text="Azioni" data-section="azioni"
                  onclick="showPage('azioni'); setNavActive(this)">✅</div>
@@ -680,7 +684,20 @@
     <main class="main-content">
 
         <!-- PAGE: OBIETTIVI -->
-        <section class="page active" id="page-obiettivi">
+        <!-- PAGE: PIANO QUOTIDIANO -->
+        <section class="page active" id="page-piano">
+            <div class="page-header">
+                <div class="page-title">Piano quotidiano</div>
+                <button class="btn btn-accent" onclick="openActionEditor(null,null)">+ Azione</button>
+            </div>
+            <div class="page-hint">
+                Tutte le azioni da svolgere, giorno per giorno: quelle rimaste indietro in cima,
+                poi oggi, poi i giorni che vengono. Da qui si chiudono.
+            </div>
+            <div id="pianoList"></div>
+        </section>
+
+        <section class="page" id="page-obiettivi">
             <div class="page-header">
                 <div class="page-title">Obiettivi</div>
                 <button class="btn btn-accent" onclick="openObjectiveEditor(null, null)">+ Obiettivo annuale</button>
@@ -1268,8 +1285,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.8.0';
-var BUILD_TIME  = '2026-08-28T14:30:00Z';
+var APP_VERSION = 'v1.9.0';
+var BUILD_TIME  = '2026-08-28T16:00:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1442,6 +1459,7 @@ async function loadAll() {
     fillActionFilters();
     renderObjectives();
     renderActionsPage();
+    renderPianoPage();
     renderArchive();
 }
 
@@ -2434,6 +2452,99 @@ function filteredActions() {
     });
 }
 
+// ── PIANO QUOTIDIANO ──────────────────────────────────────────────────────
+//
+// La stessa materia della pagina ✅ Azioni, letta in un altro modo: lì si cerca
+// e si filtra, qui si scorre il calendario. Un giorno per riquadro, in ordine,
+// con quel che è rimasto indietro in cima — perché è quello che si fa per primo.
+//
+// ⚠️ Le azioni **concluse non ci sono**: un piano dice cosa resta da fare, e una
+// riga che non si può più toccare è memoria, non piano. Si guardano in
+// 📊 Andamento.
+function renderPianoPage() {
+    const host = document.getElementById('pianoList');
+    if (!host) return;
+
+    const vive = actions.filter(actionIsAlive);
+    if (!vive.length) {
+        host.innerHTML = `<div class="empty-state"><div class="empty-icon">📆</div>
+            <div class="empty-title">Niente in programma</div>
+            <div class="empty-desc">Un obiettivo senza azioni è un desiderio: aggiungi la prima cosa da fare.</div></div>`;
+        return;
+    }
+
+    const oggi   = todayISO();
+    const libere = vive.filter(a => a.type === 'free_repeat');
+    const datate = vive.filter(a => a.type !== 'free_repeat');
+
+    // un mucchietto per giorno, in ordine di data
+    const perGiorno = new Map();
+    datate.forEach(a => {
+        const g = actionDay(a) || oggi;
+        if (!perGiorno.has(g)) perGiorno.set(g, []);
+        perGiorno.get(g).push(a);
+    });
+    const giorni = [...perGiorno.keys()].sort();
+
+    const scadute = giorni.filter(g => g < oggi);
+    const futuri  = giorni.filter(g => g > oggi);
+    const diOggi  = perGiorno.get(oggi) || [];
+
+    // Le arretrate stanno insieme in un riquadro solo: sono «da recuperare»,
+    // non un'agenda di giorni passati da sfogliare.
+    const arretrate = scadute.flatMap(g => perGiorno.get(g))
+        .sort((x, y) => (actionDay(x) || '').localeCompare(actionDay(y) || ''));
+
+    let html = '';
+
+    if (arretrate.length) {
+        html += sezionePiano('⚠️ Rimaste indietro', arretrate, {
+            nota: 'la più vecchia è di ' + giorniFa(actionDay(arretrate[0]))
+        });
+    }
+    html += sezionePiano('🎯 Oggi · ' + fmtDate(oggi), diOggi, {
+        vuoto: 'Niente in programma per oggi.'
+    });
+    futuri.forEach(g => {
+        html += sezionePiano(etichettaGiorno(g), perGiorno.get(g), {});
+    });
+    if (libere.length) {
+        html += sezionePiano('🔄 Quando capita', libere, {
+            nota: 'senza data: si fanno quando si può'
+        });
+    }
+
+    host.innerHTML = html;
+}
+
+function sezionePiano(titolo, righe, opts) {
+    if (!righe.length && !opts.vuoto) return '';
+    return `
+    <div class="act-section">
+        <div class="act-section-head">
+            <span>${titolo}</span>
+            <span class="act-count">${righe.length}${opts.nota ? ' · ' + esc(opts.nota) : ''}</span>
+        </div>
+        ${righe.length
+            ? righe.map(a => renderActionCard(a, { showObjective: true })).join('')
+            : `<div class="form-hint">${esc(opts.vuoto)}</div>`}
+    </div>`;
+}
+
+// «domani» e «dopodomani» si leggono meglio di una data, ma solo per due giorni:
+// oltre, «fra 9 giorni» costringe a fare il conto e la data no.
+function etichettaGiorno(g) {
+    const d = daysBetween(todayISO(), g);
+    if (d === 1) return '📅 Domani · ' + fmtDate(g);
+    if (d === 2) return '📅 Dopodomani · ' + fmtDate(g);
+    return '📅 ' + fmtDate(g);
+}
+
+function giorniFa(g) {
+    const d = daysBetween(g, todayISO());
+    return d === 1 ? 'ieri' : d + ' giorni fa';
+}
+
 // ── elenco ────────────────────────────────────────────────────────────────
 function renderActionsPage() {
     const host = document.getElementById('actionsList');
@@ -2488,9 +2599,10 @@ function renderActionCard(a, opts) {
     const pri  = priorityById(a.priority_id);
     const cats = (a.categories || []).map(categoryById).filter(Boolean);
     const mets = metricsOfAction(a.id);
-    const day  = actionDay(a);
-    const ora  = localTime(a.next_occurrence_date || a.start_date);
-    const late = day && day < todayISO() && actionIsAlive(a) && a.type !== 'free_repeat';
+    const libera = a.type === 'free_repeat';
+    const day  = libera ? null : actionDay(a);
+    const ora  = libera ? '' : localTime(a.next_occurrence_date || a.start_date);
+    const late = day && day < todayISO() && actionIsAlive(a);
     const colore = pri ? pri.color : (obj?.color || '#6C5CE7');
 
     // Il workflow si chiude dai suoi step, non da un pulsante «Completa»:
@@ -2514,7 +2626,7 @@ function renderActionCard(a, opts) {
             <div class="act-meta">
                 ${TYPE_LABEL[a.type] || esc(a.type)}${stepInfo}
                 ${day ? ' · <span class="' + (late ? 'act-late' : '') + '">' + fmtDate(day) + (ora ? ' ' + ora : '') + '</span>' : ''}
-                ${a.type === 'free_repeat' && a.last_completed_date ? ' · ultima: ' + fmtDate(localDay(a.last_completed_date)) : ''}
+                ${libera ? (a.last_completed_date ? ' · ultima: ' + fmtDate(localDay(a.last_completed_date)) : ' · mai fatta') : ''}
                 ${opts.showObjective && obj ? ' · ' + esc(obj.title) : ''}
                 ${vivo ? '' : ' · ' + (esitoDi(a.id) || 'conclusa')}
             </div>
