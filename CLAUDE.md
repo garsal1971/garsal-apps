@@ -1989,10 +1989,22 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   L'elenco è raggruppato come la panoramica dei task — ⚠️ Scadute, 🎯 Oggi, 📅 Prossime,
   🔄 A libera ripetizione, 🏁 Concluse — con i filtri per obiettivo, tipo, priorità, categoria,
   stato e testo.
-- **Quali pulsanti compaiono è la regola dei task**: *Completa* sempre, *Fallisci* su tutto tranne
-  i `free_repeat`, *Salta* solo su ciò che ha una prossima volta a cui rimandare. ⚠️ Un `workflow`
-  mostra **Step** al posto di *Completa*: si chiude dai suoi step, e un pulsante che lo chiudesse
-  di forza salterebbe quelli ancora aperti.
+- **Quali pulsanti compaiono**: *Completa* sempre, *Salta* solo su ciò che ha una prossima volta a
+  cui rimandare (`single`, `recurring`, `simple_recurring`, `multiple`). ⚠️ Un `workflow` mostra
+  **Step** al posto di *Completa*: si chiude dai suoi step, e un pulsante che lo chiudesse di forza
+  salterebbe quelli ancora aperti.
+- ⚠️ **Un'azione non si fallisce** (v1.8.0): o la si fa, o la si sposta. Il *Fallisci* chiudeva una
+  singola per sempre con un malus, e l'unica cosa che serviva davvero — «oggi no» — la fa già il
+  salto. Via il pulsante, la funzione `failAction` e il campo *Fallimento* dal form;
+  `failure_points` si salva a **zero**, perché un valore che non si può più prendere è meglio a
+  zero che scritto e finto. ⚠️ La RPC `ob_action_fail` **resta nel database** e nessuno la chiama:
+  toglierla è una modifica di schema, e i punteggi già presi restano nello storico.
+  In 📊 Andamento il segmento si chiama **«non riuscite»** e non «fallite» — ci finisce solo chi è
+  chiuso senza esserci riusciti, per esempio una multipla arrivata in fondo alle sue date — e
+  compare solo se ce n'è almeno una.
+- **I punti di partenza di un'azione**: successo **+10**, salto **−2**, in ritardo **−2**. Il
+  ritardo valeva +3 (un premio ridotto per averla fatta comunque) ed è diventato una penalità come
+  il salto. I punti restano dentro l'app: Obiettivi sta in `APP_SENZA_PUNTI`.
 - ⚠️ **Il tipo di un'azione che esiste già non si cambia** (la tendina è bloccata in modifica):
   decide quali colonne quell'azione ha, e cambiandolo resterebbero dietro quelle del tipo di prima
   — le date multiple su una ricorrente — che nessuno ripulisce. È la stessa scelta di `TaskForm`
