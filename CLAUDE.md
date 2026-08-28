@@ -2023,6 +2023,17 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   restano registrate e la finestra resta aperta dicendo quali non sono passate. L'unicità
   `(metric_id, measured_on)` fa sì che registrare due volte lo stesso giorno **corregga** invece di
   aggiungere.
+- In ⚙️ Impostazioni c'è una **zona pericolosa** che svuota Obiettivi: le sole sette tabelle
+  `ob_*`, cancellate **dal figlio al padre** (`TABELLE_DA_SVUOTARE`). ⚠️ Categorie e priorità
+  restano fuori di proposito: `cm_categories` e `cm_priorities` sono **condivise con Tasks**, e
+  cancellarle da qui lascerebbe i task senza — un danno in un'app che non si sta nemmeno
+  guardando. Si fa scrivere `CANCELLA` invece di un `confirm()` con l'OK a portata di clic, come
+  in `spese-personali.html`, e la finestra dice **quante righe** stai per perdere e offre
+  l'esportazione prima. ⚠️ Ogni DELETE porta il filtro `user_id`, ridondante rispetto alla RLS e
+  voluto: una DELETE senza condizione è una riga che, il giorno che una policy cambia, cancella
+  più di quel che dice. Le cascate basterebbero partendo da `ob_objectives`, ma una riga rimasta
+  orfana resterebbe lì senza che nessuno la veda più.
+
 #### I grafici dell'Andamento
 
 Sono **SVG scritti a mano**: la pagina non carica nessuna libreria di grafici, e per due spezzate e
