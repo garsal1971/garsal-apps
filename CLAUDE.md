@@ -681,6 +681,13 @@ E vale **anche per le azioni di Obiettivi**, che sono la copia dei task
 | `ob_action_fail(p_action_id)` | `task_fail` | La segna fallita |
 | `ob_action_next_recurring_date(p_action, p_base)` | `task_next_recurring_date` | Prossima data di una ricorrente |
 
+⚠️ **La prossima occorrenza si calcola dalla vecchia occorrenza, non da oggi**, in tutt'e tre le
+RPC e per tutti i tipi: `COALESCE(next_occurrence_date, start_date)` è la base, e `p_today` serve
+solo a decidere se una singola è stata chiusa in ritardo. Verificato su un'azione scaduta dal 7
+agosto e chiusa il 28: la ricorrente settimanale va al **14 agosto** (non al venerdì dopo oggi),
+la «ogni 7 giorni» al 14, la singola saltata di 3 giorni al 10, la multipla alla data seguente del
+suo elenco. Calcolarla da oggi salterebbe le volte arretrate senza dirlo.
+
 Il comportamento per tipo è quello dei task, riga per riga. Due differenze **volute**, da non
 "correggere" indietro:
 
@@ -2017,12 +2024,13 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   - ⚠️ **una misura lasciata su «non adesso» non si registra**, e non si registra come zero — è la
     stessa scelta delle misure di un diario in Memo e delle caselle vuote di `fnz_income`. La riga
     resta visibile ma spenta, così si vede che c'era;
-  - ⚠️ **la data non si sceglie**: è quella in cui l'azione è stata chiusa, letta dallo storico
-    (`giornoDiChiusura`) e mostrata in sola lettura. Modificabile, permetterebbe di datare la
-    rilevazione a un giorno in cui quella cosa non è stata fatta — e con l'unicità
-    `(metric_id, measured_on)` sovrascriverebbe in silenzio la rilevazione di quel giorno.
-    ⚠️ Si legge dallo storico e **non** da `ob_actions.last_completed_date`: quella è l'occorrenza
-    chiusa, che per un'azione scaduta sta nel passato, non il momento in cui l'hai fatta.
+  - ⚠️ **la data non si sceglie ed è la _data di occorrenza_**, non il giorno del clic: la
+    rilevazione appartiene alla volta che si sta chiudendo. Si legge da `next_occurrence_date`
+    **prima** di chiamare la RPC (`occorrenzaDi`), perché subito dopo la riga è già stata spostata
+    sulla volta successiva; una `free_repeat` non ha un'occorrenza e allora vale oggi.
+    ⚠️ Su un'azione scaduta occorrenza e oggi sono giorni diversi, e datare tutto a oggi vorrebbe
+    dire che **due occorrenze arretrate chiuse nello stesso pomeriggio si sovrascrivono a
+    vicenda** — l'unicità è `(metric_id, measured_on)`.
   Ogni metrica passa da `ob_record_measurement`, una chiamata per metrica; se una fallisce le altre
   restano registrate e la finestra resta aperta dicendo quali non sono passate. L'unicità
   `(metric_id, measured_on)` fa sì che registrare due volte lo stesso giorno **corregga** invece di

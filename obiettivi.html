@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.7.0</title>
+    <title>Obiettivi v1.7.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -1231,9 +1231,10 @@
             e «vale zero» sono due cose diverse.
         </div>
         <div class="form-group">
-            <label class="form-label">Data</label>
+            <label class="form-label">Data di occorrenza</label>
             <div class="form-static" id="measMultiDate"></div>
-            <div class="form-hint">È il giorno in cui hai chiuso l'azione: la rilevazione appartiene a quel giorno.</div>
+            <div class="form-hint">È la volta che stai chiudendo, non il giorno in cui la chiudi:
+                la rilevazione appartiene a quella.</div>
         </div>
         <div id="measMultiBody"></div>
         <div class="form-group">
@@ -1270,8 +1271,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.7.0';
-var BUILD_TIME  = '2026-08-28T12:30:00Z';
+var APP_VERSION = 'v1.7.1';
+var BUILD_TIME  = '2026-08-28T13:30:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2546,30 +2547,41 @@ async function runActionRpc(fn, args, verbo) {
 }
 
 async function completeAction(id) {
+    // ⚠️ L'occorrenza si legge PRIMA di chiamare la RPC: subito dopo, la riga è
+    // già stata spostata sulla volta successiva e `next_occurrence_date` non è
+    // più quella che si sta chiudendo.
+    const occorrenza = occorrenzaDi(actions.find(x => x.id === id));
+
     const esito = await runActionRpc('ob_action_complete',
         { p_action_id: id, p_today: todayISO() }, '✅ Completata');
     // Solo se è andata bene davvero: un'azione fallita o saltata non è il
     // momento di chiedere un numero.
     if (esito && (esito.action === 'completed' || esito.action === 'completed_late')) {
-        chiediRilevazioni(id);
+        chiediRilevazioni(id, occorrenza);
     }
+}
+
+// Il giorno a cui l'occorrenza che si sta chiudendo appartiene. Un'azione a
+// libera ripetizione non ne ha una — si fa quando capita — e allora vale oggi.
+function occorrenzaDi(a) {
+    return a && a.next_occurrence_date ? localDay(a.next_occurrence_date) : todayISO();
 }
 
 // ⚠️ Il popup si apre **dopo** che la RPC ha chiuso l'azione, non prima: il
 // ciclo di vita non deve dipendere dal fatto che uno si ricordi il numero. Se
 // lo si chiude senza registrare niente, l'azione resta completata lo stesso.
-function chiediRilevazioni(actionId) {
+function chiediRilevazioni(actionId, occorrenza) {
     const a    = actions.find(x => x.id === actionId);
     const mets = metricsOfAction(actionId);
     if (!a || !mets.length) return;          // niente metriche, niente da chiedere
 
     misurandoAzione = actionId;
-    // ⚠️ La data non si sceglie: è quella in cui l'azione è stata chiusa, letta
-    // dallo storico. Lasciarla modificabile vorrebbe dire poter datare la
-    // rilevazione a un giorno in cui quella cosa non è stata fatta — e, con
-    // l'unicità (metric_id, measured_on), sovrascrivere in silenzio la
-    // rilevazione di quel giorno.
-    misurandoGiorno = giornoDiChiusura(actionId);
+    // ⚠️ La data non si sceglie ed è la **data di occorrenza**, non il giorno
+    // del clic: la rilevazione appartiene alla volta che si sta chiudendo. Su
+    // un'azione scaduta le due cose sono diverse, e datarle tutte a oggi
+    // vorrebbe dire che due occorrenze arretrate chiuse nello stesso pomeriggio
+    // si sovrascrivono a vicenda — l'unicità è (metric_id, measured_on).
+    misurandoGiorno = occorrenza || occorrenzaDi(a) || todayISO();
     document.getElementById('measMultiTitle').textContent = a.title;
     document.getElementById('measMultiDate').textContent = fmtDate(misurandoGiorno);
     document.getElementById('measMultiNote').value = '';
@@ -2612,15 +2624,6 @@ function toggleSaltaMetrica(el) {
 // Ogni metrica passa da ob_record_measurement, una chiamata per metrica: è
 // l'unico punto di scrittura di una rilevazione, ed è lei a rifiutare un voto
 // fuori scala. Le righe lasciate su «non adesso» non si toccano affatto.
-// Il giorno in cui l'azione è stata chiusa con successo: l'ultima riga di
-// storico che lo dice. `last_completed_date` no — quella è l'occorrenza chiusa
-// (che per un'azione scaduta sta nel passato), non il momento in cui l'hai fatta.
-function giornoDiChiusura(actionId) {
-    const riga = actionHistory.find(h => h.action_id === actionId
-        && (h.action === 'completed' || h.action === 'completed_late'));
-    return riga ? localDay(riga.timestamp) : todayISO();
-}
-
 async function salvaRilevazioniAzione() {
     const giorno = misurandoGiorno || todayISO();
     const nota   = document.getElementById('measMultiNote').value.trim();
@@ -2752,13 +2755,14 @@ async function chiudiStep(stepId, esito) {
     if (up.error) { showToast('❌ ' + up.error.message); return; }
 
     // Poi si chiede alla RPC se il workflow è finito: la decisione resta sua.
+    const occorrenza = occorrenzaDi(a);   // prima che la RPC la sposti
     const { data } = await sb.rpc('ob_action_complete', { p_action_id: a.id, p_today: todayISO() });
     await loadAll();
 
     if (data?.action === 'completed') {
         closeModal('wfModal');
         showToast('🎉 Workflow concluso · ' + (data.points > 0 ? '+' : '') + data.points + ' pt');
-        chiediRilevazioni(a.id);
+        chiediRilevazioni(a.id, occorrenza);
     } else {
         showToast((esito === 'completed' ? '✅ ' : '❌ ') + st.title + ' · ' + (punti > 0 ? '+' : '') + punti + ' pt');
         openWorkflow(a.id);
