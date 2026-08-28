@@ -1950,6 +1950,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 
 ### `obiettivi.html` — Obiettivi
 - Obiettivi annuali con sotto-obiettivi trimestrali (`parent_id`, due soli livelli)
+- ⚠️ **Dettaglio e Andamento sono due finestre con due mestieri**, e la separazione è la
+  funzionalità: **Dettaglio** dice *com'è definito* l'obiettivo (metriche, sotto-obiettivi,
+  milestone) e non ha né il pulsante *Rileva*, né *+ Azione*, né una riga di storico; le azioni si
+  vedono ma non si eseguono. **📊 Andamento** dice *come sta andando*. Rilevare si fa da
+  📈 Rilevazioni o dalla finestra che si apre chiudendo un'azione; le azioni si creano e si
+  chiudono da ✅ Azioni.
+- **📊 Andamento** (pulsante accanto a *Dettaglio* sulla scheda): quattro numeri di testa
+  (risultato, esecuzione, punti presi, giorni alla scadenza), **una curva per metrica** e lo stato
+  delle azioni.
 - **Due barre affiancate, mai fuse in una media**: *risultato* (metrica `primary` dell'obiettivo) e
   *esecuzione* (% figli + milestone completati). Il progresso del padre **non** è la media dei figli:
   quando le due barre divergono di ≥ 25 punti l'app mostra un avviso esplicito, perché è il segnale
@@ -2003,11 +2012,40 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
     niente, l'azione resta completata lo stesso;
   - ⚠️ **una misura lasciata su «non adesso» non si registra**, e non si registra come zero — è la
     stessa scelta delle misure di un diario in Memo e delle caselle vuote di `fnz_income`. La riga
-    resta visibile ma spenta, così si vede che c'era.
+    resta visibile ma spenta, così si vede che c'era;
+  - ⚠️ **la data non si sceglie**: è quella in cui l'azione è stata chiusa, letta dallo storico
+    (`giornoDiChiusura`) e mostrata in sola lettura. Modificabile, permetterebbe di datare la
+    rilevazione a un giorno in cui quella cosa non è stata fatta — e con l'unicità
+    `(metric_id, measured_on)` sovrascriverebbe in silenzio la rilevazione di quel giorno.
+    ⚠️ Si legge dallo storico e **non** da `ob_actions.last_completed_date`: quella è l'occorrenza
+    chiusa, che per un'azione scaduta sta nel passato, non il momento in cui l'hai fatta.
   Ogni metrica passa da `ob_record_measurement`, una chiamata per metrica; se una fallisce le altre
   restano registrate e la finestra resta aperta dicendo quali non sono passate. L'unicità
   `(metric_id, measured_on)` fa sì che registrare due volte lo stesso giorno **corregga** invece di
   aggiungere.
+#### I grafici dell'Andamento
+
+Sono **SVG scritti a mano**: la pagina non carica nessuna libreria di grafici, e per due spezzate e
+una barra non vale mezzo megabyte dal CDN — è la stessa scelta delle miniature di Memo.
+
+⚠️ **L'asse verticale di una metrica è la sua scala** (`da → a`), non il minimo e il massimo
+osservati: così l'altezza della curva si legge come «quanto manca», e due rilevazioni vicine non
+sembrano un terremoto. Se un valore esce dalla scala l'asse si allarga per contenerlo, invece di
+tagliarlo. Ne discende che il traguardo di norma **coincide col bordo**: la riga dell'obiettivo si
+disegna solo quando cade *dentro* il grafico, altrimenti ripeterebbe l'etichetta dell'asse
+sovrapponendocisi — al suo posto la parola «obiettivo» marca quale dei due estremi è la meta.
+
+⚠️ **Gli spessori sono in pixel veri** (`vector-effect="non-scaling-stroke"`): il viewBox scala col
+riquadro, e senza quello la linea sarebbe sottile sul telefono e grassa sul PC.
+
+⚠️ **I tre colori delle azioni sono colori di stato, non di categoria**: non si riusano per «la
+serie 4» e vanno sempre con l'etichetta accanto, mai il colore da solo. Il verde
+(`#00967A`) è un passo più scuro di `--success` perché a 2,5:1 sul bianco la barra non si
+distingueva dal fondo; il giallo invece resta quello della pagina — scurendolo **collassa sul
+rosso** (ΔE 12 contro i 18 che servono). Le azioni ancora aperte non prendono un colore: sono il
+**fondo** della barra, cioè quel che resta da fare. La legenda porta i conti a parole e sotto c'è
+la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto di contrasto 3:1.
+
 - **La barra «Esecuzione» conta anche le azioni** (`ob_objective_progress`):
   `(sotto-obiettivi raggiunti + milestone centrate + azioni riuscite) / totale`. ⚠️ Entrano le
   sole azioni che possono **finire** (`single`, `multiple`, `workflow`): una ricorrente e una a

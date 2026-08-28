@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.4.0</title>
+    <title>Obiettivi v1.5.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -295,6 +295,79 @@
             border: 1px solid var(--secondary);
         }
         .act-late { color: var(--danger); font-weight: 700; }
+
+        /* ── ANDAMENTO ── */
+        .kpi-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.6rem; margin-bottom: 0.5rem;
+        }
+        .kpi {
+            background: var(--input-bg); border: 2px solid var(--border);
+            padding: 0.6rem 0.7rem;
+        }
+        .kpi-label {
+            font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);
+        }
+        /* cifre proporzionali: tabular-nums su un numero grande lo fa sembrare slegato */
+        .kpi-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; color: var(--dark); }
+        .kpi-sub { font-size: 0.72rem; color: var(--muted); }
+
+        .trend-metric { margin-bottom: 1.25rem; }
+        .trend-metric-head { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; }
+        .trend-metric-name { font-size: 1.05rem; font-weight: 700; }
+        .trend-metric-meta {
+            font-family: 'Space Mono', monospace; font-size: 0.68rem; color: var(--muted);
+        }
+        .trend-svg { width: 100%; max-width: 400px; height: auto; display: block; margin: 0.3rem 0; }
+        /* assi e riferimenti restano sottili e in secondo piano: il dato è la
+           sola cosa che ha il permesso di essere forte */
+        .trend-axis   { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+        .trend-target { stroke: var(--muted); stroke-width: 1; opacity: 0.5; vector-effect: non-scaling-stroke; }
+        .trend-tick {
+            font-family: 'Space Mono', monospace; font-size: 9px; fill: var(--muted);
+        }
+        .trend-endlabel {
+            font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; fill: var(--dark);
+        }
+        .trend-single { font-size: 1.6rem; font-weight: 700; }
+        .trend-single-date { font-size: 0.75rem; font-weight: 400; color: var(--muted); margin-left: 0.4rem; }
+
+        .trend-values summary {
+            font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--muted);
+            cursor: pointer; padding: 0.2rem 0;
+        }
+        .trend-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .trend-table th, .trend-table td {
+            text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--border);
+        }
+        .trend-table th {
+            font-family: 'Space Mono', monospace; font-size: 0.65rem; font-weight: 700;
+            text-transform: uppercase; color: var(--muted);
+        }
+        /* cifre in colonna: qui tabular-nums serve, devono incolonnarsi */
+        .trend-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .trend-tot td { font-weight: 700; }
+
+        .barra-wrap { margin-top: 0.5rem; }
+        .barra { display: flex; height: 22px; background: transparent; }
+        /* 2px di bianco a separare i segmenti: il vuoto separa, non un bordo */
+        .barra-seg + .barra-seg { margin-left: 2px; }
+        .barra-track { background: var(--input-bg); border: 1px solid var(--border); }
+        .legenda { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.45rem; }
+        .leg {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            font-size: 0.8rem; color: var(--dark);
+        }
+        .leg i {
+            width: 11px; height: 11px; flex-shrink: 0; display: inline-block; border-radius: 2px;
+        }
+        .leg i.leg-track { background: var(--input-bg); border: 1px solid var(--border); }
+
+        .form-static {
+            font-family: 'Space Mono', monospace; font-size: 1rem; font-weight: 700;
+            padding: 0.55rem 0.7rem; background: var(--input-bg); border: 2px solid var(--border);
+        }
 
         /* ── RILEVAZIONI DOPO IL COMPLETAMENTO ── */
         .meas-multi {
@@ -1100,6 +1173,20 @@
     </div>
 </div>
 
+<!-- ══════════════ MODAL: ANDAMENTO ══════════════ -->
+<div class="modal" id="trendModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title" id="trendTitle">Andamento</div>
+            <button class="modal-close" onclick="closeModal('trendModal')">&times;</button>
+        </div>
+        <div id="trendBody"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('trendModal')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
 <!-- ══════════════ MODAL: RILEVA DOPO AVER COMPLETATO ══════════════ -->
 <div class="modal" id="measMultiModal">
     <div class="modal-content">
@@ -1114,7 +1201,8 @@
         </div>
         <div class="form-group">
             <label class="form-label">Data</label>
-            <input type="date" class="form-input" id="measMultiDate">
+            <div class="form-static" id="measMultiDate"></div>
+            <div class="form-hint">È il giorno in cui hai chiuso l'azione: la rilevazione appartiene a quel giorno.</div>
         </div>
         <div id="measMultiBody"></div>
         <div class="form-group">
@@ -1151,8 +1239,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.4.0';
-var BUILD_TIME  = '2026-08-28T09:00:00Z';
+var APP_VERSION = 'v1.5.0';
+var BUILD_TIME  = '2026-08-28T10:30:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1202,6 +1290,7 @@ let editingActionId   = null;
 let editingActionObjId = null;
 let skippingActionId  = null;
 let misurandoAzione   = null;   // azione appena chiusa, di cui si rilevano le metriche
+let misurandoGiorno   = null;   // il giorno in cui è stata chiusa: la data della rilevazione
 let wfActionId        = null;
 let wfSteps           = [];   // step in modifica dentro l'editor
 let actCategories     = [];   // categorie scelte nell'editor
@@ -1539,6 +1628,7 @@ function renderObjectiveCard(obj) {
 
             <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
                 <button class="btn btn-ghost btn-small" onclick="openDetail('${obj.id}')">Dettaglio</button>
+                <button class="btn btn-ghost btn-small" onclick="openTrend('${obj.id}')">📊 Andamento</button>
                 <button class="btn btn-ghost btn-small" onclick="openObjectiveEditor(null,'${obj.id}')">+ Sotto-obiettivo</button>
                 <button class="btn btn-ghost btn-small" onclick="openMilestoneEditor('${obj.id}',null)">+ Milestone</button>
             </div>
@@ -1690,25 +1780,9 @@ async function openDetail(objId) {
                             : '';
                     })()}
                 </div>
-                ${sparkline(m)}
                 <div class="metric-value">${fmtNum(cur)}<div class="metric-target">${pct}%</div></div>
-                <button class="btn btn-accent btn-small" onclick="openMeasure('${m.id}')">Rileva</button>
             </div>`;
         }).join('');
-
-        // storico della metrica primaria
-        const prim = primaryOf(objId);
-        if (prim) {
-            const hist = measuresOf(prim.id).slice().reverse().slice(0, 12);
-            if (hist.length) {
-                html += `<div class="section-title">Storico — ${esc(prim.name)}</div>`;
-                html += hist.map(r => `<div class="hist-row">
-                    <div class="hist-date">${fmtDate(r.measured_on)}</div>
-                    <div class="hist-val">${fmtNum(r.value)}</div>
-                    <div class="hist-note">${esc(r.note || '')}</div>
-                </div>`).join('');
-            }
-        }
     }
 
     // SOTTO-OBIETTIVI
@@ -1739,25 +1813,14 @@ async function openDetail(objId) {
             </div>`).join('')
         : `<div class="form-hint">Nessuna. Le milestone sono la curva attesa: senza, il semaforo non ha riferimento.</div>`;
 
-    // AZIONI
-    html += `<div class="section-title">Azioni
-        <button class="btn btn-ghost btn-small" onclick="closeModal('detailModal');openActionEditor('${objId}',null)">+ Azione</button></div>`;
+    // AZIONI — elencate, non eseguite: questa finestra è la definizione
+    // dell'obiettivo. Si creano e si chiudono da ✅ Azioni, si guardano in
+    // 📊 Andamento.
+    html += `<div class="section-title">Azioni</div>`;
     html += acts.length
-        ? acts.map(a => renderActionCard(a, { showObjective: false })).join('')
-        : `<div class="form-hint">Nessuna. Le azioni sono il «cosa faccio» dell'obiettivo:
-             ogni azione conclusa muove la barra dell'esecuzione.</div>`;
-
-    // STORICO DELLE AZIONI — le ultime 12, che è quanto si legge davvero
-    const hist = historyOf(objId).slice(0, 12);
-    if (hist.length) {
-        html += `<div class="section-title">Storico delle azioni</div>`;
-        html += hist.map(h => `<div class="hist-row">
-            <div class="hist-date">${fmtDate(String(h.timestamp).slice(0,10))}</div>
-            <div class="hist-note">${esc(h.action_title || '')}</div>
-            <div class="hist-val">${ACTION_LABEL[h.action] || esc(h.action)}</div>
-            <div class="hist-val">${h.points > 0 ? '+' : ''}${h.points}</div>
-        </div>`).join('');
-    }
+        ? acts.map(a => renderActionCard(a, { showObjective: false, soloDefinizione: true })).join('')
+        : `<div class="form-hint">Nessuna. Le azioni sono il «cosa faccio» dell'obiettivo,
+             e si aggiungono dalla pagina ✅ Azioni.</div>`;
 
     html += `<div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal('detailModal');openObjectiveEditor('${objId}',null)">Modifica obiettivo</button>
@@ -2123,6 +2186,248 @@ async function deleteMilestone() {
 }
 
 // ════════════════════════════════════════════════════════════
+// ANDAMENTO — la statistica di un obiettivo
+//
+// Il Dettaglio dice **com'è definito** l'obiettivo; qui si vede **come sta
+// andando**: i numeri di testa, la curva di ogni metrica nel tempo e cosa ne è
+// stato delle azioni.
+//
+// I grafici sono SVG scritti a mano: questa pagina non carica nessuna libreria
+// di grafici, e per due spezzate e una barra non vale mezzo megabyte dal CDN.
+// È la stessa scelta delle miniature di Memo.
+// ════════════════════════════════════════════════════════════
+
+// I tre stati di un'azione conclusa. ⚠️ Sono colori di **stato**, non di
+// categoria: non si riusano per «la serie 4», e vanno sempre con l'etichetta
+// accanto — mai il colore da solo. Il verde è un passo più scuro di --success
+// perché a 2,5:1 sul bianco la barra non si distingueva; il giallo invece resta
+// quello della pagina: scurendolo collassa sul rosso (ΔE 12 contro 18).
+const C_OK   = '#00967A';
+const C_KO   = '#E74C3C';
+const C_SKIP = '#F39C12';
+const C_LINE = '#6C5CE7';   // la serie unica di una metrica
+
+function openTrend(objId) {
+    const obj = objectives.find(o => o.id === objId);
+    if (!obj) return;
+    document.getElementById('trendTitle').textContent = obj.title;
+    document.getElementById('trendBody').innerHTML = renderTrend(obj);
+    closeModal('detailModal');
+    openModal('trendModal');
+}
+
+function renderTrend(obj) {
+    const p     = progress[obj.id] || {};
+    const mets  = metricsOf(obj.id);
+    const acts  = actionsOf(obj.id);
+    const hist  = historyOf(obj.id);
+    const oggi  = todayISO();
+    const gg    = daysBetween(oggi, String(obj.due_date).slice(0, 10));
+
+    // ── i numeri di testa ────────────────────────────────────────────────
+    const punti   = hist.reduce((s, h) => s + (Number(h.points) || 0), 0);
+    const rilev   = mets.reduce((s, m) => s + measuresOf(m.id).length, 0);
+    const riuscite = acts.filter(a => azioneRiuscita(a.id)).length;
+
+    let html = `
+    <div class="kpi-row">
+        ${statTile('Risultato', p.has_result ? p.result + '%' : '—',
+                   mets.length ? (primaryOf(obj.id)?.name || '') : 'nessuna metrica')}
+        ${statTile('Esecuzione', p.has_execution ? p.execution + '%' : '—',
+                   (p.actions_done ?? 0) + '/' + (p.actions_total ?? 0) + ' azioni che finiscono')}
+        ${statTile('Punti', (punti > 0 ? '+' : '') + punti, 'dalle azioni chiuse')}
+        ${statTile('Giorni', gg >= 0 ? String(gg) : String(Math.abs(gg)),
+                   gg >= 0 ? 'alla scadenza' : 'oltre la scadenza')}
+    </div>`;
+
+    // ── una curva per metrica ────────────────────────────────────────────
+    html += `<div class="section-title">Le metriche nel tempo</div>`;
+    html += mets.length
+        ? mets.map(m => graficoMetrica(m)).join('')
+        : `<div class="form-hint">Nessuna metrica: non c'è niente da diagrammare.
+             Si aggiungono da Dettaglio → Metriche.</div>`;
+
+    // ── le azioni ────────────────────────────────────────────────────────
+    html += `<div class="section-title">Le azioni</div>`;
+    html += acts.length ? barraAzioni(acts, hist)
+        : `<div class="form-hint">Nessuna azione. Si aggiungono dalla pagina ✅ Azioni.</div>`;
+
+    if (rilev === 0 && mets.length) {
+        html += `<div class="form-hint" style="margin-top:1rem;">
+            Nessuna rilevazione ancora registrata: le curve compariranno da sé
+            man mano che chiudi le azioni collegate alle metriche.</div>`;
+    }
+    return html;
+}
+
+// Un'azione è riuscita se lo dice lo storico: `terminated` lo si diventa anche
+// fallendo, e contare le chiuse direbbe il contrario di quel che è successo.
+// È la stessa lettura che fa ob_objective_progress per la barra dell'esecuzione.
+function azioneRiuscita(actionId) {
+    return actionHistory.some(h => h.action_id === actionId
+        && (h.action === 'completed' || h.action === 'completed_late'));
+}
+
+function statTile(etichetta, valore, sotto) {
+    return `<div class="kpi">
+        <div class="kpi-label">${esc(etichetta)}</div>
+        <div class="kpi-value">${esc(String(valore))}</div>
+        <div class="kpi-sub">${esc(sotto || '')}</div>
+    </div>`;
+}
+
+// ── la curva di una metrica ───────────────────────────────────────────────
+//
+// Serie unica, quindi nessuna legenda: il titolo dice già cosa si sta guardando.
+// L'asse verticale è la **scala della metrica** (da → a), non il minimo e il
+// massimo osservati: così l'altezza della curva si legge come «quanto manca»,
+// e due rilevazioni vicine non sembrano un terremoto. Se un valore esce dalla
+// scala, l'asse si allarga per contenerlo invece di tagliarlo.
+function graficoMetrica(m) {
+    const righe = measuresOf(m.id).slice().sort((x, y) =>
+        String(x.measured_on).localeCompare(String(y.measured_on)));
+    const { da, a } = scaleOf(m);
+    const testa = `<div class="trend-metric-head">
+            <span class="trend-metric-name">${esc(m.name)}</span>
+            <span class="trend-metric-meta">${KIND_LABEL[m.kind]} · ${fmtNum(da)} → ${fmtNum(a)}${m.unit ? ' ' + esc(m.unit) : ''}</span>
+        </div>`;
+
+    if (!righe.length) {
+        return `<div class="trend-metric">${testa}
+            <div class="form-hint">Nessuna rilevazione.</div></div>`;
+    }
+    if (righe.length === 1) {
+        const r = righe[0];
+        return `<div class="trend-metric">${testa}
+            <div class="trend-single">${fmtNum(r.value)}
+                <span class="trend-single-date">il ${fmtDate(r.measured_on)}</span></div>
+            <div class="form-hint">Una sola rilevazione: per una curva ne servono almeno due.</div></div>`;
+    }
+
+    // geometria in unità di viewBox; gli spessori restano in pixel veri
+    // (vector-effect), così la linea è 2px sia sul telefono sia sul PC.
+    const W = 400, H = 160, ML = 38, MR = 14, MT = 12, MB = 26;
+    const x0 = ML, x1 = W - MR, y0 = MT, y1 = H - MB;
+
+    const val  = righe.map(r => Number(r.value));
+    const lo   = Math.min(da, a, ...val);
+    const hi   = Math.max(da, a, ...val);
+    const span = (hi - lo) || 1;
+
+    const t    = righe.map(r => new Date(r.measured_on + 'T00:00:00').getTime());
+    const tMin = t[0], tSpan = (t[t.length - 1] - tMin) || 1;
+
+    const px = i => x0 + ((t[i] - tMin) / tSpan) * (x1 - x0);
+    const py = v => y1 - ((v - lo) / span) * (y1 - y0);
+
+    const punti = val.map((v, i) => px(i).toFixed(1) + ',' + py(v).toFixed(1)).join(' ');
+    const area  = `${x0.toFixed(1)},${y1} ${punti} ${px(val.length - 1).toFixed(1)},${y1}`;
+
+    // ⚠️ La riga del traguardo si disegna SOLO se cade dentro il grafico.
+    // L'asse verticale è già la scala della metrica, quindi di norma il
+    // traguardo coincide col bordo: quella riga ripeterebbe l'etichetta
+    // dell'asse, sovrapponendocisi. Compare quando serve davvero — un valore
+    // che sfonda l'obiettivo o resta sotto la partenza.
+    const dentro  = a > lo && a < hi;
+    const yTarget = py(a);
+    const ultimo  = val[val.length - 1];
+
+    return `<div class="trend-metric">${testa}
+    <svg class="trend-svg" viewBox="0 0 ${W} ${H}" role="img"
+         aria-label="Andamento di ${esc(m.name)}: da ${fmtNum(val[0])} a ${fmtNum(ultimo)}">
+        <line x1="${x0}" y1="${y1}" x2="${x1}" y2="${y1}" class="trend-axis"/>
+        ${dentro ? `<line x1="${x0}" y1="${yTarget.toFixed(1)}" x2="${x1}" y2="${yTarget.toFixed(1)}" class="trend-target"/>
+        <text x="${x1}" y="${(yTarget - 4).toFixed(1)}" class="trend-tick" text-anchor="end">obiettivo ${fmtNum(a)}</text>` : ''}
+
+        <polygon points="${area}" fill="${C_LINE}" opacity="0.10"/>
+        <polyline points="${punti}" fill="none" stroke="${C_LINE}" stroke-width="2"
+                  stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+
+        ${val.map((v, i) => `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="4"
+             fill="${C_LINE}" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke">
+             <title>${fmtDate(righe[i].measured_on)}: ${fmtNum(v)}${m.unit ? ' ' + esc(m.unit) : ''}</title>
+           </circle>`).join('')}
+
+        <text x="${x0 - 6}" y="${y0 + 4}" class="trend-tick" text-anchor="end">${fmtNum(hi)}</text>
+        <text x="${x0 - 6}" y="${y1}" class="trend-tick" text-anchor="end">${fmtNum(lo)}</text>
+        ${!dentro ? `<text x="${x1}" y="${(a === hi ? y0 + 4 : y1 - 5).toFixed(1)}"
+              class="trend-tick" text-anchor="end">obiettivo</text>` : ''}
+        <text x="${x0}" y="${H - 8}" class="trend-tick">${fmtDate(righe[0].measured_on)}</text>
+        <text x="${x1}" y="${H - 8}" class="trend-tick" text-anchor="end">${fmtDate(righe[righe.length - 1].measured_on)}</text>
+        <text x="${px(val.length - 1).toFixed(1)}" y="${(py(ultimo) - 9).toFixed(1)}"
+              class="trend-endlabel" text-anchor="end">${fmtNum(ultimo)}</text>
+    </svg>
+    <details class="trend-values">
+        <summary>i ${righe.length} valori</summary>
+        <table class="trend-table">
+            <thead><tr><th>Giorno</th><th>Valore</th><th>Nota</th></tr></thead>
+            <tbody>${righe.slice().reverse().map(r => `<tr>
+                <td>${fmtDate(r.measured_on)}</td>
+                <td class="num">${fmtNum(r.value)}</td>
+                <td>${esc(r.note || '')}</td></tr>`).join('')}</tbody>
+        </table>
+    </details>
+    </div>`;
+}
+
+// ── le azioni: quanto del piano è stato eseguito ─────────────────────────
+//
+// Una barra sola, parte-su-tutto: riuscite / fallite / ancora aperte. Le aperte
+// non sono una categoria ma il **fondo** della barra — quello che resta da fare
+// — e quindi non prendono un colore: sarebbero un grigio che il controllo della
+// palette scarta perché «legge come grigio», ed è giusto così.
+//
+// I segmenti sono separati da 2px di bianco, non da un bordo: il vuoto separa
+// senza aggiungere inchiostro che non è dato.
+function barraAzioni(acts, hist) {
+    const riuscite = acts.filter(a => azioneRiuscita(a.id));
+    const chiuse   = acts.filter(a => !actionIsAlive(a));
+    const fallite  = chiuse.filter(a => !azioneRiuscita(a.id));
+    const aperte   = acts.filter(a => actionIsAlive(a) && !azioneRiuscita(a.id));
+    const salti    = hist.filter(h => h.action === 'skipped').length;
+    const tot      = acts.length;
+
+    const seg = (n, colore) => n
+        ? `<div class="barra-seg" style="flex:${n};background:${colore}"></div>` : '';
+
+    const perTipo = Object.keys(TYPE_LABEL)
+        .map(t => ({ t, righe: acts.filter(a => a.type === t) }))
+        .filter(x => x.righe.length);
+
+    return `
+    <div class="barra-wrap">
+        <div class="barra">
+            ${seg(riuscite.length, C_OK)}
+            ${seg(fallite.length, C_KO)}
+            ${aperte.length ? `<div class="barra-seg barra-track" style="flex:${aperte.length}"></div>` : ''}
+        </div>
+        <div class="legenda">
+            <span class="leg"><i style="background:${C_OK}"></i>${riuscite.length} riuscite</span>
+            <span class="leg"><i style="background:${C_KO}"></i>${fallite.length} fallite</span>
+            <span class="leg"><i class="leg-track"></i>${aperte.length} ancora aperte</span>
+            ${salti ? `<span class="leg"><i style="background:${C_SKIP}"></i>${salti} ${salti === 1 ? 'volta saltata' : 'volte saltate'}</span>` : ''}
+        </div>
+    </div>
+
+    <table class="trend-table" style="margin-top:0.75rem;">
+        <thead><tr><th>Tipo</th><th class="num">Totali</th><th class="num">Riuscite</th><th class="num">Aperte</th></tr></thead>
+        <tbody>
+            ${perTipo.map(({ t, righe }) => `<tr>
+                <td>${TYPE_LABEL[t]}</td>
+                <td class="num">${righe.length}</td>
+                <td class="num">${righe.filter(a => azioneRiuscita(a.id)).length}</td>
+                <td class="num">${righe.filter(a => actionIsAlive(a)).length}</td>
+            </tr>`).join('')}
+            <tr class="trend-tot">
+                <td>tutte</td><td class="num">${tot}</td>
+                <td class="num">${riuscite.length}</td>
+                <td class="num">${acts.filter(a => actionIsAlive(a)).length}</td>
+            </tr>
+        </tbody>
+    </table>`;
+}
+
+// ════════════════════════════════════════════════════════════
 // AZIONI — il «cosa faccio» dell'obiettivo
 //
 // Sono di quest'app, su tabelle proprie (ob_actions / ob_action_history), e non
@@ -2303,7 +2608,7 @@ function renderActionCard(a, opts) {
     // completandolo di forza si salterebbero gli step ancora aperti.
     const isWf  = a.type === 'workflow';
     const vivo  = actionIsAlive(a);
-    const bottoni = !vivo ? '' : `
+    const bottoni = (opts.soloDefinizione || !vivo) ? '' : `
         ${isWf
             ? `<button class="btn btn-accent btn-small" onclick="openWorkflow('${a.id}')">Step</button>`
             : `<button class="btn btn-success btn-small" onclick="completeAction('${a.id}')">Completa</button>`}
@@ -2375,8 +2680,14 @@ function chiediRilevazioni(actionId) {
     if (!a || !mets.length) return;          // niente metriche, niente da chiedere
 
     misurandoAzione = actionId;
+    // ⚠️ La data non si sceglie: è quella in cui l'azione è stata chiusa, letta
+    // dallo storico. Lasciarla modificabile vorrebbe dire poter datare la
+    // rilevazione a un giorno in cui quella cosa non è stata fatta — e, con
+    // l'unicità (metric_id, measured_on), sovrascrivere in silenzio la
+    // rilevazione di quel giorno.
+    misurandoGiorno = giornoDiChiusura(actionId);
     document.getElementById('measMultiTitle').textContent = a.title;
-    document.getElementById('measMultiDate').value = todayISO();
+    document.getElementById('measMultiDate').textContent = fmtDate(misurandoGiorno);
     document.getElementById('measMultiNote').value = '';
 
     document.getElementById('measMultiBody').innerHTML = mets.map(m => {
@@ -2417,8 +2728,17 @@ function toggleSaltaMetrica(el) {
 // Ogni metrica passa da ob_record_measurement, una chiamata per metrica: è
 // l'unico punto di scrittura di una rilevazione, ed è lei a rifiutare un voto
 // fuori scala. Le righe lasciate su «non adesso» non si toccano affatto.
+// Il giorno in cui l'azione è stata chiusa con successo: l'ultima riga di
+// storico che lo dice. `last_completed_date` no — quella è l'occorrenza chiusa
+// (che per un'azione scaduta sta nel passato), non il momento in cui l'hai fatta.
+function giornoDiChiusura(actionId) {
+    const riga = actionHistory.find(h => h.action_id === actionId
+        && (h.action === 'completed' || h.action === 'completed_late'));
+    return riga ? localDay(riga.timestamp) : todayISO();
+}
+
 async function salvaRilevazioniAzione() {
-    const giorno = document.getElementById('measMultiDate').value || todayISO();
+    const giorno = misurandoGiorno || todayISO();
     const nota   = document.getElementById('measMultiNote').value.trim();
     const righe  = [...document.querySelectorAll('#measMultiBody .meas-multi:not(.saltata)')];
 
