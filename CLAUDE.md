@@ -1699,7 +1699,13 @@ Tre cose che sono il motivo per cui il codice funziona:
   la stessa scelta del web, dove `onDown` esce prima di armare `onUp` e `launchApp` non scatta mai
   — senza, ogni cifra del codice aprirebbe un'app.
 
-Gli avvisi in home hanno per ora **due fonti, Spuntiamola e Ta Firi?**: le altre quattro del web
+Il fumetto degli avvisi di `index.html` ha una **settima sezione, 🎯 Obiettivi**
+(`loadHomeAlertObiettivi`): le azioni da svolgere oggi, cioè quelle che cadono oggi più quelle
+rimaste indietro, marcate con ⚠️. ⚠️ Le **prossime non entrano**: il fumetto è un promemoria di
+quel che si può chiudere adesso, non l'agenda — quella è il 📆 Piano quotidiano dentro l'app. Le
+azioni a libera ripetizione restano fuori per costruzione, perché `next_occurrence_date` è nullo.
+
+Gli avvisi in home nativa hanno per ora **due fonti, Spuntiamola e Ta Firi?**: le altre quattro del web
 (decisioni, task urgenti, totale portafogli, abitudini) porterebbero a schermate che qui non
 esistono, e un avviso che non apre niente è peggio di nessun avviso. Quello di Ta Firi? elenca le
 sfide in corso oggi con il loro orario di check-in, ed è la copia di `loadHomeAlertChallenges` —
@@ -1985,6 +1991,14 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   rifiuterebbe comunque `ob_record_measurement`, ma di lì non si può nemmeno comporre.
 - Formula unica di avanzamento per tutt'e due i `kind`, e regge anche una scala che scende:
   `(corrente − da) / (a − da)` — es. pause, partenza 14 → obiettivo 3, corrente 6 ⇒ 73 %
+- **📆 Piano quotidiano** è la pagina che si apre per prima: **tutte** le azioni ancora da fare,
+  giorno per giorno — le arretrate in un riquadro solo in cima (con quanti giorni ha la più
+  vecchia), poi oggi, poi i giorni che vengono, e in fondo quelle a libera ripetizione. Da lì si
+  chiudono. ⚠️ Le **concluse non ci sono**: un piano dice cosa resta da fare, e una riga che non si
+  può più toccare è memoria — si guarda in 📊 Andamento. È la stessa materia di ✅ Azioni letta in
+  un altro modo: lì si cerca e si filtra, qui si scorre il calendario.
+- ⚠️ **Una libera ripetizione non mostra una data**: `actionDay()` ripiega su `start_date`, e
+  scriverla la farebbe sembrare una scadenza. Di lei conta l'ultima volta che è stata fatta.
 - **✅ Azioni** è una voce di menù a sé, oltre alla sezione dentro il dettaglio di ogni obiettivo.
   L'elenco è raggruppato come la panoramica dei task — ⚠️ Scadute, 🎯 Oggi, 📅 Prossime,
   🔄 A libera ripetizione, 🏁 Concluse — con i filtri per obiettivo, tipo, priorità, categoria,
