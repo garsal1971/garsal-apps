@@ -3067,19 +3067,40 @@ Su Android l'indietro è il gesto con cui si chiude qualunque cosa si sia aperta
 che non fa niente per governarlo, dentro un popup **esce dalla pagina**: la WebView non ha niente
 in cronologia e torna ad AppSphere, buttando via quel che si stava scrivendo.
 
-Il rimedio è di tre righe e sta in `openModal`/`closeModal` (vedi `calorie.html`): aprendo un
-popup si spinge una voce di cronologia (`history.pushState`), un `popstate` la intercetta e chiude
-il popup invece di lasciare la pagina, e **anche il ✕ passa da `history.back()`** per consumare la
-voce — senza, ogni apri-e-chiudi ne lascerebbe una dietro di sé e dopo cinque popup servirebbero
-cinque indietro per uscire. La voce si spinge **una volta sola** anche quando un popup ne apre un
-altro: sono due contenuti nella stessa finestra, non due schermate.
+Il rimedio è il blocco `guardiaIndietroPopup`, **identico in tutte e dieci le app** che hanno dei
+popup (`index`, `calorie`, `finanza`, `obiettivi`, `casarosa`, `conto-risparmio-teresa`,
+`conto-spese-teresa`, `spese-ada`, `spese-personali`, `youtube-player`) — in fondo al loro script,
+e l'unica cosa che cambia è l'elenco dei popup. ⚠️ **Se lo correggi in una, portalo nelle altre**:
+è la stessa duplicazione voluta dello snapshot del patrimonio e della vista Spese Famiglia.
 
-⚠️ **Applicato per ora solo in `calorie.html`.** Le altre app con dei popup non lo fanno:
-`casarosa.html`, `conto-risparmio-teresa.html`, `index.html`, `obiettivi.html` e
-`youtube-player.html` non toccano affatto la cronologia; `conto-spese-teresa.html`,
-`finanza.html`, `spese-ada.html` e `spese-personali.html` hanno un `popstate` che governa **le
-sole viste** e non i popup, quindi lì l'indietro dentro un popup cambia la schermata sotto
-lasciandolo aperto. Chi tocca una di quelle pagine porti anche questo.
+Quattro cose che *sono* il funzionamento:
+
+- ⚠️ **L'apertura non si intercetta avvolgendo le funzioni che aprono i popup.** In queste pagine
+  sono decine, alcune sono `onclick` scritti nell'HTML e altre non hanno nemmeno un nome: si
+  osserva invece quando l'**overlay diventa visibile** (`MutationObserver` su `class` e `style`),
+  che è l'unica cosa che tutti i popup hanno in comune comunque siano stati aperti.
+- ⚠️ **Visibile si decide dallo stile calcolato**, non dal nome della classe: nelle varie pagine è
+  ora `hidden`, ora `active`, ora `open`. Tutte nascondono con `display:none`, quindi
+  `getComputedStyle(el).display !== 'none'` è il test che vale ovunque. Nell'elenco va però
+  l'**overlay** e non la scheda interna: in `casarosa` e `conto-risparmio-teresa` la classe
+  `.modal` è la scheda dentro l'overlay, e lo stile calcolato di un figlio non sa che il padre è
+  nascosto — un `.modal` messo lì risulterebbe sempre visibile. In `obiettivi` e
+  `youtube-player`, invece, `.modal` *è* l'overlay ed è giusto usarla.
+- ⚠️ **Anche il ✕ consuma la voce di cronologia**, altrimenti ogni apri-e-chiudi ne lascerebbe una
+  dietro di sé e dopo cinque popup servirebbero cinque indietro per uscire dalla pagina. Il
+  consumo controlla prima `history.state`: se nel frattempo la pagina ha spinto una voce sua (un
+  cambio di vista) la nostra non è più in cima, e un `history.back()` cieco tornerebbe indietro di
+  una schermata invece di togliere la voce del popup.
+- ⚠️ **La voce si spinge una volta sola** anche con più popup aperti uno sopra l'altro (dalla
+  ricerca alla porzione, dall'elenco al form): sono contenuti nella stessa finestra, non
+  schermate, e due voci vorrebbero dire due indietro per chiudere una cosa sola. L'indietro
+  chiude l'ultimo aperto.
+
+Restano **fuori dall'elenco** il velo di caricamento e il cassetto del menù (`loading-overlay`,
+`mobile-nav-overlay`), più il fumetto degli avvisi di `index.html`: sono tendine e non finestre.
+Le quattro pagine che avevano già un `popstate` (`conto-spese-teresa`, `finanza`, `spese-ada`,
+`spese-personali`) lo governava per le **sole viste** e continua a farlo: la guardia esce subito
+quando non c'è nessun popup aperto, così l'indietro fa quel che ha sempre fatto.
 
 ### ⚠️ ✏️ e 🗑 stanno a SINISTRA del record
 

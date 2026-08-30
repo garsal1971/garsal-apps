@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Playlist Player v1.4.0</title>
+    <title>YouTube Playlist Player v1.4.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -619,8 +619,8 @@
 // ==========================================
 // VERSION
 // ==========================================
-var APP_VERSION = 'v1.4.0';
-var BUILD_TIME  = '2026-05-27T12:00:00Z';
+var APP_VERSION = 'v1.4.1';
+var BUILD_TIME  = '2026-08-30T23:30:00Z';
 console.log('%c YT Playlist Player ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#FF0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1483,6 +1483,69 @@ window.addEventListener('load', () => {
         console.warn('⚠️ Nessun SB_TOKEN — attendo dal launcher');
     }
 });
+
+/* ── Il tasto «indietro» di Android e i popup ──────────────────────────────
+   ⚠️ Dentro un popup l'indietro usciva dalla PAGINA: la WebView non ha niente in cronologia,
+   quindi tornava ad AppSphere buttando via quel che si stava scrivendo. Un popup non è una
+   pagina, ma su Android deve comportarsi come tale — l'indietro è il gesto con cui si chiude
+   qualunque cosa si sia aperta.
+
+   Aprendo un popup si spinge una voce di cronologia; l'indietro la consuma e qui sotto si chiude
+   il popup invece di lasciare la pagina. Chiudendolo col ✕ la voce si consuma da sé, o ogni
+   apri-e-chiudi ne lascerebbe una dietro e dopo cinque popup servirebbero cinque indietro per
+   uscire.
+
+   ⚠️ L'apertura NON si intercetta avvolgendo le funzioni che aprono i popup: in queste pagine
+   sono decine, alcune sono `onclick` scritti nell'HTML e altre non hanno nemmeno un nome. Si
+   guarda invece quando l'overlay diventa visibile — l'unica cosa che tutti i popup hanno in
+   comune, comunque siano stati aperti — e si riconosce dallo stile calcolato, non dal nome della
+   classe, che in queste pagine è ora `hidden`, ora `active`, ora `open`.
+
+   ⚠️ La voce si spinge UNA SOLA VOLTA anche con più popup aperti uno sopra l'altro: sono
+   contenuti nella stessa finestra, non schermate, e due voci vorrebbero dire due indietro per
+   chiudere una cosa sola. L'indietro chiude l'ultimo aperto.
+
+   ⚠️ Il consumo controlla `history.state`: se nel frattempo la pagina ha spinto una voce sua (un
+   cambio di vista) la nostra non è più in cima, e un `history.back()` cieco tornerebbe indietro
+   di una schermata invece di togliere la voce del popup.
+
+   ⚠️ Questo blocco è UGUALE in tutte le app della suite: se lo correggi qui, portalo anche
+   nelle altre (l'elenco dei popup è l'unica cosa che cambia). */
+(function guardiaIndietroPopup(elenco) {
+  const visibile = el => el && getComputedStyle(el).display !== 'none';
+  const aperti = () => elenco.flatMap(p =>
+    [...document.querySelectorAll(p.sel)].filter(visibile).map(el => ({ el, chiudi: p.chiudi })));
+
+  let spinta = false;
+
+  function controlla() {
+    const n = aperti().length;
+    if (n && !spinta) { spinta = true; history.pushState({ __popup: true }, ''); }
+    else if (!n && spinta) {
+      spinta = false;
+      if (history.state && history.state.__popup) history.back();
+    }
+  }
+
+  function avvia() {
+    const osservatore = new MutationObserver(controlla);
+    elenco.forEach(p => document.querySelectorAll(p.sel).forEach(el =>
+      osservatore.observe(el, { attributes: true, attributeFilter: ['class', 'style'] })));
+    controlla();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', avvia);
+  else avvia();
+
+  window.addEventListener('popstate', () => {
+    const a = aperti();
+    if (!a.length) return;          // nessun popup: l'indietro fa quel che ha sempre fatto
+    spinta = false;
+    const ultimo = a[a.length - 1];
+    try { ultimo.chiudi(ultimo.el); } catch (err) { console.warn('indietro:', err); }
+  });
+})([
+  { sel: '.modal', chiudi: el => closeModal(el.id) },
+]);
 </script>
 </body>
 </html>
