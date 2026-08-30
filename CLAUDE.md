@@ -2359,6 +2359,13 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   singolare e plurale vengono dalle due colonne (vedi lo schema `al_`), e il **½ si scrive col
   simbolo** perché non ha genere — vale per l'uovo come per la pizza senza dover archiviare anche
   quello. Il nome si scrive da 🍎 Alimenti → ✏️ e senza di esso si legge «1 porzione».
+  ⚠️ **Ogni pulsante SI SOMMA a quel che c'è nel campo, non lo sostituisce**, e accanto al campo
+  c'è un **↺** per ricominciare da zero. Tre uova si segnano toccando «1 uovo» tre volte: non
+  esiste un pulsante per ogni quantità che si possa voler mangiare, e sostituendo il secondo
+  tocco non faceva niente di visibile — si leggeva come un tocco non passato. Il campo parte
+  comunque dalla porzione abituale, che è il caso di gran lunga più frequente e non costa nessun
+  tocco. La somma si arrotonda a un decimale: gli scalini sono interi, ma il campo si scrive
+  anche a mano (12,5 g d'olio) e senza arrotondare verrebbero fuori le code binarie.
   ⚠️ La **scaletta fissa** (`GRAMMI_RAPIDI`) si toglie i valori che le porzioni già coprono: due
   pulsanti «150 g» uno accanto all'altro sembrano due scelte diverse e non lo sono. Un alimento
   **senza** porzione non se ne inventa una — una porzione inventata chi la legge se la crede, e
