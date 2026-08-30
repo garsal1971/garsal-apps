@@ -3096,6 +3096,15 @@ Quattro cose che *sono* il funzionamento:
   schermate, e due voci vorrebbero dire due indietro per chiudere una cosa sola. L'indietro
   chiude l'ultimo aperto.
 
+⚠️ **In `calorie.html` da un popup si esce solo col ✕, con un pulsante o con l'indietro** — il
+tocco sul velo scuro e l'Escape non chiudono più (v1.14.0). Su un telefono la scheda occupa quasi
+tutto lo schermo, il velo è la striscia ai bordi, e il dito ci finisce sopra mentre si scorre un
+elenco o si mira a un campo in alto: il popup spariva portandosi via i grammi appena scritti, e
+sembrava un tocco andato a vuoto più che una chiusura. Il ✕ sta nell'HTML della finestra e non
+dipende da cosa ci si mette dentro, quindi togliendo quelle due vie non si resta mai chiusi
+dentro. ⚠️ **Le altre app chiudono ancora col tocco sul velo**: chi le tocca valuti se portare
+anche questo.
+
 Restano **fuori dall'elenco** il velo di caricamento e il cassetto del menù (`loading-overlay`,
 `mobile-nav-overlay`), più il fumetto degli avvisi di `index.html`: sono tendine e non finestre.
 Le quattro pagine che avevano già un `popstate` (`conto-spese-teresa`, `finanza`, `spese-ada`,

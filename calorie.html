@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.13.2</title>
+  <title>Calorie v1.14.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.13.2';
-var BUILD_TIME  = '2026-08-30T23:30:00Z';
+var APP_VERSION = 'v1.14.0';
+var BUILD_TIME  = '2026-08-31T08:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -3148,9 +3148,6 @@ document.addEventListener('change', e => {
   }
 });
 
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !$('modal-overlay').classList.contains('hidden')) closeModal();
-});
 
 $('btn-hamburger').addEventListener('click', () => {
   $('sidebar').classList.toggle('open');
@@ -3160,8 +3157,20 @@ $('mobile-nav-overlay').addEventListener('click', () => {
   $('sidebar').classList.remove('open');
   $('mobile-nav-overlay').classList.remove('open');
 });
+/* ⚠️ Da un popup si esce SOLO col ✕ o con un pulsante — più il tasto «indietro» di Android, che
+   è il gesto con cui su quel telefono si chiude qualunque cosa (`guardiaIndietroPopup`).
+
+   Il tocco sul velo scuro attorno alla scheda NON chiude più, ed è il motivo per cui questo
+   commento esiste: su un telefono la scheda occupa quasi tutto lo schermo, il velo è la striscia
+   ai bordi, e il dito ci finisce sopra mentre si scorre un elenco o si mira a un campo in alto.
+   Il popup spariva portandosi via i grammi appena scritti, senza chiedere niente — e la cosa
+   peggiore era che sembrava un tocco andato a vuoto, non una chiusura.
+
+   Per la stessa ragione è sparito l'Escape: quel che si perde è lo stesso, e sul telefono non
+   c'è nemmeno una tastiera da cui premerlo. Il ✕ c'è sempre, sta scritto nell'HTML della
+   finestra e non dipende da cosa ci si mette dentro, quindi togliendo queste due vie non si
+   resta mai chiusi dentro. */
 $('modal-close').addEventListener('click', closeModal);
-$('modal-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 
 /* ═══════════════════════════════════════════════════════════════
    AVVIO
