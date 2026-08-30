@@ -2304,6 +2304,24 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   alla v1.7.0 era una costante, e un prodotto USDA finiva in archivio dichiarato Open Food Facts —
   un dato falso proprio nella colonna che esiste per dire da dove viene un numero, e senza nessun
   modo, poi, di sapere quali righe correggere.
+- ⚠️ **Nel form dell'alimento si dice se i valori sono per 100 g o per una porzione**, perché
+  moltissime etichette li danno per confezione e ricopiarli dividendo a mente è il modo migliore
+  per sbagliare: la «Pizza condita» stava in archivio a **1225 kcal per 100 g** — impossibile, il
+  grasso puro ne fa 899 — perché quei numeri erano dell'intera pizza, e la riga sembrava una riga
+  qualunque. ⚠️ **In `al_foods` i valori restano SEMPRE per 100 g**: la scelta non cambia dove
+  finiscono, cambia come si leggono quelli scritti nel form, e la conversione si fa una volta
+  sola al salvataggio. Una colonna «unità» sulla riga vorrebbe dire che ogni conto della pagina
+  (diario, target, grafico, Edge Function) deve ricordarsi di guardarla, e il giorno che uno se
+  ne dimentica il totale è sbagliato senza nessun errore.
+  ⚠️ La scelta è una **dichiarazione sui numeri, non una trasformazione**: le caselle restano
+  come sono. Per questo sotto c'è l'**anteprima** di quel che finirà in archivio — senza, un
+  tocco per sbaglio su «1 porzione» dividerebbe valori già giusti e lo si scoprirebbe settimane
+  dopo. E per la stessa ragione riaprendo un alimento si parte **sempre da «100 g»**, che è quel
+  che c'è davvero in archivio: ricordare «porzione» sulla riga farebbe dividere una seconda volta
+  al primo salvataggio. Senza i grammi della porzione l'opzione è spenta e il salvataggio si
+  ferma — non c'è niente per cui dividere. `KCAL_IMPOSSIBILI` (900) è il **tetto fisico**, non un
+  vincolo di gusto: sopra quel valore si chiede conferma, perché è un errore di unità e non un
+  alimento insolito.
 - ⚠️ **La porzione abituale si vede e si preme, non è più un campo precompilato in silenzio.**
   `al_foods.default_grams` (un uovo 55 g, una pizza 300 g, un cucchiaio d'olio 10 g) c'è nel
   catalogo da sempre, e la finestra della porzione ci si apriva sopra senza dirlo: il campo
