@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.8.0</title>
+  <title>Calorie v1.9.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.8.0';
-var BUILD_TIME  = '2026-08-30T12:30:00Z';
+var APP_VERSION = 'v1.9.0';
+var BUILD_TIME  = '2026-08-30T14:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2195,9 +2195,93 @@ function aggiornaAnteprimaPorzione() {
   });
 }
 
+/* ── Per 100 g o per una porzione? ─────────────────────────────
+   ⚠️ In `al_foods` i valori stanno SEMPRE per 100 g, e questa scelta non cambia dove finiscono:
+   cambia solo come si leggono quelli che si scrivono qui, e la conversione si fa una volta sola,
+   al salvataggio. Non è un secondo modo di archiviare — una colonna «unità» sulla riga vorrebbe
+   dire che ogni conto della pagina (il diario, il target, il grafico, la Edge Function) deve
+   ricordarsi di guardarla, e il giorno che uno se ne dimentica il totale è sbagliato senza che
+   compaia nessun errore. Per 100 g è anche come li scrivono l'etichetta europea e le tabelle di
+   composizione, quindi un numero è già la sua percentuale in peso.
+
+   Serve perché molte etichette danno i valori **per confezione o per porzione**, e ricopiarli
+   dividendo a mente è il modo migliore per sbagliare: la «Pizza condita» stava in archivio a
+   1225 kcal per 100 g — impossibile, il grasso puro ne fa 899 — perché quei numeri erano
+   dell'intera pizza, e nessuno se n'era accorto perché la riga sembrava una riga qualunque.
+
+   ⚠️ La scelta parte SEMPRE da «100 g», anche riaprendo un alimento salvato: è quel che c'è
+   davvero in archivio. Ricordarla sulla riga la farebbe riaprire su «porzione» e un salvataggio
+   senza toccare niente dividerebbe i valori una seconda volta. */
+/* Il tetto fisico: 100 g di grasso puro fanno 899 kcal, quindi non c'è niente al mondo che stia
+   sopra. Non è un vincolo di gusto ed è per questo che si può controllare — un valore più alto è
+   un errore di unità, non un alimento insolito. */
+const KCAL_IMPOSSIBILI = 900;
+
+function unitaValori() { return (window._formAlimento || {}).unita || '100'; }
+
+function grammiPorzioneForm() {
+  const g = parseFloat($('f-porz')?.value);
+  return (!g || isNaN(g) || g <= 0) ? null : g;
+}
+
+// Per quanto va moltiplicato ciò che è scritto nelle caselle per averlo per 100 g.
+// `null` = non si può convertire, perché manca il divisore.
+function fattorePer100() {
+  if (unitaValori() !== 'porzione') return 1;
+  const g = grammiPorzioneForm();
+  return g ? 100 / g : null;
+}
+
+/* Ridisegna i due pulsanti e l'anteprima. ⚠️ Non ridisegna il resto della finestra: sostituire le
+   caselle mentre uno ci sta scrivendo dentro gli toglie il cursore da sotto le dita. */
+function aggiornaUnitaAlimento() {
+  const box = $('f-unita');
+  if (!box) return;
+  const u = unitaValori(), g = grammiPorzioneForm();
+  const nome = etichettaPorzione({
+    portion_label: ($('f-porz-nome')?.value || '').trim(),
+    portion_label_plural: ($('f-porz-nome-pl')?.value || '').trim(),
+  }, false);
+  box.innerHTML = [
+    { u: '100', testo: '100 g' },
+    { u: 'porzione', testo: g ? `1 ${nome} · ${fmtG(g)} g` : `1 ${nome}` },
+  ].map(b => `<button class="btn btn-sm ${u === b.u ? 'btn-primary' : 'btn-outline'}"
+      data-action="unita-valori" data-u="${b.u}"${b.u === 'porzione' && !g ? ' disabled' : ''}>${esc(b.testo)}</button>`).join('');
+
+  const nota = $('f-unita-nota');
+  if (nota) {
+    nota.innerHTML = u !== 'porzione'
+      ? 'Come sull\'etichetta europea e sulle tabelle di composizione.'
+      : (g ? `Li divido io: quel che scrivi vale per ${fmtG(g)} g, in archivio va il corrispondente per 100 g.`
+           : '⚠️ Scrivi prima <strong>quanti grammi</strong> è una porzione, qui sopra: senza non c\'è niente per cui dividere.');
+  }
+  aggiornaAnteprimaAlimento();
+}
+
+/* ⚠️ L'anteprima esiste perché la scelta è una DICHIARAZIONE sui numeri, non una trasformazione:
+   le caselle restano come sono e cambia solo come verranno letti. Senza vedere il risultato, un
+   tocco per sbaglio su «1 porzione» dividerebbe valori già giusti, e il difetto si scoprirebbe
+   settimane dopo guardando un totale che non torna — cioè lo stesso modo in cui la pizza a 1225
+   kcal è passata inosservata. Con «100 g» non si mostra niente: ripeterebbe le caselle. */
+function aggiornaAnteprimaAlimento() {
+  const el = $('f-anteprima');
+  if (!el) return;
+  const fattore = fattorePer100();
+  if (unitaValori() !== 'porzione' || fattore == null) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const q = id => { const n = parseFloat($(id)?.value); return isNaN(n) ? null : n * fattore; };
+  const kcal = q('f-kcal');
+  el.innerHTML = `In archivio: <strong>${fmtKcal(kcal)} kcal</strong> per 100 g`
+    + ` · proteine ${fmtG(q('f-prot'))} g · grassi ${fmtG(q('f-fat'))} g · carboidrati ${fmtG(q('f-carb'))} g`
+    + (kcal != null && kcal > KCAL_IMPOSSIBILI
+        ? `<div class="text-xs mt-4" style="color:var(--c-danger)">⚠️ ${fmtKcal(kcal)} kcal per 100 g non esistono:
+             nemmeno il grasso puro ci arriva (899). Controlla i grammi della porzione.</div>` : '');
+}
+
 /* ── Alimento scritto a mano / modifica ───────────────────────── */
 function openFormAlimento(f) {
   const v = f || {};
+  window._formAlimento = { unita: '100' };
   openModal(f ? 'Modifica alimento' : 'Nuovo alimento', `
     <div class="form-row-2">
       <div class="form-group"><label class="form-label" for="f-name">Nome</label>
@@ -2205,10 +2289,26 @@ function openFormAlimento(f) {
       <div class="form-group"><label class="form-label" for="f-brand">Marca <span class="text-muted text-xs">(facoltativa)</span></label>
         <input class="form-input" id="f-brand" value="${esc(v.brand || '')}" /></div>
     </div>
-    <div class="text-sm text-muted mb-8">Valori <strong>per 100 g</strong>, come sull'etichetta.</div>
+    <div class="form-row-3">
+      <div class="form-group"><label class="form-label" for="f-porz">Porzione abituale (g)</label>
+        <input type="number" class="form-input" id="f-porz" step="1" min="0" value="${v.default_grams ?? ''}" /></div>
+      <div class="form-group"><label class="form-label" for="f-porz-nome">Si chiama…</label>
+        <input class="form-input" id="f-porz-nome" value="${esc(v.portion_label || '')}" placeholder="uovo, fetta, cucchiaio…" /></div>
+      <div class="form-group"><label class="form-label" for="f-porz-nome-pl">…al plurale</label>
+        <input class="form-input" id="f-porz-nome-pl" value="${esc(v.portion_label_plural || '')}" placeholder="uova, fette, cucchiai…" /></div>
+    </div>
+    <div class="form-hint">I nomi fanno leggere «1 uovo · 55 g» invece di «1 porzione · 55 g» quando segni
+      quel che mangi. Lasciandoli vuoti si legge «porzione», che va bene per quasi tutto.
+      ⚠️ Il plurale si scrive perché l'italiano non lo ricava a regola: <em>uovo</em> fa <em>uova</em>.</div>
+
+    <div class="form-group mt-16">
+      <label class="form-label">I valori qui sotto si riferiscono a…</label>
+      <div class="hstack gap-6 wrap" id="f-unita"></div>
+      <div class="form-hint" id="f-unita-nota"></div>
+    </div>
     <div class="form-row-3">
       <div class="form-group"><label class="form-label" for="f-kcal">kcal</label>
-        <input type="number" class="form-input" id="f-kcal" step="1" min="0" max="900" value="${v.kcal_100g ?? ''}" /></div>
+        <input type="number" class="form-input" id="f-kcal" step="1" min="0" value="${v.kcal_100g ?? ''}" /></div>
       <div class="form-group"><label class="form-label" for="f-prot">Proteine (g)</label>
         <input type="number" class="form-input" id="f-prot" step="0.1" min="0" value="${v.proteins_100g ?? ''}" /></div>
       <div class="form-group"><label class="form-label" for="f-fat">Grassi (g)</label>
@@ -2222,23 +2322,13 @@ function openFormAlimento(f) {
       <div class="form-group"><label class="form-label" for="f-sug">di cui zuccheri (g)</label>
         <input type="number" class="form-input" id="f-sug" step="0.1" min="0" value="${v.sugars_100g ?? ''}" /></div>
     </div>
-    <div class="form-row-3">
+    <div class="form-row-2">
       <div class="form-group"><label class="form-label" for="f-fib">Fibre (g)</label>
         <input type="number" class="form-input" id="f-fib" step="0.1" min="0" value="${v.fiber_100g ?? ''}" /></div>
       <div class="form-group"><label class="form-label" for="f-salt">Sale (g)</label>
         <input type="number" class="form-input" id="f-salt" step="0.01" min="0" value="${v.salt_100g ?? ''}" /></div>
-      <div class="form-group"><label class="form-label" for="f-porz">Porzione abituale (g)</label>
-        <input type="number" class="form-input" id="f-porz" step="1" min="0" value="${v.default_grams ?? ''}" /></div>
     </div>
-    <div class="form-row-2">
-      <div class="form-group"><label class="form-label" for="f-porz-nome">Una porzione si chiama…</label>
-        <input class="form-input" id="f-porz-nome" value="${esc(v.portion_label || '')}" placeholder="uovo, fetta, cucchiaio…" /></div>
-      <div class="form-group"><label class="form-label" for="f-porz-nome-pl">…e al plurale</label>
-        <input class="form-input" id="f-porz-nome-pl" value="${esc(v.portion_label_plural || '')}" placeholder="uova, fette, cucchiai…" /></div>
-    </div>
-    <div class="form-hint">Servono a far leggere «1 uovo · 55 g» invece di «1 porzione · 55 g» quando
-      segni quel che mangi. Lasciandoli vuoti si legge «porzione», che va bene per quasi tutto.
-      ⚠️ Il plurale si scrive perché l'italiano non lo ricava a regola: <em>uovo</em> fa <em>uova</em>.</div>
+    <div class="note-box" id="f-anteprima"></div>
     <div class="form-hint">Una casella lasciata vuota resta vuota e non conta zero: «non lo so» e «zero grammi»
       sono due cose diverse, e uno zero falso farebbe sembrare senza grassi un alimento di cui non si sa niente.</div>
     <div class="modal-footer">
@@ -2246,6 +2336,7 @@ function openFormAlimento(f) {
       <button class="btn btn-primary" data-action="salva-alimento" ${f ? `data-id="${f.id}"` : ''}>💾 Salva</button>
     </div>
   `);
+  aggiornaUnitaAlimento();
   setTimeout(() => $('f-name')?.focus(), 50);
 }
 
@@ -2253,13 +2344,29 @@ function leggiFormAlimento() {
   const v = id => { const el = $(id); const n = el && el.value !== '' ? parseFloat(el.value) : null; return (n == null || isNaN(n)) ? null : n; };
   const t = id => (($(id)?.value) || '').trim() || null;
   const name = ($('f-name')?.value || '').trim();
-  const kcal = v('f-kcal');
   if (!name) { alert('Serve un nome.'); return null; }
-  if (kcal == null) { alert('Servono almeno le calorie per 100 g: senza, la riga non conterebbe niente.'); return null; }
+
+  const fattore = fattorePer100();
+  if (fattore == null) {
+    alert('Hai detto che i valori sono di una porzione, ma non hai scritto quanti grammi è.\nScrivilo in «Porzione abituale (g)».');
+    return null;
+  }
+  // ⚠️ Una casella vuota resta vuota anche qui: `null` non si converte, o «non lo so»
+  // diventerebbe uno zero — la stessa regola delle caselle vuote, un passaggio più in là.
+  const per100 = id => { const n = v(id); return n == null ? null : Math.round(n * fattore * 100) / 100; };
+
+  const kcal = per100('f-kcal');
+  if (kcal == null) { alert('Servono almeno le calorie: senza, la riga non conterebbe niente.'); return null; }
+  if (kcal > KCAL_IMPOSSIBILI &&
+      !confirm(`${kcal} kcal per 100 g non esistono: nemmeno il grasso puro ci arriva (899).\n\n`
+             + 'Di solito vuol dire che i valori sono di una porzione o della confezione: scegli '
+             + '«1 porzione» qui sopra e scrivi quanti grammi è.\n\nSalvo lo stesso?')) return null;
+
   return {
     name, brand: ($('f-brand')?.value || '').trim() || null,
-    kcal_100g: kcal, proteins_100g: v('f-prot'), fat_100g: v('f-fat'), sat_fat_100g: v('f-sat'),
-    carbs_100g: v('f-carb'), sugars_100g: v('f-sug'), fiber_100g: v('f-fib'), salt_100g: v('f-salt'),
+    kcal_100g: kcal, proteins_100g: per100('f-prot'), fat_100g: per100('f-fat'), sat_fat_100g: per100('f-sat'),
+    carbs_100g: per100('f-carb'), sugars_100g: per100('f-sug'), fiber_100g: per100('f-fib'), salt_100g: per100('f-salt'),
+    // ⚠️ I grammi della porzione NON si convertono: sono il divisore, non un valore nutrizionale.
     default_grams: v('f-porz'),
     // ⚠️ Il plurale senza il singolare non si archivia: da solo non comparirebbe mai a schermo
     // (il ½ e l'1 leggono il singolare) e resterebbe una casella scritta che non fa niente.
@@ -2559,6 +2666,10 @@ document.addEventListener('click', async e => {
       closeModal();
       openFormAlimento(btn.dataset.nome ? { name: btn.dataset.nome } : null);
     }
+    else if (action === 'unita-valori') {
+      window._formAlimento = { unita: btn.dataset.u };
+      aggiornaUnitaAlimento();
+    }
     else if (action === 'modifica-alimento') {
       openFormAlimento(S.foods.find(f => f.id === btn.dataset.id));
     }
@@ -2706,6 +2817,10 @@ document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'add-q') cercaAlimento(el.value);
   else if (el.id === 'por-g') aggiornaAnteprimaPorzione();
+  // I grammi e i nomi della porzione rifanno anche i due pulsanti (che li scrivono dentro);
+  // le caselle dei valori la sola anteprima.
+  else if (['f-porz', 'f-porz-nome', 'f-porz-nome-pl'].includes(el.id)) aggiornaUnitaAlimento();
+  else if (/^f-(kcal|prot|fat|sat|carb|sug|fib|salt)$/.test(el.id)) aggiornaAnteprimaAlimento();
   else if (el.matches('[data-action="cerca-alimenti"]')) {
     S.cercaAlimenti = el.value;
     cercaOffCatalogo(el.value);   // la rete si consulta da sé, dopo la pausa di digitazione
