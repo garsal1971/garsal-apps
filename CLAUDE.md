@@ -2199,6 +2199,25 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
 - Quattro schede: 📓 **Diario** (giorno per giorno, coi pasti configurati), 📈 **Andamento** (colonne
   delle calorie contro la linea del target, più peso e curva del piano), 🍎 **Alimenti**,
   ⚙️ **Impostazioni** (dati anagrafici, attività, pasti, stima delle calorie, obiettivo).
+- ⚠️ **Il diario non va più indietro del primo giorno della dieta** (`primoGiornoDiario()`): il ‹
+  si spegne, l'input date porta il `min`, e la stretta è ripetuta nei gestori perché il pulsante
+  spento è un suggerimento e da tastiera ci si arriva lo stesso. Prima il ‹ scendeva all'infinito
+  e **dal 121° giorno indietro ogni giornata compariva vuota** — non perché lo fosse, ma perché
+  `GIORNI_STORICO` non le aveva caricate: un archivio che sembra svuotarsi da solo è peggio di un
+  pulsante spento. Il fondo è `max(inizio dell'obiettivo attivo, finestra di caricamento)`: il
+  `max` garantisce che non si finisca mai su un giorno di cui non si hanno le righe, e con una
+  dieta più corta di `GIORNI_STORICO` — il caso normale — non morde mai. Senza obiettivo attivo
+  resta la sola finestra, che è tutto quel che si sa.
+- **📋 Ricopia da ieri** porta nel giorno aperto tutte le righe del giorno prima, e **compare solo
+  se ieri ha davvero qualcosa** (col conteggio sul pulsante): uno che c'è sempre e quasi mai fa
+  qualcosa si smette di guardarlo. Resta offerto anche se oggi ha già delle righe — mangiare due
+  volte la stessa cosa capita — ma allora **aggiunge**, e la conferma lo dice invece di lasciarlo
+  scoprire dal totale. ⚠️ Si copiano i valori **congelati sulla riga di partenza**, non quelli di
+  `al_foods` di adesso: la riga è il dato, l'alimento è solo da dove veniva — così la copia
+  funziona anche per un alimento cancellato nel frattempo (`food_id` già NULL, valori sulla riga)
+  e non cambia di nascosto perché qualcuno ha corretto una scheda. `times_used` non si tocca: è
+  il contatore che ordina i «più usati», e un tocco che lo alza di cinque lo farebbe diventare la
+  classifica di chi ricopia invece di chi mangia.
 - ⚠️ **I riquadri dei pasti ci sono in ogni giorno, anche vuoti e anche nel passato.** Fino alla
   v1.9.1 un pasto senza righe si nascondeva nei giorni passati, per non fare rumore: ma il
   riquadro non è solo un riepilogo, porta il ➕ con cui si aggiunge a *quel* pasto. In un giorno
