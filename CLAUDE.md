@@ -397,7 +397,7 @@ di dire la stessa cosa.
 | Table | Purpose |
 |---|---|
 | `al_profile` | Una riga per utente. ⚠️ Di questa tabella si usa **solo `activity`** (fattore LAF): data di nascita, altezza e sesso si leggono da `cm_profile` |
-| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'manuale'`; valori **per 100 g** |
+| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100 g**. `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama |
 | `al_log` | Le righe del diario: `day`, `meal`, `grams`, e i valori per 100 g **congelati sulla riga** |
 | `al_days` | Il target di calorie di una giornata, **congelato**, con gli ingredienti del conto (`weight_kg`, `bmr`, `tdee`, `deficit_kcal`) |
 
@@ -475,6 +475,17 @@ domani non deve riscrivere il giudizio su un giorno già passato. Si ricalcola *
 esplicita**, un giorno per volta. Per lo stesso motivo `al_log` porta i valori nutrizionali sulla
 riga e non solo `food_id`: correggere un alimento non riscrive quel che si è mangiato il mese
 scorso, e cancellarlo non fa sparire le calorie già contate (`food_id` va a NULL, la riga resta).
+
+⚠️ **La porzione abituale è tre colonne, non una**: `default_grams` dice *quanto* (un uovo 55 g,
+una pizza 300 g, un cucchiaio d'olio 10 g), `portion_label` e `portion_label_plural` *come si
+chiama*. Il singolare e il plurale sono due colonne perché **in italiano il plurale non si ricava
+a regola proprio dove serve di più** — uovo → uova — e una parola sbagliata a schermo si legge
+come un difetto dell'app; nemmeno una colonna sola con dentro `'uovo|uova'`, che sarebbe un
+formato da interpretare dentro un campo di testo. Il plurale è **facoltativo** e ripiega sul
+singolare, e senza nessuna etichetta si legge «porzione / porzioni», vero per qualunque cosa.
+⚠️ Un'etichetta **non si inventa**: chi la legge scritta se la crede, e sono le calorie della
+giornata — `20260830120000_al_porzione_etichetta.sql` ne compila 17 sulle 44 voci base, e le
+altre (petto di pollo, insalata, zucchine) restano senza perché «1 porzione» è già quel che sono.
 
 ⚠️ **Una casella vuota resta vuota e non vale zero**, né in `al_foods` né in `al_log`: «non so
 quante fibre ha» e «non ha fibre» sono due cose diverse, e uno zero falso farebbe sembrare magro
@@ -2281,14 +2292,18 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   risponde `'off'` o `'usda'`, e la stringa fissa «Open Food Facts» attribuiva a Open Food Facts
   anche i risultati USDA — cioè diceva il falso proprio nel punto che esiste per dire da dove
   viene un numero. Tutto passa da `fonteDi()` / `iconaFonte()` / `badgeFonte()`, in un posto solo.
-- ⚠️ **Un risultato USDA si può mangiare ma non si può mettere in dispensa**: il CHECK di
-  `al_foods.source` ammette solo `base`, `off` e `manuale`, quindi quell'insert il database lo
-  rifiuterebbe. `FONTI_SALVABILI` è la costante che lo dice, e **decide insieme il messaggio e il
-  salvataggio**: la finestra della porzione scrive «lo aggiungo al catalogo» solo dove succede
-  davvero, e altrove dice che i valori restano sulla sola riga del diario. Due condizioni scritte
-  separatamente sono la finestra che promette una cosa e il pulsante che ne fa un'altra, il giorno
-  che una delle due cambia. Per accogliere davvero l'USDA serve una migration che allarghi il
-  CHECK — finché non c'è, quel prodotto va ricercato ogni volta.
+- ⚠️ **`FONTI_SALVABILI` è lo specchio del CHECK su `al_foods.source` e va tenuto uguale**: una
+  fonte che il vincolo non ammette non entra in archivio, e l'insert lo rifiuta il database.
+  `20260830120100_al_foods_source_usda.sql` ci ha aggiunto `'usda'`, che prima restava fuori — un
+  prodotto USDA si poteva mangiare ma non mettere in dispensa, e andava ricercato ogni volta. La
+  costante **decide insieme il messaggio e il salvataggio**: la finestra della porzione scrive «lo
+  aggiungo al catalogo» solo dove succede davvero, e altrove dice che i valori restano sulla sola
+  riga del diario. Due condizioni scritte separatamente sono la finestra che promette una cosa e
+  il pulsante che ne fa un'altra, il giorno che una delle due cambia.
+  ⚠️ `salvaAlimentoDiRete()` archivia la fonte **com'è arrivata** e non riscritta a `'off'`: fino
+  alla v1.7.0 era una costante, e un prodotto USDA finiva in archivio dichiarato Open Food Facts —
+  un dato falso proprio nella colonna che esiste per dire da dove viene un numero, e senza nessun
+  modo, poi, di sapere quali righe correggere.
 - ⚠️ **La porzione abituale si vede e si preme, non è più un campo precompilato in silenzio.**
   `al_foods.default_grams` (un uovo 55 g, una pizza 300 g, un cucchiaio d'olio 10 g) c'è nel
   catalogo da sempre, e la finestra della porzione ci si apriva sopra senza dirlo: il campo
@@ -2297,6 +2312,10 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   esattamente il lavoro che la colonna esiste per togliere. Ora la finestra scrive la porzione e
   offre **½ / 1 / 2** (`porzioniDi()`): sono i tagli che si usano davvero — «due uova», «mezza
   pizza» — e una scaletta di multipli più fitta chiederebbe di leggere invece di far scegliere.
+  Col nome della porzione si legge **«1 uovo · 55 g»**, «2 uova · 110 g», «½ pizza · 150 g»:
+  singolare e plurale vengono dalle due colonne (vedi lo schema `al_`), e il **½ si scrive col
+  simbolo** perché non ha genere — vale per l'uovo come per la pizza senza dover archiviare anche
+  quello. Il nome si scrive da 🍎 Alimenti → ✏️ e senza di esso si legge «1 porzione».
   ⚠️ La **scaletta fissa** (`GRAMMI_RAPIDI`) si toglie i valori che le porzioni già coprono: due
   pulsanti «150 g» uno accanto all'altro sembrano due scelte diverse e non lo sono. Un alimento
   **senza** porzione non se ne inventa una — una porzione inventata chi la legge se la crede, e
