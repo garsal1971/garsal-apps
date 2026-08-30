@@ -2987,6 +2987,19 @@ All three share an identical CSS custom property palette:
 }
 ```
 
+### ⚠️ ✏️ e 🗑 stanno a SINISTRA del record
+
+In un elenco le icone di modifica ed eliminazione vanno **in testa alla riga**, mai in coda. In
+una tabella che scorre di lato — cioè ogni tabella su un telefono — l'ultima colonna sta oltre il
+bordo destro: i pulsanti esistono, ma per raggiungerli bisogna già sapere che c'è dell'altro da
+trascinare. La prima colonna è l'unica che si vede sempre, comunque sia largo lo schermo.
+
+Ordine dentro il gruppo: **✏️ prima, 🗑 dopo** — la più usata per prima, e la distruttiva non sul
+bordo, dov'è più facile prenderla di striscio.
+
+Applicato in `calorie.html` (la tabella 🍎 Alimenti e le righe del 📓 Diario). ⚠️ **Le altre app
+hanno ancora le icone in coda**: chi le tocca le sposti.
+
 ### Date handling
 - Dates are stored as ISO strings (`YYYY-MM-DD`) in Supabase
 - Displayed in European format (`dd/mm/yyyy`) in the UI
