@@ -2220,6 +2220,12 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   mente («ieri +300, oggi −300»); spalmarlo su tutti i giorni che restano darebbe un numero che
   nessuno può rifare. Un giorno **senza righe non riporta niente** — non è un digiuno, è un giorno
   non segnato — ed è la stessa regola del saldo e delle colonne mancanti nel grafico.
+  ⚠️ **Da OGGI si riporta solo lo sforo, mai il risparmio.** Oggi è l'unico giorno «precedente»
+  che può ancora cambiare: alle sette di sera il diario è a metà, e leggere quel che non è ancora
+  stato segnato come un risparmio faceva comparire un target di domani gonfiato di ottocento
+  calorie che nessuno si era guadagnato — un picco visibile nel grafico, corretto in v1.12.1. Lo
+  sforo invece è già successo e non si disfa, quindi quello si riporta subito. È la stessa regola
+  del «non lo so ≠ zero» che governa tutta la pagina: un diario a metà non è un digiuno.
   ⚠️ Nel futuro il **peso non si trascina**: `pesoAl()` ripiegherebbe sull'ultima pesata nota, e
   una linea piatta fino alla fine del piano sembrerebbe una previsione che nessuno ha fatto.
 - ⚠️ **La tabella dei tratti vive in `tabellaTratti()`, un posto solo**, perché la disegnano due
