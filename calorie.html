@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.12.1</title>
+  <title>Calorie v1.13.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.12.1';
-var BUILD_TIME  = '2026-08-30T20:30:00Z';
+var APP_VERSION = 'v1.13.0';
+var BUILD_TIME  = '2026-08-30T21:30:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1430,47 +1430,64 @@ function targetTrattoAl(giorno, tratti) {
    giorno non segnato. È la stessa regola del saldo e delle colonne mancanti nel grafico. */
 function giorniDellaDieta() {
   const arco = arcoDellaDieta();
-  if (!arco) return [];
+  if (!arco) return { righe: [], saldo: 0, restanti: 0, alGiorno: 0 };
   const oggi = oggiStr();
   const tratti = stimaTratti();
-  const out = [];
-  let scartoPrec = null;
+  const righe = [];
+
+  // ── Primo giro: quel che è già successo ──────────────────────────────────
+  // Il saldo si può sapere solo dopo aver visto tutti i giorni chiusi, e quanti giorni restano
+  // solo dopo averli contati: la spalmatura è quindi un secondo giro, non si può fare per strada.
+  let saldo = 0;
   for (let g = arco.primo; g <= arco.ultimo; g = piuGiorni(g, 1)) {
-    const righe = righeDelGiorno(g);
-    const kcal = righe.length ? totaliDi(righe).kcal : null;
+    const rr = righeDelGiorno(g);
+    const kcal = rr.length ? totaliDi(rr).kcal : null;
     const futuro = g > oggi;
-    let target = null, riporto = null;
+    let target = null;
     if (!futuro) {
       const t = targetDelGiorno(g);
       target = t.ok ? t.kcal : null;
-    } else {
-      const base = targetTrattoAl(g, tratti);
-      if (base != null) {
-        riporto = scartoPrec == null ? 0 : -scartoPrec;   // sforato ieri ⇒ oggi meno
-        target = Math.round(base + riporto);
-      }
     }
     const scarto = (kcal != null && target != null) ? kcal - target : null;
-    /* ⚠️ Da OGGI si riporta solo lo SFORO, mai il risparmio. Oggi è l'unico giorno «precedente»
-       che può ancora cambiare: alle sette di sera il diario è a metà, e leggere quel che non è
-       ancora stato segnato come un risparmio faceva comparire un target di domani gonfiato di
-       ottocento calorie che nessuno si era guadagnato — il picco che si vedeva nel grafico.
-       Lo sforo invece è già successo e non si disfa, quindi quello si riporta subito.
-       È la stessa regola del «non lo so ≠ zero» che vale in tutta la pagina: un diario a metà
-       non è un digiuno. */
-    const daRiportare = (g === oggi && scarto != null) ? Math.max(0, scarto) : scarto;
-    out.push({
-      giorno: g, kcal, target, scarto, futuro, riporto,
+    /* ⚠️ Da OGGI entra nel saldo solo lo SFORO, mai il risparmio. Oggi è l'unico giorno chiuso a
+       metà: alle sette di sera il diario non è finito, e leggere quel che non è ancora stato
+       segnato come un risparmio regalava calorie che nessuno si era guadagnato — era il picco
+       che si vedeva nel grafico. Lo sforo invece è già successo e non si disfa. È la stessa
+       regola del «non lo so ≠ zero» che vale in tutta la pagina: un diario a metà non è un
+       digiuno, come un giorno senza righe non è un digiuno. */
+    if (!futuro && scarto != null) saldo += (g === oggi ? Math.max(0, scarto) : scarto);
+    righe.push({
+      giorno: g, kcal, target, scarto, futuro, riporto: null,
       oggi: g === oggi,
       // ⚠️ Nel futuro il peso non si trascina: `pesoAl` ripiega sull'ultima pesata nota, e una
       // linea piatta fino a novembre sembrerebbe una previsione che nessuno ha fatto.
       peso: futuro ? null : pesoAl(g),
       pesoPiano: pesoPianoAl(g),
-      righe: righe.length,
+      righe: rr.length,
     });
-    scartoPrec = daRiportare;
   }
-  return out;
+
+  /* ── Secondo giro: il saldo spalmato sui giorni che restano ───────────────
+     ⚠️ Il saldo accumulato si divide per TUTTI i giorni che restano fino alla fine del piano, e
+     ogni giorno futuro prende la stessa fetta. Fino alla v1.12.1 si scaricava tutto sul giorno
+     dopo: uno sforo di 900 kcal faceva scendere il giorno seguente a 288 kcal, cioè un target
+     che non si può seguire — e un target che non si può seguire non lo si segue, quindi tanto
+     vale non darlo. Spalmato, le stesse 900 kcal su 80 giorni sono 11 kcal al giorno: si
+     recupera davvero, senza che una cena fuori renda impraticabile il giorno dopo.
+
+     La fetta è la stessa per ogni giorno futuro e non si ricalcola giorno per giorno: così il
+     numero si controlla a mente — «sono 900 in 80 giorni, undici al giorno» — che è l'unica
+     ragione per cui uno si fida di un target calcolato da quattro grandezze che non vede. */
+  const futuri = righe.filter(r => r.futuro);
+  const alGiorno = futuri.length ? saldo / futuri.length : 0;
+  futuri.forEach(r => {
+    const base = targetTrattoAl(r.giorno, tratti);
+    if (base == null) return;
+    r.riporto = -alGiorno;
+    r.target = Math.round(base + r.riporto);
+  });
+
+  return { righe, saldo, restanti: futuri.length, alGiorno };
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1489,7 +1506,8 @@ function renderDashboard() {
   const oggi = oggiStr();
   const ob = S.objective;
   const arco = arcoDellaDieta();
-  const gg = giorniDellaDieta();
+  const piano = giorniDellaDieta();
+  const gg = piano.righe;
 
   let h = `
   <div class="view-header">
@@ -1575,7 +1593,7 @@ function renderDashboard() {
   const conTarget = segnati.filter(g => g.target != null);
   const media = segnati.length ? segnati.reduce((a, g) => a + g.kcal, 0) / segnati.length : null;
   const dentro = conTarget.filter(g => g.kcal <= g.target).length;
-  const saldo = conTarget.reduce((a, g) => a + (g.kcal - g.target), 0);
+  const saldo = piano.saldo;
 
   h += `<div class="card-title mt-16">📈 Come sta andando</div>
   <div class="kpi-grid">
@@ -1587,7 +1605,7 @@ function renderDashboard() {
       <div class="kpi-note">${conTarget.length ? Math.round(dentro / conTarget.length * 100) + '%' : ''}</div></div>
     <div class="kpi-card"><div class="kpi-label">Saldo della dieta</div>
       <div class="kpi-value ${saldo > 0 ? 'neg' : 'pos'}">${saldo === 0 ? '0' : (saldo > 0 ? '+' : '−') + fmtKcal(Math.abs(saldo))}</div>
-      <div class="kpi-note">kcal ${saldo > 0 ? 'di troppo' : 'in meno'}</div></div>
+      <div class="kpi-note">kcal ${saldo > 0 ? 'di troppo' : 'in meno'}${piano.restanti ? ' · ' + (piano.alGiorno > 0 ? '−' : '+') + fmtKcal(Math.abs(piano.alGiorno)) + '/giorno' : ''}</div></div>
     <div class="kpi-card"><div class="kpi-label">Vale circa</div>
       <div class="kpi-value ${saldo > 0 ? 'neg' : 'pos'}">${saldo === 0 ? '0' : (saldo > 0 ? '+' : '−') + fmtKg(Math.abs(saldo) / KCAL_PER_KG)}</div>
       <div class="kpi-note">kg rispetto al piano</div></div>
@@ -1636,12 +1654,15 @@ function renderDashboard() {
   h += `</tbody></table></div>
     <div class="note-box mt-12">Dal primo all'ultimo giorno del piano. Per i giorni <strong>futuri</strong> il
       target parte da quello del tratto e si porta dietro lo scarto del giorno prima: sforato ieri, oggi ce n'è
-      di meno; rimasto sotto, oggi ce n'è di più — è il numero fra parentesi. Lo scarto si scarica
-      <strong>tutto sul giorno dopo</strong> e lì si esaurisce, quindi il giorno successivo torna al target del
-      suo tratto: così il conto si controlla a mente, e una cena fuori non insegue per settimane.
-      ⚠️ Da <strong>oggi</strong>, che è ancora da finire, si riporta solo lo <strong>sforo</strong>: quello è
+      di meno; rimasto sotto, ce n'è di più — è il numero fra parentesi.
+      ${piano.restanti ? `Il saldo di <strong>${(saldo > 0 ? '+' : '−') + fmtKcal(Math.abs(saldo))} kcal</strong>
+      è spalmato sui <strong>${piano.restanti} giorni</strong> che restano: ${(piano.alGiorno > 0 ? '−' : '+') + fmtKcal(Math.abs(piano.alGiorno))} kcal
+      al giorno, uguale per tutti.` : ''}
+      Spalmarlo è meglio che scaricarlo tutto sul giorno dopo: uno sforo di 900 kcal renderebbe il giorno
+      seguente impraticabile, e un target che non si può seguire non lo si segue.
+      ⚠️ Da <strong>oggi</strong>, che è ancora da finire, entra solo lo <strong>sforo</strong>: quello è
       già successo e non si disfa. Quel che non hai ancora segnato non è un risparmio, è solo un diario a
-      metà — contarlo darebbe a domani calorie che nessuno si è guadagnato.</div>
+      metà — contarlo regalerebbe calorie che nessuno si è guadagnato.</div>
   </div>`;
 
   setHtml('view-dashboard', h);

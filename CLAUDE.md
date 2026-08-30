@@ -2215,17 +2215,22 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   previsto**: si parte da quello del **tratto** (`targetTrattoAl`, il valore «se stai sul piano»,
   senza recupero) e ci si porta dietro lo **scarto del giorno prima** — sforato ieri, oggi ce n'è
   di meno; rimasto sotto, oggi ce n'è di più. Il riporto si mostra fra parentesi accanto al
-  numero. ⚠️ Lo scarto si scarica **tutto sul giorno dopo e lì si esaurisce**: il secondo giorno
-  futuro torna al target del suo tratto. È la regola scelta perché è l'unica che si controlla a
-  mente («ieri +300, oggi −300»); spalmarlo su tutti i giorni che restano darebbe un numero che
-  nessuno può rifare. Un giorno **senza righe non riporta niente** — non è un digiuno, è un giorno
-  non segnato — ed è la stessa regola del saldo e delle colonne mancanti nel grafico.
-  ⚠️ **Da OGGI si riporta solo lo sforo, mai il risparmio.** Oggi è l'unico giorno «precedente»
-  che può ancora cambiare: alle sette di sera il diario è a metà, e leggere quel che non è ancora
-  stato segnato come un risparmio faceva comparire un target di domani gonfiato di ottocento
-  calorie che nessuno si era guadagnato — un picco visibile nel grafico, corretto in v1.12.1. Lo
-  sforo invece è già successo e non si disfa, quindi quello si riporta subito. È la stessa regola
+  numero. ⚠️ Il saldo accumulato si **spalma su TUTTI i giorni che restano** fino alla fine del
+  piano, e ogni giorno futuro prende la stessa fetta — che quindi non si ricalcola giorno per
+  giorno, così il numero si controlla a mente («900 in 80 giorni, undici al giorno»). Fino alla
+  v1.12.1 si scaricava tutto sul giorno dopo: uno sforo di 900 kcal faceva scendere il giorno
+  seguente a 288 kcal, cioè un target che non si può seguire — e un target che non si può seguire
+  non lo si segue. Un giorno **senza righe non entra nel saldo** — non è un digiuno, è un giorno
+  non segnato — ed è la stessa regola delle colonne mancanti nel grafico.
+  ⚠️ **Da OGGI entra nel saldo solo lo sforo, mai il risparmio.** Oggi è l'unico giorno chiuso a
+  metà: alle sette di sera il diario non è finito, e leggere quel che non è ancora stato segnato
+  come un risparmio regalava calorie che nessuno si era guadagnato — un picco visibile nel
+  grafico, corretto in v1.12.1. Lo sforo invece è già successo e non si disfa. È la stessa regola
   del «non lo so ≠ zero» che governa tutta la pagina: un diario a metà non è un digiuno.
+  ⚠️ **Il saldo del KPI e quello che si spalma sono lo STESSO numero**, calcolato una volta sola
+  in `giorniDellaDieta()` e restituito con la fetta al giorno: due conti separati sarebbero due
+  verità sullo stesso dato — «−932 in meno» in alto e una fetta che non ci corrisponde sotto — e
+  chi legge non saprebbe quale credere.
   ⚠️ Nel futuro il **peso non si trascina**: `pesoAl()` ripiegherebbe sull'ultima pesata nota, e
   una linea piatta fino alla fine del piano sembrerebbe una previsione che nessuno ha fatto.
 - ⚠️ **La tabella dei tratti vive in `tabellaTratti()`, un posto solo**, perché la disegnano due
