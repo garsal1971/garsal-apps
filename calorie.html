@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.7.0</title>
+  <title>Calorie v1.8.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.7.0';
-var BUILD_TIME  = '2026-08-30T11:30:00Z';
+var APP_VERSION = 'v1.8.0';
+var BUILD_TIME  = '2026-08-30T12:30:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -956,13 +956,19 @@ async function ricalcolaGiorno(giorno) {
   await reload();
 }
 
-/* Salva un alimento trovato su Open Food Facts nel catalogo, così la seconda volta è già lì e
-   non serve nessuna ricerca. Se il codice a barre c'è già si aggiorna quella riga: lo stesso
-   prodotto non deve comparire due volte nell'elenco. */
-async function salvaAlimentoOff(a) {
+/* Salva nel catalogo un alimento trovato in rete, così la seconda volta è già lì e non serve
+   nessuna ricerca. Se il codice a barre c'è già si aggiorna quella riga: lo stesso prodotto non
+   deve comparire due volte nell'elenco.
+
+   ⚠️ La fonte si archivia **com'è arrivata** e non riscritta a `'off'`. Fino alla v1.7.0 era una
+   costante: un prodotto USDA finiva in archivio dichiarato Open Food Facts, cioè un dato falso
+   proprio nella colonna che esiste per dire da dove viene un numero — e senza nessun modo, poi,
+   di sapere quali righe correggere. Il CHECK sulla colonna ora ammette anche 'usda'; una fonte
+   che non ammette non arriva fin qui, perché `FONTI_SALVABILI` la ferma prima. */
+async function salvaAlimentoDiRete(a) {
   const esistente = a.barcode ? S.foods.find(f => f.barcode === a.barcode) : null;
   const payload = {
-    name: a.name, brand: a.brand, barcode: a.barcode, source: 'off',
+    name: a.name, brand: a.brand, barcode: a.barcode, source: a.source,
     kcal_100g: a.kcal_100g, proteins_100g: a.proteins_100g, fat_100g: a.fat_100g,
     sat_fat_100g: a.sat_fat_100g, carbs_100g: a.carbs_100g, sugars_100g: a.sugars_100g,
     fiber_100g: a.fiber_100g, salt_100g: a.salt_100g, default_grams: a.default_grams,
@@ -1447,6 +1453,8 @@ const FONTI = {
              spiega: 'Già nel tuo catalogo — l\'hai scritto tu' },
   off:     { icona: '📗', etichetta: 'Catalogo · Open Food Facts', classe: 'off',
              spiega: 'Già nel tuo catalogo — arrivato a suo tempo da Open Food Facts' },
+  usda:    { icona: '📗', etichetta: 'Catalogo · USDA', classe: 'off',
+             spiega: 'Già nel tuo catalogo — arrivato a suo tempo dalla banca dati USDA' },
 };
 const FONTI_RETE = {
   off:  { icona: '🌐', etichetta: 'In rete · Open Food Facts', classe: 'rete',
@@ -1469,16 +1477,18 @@ function fonteDi(a, inRete) {
 }
 
 /* ⚠️ Quali risultati di rete il catalogo può davvero ospitare. Non è una scelta di gusto: la
-   colonna `al_foods.source` ha un CHECK che ammette solo `base`, `off` e `manuale`, quindi un
-   risultato USDA in archivio non ci entra — l'insert verrebbe rifiutato dal database. Finché il
-   CHECK è quello, una voce USDA si può mangiare (i valori si copiano sulla riga del diario, come
-   per ogni altra) ma non si può mettere in dispensa, e la finestra della porzione **lo dice**
-   invece di promettere un salvataggio che non avverrà.
+   colonna `al_foods.source` ha un CHECK, e una fonte che non è fra i suoi valori non entra in
+   archivio: l'insert verrebbe rifiutato dal database. L'elenco qui sotto è quindi lo specchio di
+   quel CHECK e va tenuto uguale — `20260830120100_al_foods_source_usda.sql` ci ha aggiunto
+   'usda', che prima restava fuori.
 
    La costante sta qui, in un posto solo, ed è la stessa che decide il messaggio e il
    salvataggio: due condizioni scritte separatamente sono la finestra che promette una cosa e il
-   pulsante che ne fa un'altra, il giorno che una delle due cambia. */
-const FONTI_SALVABILI = ['off'];
+   pulsante che ne fa un'altra, il giorno che una delle due cambia. Una fonte non salvabile non è
+   un errore — quel prodotto si mangia lo stesso, i valori si copiano sulla riga del diario come
+   per ogni altro — ma la finestra della porzione **lo dice** invece di promettere un salvataggio
+   che non avverrà. */
+const FONTI_SALVABILI = ['off', 'usda'];
 
 const iconaFonte = f => `<span class="fonte-ico" title="${esc(f.spiega)}" aria-hidden="true">${f.icona}</span>`;
 const badgeFonte = f => `<span class="badge badge-src-${f.classe}" title="${esc(f.spiega)}">${esc(f.etichetta)}</span>`;
@@ -1561,7 +1571,7 @@ function renderRisultatiOff() {
     return `<div class="search-note mt-12">${esc(stato || 'Open Food Facts non ha «' + cercato + '».')}
       Puoi scriverlo a mano con <strong>➕ Nuovo alimento</strong>.</div>`;
   }
-  return `<div class="card-title mt-16">🌐 Su Open Food Facts <span class="text-muted text-xs">— non ancora nel tuo catalogo</span></div>
+  return `<div class="card-title mt-16">🌐 Trovati in rete <span class="text-muted text-xs">— non ancora nel tuo catalogo</span></div>
     <div class="search-results">
       ${risultati.map((a, i) => `<div class="search-row" style="cursor:default">
         ${iconaFonte(fonteDi(a, true))}
@@ -2091,14 +2101,31 @@ const GRAMMI_RAPIDI = [30, 50, 100, 125, 150, 200, 250];
 
 /* I multipli della porzione di QUESTO alimento. Vuoto se l'alimento non ne ha una: una porzione
    inventata è peggio di nessuna porzione — chi la vede scritta le crede, e sono le calorie della
-   giornata. */
+   giornata.
+
+   ⚠️ Singolare e plurale sono due colonne (`portion_label`, `portion_label_plural`) e non una
+   parola sola declinata qui: in italiano il plurale non si ricava a regola proprio dove serve di
+   più — uovo → uova — e una parola sbagliata a schermo si legge come un difetto dell'app.
+   Il plurale è facoltativo e ripiega sul singolare (per «bresaola» non serve), e senza nessuna
+   etichetta si torna a «porzione / porzioni», che è vero per qualunque cosa.
+
+   ⚠️ Il mezzo si scrive «½» e non «mezzo/mezza»: il simbolo non ha genere, quindi vale per
+   l'uovo come per la pizza senza dover archiviare anche quello. */
+function etichettaPorzione(alimento, plurale) {
+  const uno = (alimento && alimento.portion_label || '').trim();
+  if (!uno) return plurale ? 'porzioni' : 'porzione';
+  if (!plurale) return uno;
+  return (alimento.portion_label_plural || '').trim() || uno;
+}
+
 function porzioniDi(alimento) {
   const p = num(alimento && alimento.default_grams);
   if (p == null || p <= 0) return [];
+  const uno = etichettaPorzione(alimento, false), tanti = etichettaPorzione(alimento, true);
   return [
-    { etichetta: '½ porzione', g: Math.round(p / 2) },
-    { etichetta: '1 porzione', g: Math.round(p) },
-    { etichetta: '2 porzioni', g: Math.round(p * 2) },
+    { etichetta: '½ ' + uno, g: Math.round(p / 2) },
+    { etichetta: '1 ' + uno, g: Math.round(p) },
+    { etichetta: '2 ' + tanti, g: Math.round(p * 2) },
   ].filter(v => v.g >= 1);
 }
 
@@ -2124,7 +2151,7 @@ function openPorzione(alimento, meal, foodId) {
       <label class="form-label" for="por-g">Peso (grammi)</label>
       <input type="number" class="form-input" id="por-g" step="1" min="1" max="5000" value="${g}" />
       ${porz.length ? `
-        <div class="form-hint">Porzione abituale di questo alimento: <strong>${fmtG(porz[1].g)} g</strong>. Il campo parte da lì.</div>
+        <div class="form-hint">Porzione abituale: <strong>${esc(porz[1].etichetta)}</strong> · ${fmtG(porz[1].g)} g. Il campo parte da lì.</div>
         <div class="hstack gap-6 wrap mt-8">
           ${porz.map(v => `<button class="btn btn-porz btn-sm" data-action="grammi" data-g="${v.g}">${v.etichetta} · ${fmtG(v.g)} g</button>`).join('')}
         </div>
@@ -2203,6 +2230,15 @@ function openFormAlimento(f) {
       <div class="form-group"><label class="form-label" for="f-porz">Porzione abituale (g)</label>
         <input type="number" class="form-input" id="f-porz" step="1" min="0" value="${v.default_grams ?? ''}" /></div>
     </div>
+    <div class="form-row-2">
+      <div class="form-group"><label class="form-label" for="f-porz-nome">Una porzione si chiama…</label>
+        <input class="form-input" id="f-porz-nome" value="${esc(v.portion_label || '')}" placeholder="uovo, fetta, cucchiaio…" /></div>
+      <div class="form-group"><label class="form-label" for="f-porz-nome-pl">…e al plurale</label>
+        <input class="form-input" id="f-porz-nome-pl" value="${esc(v.portion_label_plural || '')}" placeholder="uova, fette, cucchiai…" /></div>
+    </div>
+    <div class="form-hint">Servono a far leggere «1 uovo · 55 g» invece di «1 porzione · 55 g» quando
+      segni quel che mangi. Lasciandoli vuoti si legge «porzione», che va bene per quasi tutto.
+      ⚠️ Il plurale si scrive perché l'italiano non lo ricava a regola: <em>uovo</em> fa <em>uova</em>.</div>
     <div class="form-hint">Una casella lasciata vuota resta vuota e non conta zero: «non lo so» e «zero grammi»
       sono due cose diverse, e uno zero falso farebbe sembrare senza grassi un alimento di cui non si sa niente.</div>
     <div class="modal-footer">
@@ -2215,6 +2251,7 @@ function openFormAlimento(f) {
 
 function leggiFormAlimento() {
   const v = id => { const el = $(id); const n = el && el.value !== '' ? parseFloat(el.value) : null; return (n == null || isNaN(n)) ? null : n; };
+  const t = id => (($(id)?.value) || '').trim() || null;
   const name = ($('f-name')?.value || '').trim();
   const kcal = v('f-kcal');
   if (!name) { alert('Serve un nome.'); return null; }
@@ -2224,6 +2261,10 @@ function leggiFormAlimento() {
     kcal_100g: kcal, proteins_100g: v('f-prot'), fat_100g: v('f-fat'), sat_fat_100g: v('f-sat'),
     carbs_100g: v('f-carb'), sugars_100g: v('f-sug'), fiber_100g: v('f-fib'), salt_100g: v('f-salt'),
     default_grams: v('f-porz'),
+    // ⚠️ Il plurale senza il singolare non si archivia: da solo non comparirebbe mai a schermo
+    // (il ½ e l'1 leggono il singolare) e resterebbe una casella scritta che non fa niente.
+    portion_label: t('f-porz-nome'),
+    portion_label_plural: t('f-porz-nome') ? t('f-porz-nome-pl') : null,
   };
 }
 
@@ -2392,7 +2433,7 @@ async function cercaBarcode(codice) {
     }
     if (perCatalogo) {
       // Dal catalogo si archivia subito: è esattamente quel che si è chiesto scansionandolo.
-      await salvaAlimentoOff(a);
+      await salvaAlimentoDiRete(a);
       showToast(`➕ «${a.name}» aggiunto al tuo catalogo`);
       await reload();
       return;
@@ -2485,7 +2526,7 @@ document.addEventListener('click', async e => {
       if (!foodId && FONTI_SALVABILI.includes(p.alimento.source)) {
         // L'alimento preso dalla rete entra nel catalogo ADESSO, insieme alla riga del diario:
         // la prossima volta è già lì e non serve nessuna ricerca.
-        const salvato = await salvaAlimentoOff(p.alimento);
+        const salvato = await salvaAlimentoDiRete(p.alimento);
         foodId = salvato?.id || null;
         nuovoInCatalogo = !!foodId;
       }
@@ -2591,7 +2632,7 @@ document.addEventListener('click', async e => {
       const a = S.cercaOff.risultati[+btn.dataset.off];
       if (!a) return;
       btn.disabled = true;
-      await salvaAlimentoOff(a);
+      await salvaAlimentoDiRete(a);
       showToast(`➕ «${a.name}» aggiunto al tuo catalogo`);
       // Si toglie dai risultati solo quello aggiunto: gli altri restano, perché da una ricerca
       // sola se ne aggiungono spesso due o tre, e azzerarla costringerebbe a riscriverla ogni
