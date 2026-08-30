@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.9.2</title>
+  <title>Calorie v1.10.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.9.2';
-var BUILD_TIME  = '2026-08-30T16:00:00Z';
+var APP_VERSION = 'v1.10.0';
+var BUILD_TIME  = '2026-08-30T17:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -998,6 +998,35 @@ async function aggiungiAlDiario({ giorno, meal, alimento, grammi, foodId }) {
   }
 }
 
+/* Ricopia in un giorno tutte le righe del giorno prima.
+
+   ⚠️ Si copiano i valori CONGELATI sulla riga di partenza, non quelli di `al_foods` di adesso:
+   la riga del diario è il dato, l'alimento è solo da dove veniva. Così la copia funziona anche
+   per un alimento cancellato nel frattempo (`food_id` è già NULL e i valori sono lì), e non
+   cambia di nascosto perché qualcuno ha corretto una scheda ieri sera.
+
+   `times_used` non si tocca: è il contatore che ordina i «più usati» nella ricerca, e un solo
+   tocco che lo alza di cinque lo renderebbe la classifica di chi ricopia, non di chi mangia. */
+async function ricopiaDalGiornoPrima(giorno) {
+  const prima = piuGiorni(giorno, -1);
+  const righe = righeDelGiorno(prima);
+  if (!righe.length) return 0;
+  const gia = righeDelGiorno(giorno).length;
+  const conferma = `Ricopio le ${righe.length} righe del ${fmtData(prima)} nel ${fmtData(giorno)}?`
+    + (gia ? `\n\nLe ${gia} già segnate restano dove sono: queste si aggiungono.` : '');
+  if (!confirm(conferma)) return 0;
+
+  await congelaGiorno(giorno);
+  const nuove = righe.map(r => {
+    const n = { day: giorno, meal: r.meal, food_id: r.food_id || null,
+                name: r.name, brand: r.brand || null, grams: r.grams };
+    CAMPI_NUTRIENTI.forEach(c => { n[c] = num(r[c]); });
+    return n;
+  });
+  await sbIns('al_log', nuove);
+  return nuove.length;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    CONTI SULLE RIGHE DEL DIARIO
    ═══════════════════════════════════════════════════════════════ */
@@ -1009,6 +1038,23 @@ const kcalDi = r => perRiga(r, 'kcal_100g') || 0;
 
 function righeDelGiorno(giorno) {
   return S.logs.filter(r => r.day === giorno);
+}
+
+/* Il giorno più indietro a cui il diario si può spostare.
+
+   ⚠️ Prima non c'era nessun fondo: il ‹ scendeva all'infinito, e già dal 121° giorno indietro
+   ogni giornata compariva vuota — non perché lo fosse, ma perché le righe non erano state
+   caricate. Un archivio che sembra svuotarsi da solo è peggio di un pulsante spento.
+
+   È il **primo giorno della dieta**, cioè l'inizio dell'obiettivo attivo: prima di quello non
+   c'è niente da segnare, perché il piano non era ancora cominciato. Il `max` con la finestra di
+   caricamento è la garanzia che non si finisca mai su un giorno di cui non si hanno le righe;
+   con una dieta più corta di `GIORNI_STORICO` — che è il caso normale — non morde mai, e senza
+   obiettivo attivo resta la sola finestra, che è tutto quel che si sa. */
+function primoGiornoDiario() {
+  const finestra = piuGiorni(oggiStr(), -GIORNI_STORICO);
+  const inizio = S.objective?.start_date ? String(S.objective.start_date).slice(0, 10) : null;
+  return (inizio && inizio > finestra) ? inizio : finestra;
 }
 function totaliDi(righe) {
   const t = { kcal: 0, proteine: 0, grassi: 0, saturi: 0, carbo: 0, zuccheri: 0, fibre: 0, sale: 0 };
@@ -1063,6 +1109,7 @@ function renderDiario() {
   const oggi = oggiStr();
   const t = targetDelGiorno(giorno);
   const righe = righeDelGiorno(giorno);
+  const primo = primoGiornoDiario();
   const tot = totaliDi(righe);
   const mangiate = tot.kcal;
   const restano = t.ok ? t.kcal - mangiate : null;
@@ -1077,8 +1124,8 @@ function renderDiario() {
       <div class="page-sub">${esc(fmtData(giorno))}${giorno === oggi ? ' · oggi' : ''}</div>
     </div>
     <div class="day-nav">
-      <button class="btn btn-outline btn-sm" data-action="giorno-prec">‹</button>
-      <input type="date" class="form-input" id="day-picker" value="${giorno}" max="${oggi}" />
+      <button class="btn btn-outline btn-sm" data-action="giorno-prec" ${giorno <= primo ? 'disabled' : ''}>‹</button>
+      <input type="date" class="form-input" id="day-picker" value="${giorno}" min="${primo}" max="${oggi}" />
       <button class="btn btn-outline btn-sm" data-action="giorno-succ" ${giorno >= oggi ? 'disabled' : ''}>›</button>
       ${giorno !== oggi ? '<button class="btn btn-outline btn-sm" data-action="giorno-oggi">Oggi</button>' : ''}
     </div>
@@ -1119,8 +1166,19 @@ function renderDiario() {
   </div>`;
 
   // ── I pasti ──
+  /* ⚠️ «Ricopia da ieri» compare solo se ieri ha davvero qualcosa: un pulsante che c'è sempre e
+     quasi sempre non fa niente si smette di guardarlo. Il conteggio sta sul pulsante perché è
+     l'unica cosa che serve sapere prima di premerlo. Rimane offerto anche se oggi ha già delle
+     righe — mangiare due volte la stessa cosa capita — ma allora AGGIUNGE, e la conferma lo dice
+     invece di lasciarlo scoprire dal totale. */
+  const daIeri = righeDelGiorno(piuGiorni(giorno, -1));
   h += '<div class="card-header-row mt-16"><div class="card-title">I pasti</div>'
-     + `<button class="btn btn-primary btn-sm" data-action="aggiungi" data-meal="${pastoDellOra()}">➕ Aggiungi alimento</button></div>`;
+     + '<div class="hstack gap-6 wrap">'
+     + (daIeri.length
+        ? `<button class="btn btn-outline btn-sm" data-action="ricopia-ieri">📋 Ricopia da ieri (${daIeri.length})</button>`
+        : '')
+     + `<button class="btn btn-primary btn-sm" data-action="aggiungi" data-meal="${pastoDellOra()}">➕ Aggiungi alimento</button>`
+     + '</div></div>';
 
   pastiDelGiorno(giorno).forEach(p => {
     const rp = righe.filter(r => r.meal === p.id);
@@ -2595,7 +2653,19 @@ document.addEventListener('click', async e => {
 
     else if (action === 'close-modal') { closeModal(); }
 
-    else if (action === 'giorno-prec') { S.day = piuGiorni(S.day, -1); render(); }
+    else if (action === 'giorno-prec') {
+      // Il fondo si rispetta anche qui e non solo nel disegno: il pulsante spento è un
+      // suggerimento, non una garanzia — da tastiera ci si arriva lo stesso.
+      const g = piuGiorni(S.day, -1);
+      if (g >= primoGiornoDiario()) { S.day = g; render(); }
+    }
+    else if (action === 'ricopia-ieri') {
+      btn.disabled = true;
+      const n = await ricopiaDalGiornoPrima(S.day);
+      if (!n) { btn.disabled = false; return; }
+      showToast(`📋 Ricopiate ${n} ${n === 1 ? 'riga' : 'righe'}`);
+      await reload();
+    }
     else if (action === 'giorno-succ') { if (S.day < oggiStr()) { S.day = piuGiorni(S.day, 1); render(); } }
     else if (action === 'giorno-oggi') { S.day = oggiStr(); render(); }
     else if (action === 'vai-giorno') { S.day = btn.dataset.day; navigate('diario'); }
@@ -2842,7 +2912,13 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'imp-file') { if (el.files?.[0]) leggiFileTabella(el.files[0]); return; }
-  if (el.id === 'day-picker') { S.day = el.value || oggiStr(); render(); }
+  if (el.id === 'day-picker') {
+    // `min` e `max` sull'input li rispetta il calendario del browser, non chi scrive la data a
+    // mano nel campo: la stretta vera si fa qui.
+    const g = el.value || oggiStr();
+    S.day = g < primoGiornoDiario() ? primoGiornoDiario() : (g > oggiStr() ? oggiStr() : g);
+    render();
+  }
   else if (el.matches('[data-action="periodo"]')) { S.periodo = parseInt(el.value, 10) || 30; renderAndamento(); }
 });
 
