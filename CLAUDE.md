@@ -2196,9 +2196,40 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
 - **Il riquadro spiega sempre da dove esce il target**, per intero (basale × attività − deficit,
   coi chili che mancano e i giorni che restano): un numero calcolato da quattro grandezze che
   nessuno vede è un numero di cui non ci si fida, e alla prima sorpresa si smette di seguirlo.
-- Quattro schede: 📓 **Diario** (giorno per giorno, coi pasti configurati), 📈 **Andamento** (colonne
-  delle calorie contro la linea del target, più peso e curva del piano), 🍎 **Alimenti**,
-  ⚙️ **Impostazioni** (dati anagrafici, attività, pasti, stima delle calorie, obiettivo).
+- Quattro schede: 📊 **Dashboard** (la prima che si apre), 📓 **Diario** (giorno per giorno, coi
+  pasti configurati), 🍎 **Alimenti**, ⚙️ **Impostazioni** (dati anagrafici, attività, pasti, stima
+  delle calorie, obiettivo). ⚠️ **📈 Andamento non esiste più**: il suo contenuto — i quattro KPI,
+  le colonne delle calorie contro la linea del target, il peso con la curva del piano e il giorno
+  per giorno — è dentro la Dashboard.
+- La **📊 Dashboard** è in cinque sezioni, nell'ordine delle domande che ci si fa aprendo l'app:
+  ⚖️ **le pesate** (peso minimo di oggi, peso che il piano chiede oggi, quanto manca al peso
+  finale), 🔥 **le calorie di oggi** (target, mangiate, restano), 📐 **le calorie per tratto**,
+  📈 **come sta andando**, e il **giorno per giorno**.
+  ⚠️ **Tutto qui dentro copre l'arco della dieta, non una finestra di N giorni**: il selettore
+  «ultimi 30 giorni» dell'Andamento è sparito perché il periodo *è* il piano, e due archi diversi
+  sulla stessa pagina sarebbero due risposte diverse alla stessa domanda. `arcoDellaDieta()` tira
+  però il primo giorno in avanti fino alla finestra di caricamento, per la stessa ragione del
+  fondo del diario, e quando lo fa la pagina lo dice: una riga «niente segnato» per un giorno di
+  cui non si sono lette le righe è una bugia.
+- ⚠️ **Il giorno per giorno arriva fino alla FINE del piano, e i giorni futuri hanno un target
+  previsto**: si parte da quello del **tratto** (`targetTrattoAl`, il valore «se stai sul piano»,
+  senza recupero) e ci si porta dietro lo **scarto del giorno prima** — sforato ieri, oggi ce n'è
+  di meno; rimasto sotto, oggi ce n'è di più. Il riporto si mostra fra parentesi accanto al
+  numero. ⚠️ Lo scarto si scarica **tutto sul giorno dopo e lì si esaurisce**: il secondo giorno
+  futuro torna al target del suo tratto. È la regola scelta perché è l'unica che si controlla a
+  mente («ieri +300, oggi −300»); spalmarlo su tutti i giorni che restano darebbe un numero che
+  nessuno può rifare. Un giorno **senza righe non riporta niente** — non è un digiuno, è un giorno
+  non segnato — ed è la stessa regola del saldo e delle colonne mancanti nel grafico.
+  ⚠️ Nel futuro il **peso non si trascina**: `pesoAl()` ripiegherebbe sull'ultima pesata nota, e
+  una linea piatta fino alla fine del piano sembrerebbe una previsione che nessuno ha fatto.
+- ⚠️ **La tabella dei tratti vive in `tabellaTratti()`, un posto solo**, perché la disegnano due
+  schermate (Dashboard e Impostazioni): due copie sarebbero due tabelle che divergono il giorno
+  che una colonna cambia — lo stesso difetto della vista Spese Famiglia duplicata in due pagine.
+- ⚠️ **`drawChart()` sopravvive a Chart.js che non arriva**: la libreria viene dal CDN, e prima
+  l'eccezione partiva e basta. Era sopportabile con i grafici in una pagina secondaria; ora sono
+  nella Dashboard, cioè la prima cosa che si apre, e un'eccezione lì fermerebbe il disegno di
+  tutto quel che viene dopo. Al posto del grafico si scrive perché manca: i numeri stanno già
+  tutti nelle tabelle, quindi senza la libreria si perde la forma, non il dato.
 - ⚠️ **Il diario non va più indietro del primo giorno della dieta** (`primoGiornoDiario()`): il ‹
   si spegne, l'input date porta il `min`, e la stretta è ripetuta nei gestori perché il pulsante
   spento è un suggerimento e da tastiera ci si arriva lo stesso. Prima il ‹ scendeva all'infinito
