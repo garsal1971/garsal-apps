@@ -2266,6 +2266,29 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   dispensa prima di mangiarlo. Aggiungendone uno gli altri risultati **restano** — da una ricerca
   sola se ne prendono spesso due o tre, e azzerarla costerebbe una chiamata in più a OFF, che le
   ricerche le conta.
+- ⚠️ **Da dove viene un alimento si vede prima di sceglierlo, e la distinzione che conta è una
+  sola**: è già nel tuo catalogo, oppure sta arrivando adesso da una banca dati pubblica? Il primo
+  è un dato tuo, già guardato e correggibile; il secondo l'ha scritto qualcun altro, può mancare,
+  può essere sbagliato e quando lo scegli entra in archivio. La porta l'**icona in testa alla
+  riga** (📗 catalogo / 🌐 in rete), che è dove cade l'occhio per primo, e il **colore del badge**
+  la ripete (ambra per la rete, l'unico colore che nessuna fonte interna usa); il badge dice
+  invece *quale* fonte, che è l'informazione di secondo livello. Nell'elenco dei risultati le due
+  provenienze stanno sotto **due intestazioni appiccicate in cima** (`.search-group`) e non
+  concatenate: una fila unica in cui il catalogo sfuma nella rete le fa sembrare la stessa cosa.
+  Fino alla v1.5.0 la fonte era una parola in coda alla riga dei valori, dopo le calorie e con lo
+  stesso grigio: si leggeva solo andandola a cercare.
+  ⚠️ Il nome della fonte di rete si legge da **`a.source`** e non è scritto a mano: `al-food-search`
+  risponde `'off'` o `'usda'`, e la stringa fissa «Open Food Facts» attribuiva a Open Food Facts
+  anche i risultati USDA — cioè diceva il falso proprio nel punto che esiste per dire da dove
+  viene un numero. Tutto passa da `fonteDi()` / `iconaFonte()` / `badgeFonte()`, in un posto solo.
+- ⚠️ **Un risultato USDA si può mangiare ma non si può mettere in dispensa**: il CHECK di
+  `al_foods.source` ammette solo `base`, `off` e `manuale`, quindi quell'insert il database lo
+  rifiuterebbe. `FONTI_SALVABILI` è la costante che lo dice, e **decide insieme il messaggio e il
+  salvataggio**: la finestra della porzione scrive «lo aggiungo al catalogo» solo dove succede
+  davvero, e altrove dice che i valori restano sulla sola riga del diario. Due condizioni scritte
+  separatamente sono la finestra che promette una cosa e il pulsante che ne fa un'altra, il giorno
+  che una delle due cambia. Per accogliere davvero l'USDA serve una migration che allarghi il
+  CHECK — finché non c'è, quel prodotto va ricercato ogni volta.
 - Il **codice a barre** porta a due posti diversi a seconda di dove si parte (`S.scanPer`): dal
   diario finisce sulla porzione, dal catalogo archivia la voce e basta. La finestra dello scanner
   è la stessa.
