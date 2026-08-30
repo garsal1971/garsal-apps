@@ -2289,6 +2289,18 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   separatamente sono la finestra che promette una cosa e il pulsante che ne fa un'altra, il giorno
   che una delle due cambia. Per accogliere davvero l'USDA serve una migration che allarghi il
   CHECK — finché non c'è, quel prodotto va ricercato ogni volta.
+- ⚠️ **La porzione abituale si vede e si preme, non è più un campo precompilato in silenzio.**
+  `al_foods.default_grams` (un uovo 55 g, una pizza 300 g, un cucchiaio d'olio 10 g) c'è nel
+  catalogo da sempre, e la finestra della porzione ci si apriva sopra senza dirlo: il campo
+  arrivava già scritto «55» e niente diceva che quei 55 g sono un uovo. Un numero che compare da
+  solo si legge come un valore di ripiego, quindi lo si riscriveva a mano ogni volta — cioè
+  esattamente il lavoro che la colonna esiste per togliere. Ora la finestra scrive la porzione e
+  offre **½ / 1 / 2** (`porzioniDi()`): sono i tagli che si usano davvero — «due uova», «mezza
+  pizza» — e una scaletta di multipli più fitta chiederebbe di leggere invece di far scegliere.
+  ⚠️ La **scaletta fissa** (`GRAMMI_RAPIDI`) si toglie i valori che le porzioni già coprono: due
+  pulsanti «150 g» uno accanto all'altro sembrano due scelte diverse e non lo sono. Un alimento
+  **senza** porzione non se ne inventa una — una porzione inventata chi la legge se la crede, e
+  sono le calorie della giornata: si parte da 100 g e la finestra dice dove scriverla.
 - Il **codice a barre** porta a due posti diversi a seconda di dove si parte (`S.scanPer`): dal
   diario finisce sulla porzione, dal catalogo archivia la voce e basta. La finestra dello scanner
   è la stessa.
