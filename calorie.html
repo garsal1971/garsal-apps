@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.10.0</title>
+  <title>Calorie v1.11.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.10.0';
-var BUILD_TIME  = '2026-08-30T17:00:00Z';
+var APP_VERSION = 'v1.11.0';
+var BUILD_TIME  = '2026-08-30T18:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2213,15 +2213,20 @@ function openPorzione(alimento, meal, foodId) {
     </div>
     <div class="form-group">
       <label class="form-label" for="por-g">Peso (grammi)</label>
-      <input type="number" class="form-input" id="por-g" step="1" min="1" max="5000" value="${g}" />
+      <div class="hstack gap-8">
+        <input type="number" class="form-input grow" id="por-g" step="1" min="1" max="5000" value="${g}" />
+        <button class="btn btn-outline btn-sm" data-action="azzera-grammi" title="Azzera il peso">↺</button>
+      </div>
       ${porz.length ? `
-        <div class="form-hint">Porzione abituale: <strong>${esc(porz[1].etichetta)}</strong> · ${fmtG(porz[1].g)} g. Il campo parte da lì.</div>
+        <div class="form-hint">Porzione abituale: <strong>${esc(porz[1].etichetta)}</strong> · ${fmtG(porz[1].g)} g — il campo parte da lì.
+          Ogni pulsante <strong>si somma</strong> a quel che c'è scritto; ↺ azzera.</div>
         <div class="hstack gap-6 wrap mt-8">
           ${porz.map(v => `<button class="btn btn-porz btn-sm" data-action="grammi" data-g="${v.g}">${v.etichetta} · ${fmtG(v.g)} g</button>`).join('')}
         </div>
         <div class="form-hint mt-8">Oppure a peso:</div>` : `
         <div class="form-hint">Per questo alimento non è scritta nessuna porzione abituale: parto da 100 g.
-          La si scrive una volta sola da 🍎 Alimenti → ✏️, e da lì in poi la trovi qui.</div>`}
+          La si scrive una volta sola da 🍎 Alimenti → ✏️, e da lì in poi la trovi qui.
+          Ogni pulsante <strong>si somma</strong> a quel che c'è scritto; ↺ azzera.</div>`}
       <div class="hstack gap-6 wrap mt-8">
         ${rapidi.map(v => `<button class="btn btn-outline btn-sm" data-action="grammi" data-g="${v}">${v} g</button>`).join('')}
       </div>
@@ -2694,8 +2699,24 @@ document.addEventListener('click', async e => {
       }
     }
 
+    /* ⚠️ Il pulsante SOMMA invece di sostituire: tre uova si segnano toccando «1 uovo» tre volte,
+       e non c'è un pulsante per ogni quantità che si possa voler mangiare. Sostituendo, toccarlo
+       una seconda volta non faceva niente di visibile — sembrava che il tocco non fosse passato.
+       Il campo parte comunque dalla porzione abituale, che è il caso di gran lunga più frequente
+       e non costa nessun tocco; l'↺ è lì per ricominciare da zero quando si compone. */
     else if (action === 'grammi') {
-      const i = $('por-g'); if (i) { i.value = btn.dataset.g; aggiornaAnteprimaPorzione(); }
+      const i = $('por-g');
+      if (i) {
+        const ora = parseFloat(i.value);
+        // Un decimale: gli scalini sono interi, ma il campo si può scrivere a mano (12,5 g di
+        // olio) e senza l'arrotondamento la somma tirerebbe fuori le code binarie di JavaScript.
+        i.value = Math.round(((isNaN(ora) ? 0 : ora) + (parseFloat(btn.dataset.g) || 0)) * 10) / 10;
+        aggiornaAnteprimaPorzione();
+      }
+    }
+    else if (action === 'azzera-grammi') {
+      const i = $('por-g');
+      if (i) { i.value = ''; i.focus(); aggiornaAnteprimaPorzione(); }
     }
 
     else if (action === 'conferma-porzione') {
