@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.11.0</title>
+  <title>Calorie v1.12.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -237,8 +237,8 @@
   <div id="mobile-nav-overlay"></div>
   <div class="app-layout">
     <nav class="sidebar" id="sidebar">
-      <button class="nav-item active" data-action="nav" data-view="diario">📓 Diario</button>
-      <button class="nav-item" data-action="nav" data-view="andamento">📈 Andamento</button>
+      <button class="nav-item active" data-action="nav" data-view="dashboard">📊 Dashboard</button>
+      <button class="nav-item" data-action="nav" data-view="diario">📓 Diario</button>
       <button class="nav-item" data-action="nav" data-view="alimenti">🍎 Alimenti</button>
       <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
       <div class="nav-sep"></div>
@@ -246,8 +246,8 @@
       <a class="nav-item" href="/" style="text-decoration:none">🏠 AppSphere</a>
     </nav>
     <main class="app-main">
-      <div id="view-diario" class="view active"></div>
-      <div id="view-andamento" class="view"></div>
+      <div id="view-dashboard" class="view active"></div>
+      <div id="view-diario" class="view"></div>
       <div id="view-alimenti" class="view"></div>
       <div id="view-impostazioni" class="view"></div>
     </main>
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.11.0';
-var BUILD_TIME  = '2026-08-30T18:00:00Z';
+var APP_VERSION = 'v1.12.0';
+var BUILD_TIME  = '2026-08-30T19:30:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -399,7 +399,7 @@ const ATTIVITA = [
 ];
 
 const S = {
-  session: null, view: 'diario',
+  session: null, view: 'dashboard',
   // ⚠️ Il profilo viene da DUE righe e non da una: data di nascita, altezza e sesso stanno in
   // cm_profile — la scheda che si apre da AppSphere → ☰ → 👤 Profilo, condivisa con le altre app —
   // e qui si LEGGONO soltanto. Chiedere di nuovo l'altezza in ogni app che ne ha bisogno vuol dire
@@ -416,7 +416,6 @@ const S = {
   day: null,              // il giorno che si sta guardando
   pasti: null,            // i pasti configurati: [{id, label}] — null = mai configurati
   charts: {},
-  periodo: 30,            // giorni mostrati in Andamento
   ricerca: { q: '', locali: [], off: [], stato: '' },
   cercaAlimenti: '',
   // La ricerca su Open Food Facts fatta dalla pagina 🍎 Alimenti: quel che il catalogo non ha
@@ -720,6 +719,46 @@ function calcolaTarget(giorno) {
    nel solo tratto in corso renderebbe una riga incomparabile con le altre, e nei tratti futuri
    sarebbe un'invenzione — lo scarto di domani non si conosce. Il conto vero di oggi, recupero
    compreso, sta nel riquadro del Diario. */
+/* La tabella dei tratti del piano. ⚠️ Vive in un posto solo perché la disegnano DUE schermate —
+   📊 Dashboard e ⚙️ Impostazioni: due copie sarebbero due tabelle che divergono il giorno che una
+   colonna cambia, ed è lo stesso difetto della vista Spese Famiglia duplicata in due pagine.
+
+   ⚠️ L'ordine delle colonne è quello di lettura, non quello del conto: sul telefono la tabella
+   scorre dentro il suo riquadro, e quel che resta fuori è quel che sta a destra. Il TARGET — la
+   risposta per cui questa tabella esiste — viene subito dopo i pesi; ritmo, deficit e consumo
+   sono la spiegazione e possono uscire dal bordo. Per la stessa ragione kg e giorni non hanno
+   una colonna loro: si ricavano dalle due che li contengono già, e stanno lì sotto in piccolo. */
+function tabellaTratti(tratti) {
+  if (!tratti.length) return '';
+  let h = `<div class="table-wrap"><table class="table"><thead><tr>
+    <th>Tratto</th><th>Periodo</th><th class="text-right">Peso</th><th class="text-right">Target</th>
+    <th class="text-right">Ritmo</th><th class="text-right">Deficit</th><th class="text-right">Consumo</th>
+  </tr></thead><tbody>`;
+  tratti.forEach(t => {
+    // Il tratto in corso si evidenzia, quelli già passati si sbiadiscono: la riga che serve
+    // adesso deve trovarsi senza contare le righe.
+    const stile = t.corrente ? ' style="background:#f0fdf4"' : t.passato ? ' class="text-muted"' : '';
+    h += `<tr${stile}>
+      <td class="nowrap">${t.corrente ? '▶ ' : ''}${t.numero}<span class="text-muted">/${tratti.length}</span></td>
+      <td class="nowrap"><div class="text-sm">${esc(fmtDataBreve(t.inizio))} → ${esc(fmtDataBreve(t.fine))}</div>
+        <div class="text-xs text-muted">${t.giorni} giorni</div></td>
+      <td class="text-right nowrap"><div class="mono">${fmtKg(t.pesoInizio)} → ${fmtKg(t.pesoFine)}</div>
+        <div class="text-xs text-muted mono">${t.kg > 0 ? '−' : t.kg < 0 ? '+' : ''}${fmtKg(Math.abs(t.kg))} kg</div></td>
+      <td class="text-right mono fw-700 nowrap">${fmtKcal(t.target)}</td>
+      <td class="text-right mono nowrap">${fmtRitmo(t.kgAlGiorno * 7)} kg/sett</td>
+      <td class="text-right mono neg nowrap">${t.deficit > 0 ? '−' + fmtKcal(t.deficit) : fmtKcal(0)}</td>
+      <td class="text-right mono text-muted nowrap">${fmtKcal(t.tdee)}</td>
+    </tr>`;
+  });
+  return h + `</tbody></table></div>
+    <div class="note-box mt-12">Ogni tratto è calcolato sul <strong>peso medio che il piano prevede lì</strong>,
+      non su quello di oggi: il metabolismo basale cala col peso, quindi a parità di ritmo l'ultimo tratto
+      chiede meno calorie del primo, e usare il peso di oggi darebbe numeri troppo alti verso la fine.
+      Sono i valori <strong>se stai sul piano</strong>: il recupero dello scarto non c'è —
+      nei tratti futuri sarebbe un'invenzione, perché lo scarto di domani non si conosce.
+      Il conto di oggi per intero, recupero compreso, è nel riquadro del 📓 Diario.</div>`;
+}
+
 function stimaTratti() {
   const ms = S.milestones;
   const p = S.profile;
@@ -1329,69 +1368,216 @@ function disegnaMacro(tot) {
   });
 }
 
+/* ⚠️ Chart.js arriva dal CDN, e se non arriva `Chart` non esiste. Prima l'eccezione partiva e
+   basta: era sopportabile finché i grafici stavano in una pagina secondaria, ma ora sono nella
+   📊 Dashboard, cioè la prima cosa che si apre — e un'eccezione lì ferma il disegno di tutto
+   quel che viene dopo. Al posto del grafico si scrive perché manca: i numeri della pagina sono
+   già tutti nelle tabelle, quindi senza una libreria si perde la forma, non il dato. */
 function drawChart(id, config) {
   if (S.charts[id]) { S.charts[id].destroy(); delete S.charts[id]; }
   const canvas = $(id);
   if (!canvas) return;
+  if (typeof Chart === 'undefined') {
+    canvas.insertAdjacentHTML('afterend',
+      '<div class="note-box is-warn">Il grafico non si può disegnare: la libreria non è stata caricata '
+      + '(serve la rete). I numeri ci sono lo stesso, nella tabella qui sotto.</div>');
+    canvas.remove();
+    return;
+  }
   S.charts[id] = new Chart(canvas.getContext('2d'), config);
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   VISTA: ANDAMENTO
-   ═══════════════════════════════════════════════════════════════ */
 
 // I giorni del periodo, dal più vecchio a oggi. Si parte dall'elenco dei GIORNI e non da quello
 // delle righe del diario: un giorno saltato deve vedersi come una colonna vuota, non sparire
 // dal grafico facendo sembrare che il diario sia stato tenuto tutti i giorni.
-function giorniDelPeriodo() {
+/* ── L'arco della dieta ────────────────────────────────────────────────────
+   Il primo e l'ultimo giorno del piano: i traguardi quando ci sono (sono loro a disegnare la
+   curva), altrimenti le date dell'obiettivo. ⚠️ Il primo è tirato in avanti fino alla finestra
+   di caricamento, per la stessa ragione del fondo del diario: una riga che dice «niente segnato»
+   per un giorno di cui non si sono lette le righe è una bugia, e sembra un archivio che si
+   svuota da solo. Senza obiettivo attivo non c'è nessuna dieta e la dashboard lo dice. */
+function arcoDellaDieta() {
+  const ob = S.objective;
+  if (!ob) return null;
+  const ms = S.milestones;
+  const primo = (ms && ms.length ? ms[0].date : ob.start_date);
+  const ultimo = (ms && ms.length >= 2 ? ms[ms.length - 1].date : ob.end_date);
+  if (!primo || !ultimo) return null;
+  const p = String(primo).slice(0, 10), u = String(ultimo).slice(0, 10);
+  const finestra = piuGiorni(oggiStr(), -GIORNI_STORICO);
+  return { primo: p < finestra ? finestra : p, ultimo: u, primoVero: p, tagliato: p < finestra };
+}
+
+/* Il target «se stai sul piano» del tratto che contiene un giorno — quello della tabella dei
+   tratti, calcolato sul peso medio che il piano prevede lì e SENZA il recupero dello scarto.
+   È la base da cui parte il target proiettato di un giorno futuro. */
+function targetTrattoAl(giorno, tratti) {
+  const tt = tratti || stimaTratti();
+  if (!tt.length) return null;
+  const t = tt.find(x => giorno >= x.inizio && giorno < x.fine) || (giorno >= tt[tt.length - 1].fine ? tt[tt.length - 1] : null);
+  return t ? t.target : null;
+}
+
+/* Giorno per giorno dal primo all'ultimo del piano.
+
+   ⚠️ Per i giorni FUTURI il target non è quello del tratto e basta: ci si porta dietro lo scarto
+   del giorno prima — mangiato meno del target, domani se ne può avere di più; sforato, domani se
+   ne ha di meno. Lo scarto si scarica **tutto sul giorno dopo** e lì si esaurisce: non si somma
+   all'infinito, quindi il secondo giorno futuro torna al target del suo tratto. È la regola
+   scelta perché è l'unica che si può controllare a mente — «ieri +300, oggi −300».
+
+   ⚠️ Un giorno senza righe non ha scarto e non riporta niente: non è un giorno di digiuno, è un
+   giorno non segnato. È la stessa regola del saldo e delle colonne mancanti nel grafico. */
+function giorniDellaDieta() {
+  const arco = arcoDellaDieta();
+  if (!arco) return [];
   const oggi = oggiStr();
+  const tratti = stimaTratti();
   const out = [];
-  for (let i = S.periodo - 1; i >= 0; i--) {
-    const g = piuGiorni(oggi, -i);
+  let scartoPrec = null;
+  for (let g = arco.primo; g <= arco.ultimo; g = piuGiorni(g, 1)) {
     const righe = righeDelGiorno(g);
-    const t = targetDelGiorno(g);
+    const kcal = righe.length ? totaliDi(righe).kcal : null;
+    const futuro = g > oggi;
+    let target = null, riporto = null;
+    if (!futuro) {
+      const t = targetDelGiorno(g);
+      target = t.ok ? t.kcal : null;
+    } else {
+      const base = targetTrattoAl(g, tratti);
+      if (base != null) {
+        riporto = scartoPrec == null ? 0 : -scartoPrec;   // sforato ieri ⇒ oggi meno
+        target = Math.round(base + riporto);
+      }
+    }
+    const scarto = (kcal != null && target != null) ? kcal - target : null;
     out.push({
-      giorno: g,
-      kcal: righe.length ? totaliDi(righe).kcal : null,   // null = non segnato, ≠ zero calorie
-      target: t.ok ? t.kcal : null,
-      peso: pesoAl(g),
+      giorno: g, kcal, target, scarto, futuro, riporto,
+      oggi: g === oggi,
+      // ⚠️ Nel futuro il peso non si trascina: `pesoAl` ripiega sull'ultima pesata nota, e una
+      // linea piatta fino a novembre sembrerebbe una previsione che nessuno ha fatto.
+      peso: futuro ? null : pesoAl(g),
       pesoPiano: pesoPianoAl(g),
       righe: righe.length,
     });
+    scartoPrec = scarto;
   }
   return out;
 }
 
-function renderAndamento() {
-  const gg = giorniDelPeriodo();
-  const segnati = gg.filter(g => g.kcal != null);
-  const conTarget = segnati.filter(g => g.target != null);
-  const media = segnati.length ? segnati.reduce((s, g) => s + g.kcal, 0) / segnati.length : null;
-  const dentro = conTarget.filter(g => g.kcal <= g.target).length;
-  // Il saldo è la somma degli scarti sui soli giorni SEGNATI: sommarci i giorni non segnati come
-  // se fossero a zero calorie darebbe un deficit enorme e falso — un giorno non segnato non è un
-  // giorno di digiuno.
-  const saldo = conTarget.reduce((s, g) => s + (g.kcal - g.target), 0);
+/* ═══════════════════════════════════════════════════════════════
+   VISTA: DASHBOARD — la prima pagina
+   ═══════════════════════════════════════════════════════════════
+   Cinque sezioni, in quest'ordine: le pesate, le calorie di oggi, i tratti del piano, come sta
+   andando (quel che era la pagina 📈 Andamento, che non esiste più), e il giorno per giorno
+   dell'intera dieta. L'ordine è quello delle domande che ci si fa aprendo l'app: quanto peso,
+   quanto posso mangiare oggi, cosa chiede il piano, come sta andando, e cosa è successo.
+
+   ⚠️ Tutto qui dentro copre l'ARCO DELLA DIETA, non una finestra di N giorni: il selettore
+   «ultimi 30 giorni» dell'Andamento è sparito perché il periodo è il piano. Due archi diversi
+   sulla stessa pagina — i grafici a 30 giorni e la tabella su tutta la dieta — sarebbero due
+   risposte diverse alla stessa domanda. */
+function renderDashboard() {
+  const oggi = oggiStr();
+  const ob = S.objective;
+  const arco = arcoDellaDieta();
+  const gg = giorniDellaDieta();
 
   let h = `
   <div class="view-header">
     <div>
-      <div class="page-title">📈 Andamento</div>
-      <div class="page-sub">Quanto si è mangiato contro quanto si doveva</div>
+      <div class="page-title">📊 Dashboard</div>
+      <div class="page-sub">${ob ? esc(ob.objective_name || 'la dieta') + (arco ? ' · ' + esc(fmtDataBreve(arco.primoVero)) + ' → ' + esc(fmtDataBreve(arco.ultimo)) : '') : 'nessun obiettivo attivo'}</div>
     </div>
-    <select class="form-input form-select" data-action="periodo" style="width:auto">
-      ${[14, 30, 60, 90].map(n => `<option value="${n}" ${S.periodo === n ? 'selected' : ''}>Ultimi ${n} giorni</option>`).join('')}
-    </select>
   </div>`;
 
-  h += `<div class="kpi-grid">
+  if (!ob) {
+    h += `<div class="note-box is-warn">Non c'è nessun obiettivo attivo, quindi non c'è nessuna dieta da
+      seguire: il target è il semplice mantenimento del peso, e questa pagina non ha un piano da
+      raccontare. L'obiettivo si crea in <a href="weight-quest.html">⚖️ Ti pisasti?</a> — qui si legge e basta.</div>`;
+    setHtml('view-dashboard', h);
+    return;
+  }
+
+  // ── 1. Le pesate ──
+  const peso = pesoAl(oggi);
+  const pesatoOggi = S.weights.some(w => w.date === oggi && num(w.weight) != null);
+  const pianoOggi = pesoPianoAl(oggi);
+  const finale = S.milestones.length >= 2 ? +S.milestones[S.milestones.length - 1].weight : num(ob.end_weight);
+  const alFinale = (peso != null && finale != null) ? peso - finale : null;
+
+  h += `<div class="card-title mt-16">⚖️ Le pesate</div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Peso minimo di oggi</div>
+      <div class="kpi-value">${peso == null ? '—' : fmtKg(peso)}</div>
+      <div class="kpi-note">${peso == null ? 'mai pesato' : pesatoOggi ? 'kg' : 'kg · ultima pesata nota'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Peso che il piano chiede oggi</div>
+      <div class="kpi-value">${pianoOggi == null ? '—' : fmtKg(pianoOggi)}</div>
+      <div class="kpi-note">${pianoOggi == null ? 'servono due traguardi' : 'kg'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mancano al peso finale</div>
+      <div class="kpi-value ${alFinale == null ? '' : alFinale <= 0 ? 'pos' : ''}">${alFinale == null ? '—' : fmtKg(Math.abs(alFinale))}</div>
+      <div class="kpi-note">${alFinale == null ? '—' : alFinale <= 0 ? 'kg · già sotto il finale' : 'kg · finale ' + fmtKg(finale)}</div>
+    </div>
+  </div>`;
+
+  // ── 2. Le calorie di oggi ──
+  const t = targetDelGiorno(oggi);
+  const mangiate = totaliDi(righeDelGiorno(oggi)).kcal;
+  const restano = t.ok ? t.kcal - mangiate : null;
+  const sforato = restano != null && restano < 0;
+
+  h += `<div class="card-title mt-16">🔥 Le calorie di oggi</div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Target</div>
+      <div class="kpi-value">${t.ok ? fmtKcal(t.kcal) : '—'}</div>
+      <div class="kpi-note">${t.ok ? 'kcal' + (t.congelato ? ' · congelato' : '') : 'da calcolare'}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mangiate</div>
+      <div class="kpi-value">${fmtKcal(mangiate)}</div>
+      <div class="kpi-note">kcal</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">${sforato ? 'Sforate' : 'Restano'}</div>
+      <div class="kpi-value ${restano == null ? '' : sforato ? 'neg' : 'pos'}">${restano == null ? '—' : fmtKcal(Math.abs(restano))}</div>
+      <div class="kpi-note">${restano == null ? '' : 'kcal'}</div>
+    </div>
+  </div>`;
+
+  // ── 3. I tratti del piano ──
+  const tratti = stimaTratti();
+  h += '<div class="card"><div class="card-title">📐 Le calorie per tratto di dieta</div>';
+  h += tratti.length ? tabellaTratti(tratti)
+    : `<div class="note-box is-warn">Il piano ha meno di due traguardi, quindi non ci sono tratti: il deficit
+       è la media fino alla fine. Aggiungendo traguardi in «Ti pisasti?» ogni periodo avrà il suo target.</div>`;
+  h += '</div>';
+
+  // ── 4. Come sta andando (quel che era 📈 Andamento) ──
+  // Il saldo somma gli scarti sui soli giorni SEGNATI: contarci i giorni non segnati come se
+  // fossero a zero calorie darebbe un deficit enorme e falso — un giorno non segnato non è un
+  // giorno di digiuno. Per la stessa ragione i giorni futuri restano fuori da tutti e quattro.
+  const passati = gg.filter(g => !g.futuro);
+  const segnati = passati.filter(g => g.kcal != null);
+  const conTarget = segnati.filter(g => g.target != null);
+  const media = segnati.length ? segnati.reduce((a, g) => a + g.kcal, 0) / segnati.length : null;
+  const dentro = conTarget.filter(g => g.kcal <= g.target).length;
+  const saldo = conTarget.reduce((a, g) => a + (g.kcal - g.target), 0);
+
+  h += `<div class="card-title mt-16">📈 Come sta andando</div>
+  <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-label">Media al giorno</div>
       <div class="kpi-value">${fmtKcal(media)}</div>
       <div class="kpi-note">kcal · su ${segnati.length} ${segnati.length === 1 ? 'giorno segnato' : 'giorni segnati'}</div></div>
     <div class="kpi-card"><div class="kpi-label">Dentro il target</div>
       <div class="kpi-value">${conTarget.length ? dentro + '/' + conTarget.length : '—'}</div>
       <div class="kpi-note">${conTarget.length ? Math.round(dentro / conTarget.length * 100) + '%' : ''}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Saldo del periodo</div>
+    <div class="kpi-card"><div class="kpi-label">Saldo della dieta</div>
       <div class="kpi-value ${saldo > 0 ? 'neg' : 'pos'}">${saldo === 0 ? '0' : (saldo > 0 ? '+' : '−') + fmtKcal(Math.abs(saldo))}</div>
       <div class="kpi-note">kcal ${saldo > 0 ? 'di troppo' : 'in meno'}</div></div>
     <div class="kpi-card"><div class="kpi-label">Vale circa</div>
@@ -1403,40 +1589,55 @@ function renderAndamento() {
     <div class="card-title">Calorie al giorno</div>
     <div class="chart-wrap"><canvas id="ch-kcal"></canvas></div>
     <div class="text-xs text-muted mt-8">Le colonne sono le calorie segnate, la linea il target di quel giorno.
-      Un giorno senza colonna è un giorno non segnato, non un giorno a zero.</div>
+      Un giorno senza colonna è un giorno non segnato, non un giorno a zero. Da domani in poi la linea è
+      il target <strong>previsto</strong>: colonne non ce ne sono ancora.</div>
   </div>`;
 
   if (gg.some(g => g.peso != null)) {
     h += `<div class="card">
       <div class="card-title">Peso e curva del piano</div>
       <div class="chart-wrap"><canvas id="ch-peso"></canvas></div>
-      <div class="text-xs text-muted mt-8">Il peso viene da «Ti pisasti?» — qui si legge e basta.</div>
+      <div class="text-xs text-muted mt-8">Il peso viene da «Ti pisasti?» — qui si legge e basta.
+        La curva del piano arriva fino alla fine, il peso si ferma all'ultima pesata.</div>
     </div>`;
   }
 
-  // ── La tabella, per chi vuole il numero e non la forma ──
-  h += `<div class="card"><div class="card-title">Giorno per giorno</div><div class="table-wrap">
+  // ── 5. Giorno per giorno, dal primo all'ultimo della dieta ──
+  h += `<div class="card"><div class="card-title">Giorno per giorno</div>`;
+  if (arco.tagliato) {
+    h += `<div class="note-box is-warn">La dieta comincia il ${esc(fmtDataBreve(arco.primoVero))}, ma qui si parte
+      dal ${esc(fmtDataBreve(arco.primo))}: più indietro le righe del diario non vengono caricate, e mostrarle
+      vuote direbbe che non hai segnato niente invece che «non lo so».</div>`;
+  }
+  h += `<div class="table-wrap">
     <table class="table"><thead><tr>
       <th>Giorno</th><th class="text-right">Mangiate</th><th class="text-right">Target</th>
       <th class="text-right">Scarto</th><th class="text-right">Peso</th>
     </tr></thead><tbody>`;
-  gg.slice().reverse().forEach(g => {
-    const scarto = (g.kcal != null && g.target != null) ? g.kcal - g.target : null;
-    h += `<tr>
-      <td class="nowrap"><button class="cell-link btn-icon" data-action="vai-giorno" data-day="${g.giorno}" style="color:var(--c-primary)">${esc(fmtDataBreve(g.giorno))}</button></td>
+  gg.forEach(g => {
+    const stile = g.oggi ? ' style="background:#f0fdf4"' : g.futuro ? ' class="text-muted"' : '';
+    h += `<tr${stile}>
+      <td class="nowrap">${g.oggi ? '▶ ' : ''}<button class="cell-link btn-icon" data-action="vai-giorno" data-day="${g.giorno}" style="color:var(--c-primary)">${esc(fmtDataBreve(g.giorno))}</button></td>
       <td class="text-right mono">${g.kcal == null ? '<span class="text-muted">—</span>' : fmtKcal(g.kcal)}</td>
-      <td class="text-right mono text-muted">${fmtKcal(g.target)}</td>
-      <td class="text-right mono ${scarto == null ? '' : scarto > 0 ? 'neg' : 'pos'}">${scarto == null ? '—' : (scarto > 0 ? '+' : '') + fmtKcal(scarto)}</td>
+      <td class="text-right mono ${g.futuro ? '' : 'text-muted'} nowrap">${fmtKcal(g.target)}${
+        g.riporto ? ` <span class="text-xs ${g.riporto > 0 ? 'pos' : 'neg'}">(${g.riporto > 0 ? '+' : '−'}${fmtKcal(Math.abs(g.riporto))})</span>` : ''}</td>
+      <td class="text-right mono ${g.scarto == null ? '' : g.scarto > 0 ? 'neg' : 'pos'}">${g.scarto == null ? '—' : (g.scarto > 0 ? '+' : '') + fmtKcal(g.scarto)}</td>
       <td class="text-right mono text-muted">${g.peso == null ? '—' : fmtKg(g.peso)}</td>
     </tr>`;
   });
-  h += '</tbody></table></div></div>';
+  h += `</tbody></table></div>
+    <div class="note-box mt-12">Dal primo all'ultimo giorno del piano. Per i giorni <strong>futuri</strong> il
+      target parte da quello del tratto e si porta dietro lo scarto del giorno prima: sforato ieri, oggi ce n'è
+      di meno; rimasto sotto, oggi ce n'è di più — è il numero fra parentesi. Lo scarto si scarica
+      <strong>tutto sul giorno dopo</strong> e lì si esaurisce, quindi il giorno successivo torna al target del
+      suo tratto: così il conto si controlla a mente, e una cena fuori non insegue per settimane.</div>
+  </div>`;
 
-  setHtml('view-andamento', h);
-  disegnaAndamento(gg);
+  setHtml('view-dashboard', h);
+  disegnaGrafici(gg);
 }
 
-function disegnaAndamento(gg) {
+function disegnaGrafici(gg) {
   const etichette = gg.map(g => fmtDataBreve(g.giorno));
   drawChart('ch-kcal', {
     type: 'bar',
@@ -1937,34 +2138,7 @@ function renderImpostazioni() {
          deficit e consumo sono la spiegazione e possono uscire dal bordo. Per la stessa ragione
          kg e giorni non hanno una colonna loro: si ricavano dalle due che li contengono già, e
          stanno lì sotto in piccolo. */
-      h += `<div class="card-title mt-16">I tratti del piano</div>
-      <div class="table-wrap"><table class="table"><thead><tr>
-        <th>Tratto</th><th>Periodo</th><th class="text-right">Peso</th><th class="text-right">Target</th>
-        <th class="text-right">Ritmo</th><th class="text-right">Deficit</th><th class="text-right">Consumo</th>
-      </tr></thead><tbody>`;
-      tratti.forEach(t => {
-        // Il tratto in corso si evidenzia, quelli già passati si sbiadiscono: la riga che serve
-        // adesso deve trovarsi senza contare le righe.
-        const stile = t.corrente ? ' style="background:#f0fdf4"' : t.passato ? ' class="text-muted"' : '';
-        h += `<tr${stile}>
-          <td class="nowrap">${t.corrente ? '▶ ' : ''}${t.numero}<span class="text-muted">/${tratti.length}</span></td>
-          <td class="nowrap"><div class="text-sm">${esc(fmtDataBreve(t.inizio))} → ${esc(fmtDataBreve(t.fine))}</div>
-            <div class="text-xs text-muted">${t.giorni} giorni</div></td>
-          <td class="text-right nowrap"><div class="mono">${fmtKg(t.pesoInizio)} → ${fmtKg(t.pesoFine)}</div>
-            <div class="text-xs text-muted mono">${t.kg > 0 ? '−' : t.kg < 0 ? '+' : ''}${fmtKg(Math.abs(t.kg))} kg</div></td>
-          <td class="text-right mono fw-700 nowrap">${fmtKcal(t.target)}</td>
-          <td class="text-right mono nowrap">${fmtRitmo(t.kgAlGiorno * 7)} kg/sett</td>
-          <td class="text-right mono neg nowrap">${t.deficit > 0 ? '−' + fmtKcal(t.deficit) : fmtKcal(0)}</td>
-          <td class="text-right mono text-muted nowrap">${fmtKcal(t.tdee)}</td>
-        </tr>`;
-      });
-      h += `</tbody></table></div>
-      <div class="note-box mt-12">Ogni tratto è calcolato sul <strong>peso medio che il piano prevede lì</strong>,
-        non su quello di oggi: il metabolismo basale cala col peso, quindi a parità di ritmo l'ultimo tratto
-        chiede meno calorie del primo, e usare il peso di oggi darebbe numeri troppo alti verso la fine.
-        Sono i valori <strong>se stai sul piano</strong>: il recupero dello scarto non c'è —
-        nei tratti futuri sarebbe un'invenzione, perché lo scarto di domani non si conosce.
-        Il conto di oggi per intero, recupero compreso, è nel riquadro del 📓 Diario.</div>`;
+      h += '<div class="card-title mt-16">I tratti del piano</div>' + tabellaTratti(tratti);
     } else if (ob) {
       h += `<div class="note-box is-warn mt-12">Il piano ha meno di due traguardi, quindi non ci sono tratti:
         il deficit è la media fino alla fine. Aggiungendo traguardi in «Ti pisasti?» ogni periodo avrà il suo target.</div>`;
@@ -2634,8 +2808,8 @@ function navigate(view) {
 }
 
 function render() {
-  if (S.view === 'diario') renderDiario();
-  else if (S.view === 'andamento') renderAndamento();
+  if (S.view === 'dashboard') renderDashboard();
+  else if (S.view === 'diario') renderDiario();
   else if (S.view === 'alimenti') renderAlimenti();
   else if (S.view === 'impostazioni') renderImpostazioni();
   $('footer-version').textContent = APP_VERSION;
@@ -2940,7 +3114,6 @@ document.addEventListener('change', e => {
     S.day = g < primoGiornoDiario() ? primoGiornoDiario() : (g > oggiStr() ? oggiStr() : g);
     render();
   }
-  else if (el.matches('[data-action="periodo"]')) { S.periodo = parseInt(el.value, 10) || 30; renderAndamento(); }
 });
 
 document.addEventListener('keydown', e => {
@@ -2994,7 +3167,7 @@ async function init() {
 
   $('screen-app').style.display = 'flex';
   $('loading-overlay').classList.add('hidden');
-  navigate('diario');
+  navigate('dashboard');
 
   // I dati anagrafici sono la prima cosa senza la quale non esce nessun numero: se mancano si
   // apre su Impostazioni, dove c'è scritto dove si compilano e il pulsante che ci porta, invece
