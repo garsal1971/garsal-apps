@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.5.0</title>
+  <title>Calorie v1.6.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -106,6 +106,10 @@
     .badge-src-off  { background: #e0f2fe; color: #075985; }
     .badge-src-base { background: #dcfce7; color: #166534; }
     .badge-src-manuale { background: #f1f5f9; color: #475569; }
+    /* ⚠️ L'ambra è l'unico colore che non appartiene a nessuna voce del catalogo: «in rete» deve
+       staccarsi dalle tre fonti interne a colpo d'occhio, non essere la quarta sfumatura di una
+       fila di badge che si somigliano. */
+    .badge-src-rete { background: #fef3c7; color: #92400e; }
     .chart-wrap { height: 260px; }
     .chart-wrap canvas { max-height: 260px; }
     .chart-wrap-sm { height: 200px; }
@@ -161,11 +165,28 @@
     .meal-empty { padding: 10px 16px; font-size: .8rem; color: var(--c-muted); }
 
     /* ── Ricerca alimenti ── */
-    .search-results { max-height: 320px; overflow-y: auto; border: 1px solid var(--c-border); border-radius: var(--radius-sm); margin-top: 8px; }
+    /* ⚠️ Il tetto è in `rem` e non in px: coi caratteri di sistema grandi 320 px fissi sono una
+       riga e mezza — un'altezza attorno al testo che non cresce col testo. Il `min()` col viewport
+       serve al caso opposto, lo schermo basso, dove 30rem uscirebbero dalla finestra. */
+    .search-results { max-height: min(55vh, 30rem); overflow-y: auto; border: 1px solid var(--c-border); border-radius: var(--radius-sm); margin-top: 8px; }
     .search-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
     .search-row + .search-row { border-top: 1px solid #f1f5f1; }
     .search-row:hover { background: #f4f7f4; }
     .search-note { font-size: .74rem; color: var(--c-muted); padding: 9px 12px; }
+    /* L'icona della provenienza sta PRIMA del nome, che è dove cade l'occhio per primo. Larghezza
+       fissa in `em` e non in px: coi caratteri di sistema grandi deve crescere col testo, o accanto
+       a un nome ingrandito sembra rimpicciolita. */
+    .fonte-ico { flex-shrink: 0; width: 1.5em; text-align: center; font-size: 1.1em; line-height: 1.2; }
+    /* La riga della fonte va a capo per conto suo: kcal e badge su una riga sola è un'ipotesi che
+       al primo ingrandimento dei caratteri non regge. */
+    .riga-fonte { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; margin-top: 2px; }
+    /* L'intestazione del gruppo resta appiccicata in cima mentre l'elenco scorre: senza, appena si
+       scende di tre righe non si sa più se quel che si sta guardando è del catalogo o della rete. */
+    .search-group { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px;
+      padding: 6px 12px; background: #f1f5f1; border-bottom: 1px solid var(--c-border);
+      font-size: .72rem; font-weight: 700; color: #475569; letter-spacing: .02em; }
+    .search-group .sg-nota { font-weight: 500; color: var(--c-muted); }
+    .search-row + .search-group { border-top: 1px solid var(--c-border); }
     #scanner-wrap { display: none; margin-top: 10px; }
     #scanner-wrap.open { display: block; }
     #scanner-video { width: 100%; max-height: 260px; border-radius: var(--radius-sm); background: #000; object-fit: cover; }
@@ -283,8 +304,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.5.0';
-var BUILD_TIME  = '2026-08-27T09:00:00Z';
+var APP_VERSION = 'v1.6.0';
+var BUILD_TIME  = '2026-08-30T10:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1397,7 +1418,64 @@ function disegnaAndamento(gg) {
    VISTA: ALIMENTI
    ═══════════════════════════════════════════════════════════════ */
 
-const ETICHETTA_FONTE = { base: 'base', off: 'Open Food Facts', manuale: 'a mano' };
+/* ── Da dove viene un alimento ─────────────────────────────────────────────
+   ⚠️ La distinzione che conta è UNA: quella voce è già nel tuo catalogo, oppure sta arrivando
+   adesso da una banca dati pubblica? Sono due cose diverse da usare — la prima è un dato tuo,
+   che hai già guardato e che puoi correggere; la seconda l'ha scritta qualcun altro, può
+   mancare, può essere sbagliata, e quando la scegli entra in archivio.
+
+   Fino alla v1.5.0 quella differenza era una parola in coda alla riga dei valori, dopo le
+   calorie e con lo stesso grigio: la si leggeva solo andandola a cercare. Ora la porta
+   l'**icona in testa alla riga** (📗 catalogo / 🌐 in rete), che è il primo posto dove cade
+   l'occhio, e il **colore del badge** la ripete. Il badge dice invece QUALE fonte, che è
+   l'informazione di secondo livello.
+
+   ⚠️ Il nome della fonte di rete si legge da `a.source` e non è più scritto a mano: la Edge
+   Function `al-food-search` risponde `'off'` o `'usda'`, e la stringa fissa «Open Food Facts»
+   attribuiva a Open Food Facts anche i risultati USDA — cioè diceva il falso proprio nel punto
+   che esiste per dire da dove viene un numero. */
+const FONTI = {
+  base:    { icona: '📗', etichetta: 'Catalogo · base', classe: 'base',
+             spiega: 'Già nel tuo catalogo — voce generica dalle tabelle di composizione pubbliche' },
+  manuale: { icona: '📗', etichetta: 'Catalogo · a mano', classe: 'manuale',
+             spiega: 'Già nel tuo catalogo — l\'hai scritto tu' },
+  off:     { icona: '📗', etichetta: 'Catalogo · Open Food Facts', classe: 'off',
+             spiega: 'Già nel tuo catalogo — arrivato a suo tempo da Open Food Facts' },
+};
+const FONTI_RETE = {
+  off:  { icona: '🌐', etichetta: 'In rete · Open Food Facts', classe: 'rete',
+          spiega: 'Arriva adesso da Open Food Facts, in tempo reale: non è ancora nel tuo catalogo, ci entra quando lo scegli' },
+  usda: { icona: '🌐', etichetta: 'In rete · USDA', classe: 'rete',
+          spiega: 'Arriva adesso dalla banca dati USDA, in tempo reale: non è ancora nel tuo catalogo, ci entra quando lo scegli' },
+};
+
+/* `inRete` = la riga viene da una banca dati pubblica e non dall'archivio. Una fonte che non si
+   conosce non fa sparire l'icona né il badge: si mostra il nome così com'è, perché «viene da una
+   fonte che non so nominare» resta un'informazione, mentre una riga muta si legge come «catalogo». */
+function fonteDi(a, inRete) {
+  const src = (a && a.source) || '';
+  if (inRete) {
+    return FONTI_RETE[src] || { icona: '🌐', etichetta: 'In rete · ' + (src || 'banca dati pubblica'), classe: 'rete',
+      spiega: 'Arriva adesso da una banca dati pubblica: entra nel tuo catalogo quando lo scegli' };
+  }
+  return FONTI[src] || { icona: '📗', etichetta: 'Catalogo · ' + (src || 'archivio'), classe: 'manuale',
+    spiega: 'Già nel tuo catalogo' };
+}
+
+/* ⚠️ Quali risultati di rete il catalogo può davvero ospitare. Non è una scelta di gusto: la
+   colonna `al_foods.source` ha un CHECK che ammette solo `base`, `off` e `manuale`, quindi un
+   risultato USDA in archivio non ci entra — l'insert verrebbe rifiutato dal database. Finché il
+   CHECK è quello, una voce USDA si può mangiare (i valori si copiano sulla riga del diario, come
+   per ogni altra) ma non si può mettere in dispensa, e la finestra della porzione **lo dice**
+   invece di promettere un salvataggio che non avverrà.
+
+   La costante sta qui, in un posto solo, ed è la stessa che decide il messaggio e il
+   salvataggio: due condizioni scritte separatamente sono la finestra che promette una cosa e il
+   pulsante che ne fa un'altra, il giorno che una delle due cambia. */
+const FONTI_SALVABILI = ['off'];
+
+const iconaFonte = f => `<span class="fonte-ico" title="${esc(f.spiega)}" aria-hidden="true">${f.icona}</span>`;
+const badgeFonte = f => `<span class="badge badge-src-${f.classe}" title="${esc(f.spiega)}">${esc(f.etichetta)}</span>`;
 
 function renderAlimenti() {
   const q = (S.cercaAlimenti || '').trim().toLowerCase();
@@ -1433,6 +1511,7 @@ function renderAlimenti() {
     h += '<tr><td colspan="8" class="text-center text-muted" style="padding:26px">Nessun alimento.</td></tr>';
   } else {
     elenco.slice(0, 400).forEach(f => {
+      const fo = fonteDi(f);
       h += `<tr>
         <td><button class="btn-icon" data-action="preferito" data-id="${f.id}" title="Preferito">${f.favorite ? '⭐' : '☆'}</button></td>
         <td><div class="fw-600">${esc(f.name)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
@@ -1440,7 +1519,7 @@ function renderAlimenti() {
         <td class="text-right mono text-muted">${fmtG(f.fat_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.sugars_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.proteins_100g)}</td>
-        <td><span class="badge badge-src-${esc(f.source)}">${esc(ETICHETTA_FONTE[f.source] || f.source)}</span></td>
+        <td class="nowrap">${iconaFonte(fo)}${badgeFonte(fo)}</td>
         <td class="nowrap text-right">
           <button class="btn-icon" data-action="modifica-alimento" data-id="${f.id}" title="Modifica">✏️</button>
           <button class="btn-icon btn-icon-danger" data-action="elimina-alimento" data-id="${f.id}" title="Elimina">🗑</button>
@@ -1479,9 +1558,10 @@ function renderRisultatiOff() {
   return `<div class="card-title mt-16">🌐 Su Open Food Facts <span class="text-muted text-xs">— non ancora nel tuo catalogo</span></div>
     <div class="search-results">
       ${risultati.map((a, i) => `<div class="search-row" style="cursor:default">
+        ${iconaFonte(fonteDi(a, true))}
         <span class="grow">
           <span class="fw-600">${esc(a.name)}</span>${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
-          <span class="food-sub">${fmtKcal(a.kcal_100g)} kcal · grassi ${fmtG(a.fat_100g)} g · zuccheri ${fmtG(a.sugars_100g)} g per 100 g</span>
+          <span class="food-sub riga-fonte">${badgeFonte(fonteDi(a, true))}<span>${fmtKcal(a.kcal_100g)} kcal · grassi ${fmtG(a.fat_100g)} g · zuccheri ${fmtG(a.sugars_100g)} g per 100 g</span></span>
         </span>
         <button class="btn btn-outline btn-sm" data-action="aggiungi-al-catalogo" data-off="${i}">➕ Aggiungi</button>
       </div>`).join('')}
@@ -1916,13 +1996,24 @@ function renderRisultati() {
     // per segnare è già lì, e cercarlo sarebbe scrivere per niente.
     const prop = S.foods.slice(0, 12);
     if (prop.length) {
-      h += '<div class="search-results">' + prop.map(a => rigaRisultato(a)).join('') + '</div>';
-      h += '<div class="search-note">I tuoi preferiti e i più usati. Scrivi per cercare altro.</div>';
+      h += '<div class="search-results">'
+         + '<div class="search-group">📗 Nel tuo catalogo<span class="sg-nota">— preferiti e più usati</span></div>'
+         + prop.map(a => rigaRisultato(a)).join('') + '</div>';
+      h += '<div class="search-note">Scrivi per cercare fra i tuoi alimenti e in rete.</div>';
     }
   } else {
+    // ⚠️ Le due provenienze vanno sotto due intestazioni, non concatenate. Una fila unica in cui
+    // il catalogo sfuma nella rete senza uno stacco fa sembrare tutto la stessa cosa, ed è
+    // esattamente la distinzione che qui bisogna vedere prima di scegliere.
     h += '<div class="search-results">';
-    if (locali.length) h += locali.map(a => rigaRisultato(a)).join('');
-    if (off.length) h += off.map((a, i) => rigaRisultato(a, i)).join('');
+    if (locali.length) {
+      h += '<div class="search-group">📗 Nel tuo catalogo<span class="sg-nota">— già in archivio</span></div>';
+      h += locali.map(a => rigaRisultato(a)).join('');
+    }
+    if (off.length) {
+      h += '<div class="search-group">🌐 Trovati in rete<span class="sg-nota">— entrano in catalogo quando li scegli</span></div>';
+      h += off.map((a, i) => rigaRisultato(a, i)).join('');
+    }
     if (!locali.length && !off.length) h += `<div class="search-note">${stato === 'cerco' ? 'Cerco…' : 'Niente trovato. Puoi scriverlo a mano.'}</div>`;
     h += '</div>';
     if (stato) h += `<div class="search-note">${esc(stato === 'cerco' ? '🔎 Cerco su Open Food Facts…' : stato)}</div>`;
@@ -1932,15 +2023,17 @@ function renderRisultati() {
 }
 
 // Una riga di risultato. `indiceOff` distingue i prodotti appena arrivati dalla rete (che non
-// hanno ancora un id nostro) da quelli già in archivio.
+// hanno ancora un id nostro) da quelli già in archivio — ed è la stessa cosa che l'icona in testa
+// alla riga dice a chi guarda.
 function rigaRisultato(a, indiceOff) {
   const attr = indiceOff == null ? `data-food-id="${a.id}"` : `data-off="${indiceOff}"`;
-  const fonte = indiceOff == null ? (ETICHETTA_FONTE[a.source] || a.source) : 'Open Food Facts';
+  const f = fonteDi(a, indiceOff != null);
   return `<button class="search-row" data-action="scegli" ${attr}>
+    ${iconaFonte(f)}
     <span class="grow">
       <span class="fw-600">${esc(a.name)}</span>
       ${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
-      <span class="food-sub">${fmtKcal(a.kcal_100g)} kcal/100 g · ${esc(fonte)}</span>
+      <span class="food-sub riga-fonte">${badgeFonte(f)}<span>${fmtKcal(a.kcal_100g)} kcal/100 g</span></span>
     </span>
     ${indiceOff == null && a.favorite ? '<span>⭐</span>' : ''}
   </button>`;
@@ -1981,11 +2074,17 @@ function cercaAlimento(q) {
 /* ── La porzione ───────────────────────────────────────────── */
 function openPorzione(alimento, meal, foodId) {
   const g = alimento.default_grams || 100;
+  const dallaRete = !foodId;
+  const fonte = fonteDi(alimento, dallaRete);
+  const entraInCatalogo = dallaRete && FONTI_SALVABILI.includes(alimento.source);
   openModal('Quanto ne hai mangiato?', `
     <div class="mb-16">
-      <div class="fw-700">${esc(alimento.name)}</div>
+      <div class="fw-700 hstack gap-6" style="align-items:flex-start">${iconaFonte(fonte)}<span>${esc(alimento.name)}</span></div>
       ${alimento.brand ? '<div class="text-sm text-muted">' + esc(alimento.brand) + '</div>' : ''}
-      <div class="text-sm text-muted mt-4">${fmtKcal(alimento.kcal_100g)} kcal per 100 g${alimento.quantita ? ' · confezione ' + esc(alimento.quantita) : ''}</div>
+      <div class="riga-fonte mt-4">${badgeFonte(fonte)}<span class="text-sm text-muted">${fmtKcal(alimento.kcal_100g)} kcal per 100 g${alimento.quantita ? ' · confezione ' + esc(alimento.quantita) : ''}</span></div>
+      ${!dallaRete ? '' : entraInCatalogo
+        ? '<div class="text-xs text-muted mt-4">Non è ancora fra i tuoi alimenti: lo aggiungo al catalogo insieme alla riga del diario, così la prossima volta è già qui.</div>'
+        : '<div class="text-xs text-muted mt-4">I valori restano su questa riga del diario, ma il prodotto non entra nel catalogo: dovrai ricercarlo la prossima volta.</div>'}
     </div>
     <div class="form-group">
       <label class="form-label" for="por-g">Peso (grammi)</label>
@@ -2335,7 +2434,7 @@ document.addEventListener('click', async e => {
       btn.disabled = true;
       let foodId = p.foodId;
       let nuovoInCatalogo = false;
-      if (!foodId && p.alimento.source === 'off') {
+      if (!foodId && FONTI_SALVABILI.includes(p.alimento.source)) {
         // L'alimento preso dalla rete entra nel catalogo ADESSO, insieme alla riga del diario:
         // la prossima volta è già lì e non serve nessuna ricerca.
         const salvato = await salvaAlimentoOff(p.alimento);
