@@ -2196,6 +2196,20 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
 - **Il riquadro spiega sempre da dove esce il target**, per intero (basale × attività − deficit,
   coi chili che mancano e i giorni che restano): un numero calcolato da quattro grandezze che
   nessuno vede è un numero di cui non ci si fida, e alla prima sorpresa si smette di seguirlo.
+- **La navigazione è una barra di icone, come in «Ti pisasti?»**, non un menù ☰. Sul telefono le
+  quattro pagine si vedono tutte insieme e ci si sposta con **un tocco solo** invece di tre (apri
+  il cassetto, scegli, il cassetto si chiude); sopra i 768 px la barra sparisce e resta la
+  sidebar, dove le voci hanno il posto per il loro nome. La voce accesa si aggiorna in tutt'e due
+  da `navigate()`, con un selettore solo: chi disegna non deve sapere quale delle due è a schermo.
+  ⚠️ La barra **scorre di lato e non stringe le icone**: coi caratteri di sistema grandi sei voci
+  su 360 px non ci stanno, e schiacciarle sotto il polpastrello le renderebbe non toccabili — è
+  la stessa regola delle righe di pulsanti che non vanno mai a capo. Per questo l'ordine conta:
+  prima le quattro **pagine**, poi il separatore, poi i due collegamenti (⚖️ Ti pisasti?, 🏠
+  AppSphere) — quel che esce dal bordo è quel che serve meno.
+  ⚠️ `min-width` è in `em`, quindi si misura sul font dell'**icona** e non su quello della pagina:
+  a 3.2em faceva 74 px a voce e la barra scorreva già a carattere normale. Resta in `em` di
+  proposito — il bersaglio da toccare deve crescere col testo di sistema — ma il valore va provato
+  a 360 px, non calcolato a mente.
 - Quattro schede: 📊 **Dashboard** (la prima che si apre), 📓 **Diario** (giorno per giorno, coi
   pasti configurati), 🍎 **Alimenti**, ⚙️ **Impostazioni** (dati anagrafici, attività, pasti, stima
   delle calorie, obiettivo). ⚠️ **📈 Andamento non esiste più**: il suo contenuto — i quattro KPI,
