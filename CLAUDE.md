@@ -2199,6 +2199,12 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
 - Quattro schede: 📓 **Diario** (giorno per giorno, coi pasti configurati), 📈 **Andamento** (colonne
   delle calorie contro la linea del target, più peso e curva del piano), 🍎 **Alimenti**,
   ⚙️ **Impostazioni** (dati anagrafici, attività, pasti, stima delle calorie, obiettivo).
+- ⚠️ **I riquadri dei pasti ci sono in ogni giorno, anche vuoti e anche nel passato.** Fino alla
+  v1.9.1 un pasto senza righe si nascondeva nei giorni passati, per non fare rumore: ma il
+  riquadro non è solo un riepilogo, porta il ➕ con cui si aggiunge a *quel* pasto. In un giorno
+  passato ancora tutto da segnare — cioè proprio il caso in cui un giorno passato si apre — non
+  ne restava nemmeno uno e la pagina finiva dopo la scritta «I pasti», che si legge come «qui non
+  si può scrivere». Segnare ieri quel che si è mangiato ieri è il caso normale, non quello strano.
 - **Quanti pasti al giorno lo decide l'utente** (⚙️ Impostazioni → 🍽️ I pasti della giornata):
   si spuntano i momenti in cui si mangia davvero e si rinominano. La configurazione sta in
   `cm_settings`, chiave `al_pasti`, come JSON — così è la stessa dal PC e dal telefono, dove

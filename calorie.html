@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.9.1</title>
+  <title>Calorie v1.9.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -310,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.9.1';
-var BUILD_TIME  = '2026-08-30T15:00:00Z';
+var APP_VERSION = 'v1.9.2';
+var BUILD_TIME  = '2026-08-30T16:00:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1124,9 +1124,15 @@ function renderDiario() {
 
   pastiDelGiorno(giorno).forEach(p => {
     const rp = righe.filter(r => r.meal === p.id);
-    // Un pasto vuoto in un giorno passato è rumore: si mostra solo se ha qualcosa dentro, o se
-    // il giorno è oggi — dove il riquadro vuoto è l'invito a riempirlo.
-    if (!rp.length && giorno !== oggi) return;
+    /* ⚠️ I pasti vuoti si mostrano ANCHE nei giorni passati. Fino alla v1.9.1 si nascondevano
+       («un riquadro vuoto in un giorno passato è rumore»), ma il riquadro non è solo un
+       riepilogo: porta il ➕ con cui si aggiunge a QUEL pasto. In un giorno passato ancora tutto
+       da segnare — cioè il caso in cui si apre un giorno passato — non ne restava nemmeno uno, e
+       la pagina finiva dopo la scritta «I pasti»: si leggeva come «qui non si può scrivere».
+       Segnare ieri quel che si è mangiato ieri è normale, non è il caso strano.
+
+       `pastiDelGiorno` esclude già i pasti spenti che non hanno righe, quindi qui non si rischia
+       di invitare a scrivere in un pasto che non si usa più. */
     const k = rp.reduce((s, r) => s + kcalDi(r), 0);
     h += `<div class="meal">
       <div class="meal-head">
