@@ -3061,6 +3061,26 @@ All three share an identical CSS custom property palette:
 }
 ```
 
+### ⚠️ Il tasto «indietro» di Android dentro un popup
+
+Su Android l'indietro è il gesto con cui si chiude qualunque cosa si sia aperta. In una pagina web
+che non fa niente per governarlo, dentro un popup **esce dalla pagina**: la WebView non ha niente
+in cronologia e torna ad AppSphere, buttando via quel che si stava scrivendo.
+
+Il rimedio è di tre righe e sta in `openModal`/`closeModal` (vedi `calorie.html`): aprendo un
+popup si spinge una voce di cronologia (`history.pushState`), un `popstate` la intercetta e chiude
+il popup invece di lasciare la pagina, e **anche il ✕ passa da `history.back()`** per consumare la
+voce — senza, ogni apri-e-chiudi ne lascerebbe una dietro di sé e dopo cinque popup servirebbero
+cinque indietro per uscire. La voce si spinge **una volta sola** anche quando un popup ne apre un
+altro: sono due contenuti nella stessa finestra, non due schermate.
+
+⚠️ **Applicato per ora solo in `calorie.html`.** Le altre app con dei popup non lo fanno:
+`casarosa.html`, `conto-risparmio-teresa.html`, `index.html`, `obiettivi.html` e
+`youtube-player.html` non toccano affatto la cronologia; `conto-spese-teresa.html`,
+`finanza.html`, `spese-ada.html` e `spese-personali.html` hanno un `popstate` che governa **le
+sole viste** e non i popup, quindi lì l'indietro dentro un popup cambia la schermata sotto
+lasciandolo aperto. Chi tocca una di quelle pagine porti anche questo.
+
 ### ⚠️ ✏️ e 🗑 stanno a SINISTRA del record
 
 In un elenco le icone di modifica ed eliminazione vanno **in testa alla riga**, mai in coda. In
