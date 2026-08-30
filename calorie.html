@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.6.0</title>
+  <title>Calorie v1.7.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -81,6 +81,12 @@
     .btn-danger { background: #fee2e2; color: var(--c-danger); }
     .btn-danger:hover { background: #fecaca; }
     .btn-sm { padding: 6px 12px; font-size: .82rem; }
+    /* La porzione dell'alimento e la scaletta fissa sono due cose diverse e devono sembrarlo: la
+       prima è quel che di solito si mangia di QUESTO alimento, la seconda un righello uguale per
+       tutti. Stessa forma, peso diverso. */
+    .btn-porz { background: #ecfdf5; color: #166534; border: 1.5px solid #a7f3d0; font-weight: 600; }
+    .btn-porz:hover { background: #d1fae5; border-color: #6ee7b7; }
+    .btn.chip-attivo { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
     .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--c-muted); font-size: .9rem; line-height: 1; transition: background .12s, color .12s; }
     .btn-icon:hover { background: var(--c-bg); color: var(--c-text); }
     .btn-icon-danger:hover { background: #fee2e2; color: var(--c-danger); }
@@ -304,8 +310,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.6.0';
-var BUILD_TIME  = '2026-08-30T10:00:00Z';
+var APP_VERSION = 'v1.7.0';
+var BUILD_TIME  = '2026-08-30T11:30:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2071,9 +2077,37 @@ function cercaAlimento(q) {
   }, RITARDO_RICERCA);
 }
 
-/* ── La porzione ───────────────────────────────────────────── */
+/* ── La porzione ───────────────────────────────────────────────
+   ⚠️ `default_grams` — la porzione abituale, un uovo 55 g, una pizza 300 g, un cucchiaio d'olio
+   10 g — c'è nel catalogo da sempre, e questa finestra ci si apriva sopra IN SILENZIO: il campo
+   arrivava già scritto «55» e niente diceva che quei 55 g sono un uovo. Un numero che compare da
+   solo si legge come un valore di ripiego, quindi lo si riscriveva a mano ogni volta, che è
+   esattamente il lavoro che la colonna esiste per togliere.
+
+   Ora la porzione è scritta e si preme. I tre tagli sono ½, 1 e 2 perché sono quelli che si
+   usano davvero — «due uova», «mezza pizza» — e una scaletta di multipli più fitta chiederebbe
+   di leggere invece di far scegliere. */
+const GRAMMI_RAPIDI = [30, 50, 100, 125, 150, 200, 250];
+
+/* I multipli della porzione di QUESTO alimento. Vuoto se l'alimento non ne ha una: una porzione
+   inventata è peggio di nessuna porzione — chi la vede scritta le crede, e sono le calorie della
+   giornata. */
+function porzioniDi(alimento) {
+  const p = num(alimento && alimento.default_grams);
+  if (p == null || p <= 0) return [];
+  return [
+    { etichetta: '½ porzione', g: Math.round(p / 2) },
+    { etichetta: '1 porzione', g: Math.round(p) },
+    { etichetta: '2 porzioni', g: Math.round(p * 2) },
+  ].filter(v => v.g >= 1);
+}
+
 function openPorzione(alimento, meal, foodId) {
-  const g = alimento.default_grams || 100;
+  const porz = porzioniDi(alimento);
+  const g = porz.length ? porz[1].g : 100;
+  // ⚠️ La scaletta fissa si toglie i valori che le porzioni già coprono: due pulsanti «50 g» uno
+  // accanto all'altro sembrano due scelte diverse e non lo sono.
+  const rapidi = GRAMMI_RAPIDI.filter(v => !porz.some(x => x.g === v));
   const dallaRete = !foodId;
   const fonte = fonteDi(alimento, dallaRete);
   const entraInCatalogo = dallaRete && FONTI_SALVABILI.includes(alimento.source);
@@ -2089,8 +2123,16 @@ function openPorzione(alimento, meal, foodId) {
     <div class="form-group">
       <label class="form-label" for="por-g">Peso (grammi)</label>
       <input type="number" class="form-input" id="por-g" step="1" min="1" max="5000" value="${g}" />
+      ${porz.length ? `
+        <div class="form-hint">Porzione abituale di questo alimento: <strong>${fmtG(porz[1].g)} g</strong>. Il campo parte da lì.</div>
+        <div class="hstack gap-6 wrap mt-8">
+          ${porz.map(v => `<button class="btn btn-porz btn-sm" data-action="grammi" data-g="${v.g}">${v.etichetta} · ${fmtG(v.g)} g</button>`).join('')}
+        </div>
+        <div class="form-hint mt-8">Oppure a peso:</div>` : `
+        <div class="form-hint">Per questo alimento non è scritta nessuna porzione abituale: parto da 100 g.
+          La si scrive una volta sola da 🍎 Alimenti → ✏️, e da lì in poi la trovi qui.</div>`}
       <div class="hstack gap-6 wrap mt-8">
-        ${[30, 50, 100, 125, 150, 200, 250].map(v => `<button class="btn btn-outline btn-sm" data-action="grammi" data-g="${v}">${v} g</button>`).join('')}
+        ${rapidi.map(v => `<button class="btn btn-outline btn-sm" data-action="grammi" data-g="${v}">${v} g</button>`).join('')}
       </div>
     </div>
     <div class="form-group">
@@ -2118,6 +2160,12 @@ function aggiornaAnteprimaPorzione() {
   const q = c => (num(p.alimento[c]) == null ? null : +p.alimento[c] * g / 100);
   el.innerHTML = `<strong>${fmtKcal(q('kcal_100g'))} kcal</strong> per ${fmtG(g)} g`
     + ` · grassi ${fmtG(q('fat_100g'))} g · zuccheri ${fmtG(q('sugars_100g'))} g · proteine ${fmtG(q('proteins_100g'))} g`;
+  // Quale pulsante corrisponde a quel che c'è scritto nel campo. Si aggiorna anche scrivendo a
+  // mano: la traccia deve seguire il valore, non il tocco, o dopo una correzione a tastiera
+  // resterebbe accesa una porzione che non è più quella.
+  document.querySelectorAll('[data-action="grammi"]').forEach(b => {
+    b.classList.toggle('chip-attivo', parseFloat(b.dataset.g) === g);
+  });
 }
 
 /* ── Alimento scritto a mano / modifica ───────────────────────── */
