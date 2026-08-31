@@ -1917,7 +1917,7 @@ due, e il blu al centro sopra a tutti — e sta scritto in tre file:
 | Dove | File |
 |---|---|
 | Icone di lancio dei due APK | `app/…/ic_launcher_foreground.xml` e `appsphere-native/…/ic_launcher_foreground.xml` (fondo bianco per il WebView, nero per il nativo: è il segno che distingue le due app sul telefono) |
-| Barra in alto del nativo | `appsphere-native/…/drawable/logo_appsphere.xml` |
+| Tutto il nativo (barra, login, biometria) | `appsphere-native/…/core/Logo.kt` — `LogoAppSphere`, disegnata su `Canvas` |
 | Barra in alto delle pagine | l'SVG in linea dentro `#garsal-top-bar` (e `#user-bar` / `.login-top-bar-icon` in `index.html`) |
 
 ⚠️ **È già successo che divergessero**: le icone di lancio erano passate al marchio nuovo e le
@@ -1928,9 +1928,15 @@ marchio si toccano tutti e tre.
 il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno
 sparisce nel colore della barra. Sul launcher il fondo ce l'ha già.
 
-⚠️ **I cerchi olimpici NON sono spariti**: `CerchiOlimpici` in `core/Logo.kt` disegna ancora
-l'avvio e la schermata della biometria del nativo, e la palette olimpica resta quella delle bolle
-della home.
+⚠️ **I cerchi olimpici sono spariti dall'interfaccia**: `CerchiOlimpici` non esiste più —
+`LogoAppSphere` ha preso il suo posto anche sull'avvio e sulla schermata della biometria, che
+erano gli ultimi due punti rimasti indietro. **`Palette.olimpici` invece resta**, ed è un'altra
+cosa: è il ripiego dei colori delle bolle della home quando `cm_apps.color` è vuoto.
+
+⚠️ **Nel nativo il marchio è una funzione sola, non un drawable per contesto**: `LogoAppSphere`
+prende un parametro `disco`, e il fondo bianco si accende solo dove serve. Cinque cerchi disegnati
+su `Canvas` si adattano a qualsiasi dimensione senza un asset per densità — è la stessa scelta che
+era già stata fatta per i cerchi olimpici.
 
 ⚠️ **Le barre delle pagine non sono tutte lo stesso marchio**: quelle che dicono *Garsal Apps* e
 rimandano a `/` portano il logo; `calorie.html` (🍽️), `finanza.html` e figlie (*GarsalFinanza*),
