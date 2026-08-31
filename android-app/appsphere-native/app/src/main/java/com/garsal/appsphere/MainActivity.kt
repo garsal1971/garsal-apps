@@ -34,7 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import com.garsal.appsphere.core.AppSphereTheme
 import com.garsal.appsphere.core.AuthRepo
 import com.garsal.appsphere.core.BiometricGate
-import com.garsal.appsphere.core.CerchiOlimpici
+import com.garsal.appsphere.core.LogoAppSphere
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.abituati.AbituatiScreen
 import com.garsal.appsphere.calorie.CalorieScreen
@@ -258,7 +258,7 @@ private fun SchermataLogin() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            CerchiOlimpici(Modifier.size(120.dp))
+            LogoAppSphere(Modifier.size(120.dp))
             Text(
                 text = "AppSphere",
                 style = MaterialTheme.typography.headlineMedium,
@@ -312,7 +312,7 @@ private fun SchermataBloccata(rifiutata: Boolean, onRiprova: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            CerchiOlimpici(Modifier.size(96.dp))
+            LogoAppSphere(Modifier.size(96.dp))
             Text(
                 text = if (rifiutata) "App bloccata" else "Sblocca AppSphere",
                 style = MaterialTheme.typography.titleLarge,
