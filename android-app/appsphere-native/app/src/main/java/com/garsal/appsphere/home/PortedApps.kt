@@ -11,6 +11,7 @@ object Route {
     const val PESO = "peso"
     const val MEMO = "memo"
     const val ABITUATI = "abituati"
+    const val CALORIE = "calorie"
 }
 
 /**
@@ -129,6 +130,12 @@ object PortedApps {
             titoloDiRipiego = "Memo",
             descrizioneDiRipiego = "Schede e appunti",
             coloreDiRipiego = "#2563EB",
+        ),
+        "calorie.html" to AppPortata(
+            route = Route.CALORIE,
+            titoloDiRipiego = "Calorie",
+            descrizioneDiRipiego = "Diario alimentare",
+            coloreDiRipiego = "#D97706",
         ),
         "weight-quest.html" to AppPortata(
             route = Route.PESO,

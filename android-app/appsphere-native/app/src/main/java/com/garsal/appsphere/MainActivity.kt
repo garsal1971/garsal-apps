@@ -37,6 +37,7 @@ import com.garsal.appsphere.core.BiometricGate
 import com.garsal.appsphere.core.CerchiOlimpici
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.abituati.AbituatiScreen
+import com.garsal.appsphere.calorie.CalorieScreen
 import com.garsal.appsphere.core.Supabase
 import com.garsal.appsphere.eventslog.EventsLogScreen
 import com.garsal.appsphere.home.HomeScreen
@@ -230,6 +231,9 @@ private fun Navigazione() {
         }
         composable(Route.ABITUATI) {
             AbituatiScreen(onIndietro = { nav.popBackStack() })
+        }
+        composable(Route.CALORIE) {
+            CalorieScreen(onIndietro = { nav.popBackStack() })
         }
     }
 }
