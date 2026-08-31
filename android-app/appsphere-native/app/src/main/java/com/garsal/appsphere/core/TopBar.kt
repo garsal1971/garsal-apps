@@ -1,5 +1,6 @@
 package com.garsal.appsphere.core
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,14 +19,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.garsal.appsphere.R
 
 /**
- * La barra blu con i cerchi olimpici, uguale al `#garsal-top-bar` che tutte le
+ * La barra blu col logo di AppSphere, uguale al `#garsal-top-bar` che tutte le
  * pagine web hanno in cima.
  *
  * ⚠️ **Due cose che sembrano dettagli e invece tagliavano il titolo.**
@@ -81,7 +85,18 @@ fun GarsalTopBar(
                     .clickable(onClick = onIndietro),
             )
         } else {
-            CerchiOlimpici(Modifier.size(34.dp * scala))
+            // ⚠️ Il logo è **lo stesso file** che il sito serve in `/icons/` e che
+            // fa da icona di lancio dell'APK WebView: un marchio disegnato a
+            // parte in Compose sarebbe una seconda verità su com'è fatto, e
+            // divergerebbe il giorno che una delle due cambia. I cerchi
+            // olimpici restano in `Logo.kt` — li usano ancora l'avvio e la
+            // schermata della biometria.
+            Image(
+                painter = painterResource(R.drawable.logo_appsphere),
+                contentDescription = "AppSphere",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(34.dp * scala),
+            )
         }
 
         Text(

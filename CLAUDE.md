@@ -1785,6 +1785,25 @@ Due corollari, entrambi già in codice e da non disfare:
   `access_token`, ormai scaduto o già speso, e lo rimetterebbe al posto di una sessione buona.
   `gestisciDeepLink` azzera `intent.data` appena l'ha letto.
 
+### ⚠️ Il logo della barra in alto è un file solo, servito dal sito
+
+Il marchio in cima — `GarsalTopBar` nel nativo, `#garsal-top-bar` e `#user-bar` nelle pagine —
+è **lo stesso PNG** che fa da icona di lancio dell'APK WebView e da favicon del sito:
+`icons/icon-192.png`, con `icons/logo-64.png` (10 KB) per le barre web e una copia in
+`appsphere-native/…/res/drawable-nodpi/logo_appsphere.png` per il nativo. Un marchio ridisegnato
+a parte in Compose o in SVG sarebbe una seconda verità su com'è fatto, e divergerebbe il giorno
+che una delle due cambia — è quello che era successo: il launcher portava già la faccia nuova e
+le barre mostravano ancora i cerchi olimpici.
+
+⚠️ **I cerchi olimpici restano in `core/Logo.kt` e sono ancora in uso**: `CerchiOlimpici` disegna
+l'avvio e la schermata della biometria (`MainActivity`), e resta l'icona di lancio dell'APK
+nativo (`ic_launcher_foreground.xml`). La palette olimpica resta quella delle bolle.
+
+⚠️ **Le barre delle pagine non sono tutte lo stesso marchio**: quelle che portano *Garsal Apps*
+e rimandano a `/` sono il marchio di AppSphere e hanno il logo; `calorie.html` (🍽️),
+`finanza.html` e figlie (*GarsalFinanza*), `spese-ada.html`, `spese-personali.html` e le pagine
+ospiti hanno un'identità propria e **non** vanno allineate.
+
 ### ⚠️ `material-icons-extended` non va reintrodotto
 
 Quel pacchetto contiene **migliaia di icone compilate come codice Kotlin**: senza
