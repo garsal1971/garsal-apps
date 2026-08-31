@@ -397,7 +397,7 @@ di dire la stessa cosa.
 | Table | Purpose |
 |---|---|
 | `al_profile` | Una riga per utente. ⚠️ Di questa tabella si usa **solo `activity`** (fattore LAF): data di nascita, altezza e sesso si leggono da `cm_profile` |
-| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100 g**. `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama |
+| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100 g**. `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama. `verified` = i numeri li ha guardati l'utente |
 | `al_log` | Le righe del diario: `day`, `meal`, `grams`, e i valori per 100 g **congelati sulla riga** |
 | `al_days` | Il target di calorie di una giornata, **congelato**, con gli ingredienti del conto (`weight_kg`, `bmr`, `tdee`, `deficit_kcal`) |
 
@@ -486,6 +486,29 @@ singolare, e senza nessuna etichetta si legge «porzione / porzioni», vero per 
 ⚠️ Un'etichetta **non si inventa**: chi la legge scritta se la crede, e sono le calorie della
 giornata — `20260830120000_al_porzione_etichetta.sql` ne compila 17 sulle 44 voci base, e le
 altre (petto di pollo, insalata, zucchine) restano senza perché «1 porzione» è già quel che sono.
+
+⚠️ **`verified` non è una seconda `source`, ed è ortogonale a lei**
+(`20260831120000_al_foods_verified.sql`): `source` dice **da dove viene** un numero, `verified`
+dice **se qualcuno l'ha guardato**. Un prodotto letto da Open Food Facts e confrontato con
+l'etichetta che si ha in mano è verificato; una voce scritta a mano di fretta non lo è —
+ricavarla dalla fonte le farebbe dire una cosa diversa da quella per cui esiste. È la domanda
+che ha lasciato la «Pizza condita» in archivio a 1225 kcal per 100 g: la riga sembrava una riga
+qualunque, e non c'era nessun posto in cui dire «questa l'ho controllata».
+
+⚠️ **`NOT NULL DEFAULT false` e nessun backfill, nemmeno sulle voci `'base'`**: la spunta
+significa «l'ho controllato io», e metterla d'ufficio su righe che nessuno ha mai riguardato
+direbbe il falso proprio nella colonna che esiste per dire se ci si può fidare — un catalogo
+tutto verificato al primo avvio non distingue più niente. Le voci base restano quel che dice il
+riquadro di 🍎 Alimenti: valori indicativi delle tabelle di composizione pubbliche. Per la stessa
+ragione è un **booleano e non una data di verifica**: la domanda è «me ne fido?», e una data
+sarebbe un secondo dato da tenere aggiornato per rispondere alla stessa.
+
+La spunta si mette dal form ✏️ dell'alimento e si vede **nelle righe di ricerca del 📓 Diario**
+(badge *✅ verificato*), che è il momento in cui si sceglie quale numero far entrare nella
+giornata. ⚠️ **Solo sulle righe del catalogo**: un risultato di rete non è ancora in archivio,
+quindi nessuno ha potuto verificarlo e un ✅ lì direbbe il falso — è la stessa distinzione
+📗/🌐 che l'icona in testa alla riga già fa. E **solo quando c'è**: «non verificato» è lo stato
+normale di quasi tutto, e un badge su ogni riga smetterebbe di distinguere qualcosa.
 
 ⚠️ **Una casella vuota resta vuota e non vale zero**, né in `al_foods` né in `al_log`: «non so
 quante fibre ha» e «non ha fibre» sono due cose diverse, e uno zero falso farebbe sembrare magro

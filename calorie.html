@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.15.0</title>
+  <title>Calorie v1.16.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -116,6 +116,9 @@
        staccarsi dalle tre fonti interne a colpo d'occhio, non essere la quarta sfumatura di una
        fila di badge che si somigliano. */
     .badge-src-rete { background: #fef3c7; color: #92400e; }
+    /* «Verificato» non è una fonte e non prende un colore della fila delle fonti: sta accanto a
+       loro e dice un'altra cosa — non da dove viene il numero, ma se qualcuno l'ha guardato. */
+    .badge-verificato { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
     .chart-wrap { height: 260px; }
     .chart-wrap canvas { max-height: 260px; }
     .chart-wrap-sm { height: 200px; }
@@ -328,8 +331,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.15.0';
-var BUILD_TIME  = '2026-08-31T09:00:00Z';
+var APP_VERSION = 'v1.16.0';
+var BUILD_TIME  = '2026-08-31T14:30:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2332,12 +2335,18 @@ function renderRisultati() {
 function rigaRisultato(a, indiceOff) {
   const attr = indiceOff == null ? `data-food-id="${a.id}"` : `data-off="${indiceOff}"`;
   const f = fonteDi(a, indiceOff != null);
+  // ⚠️ La spunta si mostra solo sulle righe del CATALOGO: un risultato di rete non è ancora in
+  // archivio, quindi nessuno l'ha potuto verificare — un ✅ lì direbbe il falso. E si mostra solo
+  // quando c'è: «non verificato» è lo stato normale di quasi tutto, e un badge su ogni riga
+  // smetterebbe di distinguere qualcosa.
+  const verif = indiceOff == null && a.verified
+    ? `<span class="badge badge-verificato" title="Valori controllati contro l'etichetta o la tabella">✅ verificato</span>` : '';
   return `<button class="search-row" data-action="scegli" ${attr}>
     ${iconaFonte(f)}
     <span class="grow">
       <span class="fw-600">${esc(a.name)}</span>
       ${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
-      <span class="food-sub riga-fonte">${badgeFonte(f)}<span>${fmtKcal(a.kcal_100g)} kcal/100 g</span></span>
+      <span class="food-sub riga-fonte">${badgeFonte(f)}${verif}<span>${fmtKcal(a.kcal_100g)} kcal/100 g</span></span>
     </span>
     ${indiceOff == null && a.favorite ? '<span>⭐</span>' : ''}
   </button>`;
@@ -2624,6 +2633,18 @@ function openFormAlimento(f) {
     <div class="note-box" id="f-anteprima"></div>
     <div class="form-hint">Una casella lasciata vuota resta vuota e non conta zero: «non lo so» e «zero grammi»
       sono due cose diverse, e uno zero falso farebbe sembrare senza grassi un alimento di cui non si sa niente.</div>
+
+    <div class="form-group mt-16">
+      <label class="hstack gap-8">
+        <input type="checkbox" id="f-verified" ${v.verified ? 'checked' : ''} />
+        <span class="fw-600">✅ Dati verificati</span>
+      </label>
+      <div class="form-hint">Spuntalo quando hai <strong>guardato tu</strong> questi numeri — etichetta o
+        tabella alla mano. Non è la stessa cosa della fonte: un prodotto letto da Open Food Facts e
+        confrontato con la confezione è verificato, uno scritto a mano di fretta no. Serve a sapere,
+        mesi dopo, di quali righe ci si può fidare.</div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" data-action="close-modal">Annulla</button>
       <button class="btn btn-primary" data-action="salva-alimento" ${f ? `data-id="${f.id}"` : ''}>💾 Salva</button>
@@ -2665,6 +2686,10 @@ function leggiFormAlimento() {
     // (il ½ e l'1 leggono il singolare) e resterebbe una casella scritta che non fa niente.
     portion_label: t('f-porz-nome'),
     portion_label_plural: t('f-porz-nome') ? t('f-porz-nome-pl') : null,
+    // ⚠️ Booleano secco e non `|| null` come le caselle di testo: qui «non spuntato» vuol dire
+    // «non verificato», non «non lo so» — la colonna è NOT NULL e togliere la spunta a un
+    // alimento è una risposta, non una casella lasciata in bianco.
+    verified: !!$('f-verified')?.checked,
   };
 }
 
