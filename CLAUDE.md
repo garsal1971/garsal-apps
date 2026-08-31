@@ -1909,6 +1909,34 @@ Due corollari, entrambi già in codice e da non disfare:
   `access_token`, ormai scaduto o già speso, e lo rimetterebbe al posto di una sessione buona.
   `gestisciDeepLink` azzera `intent.data` appena l'ha letto.
 
+### ⚠️ Il marchio vive in tre posti, e vanno cambiati insieme
+
+Il logo di AppSphere sono **cinque cerchi** — arancio, rosso, verde e viola che si toccano a due a
+due, e il blu al centro sopra a tutti — e sta scritto in tre file:
+
+| Dove | File |
+|---|---|
+| Icone di lancio dei due APK | `app/…/ic_launcher_foreground.xml` e `appsphere-native/…/ic_launcher_foreground.xml` (fondo bianco per il WebView, nero per il nativo: è il segno che distingue le due app sul telefono) |
+| Barra in alto del nativo | `appsphere-native/…/drawable/logo_appsphere.xml` |
+| Barra in alto delle pagine | l'SVG in linea dentro `#garsal-top-bar` (e `#user-bar` / `.login-top-bar-icon` in `index.html`) |
+
+⚠️ **È già successo che divergessero**: le icone di lancio erano passate al marchio nuovo e le
+barre mostravano ancora i cerchi olimpici — cioè il logo di due generazioni prima. Cambiando il
+marchio si toccano tutti e tre.
+
+⚠️ **Nella barra il marchio sta su un disco bianco**, e non è decorazione: la barra è `#0081C8` e
+il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno
+sparisce nel colore della barra. Sul launcher il fondo ce l'ha già.
+
+⚠️ **I cerchi olimpici NON sono spariti**: `CerchiOlimpici` in `core/Logo.kt` disegna ancora
+l'avvio e la schermata della biometria del nativo, e la palette olimpica resta quella delle bolle
+della home.
+
+⚠️ **Le barre delle pagine non sono tutte lo stesso marchio**: quelle che dicono *Garsal Apps* e
+rimandano a `/` portano il logo; `calorie.html` (🍽️), `finanza.html` e figlie (*GarsalFinanza*),
+`spese-ada.html`, `spese-personali.html` e le pagine ospiti hanno un'identità propria e **non**
+vanno allineate.
+
 ### ⚠️ `material-icons-extended` non va reintrodotto
 
 Quel pacchetto contiene **migliaia di icone compilate come codice Kotlin**: senza
