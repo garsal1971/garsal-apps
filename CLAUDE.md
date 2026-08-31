@@ -2018,6 +2018,26 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   cui rimandare (`single`, `recurring`, `simple_recurring`, `multiple`). ⚠️ Un `workflow` mostra
   **Step** al posto di *Completa*: si chiude dai suoi step, e un pulsante che lo chiudesse di forza
   salterebbe quelli ancora aperti.
+- **Esecuzioni** (v1.10.0): ogni scheda della pagina ✅ Azioni porta il pulsante *Esecuzioni*, col
+  numero di volte che l'azione è stata chiusa, e apre l'elenco di quelle volte — quando, com'è
+  andata, quanti punti — con un 🗑 per ciascuna. ⚠️ È l'**unico pulsante che compare anche su
+  un'azione conclusa**: è lì che le esecuzioni ci sono, ed è la scheda che di pulsanti non ne ha
+  nessun altro. Resta invece fuori dal 📆 Piano quotidiano e dal Dettaglio dell'obiettivo — un
+  piano dice cosa resta da fare e il Dettaglio com'è definito l'obiettivo: le volte già fatte sono
+  memoria.
+  ⚠️ **Le righe `terminated` non sono esecuzioni e non si elencano**, come in `esitoDi()`:
+  chiudendo una singola la RPC ne scrive due nello stesso istante — l'esito, coi suoi punti, e la
+  chiusura, sempre a zero punti e che nessun conto guarda — e mostrarle tutt'e due farebbe sembrare
+  chiusa due volte un'azione chiusa una volta sola. Cancellando l'esecuzione se ne va con lei anche
+  la sua riga di chiusura (`chiusuraGemella`, riconosciuta dallo stesso istante: i due INSERT
+  stanno nella stessa transazione, quindi `now()` è identico), o resterebbe una riga che non si
+  vede da nessuna parte e che nessuno può più togliere.
+  ⚠️ **Cancellare un'esecuzione non riporta indietro l'azione**: i punti spariscono con la riga e
+  la barra dell'esecuzione si rifà senza — `ob_objective_progress` conta le azioni che hanno una
+  riga `completed`/`completed_late` — ma la **prossima occorrenza resta dov'è**, perché l'ha
+  spostata la RPC quando la riga è nata e rifarne il conto all'indietro vorrebbe dire riapplicare
+  in ordine tutta la storia. È la stessa scelta della cancellazione di un giro in SOS, e la
+  conferma lo dice prima.
 - ⚠️ **Un'azione non si fallisce** (v1.8.0): o la si fa, o la si sposta. Il *Fallisci* chiudeva una
   singola per sempre con un malus, e l'unica cosa che serviva davvero — «oggi no» — la fa già il
   salto. Via il pulsante, la funzione `failAction` e il campo *Fallimento* dal form;
