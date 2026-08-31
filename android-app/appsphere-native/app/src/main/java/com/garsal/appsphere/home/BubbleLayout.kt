@@ -40,9 +40,21 @@ object BubbleLayout {
      * Diametro proporzionale al punteggio: `area = (score/maxScore) * MAX_AREA`,
      * con un minimo di 6 cm² perché la bolla resti toccabile anche a punteggio
      * zero. Identico al web, densità inclusa.
+     *
+     * ⚠️ **I «6 cm²» sono quelli del web, e il web non li misura col righello.**
+     * `sizeOf()` lavora in CSS px e li converte a 96 dpi — ma su Android un CSS
+     * px *è* un dp, e un dp è 1/160 di pollice: quei 6 cm² valgono in realtà
+     * ~2,1 cm² veri, cioè un pavimento di **104,5 dp** di diametro. Prendendo
+     * `160f` — la densità vera — il pavimento diventava di 6 cm² fisici, cioè
+     * **174 dp**: un terzo più largo, e su uno schermo da 393 dp ci finivano
+     * sopra quasi tutte le bolle. Il risultato era una home di cerchi tutti
+     * uguali, in cui 10 punti e 5952 differivano del 26 % invece che del 110 %,
+     * e la proporzionalità — che è tutto il senso delle bolle — non si vedeva
+     * più. Il fattore giusto è quindi quello del web, `96f`, non la densità
+     * dello schermo: qui si stanno convertendo dp, non centimetri.
      */
     fun diametro(punteggio: Int, punteggioMax: Int, densita: Float): Float {
-        val pxPerCm = densita * 160f / 2.54f      // dp→px del web: 96 dpi; qui la densità vera
+        val pxPerCm = densita * 96f / 2.54f       // il "cm" del web: 96 dp per pollice
         val areaMin = 6f * pxPerCm * pxPerCm
         val diametroMax = 220f * densita
         val areaMax = PI.toFloat() * (diametroMax / 2f) * (diametroMax / 2f)
