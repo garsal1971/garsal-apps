@@ -1417,11 +1417,32 @@ Le regole di calcolo stanno tutte in `peso/PesoRegole.kt`, ricalcate una per una
 Due differenze di forma. La **tabella non è una tabella**: sei colonne coi caratteri di sistema
 grandi si tagliano o vanno a capo ognuna per conto suo, quindi ogni giornata è una scheda con la
 data e il peso in cima. E il **grafico è disegnato a mano su un `Canvas`** invece che con Chart.js:
-restano le due curve che si guardano davvero — peso e target — perché un grafico fitto di etichette
-su uno schermo di telefono è illeggibile prima ancora di essere utile. La spezzata del target è
-quella dei **traguardi presi diretti**, non i valori interpolati giorno per giorno che restano
-nella tabella: fra un traguardo e l'altro serve la retta vera, non tanti segmenti arrotondati a
-due decimali che sembrano seghettati.
+restano le curve che si guardano davvero — il peso e il target — perché un grafico fitto di
+etichette su uno schermo di telefono è illeggibile prima ancora di essere utile. La spezzata del
+target è quella dei **traguardi presi diretti**, non i valori interpolati giorno per giorno che
+restano nella tabella: fra un traguardo e l'altro serve la retta vera, non tanti segmenti
+arrotondati a due decimali che sembrano seghettati.
+
+⚠️ **Del peso si disegnano minimo e massimo della giornata, non il solo minimo.** Il minimo è la
+pesata del mattino — quella che fa punti, e per questo è la linea piena — mentre il massimo è una
+linea più sottile e sbiadita; la **fascia fra le due** è quanto il peso è ballato quel giorno, che
+con la sola linea del minimo non si vedeva affatto. ⚠️ Un giorno **ricostruito** un massimo non ce
+l'ha (`RigaGiorno.massimo` è `null`): lì il massimo ripiega sul minimo e la fascia si chiude su sé
+stessa — inventarne una vorrebbe dire disegnare un'oscillazione che nessuno ha misurato, ed è la
+stessa regola del pallino che sui giorni ricostruiti non si disegna.
+
+⚠️ **Il colore dice se si sta dentro il piano: sotto o pari al target è verde, sopra è rosso** —
+fascia, linee e pallini insieme. Non è una decorazione, è la **stessa** domanda che decide i punti
+della giornata (`PesoRegole.punti`, confronto a un decimale), quindi una giornata verde nel grafico
+è una giornata guadagnata nella tabella. Il taglio si fa **ritagliando sulla spezzata del target
+già disegnata** (`clipPath` sulle due regioni sopra e sotto di lei) e non spezzando le curve a
+mano: il confine cade così esattamente sulla linea che l'occhio confronta, e una giornata a cavallo
+del target viene per metà verde e per metà rossa — il minimo dentro il piano e il massimo fuori è
+il caso normale, non un difetto. ⚠️ Senza curva di traguardi (meno di due) non c'è nessun target da
+superare e il peso resta del suo colore neutro: un verde o un rosso lì sarebbe un giudizio
+inventato. ⚠️ Il verde del peso (`VerdePeso`, `#00967A`) è **un passo più scuro** di quello della
+spezzata del target: le due linee si incrociano di continuo, e con lo stesso identico verde nel
+punto in cui si toccano non si distinguerebbe più quale si sta guardando.
 
 ⚠️ **Il grafico copre l'intero periodo dell'obiettivo, futuro compreso, ed è scorrevole.** La
 curva del peso comincia dal giorno di inizio (non dal mese di respiro che il caricamento tiene
