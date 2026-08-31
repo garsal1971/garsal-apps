@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.16.0</title>
+  <title>Calorie v1.17.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -119,6 +119,10 @@
     /* «Verificato» non è una fonte e non prende un colore della fila delle fonti: sta accanto a
        loro e dice un'altra cosa — non da dove viene il numero, ma se qualcuno l'ha guardato. */
     .badge-verificato { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    /* Nella tabella il ✅ sta accanto al nome e non in una colonna sua: l'ultima colonna di una
+       tabella che scorre di lato sta oltre il bordo destro, e un segno che si vede solo
+       trascinando non si vede. */
+    .segno-verificato { font-size: .8em; vertical-align: middle; }
     .chart-wrap { height: 260px; }
     .chart-wrap canvas { max-height: 260px; }
     .chart-wrap-sm { height: 200px; }
@@ -331,8 +335,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.16.0';
-var BUILD_TIME  = '2026-08-31T14:30:00Z';
+var APP_VERSION = 'v1.17.0';
+var BUILD_TIME  = '2026-08-31T15:10:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -439,6 +443,10 @@ const S = {
   charts: {},
   ricerca: { q: '', locali: [], off: [], stato: '' },
   cercaAlimenti: '',
+  // 🍎 Alimenti: mostra i soli alimenti con la spunta «dati verificati». Vive in memoria e non in
+  // `localStorage`: è il taglio di una sessione di lavoro — «faccio l'inventario di quel che ho
+  // controllato» — e ritrovarlo acceso domani farebbe sembrare mezzo vuoto un catalogo pieno.
+  soloVerificati: false,
   // La ricerca su Open Food Facts fatta dalla pagina 🍎 Alimenti: quel che il catalogo non ha
   // ancora, si va a prenderlo lì e si aggiunge.
   cercaOff: { q: '', risultati: [], stato: '' },
@@ -1811,15 +1819,28 @@ const FONTI_SALVABILI = ['off', 'usda'];
 const iconaFonte = f => `<span class="fonte-ico" title="${esc(f.spiega)}" aria-hidden="true">${f.icona}</span>`;
 const badgeFonte = f => `<span class="badge badge-src-${f.classe}" title="${esc(f.spiega)}">${esc(f.etichetta)}</span>`;
 
+/* La spunta «dati verificati» in un elenco. ⚠️ Si scrive SOLO quando c'è: «non verificato» è lo
+   stato normale di quasi tutto, e un segno su ogni riga smetterebbe di distinguere qualcosa —
+   la stessa regola delle righe di ricerca del diario. Niente `aria-hidden`: qui il ✅ è l'unica
+   cosa che porta l'informazione, quindi il `title` deve poterla dire anche a chi non lo vede. */
+const segnoVerificato = a => a && a.verified
+  ? ' <span class="segno-verificato" title="Dati verificati: i valori li hai controllati tu">✅</span>' : '';
+
 function renderAlimenti() {
   const q = (S.cercaAlimenti || '').trim().toLowerCase();
-  const elenco = S.foods.filter(f => !q || (f.name || '').toLowerCase().includes(q) || (f.brand || '').toLowerCase().includes(q));
+  // ⚠️ Il filtro è un AND col testo, non una ricerca a sé: «solo verificati» restringe quel che
+  // la ricerca ha già trovato, come farebbe chiunque se lo aspetti — accendendolo mentre si sta
+  // cercando, l'elenco si accorcia, non riparte da capo.
+  const elenco = S.foods.filter(f =>
+    (!q || (f.name || '').toLowerCase().includes(q) || (f.brand || '').toLowerCase().includes(q))
+    && (!S.soloVerificati || f.verified));
+  const nVerificati = S.foods.filter(f => f.verified).length;
 
   let h = `
   <div class="view-header">
     <div>
       <div class="page-title">🍎 Alimenti</div>
-      <div class="page-sub">${S.foods.length} in archivio · i valori sono per 100 g</div>
+      <div class="page-sub">${S.foods.length} in archivio · ${nVerificati} verificati · i valori sono per 100 g</div>
     </div>
     <div class="hstack gap-8 wrap">
       <button class="btn btn-outline btn-sm" data-action="importa-tabella">📄 Importa una tabella</button>
@@ -1833,6 +1854,13 @@ function renderAlimenti() {
       <input type="search" class="form-input grow" data-action="cerca-alimenti" placeholder="Cerca un alimento — se non ce l'hai lo cerco in rete…" value="${esc(S.cercaAlimenti)}" />
       <button class="btn btn-outline btn-sm" data-action="${scanner ? 'apri-scanner-cat' : 'barcode-catalogo'}" title="Codice a barre">📷</button>
     </div>
+    <div class="hstack gap-8 wrap mt-8">
+      <button class="btn btn-sm ${S.soloVerificati ? 'btn-primary' : 'btn-outline'}" data-action="filtro-verificati"
+        title="Mostra i soli alimenti di cui hai controllato i valori">✅ Solo verificati</button>
+      <span class="text-xs text-muted">${S.soloVerificati
+        ? 'Elenco ristretto a quelli che hai controllato: gli altri ci sono, non li stai guardando.'
+        : nVerificati + ' su ' + S.foods.length + ' hanno la spunta.'}</span>
+    </div>
     <div id="scanner-wrap"><video id="scanner-video" playsinline muted></video>
       <div class="text-xs text-muted mt-8">Inquadra il codice a barre. <button class="btn-icon" data-action="chiudi-scanner">chiudi</button></div>
     </div>
@@ -1842,7 +1870,11 @@ function renderAlimenti() {
         <th class="text-right">Zuccheri</th><th class="text-right">Proteine</th><th>Fonte</th>
       </tr></thead><tbody>`;
   if (!elenco.length) {
-    h += '<tr><td colspan="8" class="text-center text-muted" style="padding:26px">Nessun alimento.</td></tr>';
+    // ⚠️ Un elenco vuoto col filtro acceso non è un catalogo vuoto: dirlo evita di andare a
+    // cercare l'alimento che c'è, non ha la spunta, e per questo non si vede.
+    h += `<tr><td colspan="8" class="text-center text-muted" style="padding:26px">${S.soloVerificati
+      ? 'Nessun alimento <strong>verificato</strong>' + (q ? ' con questo nome' : '') + '. Togli il filtro per vedere gli altri.'
+      : 'Nessun alimento.'}</td></tr>`;
   } else {
     elenco.slice(0, 400).forEach(f => {
       const fo = fonteDi(f);
@@ -1852,7 +1884,7 @@ function renderAlimenti() {
           <button class="btn-icon btn-icon-danger" data-action="elimina-alimento" data-id="${f.id}" title="Elimina">🗑</button>
         </td>
         <td><button class="btn-icon" data-action="preferito" data-id="${f.id}" title="Preferito">${f.favorite ? '⭐' : '☆'}</button></td>
-        <td><div class="fw-600">${esc(f.name)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
+        <td><div class="fw-600">${esc(f.name)}${segnoVerificato(f)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
         <td class="text-right mono">${fmtKcal(f.kcal_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.fat_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.sugars_100g)}</td>
@@ -1863,7 +1895,7 @@ function renderAlimenti() {
   }
   h += `</tbody></table></div>
     ${elenco.length > 400 ? '<div class="text-xs text-muted mt-8">Mostrati i primi 400: restringi la ricerca.</div>' : ''}
-    ${renderRisultatiOff()}
+    ${S.soloVerificati ? '' : renderRisultatiOff()}
   </div>
   <div class="note-box">Gli alimenti «base» sono valori indicativi presi dalle tabelle di composizione pubbliche
     (per l'Italia il riferimento è il CREA): dove un numero conta davvero, confrontalo con la tabella e correggilo —
@@ -3048,6 +3080,13 @@ document.addEventListener('click', async e => {
       await reload();
     }
 
+    // ⚠️ Ridisegna e basta: il filtro è un taglio della lettura, non un dato da salvare, quindi
+    // niente scrittura e niente `reload()` — che rileggerebbe l'archivio per mostrarne di meno.
+    else if (action === 'filtro-verificati') {
+      S.soloVerificati = !S.soloVerificati;
+      renderAlimenti();
+    }
+
     else if (action === 'salva-profilo') {
       // Solo l'attività: data di nascita, altezza e sesso vivono in cm_profile e da qui non si
       // toccano. al_profile resta per questo campo solo — le sue colonne birth_date, height_cm
@@ -3170,7 +3209,10 @@ document.addEventListener('input', e => {
   else if (/^f-(kcal|prot|fat|sat|carb|sug|fib|salt)$/.test(el.id)) aggiornaAnteprimaAlimento();
   else if (el.matches('[data-action="cerca-alimenti"]')) {
     S.cercaAlimenti = el.value;
-    cercaOffCatalogo(el.value);   // la rete si consulta da sé, dopo la pausa di digitazione
+    // ⚠️ Col filtro «solo verificati» acceso la rete non si consulta affatto: i suoi risultati
+    // non sono in archivio, quindi nessuno li ha verificati e non verrebbero comunque mostrati —
+    // e Open Food Facts le ricerche testuali le conta, una decina al minuto.
+    if (!S.soloVerificati) cercaOffCatalogo(el.value);   // dopo la pausa di digitazione
     clearTimeout(window._timerAlimenti);
     window._timerAlimenti = setTimeout(() => {
       renderAlimenti();

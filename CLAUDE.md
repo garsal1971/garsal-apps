@@ -503,12 +503,28 @@ riquadro di 🍎 Alimenti: valori indicativi delle tabelle di composizione pubbl
 ragione è un **booleano e non una data di verifica**: la domanda è «me ne fido?», e una data
 sarebbe un secondo dato da tenere aggiornato per rispondere alla stessa.
 
-La spunta si mette dal form ✏️ dell'alimento e si vede **nelle righe di ricerca del 📓 Diario**
-(badge *✅ verificato*), che è il momento in cui si sceglie quale numero far entrare nella
-giornata. ⚠️ **Solo sulle righe del catalogo**: un risultato di rete non è ancora in archivio,
-quindi nessuno ha potuto verificarlo e un ✅ lì direbbe il falso — è la stessa distinzione
-📗/🌐 che l'icona in testa alla riga già fa. E **solo quando c'è**: «non verificato» è lo stato
-normale di quasi tutto, e un badge su ogni riga smetterebbe di distinguere qualcosa.
+La spunta si mette dal form ✏️ dell'alimento e si vede in due posti: **nelle righe di ricerca del
+📓 Diario** (badge *✅ verificato*), che è il momento in cui si sceglie quale numero far entrare
+nella giornata, e **nella tabella di 🍎 Alimenti**, accanto al nome. ⚠️ **Solo sulle righe del
+catalogo**: un risultato di rete non è ancora in archivio, quindi nessuno ha potuto verificarlo e
+un ✅ lì direbbe il falso — è la stessa distinzione 📗/🌐 che l'icona in testa alla riga già fa. E
+**solo quando c'è**: «non verificato» è lo stato normale di quasi tutto, e un segno su ogni riga
+smetterebbe di distinguere qualcosa. ⚠️ Nella tabella il ✅ sta **accanto al nome e non in una
+colonna sua**: l'ultima colonna di una tabella che scorre di lato sta oltre il bordo destro, ed è
+la stessa ragione per cui ✏️ e 🗑 stanno in testa alla riga.
+
+In 🍎 Alimenti c'è il filtro **✅ Solo verificati** (`S.soloVerificati`), che restringe l'elenco a
+quelli con la spunta; l'intestazione dice sempre quanti sono sul totale, che è la domanda «quanto
+manca» senza bisogno di accenderlo. Tre cose volute:
+- è un **AND col testo**, non una ricerca a sé: accendendolo mentre si cerca, l'elenco si
+  accorcia invece di ripartire da capo;
+- **vive in memoria e non in `localStorage`**, a differenza del filtro per carta di Spese
+  Personali: è il taglio di una sessione di lavoro, e ritrovarlo acceso domani farebbe sembrare
+  mezzo vuoto un catalogo pieno;
+- ⚠️ **col filtro acceso la ricerca in rete non parte proprio**: un risultato di Open Food Facts
+  non è in archivio, quindi nessuno l'ha verificato e non verrebbe comunque mostrato — e OFF le
+  ricerche testuali le conta, una decina al minuto. Per la stessa ragione l'elenco vuoto **dice
+  che il filtro è acceso**: «nessun alimento» sarebbe indistinguibile da un catalogo vuoto.
 
 ⚠️ **Una casella vuota resta vuota e non vale zero**, né in `al_foods` né in `al_log`: «non so
 quante fibre ha» e «non ha fibre» sono due cose diverse, e uno zero falso farebbe sembrare magro
