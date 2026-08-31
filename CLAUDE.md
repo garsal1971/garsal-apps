@@ -397,7 +397,7 @@ di dire la stessa cosa.
 | Table | Purpose |
 |---|---|
 | `al_profile` | Una riga per utente. ⚠️ Di questa tabella si usa **solo `activity`** (fattore LAF): data di nascita, altezza e sesso si leggono da `cm_profile` |
-| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100 g**. `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama |
+| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100 g**. `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama. `verified` = i numeri li ha guardati l'utente |
 | `al_log` | Le righe del diario: `day`, `meal`, `grams`, e i valori per 100 g **congelati sulla riga** |
 | `al_days` | Il target di calorie di una giornata, **congelato**, con gli ingredienti del conto (`weight_kg`, `bmr`, `tdee`, `deficit_kcal`) |
 
@@ -486,6 +486,45 @@ singolare, e senza nessuna etichetta si legge «porzione / porzioni», vero per 
 ⚠️ Un'etichetta **non si inventa**: chi la legge scritta se la crede, e sono le calorie della
 giornata — `20260830120000_al_porzione_etichetta.sql` ne compila 17 sulle 44 voci base, e le
 altre (petto di pollo, insalata, zucchine) restano senza perché «1 porzione» è già quel che sono.
+
+⚠️ **`verified` non è una seconda `source`, ed è ortogonale a lei**
+(`20260831120000_al_foods_verified.sql`): `source` dice **da dove viene** un numero, `verified`
+dice **se qualcuno l'ha guardato**. Un prodotto letto da Open Food Facts e confrontato con
+l'etichetta che si ha in mano è verificato; una voce scritta a mano di fretta non lo è —
+ricavarla dalla fonte le farebbe dire una cosa diversa da quella per cui esiste. È la domanda
+che ha lasciato la «Pizza condita» in archivio a 1225 kcal per 100 g: la riga sembrava una riga
+qualunque, e non c'era nessun posto in cui dire «questa l'ho controllata».
+
+⚠️ **`NOT NULL DEFAULT false` e nessun backfill, nemmeno sulle voci `'base'`**: la spunta
+significa «l'ho controllato io», e metterla d'ufficio su righe che nessuno ha mai riguardato
+direbbe il falso proprio nella colonna che esiste per dire se ci si può fidare — un catalogo
+tutto verificato al primo avvio non distingue più niente. Le voci base restano quel che dice il
+riquadro di 🍎 Alimenti: valori indicativi delle tabelle di composizione pubbliche. Per la stessa
+ragione è un **booleano e non una data di verifica**: la domanda è «me ne fido?», e una data
+sarebbe un secondo dato da tenere aggiornato per rispondere alla stessa.
+
+La spunta si mette dal form ✏️ dell'alimento e si vede in due posti: **nelle righe di ricerca del
+📓 Diario** (badge *✅ verificato*), che è il momento in cui si sceglie quale numero far entrare
+nella giornata, e **nella tabella di 🍎 Alimenti**, accanto al nome. ⚠️ **Solo sulle righe del
+catalogo**: un risultato di rete non è ancora in archivio, quindi nessuno ha potuto verificarlo e
+un ✅ lì direbbe il falso — è la stessa distinzione 📗/🌐 che l'icona in testa alla riga già fa. E
+**solo quando c'è**: «non verificato» è lo stato normale di quasi tutto, e un segno su ogni riga
+smetterebbe di distinguere qualcosa. ⚠️ Nella tabella il ✅ sta **accanto al nome e non in una
+colonna sua**: l'ultima colonna di una tabella che scorre di lato sta oltre il bordo destro, ed è
+la stessa ragione per cui ✏️ e 🗑 stanno in testa alla riga.
+
+In 🍎 Alimenti c'è il filtro **✅ Solo verificati** (`S.soloVerificati`), che restringe l'elenco a
+quelli con la spunta; l'intestazione dice sempre quanti sono sul totale, che è la domanda «quanto
+manca» senza bisogno di accenderlo. Tre cose volute:
+- è un **AND col testo**, non una ricerca a sé: accendendolo mentre si cerca, l'elenco si
+  accorcia invece di ripartire da capo;
+- **vive in memoria e non in `localStorage`**, a differenza del filtro per carta di Spese
+  Personali: è il taglio di una sessione di lavoro, e ritrovarlo acceso domani farebbe sembrare
+  mezzo vuoto un catalogo pieno;
+- ⚠️ **col filtro acceso la ricerca in rete non parte proprio**: un risultato di Open Food Facts
+  non è in archivio, quindi nessuno l'ha verificato e non verrebbe comunque mostrato — e OFF le
+  ricerche testuali le conta, una decina al minuto. Per la stessa ragione l'elenco vuoto **dice
+  che il filtro è acceso**: «nessun alimento» sarebbe indistinguibile da un catalogo vuoto.
 
 ⚠️ **Una casella vuota resta vuota e non vale zero**, né in `al_foods` né in `al_log`: «non so
 quante fibre ha» e «non ha fibre» sono due cose diverse, e uno zero falso farebbe sembrare magro
@@ -1079,11 +1118,25 @@ Netlify dentro una `WebView`.
 (contro `com.garsalapps`), quindi i due si installano insieme sullo stesso telefono e leggono lo
 stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire quello WebView.
 
+⚠️ **Le due icone portano lo stesso disegno e si distinguono per il fondo**: i cinque cerchi di
+AppSphere — quattro che si toccano a due a due (arancio, rosso / verde, viola) e il blu al centro,
+sopra a tutti — su **fondo bianco per la WebView** e **nero per la nativa**. È l'unica cosa che le
+distingue in un cassetto delle app, dove il nome è lo stesso e sta scritto piccolo. Il disegno vive
+in `drawable/ic_launcher_foreground.xml`, **identico nei due progetti**, e il fondo in
+`values/colors.xml` (`ic_launcher_background`): cambiando il disegno va copiato in tutt'e due, o le
+due app smettono di sembrare la stessa app.
+
+⚠️ **Il raggio dei cerchi non è scelto a occhio.** Un'icona adattiva è una tela da 108 dp di cui il
+launcher garantisce solo il **cerchio centrale da 36 dp di raggio**: col disegno a `r = 14` dp
+l'angolo più esterno cade a `r·(1+√2) = 33,8` dp dal centro, dentro quel cerchio. Allargandolo per
+riempire di più la maschera quadrata, la maschera **tonda** taglierebbe i quattro cerchi esterni —
+e non si vedrebbe finché non lo si prova su un launcher che la usa.
+
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Righe di pulsanti e liste di scelta: due componenti condivisi, non uno per schermata
 
@@ -1378,11 +1431,32 @@ Le regole di calcolo stanno tutte in `peso/PesoRegole.kt`, ricalcate una per una
 Due differenze di forma. La **tabella non è una tabella**: sei colonne coi caratteri di sistema
 grandi si tagliano o vanno a capo ognuna per conto suo, quindi ogni giornata è una scheda con la
 data e il peso in cima. E il **grafico è disegnato a mano su un `Canvas`** invece che con Chart.js:
-restano le due curve che si guardano davvero — peso e target — perché un grafico fitto di etichette
-su uno schermo di telefono è illeggibile prima ancora di essere utile. La spezzata del target è
-quella dei **traguardi presi diretti**, non i valori interpolati giorno per giorno che restano
-nella tabella: fra un traguardo e l'altro serve la retta vera, non tanti segmenti arrotondati a
-due decimali che sembrano seghettati.
+restano le curve che si guardano davvero — il peso e il target — perché un grafico fitto di
+etichette su uno schermo di telefono è illeggibile prima ancora di essere utile. La spezzata del
+target è quella dei **traguardi presi diretti**, non i valori interpolati giorno per giorno che
+restano nella tabella: fra un traguardo e l'altro serve la retta vera, non tanti segmenti
+arrotondati a due decimali che sembrano seghettati.
+
+⚠️ **Del peso si disegnano minimo e massimo della giornata, non il solo minimo.** Il minimo è la
+pesata del mattino — quella che fa punti, e per questo è la linea piena — mentre il massimo è una
+linea più sottile e sbiadita; la **fascia fra le due** è quanto il peso è ballato quel giorno, che
+con la sola linea del minimo non si vedeva affatto. ⚠️ Un giorno **ricostruito** un massimo non ce
+l'ha (`RigaGiorno.massimo` è `null`): lì il massimo ripiega sul minimo e la fascia si chiude su sé
+stessa — inventarne una vorrebbe dire disegnare un'oscillazione che nessuno ha misurato, ed è la
+stessa regola del pallino che sui giorni ricostruiti non si disegna.
+
+⚠️ **Il colore dice se si sta dentro il piano: sotto o pari al target è verde, sopra è rosso** —
+fascia, linee e pallini insieme. Non è una decorazione, è la **stessa** domanda che decide i punti
+della giornata (`PesoRegole.punti`, confronto a un decimale), quindi una giornata verde nel grafico
+è una giornata guadagnata nella tabella. Il taglio si fa **ritagliando sulla spezzata del target
+già disegnata** (`clipPath` sulle due regioni sopra e sotto di lei) e non spezzando le curve a
+mano: il confine cade così esattamente sulla linea che l'occhio confronta, e una giornata a cavallo
+del target viene per metà verde e per metà rossa — il minimo dentro il piano e il massimo fuori è
+il caso normale, non un difetto. ⚠️ Senza curva di traguardi (meno di due) non c'è nessun target da
+superare e il peso resta del suo colore neutro: un verde o un rosso lì sarebbe un giudizio
+inventato. ⚠️ Il verde del peso (`VerdePeso`, `#00967A`) è **un passo più scuro** di quello della
+spezzata del target: le due linee si incrociano di continuo, e con lo stesso identico verde nel
+punto in cui si toccano non si distinguerebbe più quale si sta guardando.
 
 ⚠️ **Il grafico copre l'intero periodo dell'obiettivo, futuro compreso, ed è scorrevole.** La
 curva del peso comincia dal giorno di inizio (non dal mese di respiro che il caricamento tiene
@@ -1595,6 +1669,56 @@ sua copia in JavaScript (`checkMissedDays`, `checkCompletedStacks`, `checkExpire
 modifica alle regole va fatta in tutt'e due**. Il passaggio del web è il pezzo che manca, ed è
 quello che rende vera la frase «una regola sola».
 
+### ⚠️ Calorie nativo: due pagine, e il conto è quello della pagina
+
+`calorie/` porta in nativo le due schermate che si aprono **col telefono in mano**:
+📊 **Dashboard** — le cinque sezioni della pagina nello stesso ordine (⚖️ le pesate, 🔥 le calorie
+di oggi, 📐 le calorie per tratto, 📈 come sta andando, e il giorno per giorno dell'intera dieta) —
+e 📓 **Diario**, un giorno per volta coi pasti configurati, la barra del target, il riquadro che
+spiega da dove esce il numero, *📋 Ricopia da ieri*, i macro e ✏️/🗑 su ogni riga. Più il
+**+ galleggiante**, che è la ragione per cui questa app sta sul telefono: si segna l'alimento nel
+momento in cui lo si mangia, non la sera al computer.
+
+**Restano sul web 🍎 Alimenti e ⚙️ Impostazioni**, e non è una mancanza: curare il catalogo,
+configurare i pasti e scegliere il fattore di attività sono cose che si fanno da seduti e una
+volta sola. Il nativo quelle scelte le **legge** — `cm_settings.al_pasti`, `al_profile.activity`,
+`cm_profile` — e non le può cambiare. Restano di là anche il **codice a barre** (qui non c'è né
+`BarcodeDetector` né una fotocamera accesa per questo) e lo *scrivilo a mano*, che è il form di
+🍎 Alimenti: sono le due strade per mettere in dispensa. Come sul web, la **dieta non si decide
+qui**: l'obiettivo si crea in «Ti pisasti?» e da questa parte si legge soltanto.
+
+Le regole stanno in `calorie/CalorieRegole.kt`, ricalcate dalla pagina una per una, e **vanno
+cambiate nelle due implementazioni insieme**: deficit in due addendi (ritmo del tratto + recupero
+dello scarto, mai sotto zero), l'ultimo traguardo che vale come peso finale solo se i traguardi
+sono almeno due, il target **congelato** in `al_days` alla prima riga del giorno e ricalcolabile
+solo su richiesta esplicita, il saldo spalmato su **tutti** i giorni che restano, un giorno senza
+righe che non entra nel saldo, e da **oggi** solo lo sforo — perché un diario a metà non è un
+digiuno.
+
+⚠️ **Una duplicazione che la pagina ha e qui no**: `pesoPianoAl()` è la copia di
+`getInterpolatedTarget()` di `weight-quest.html`, e in nativo quella funzione esiste già
+(`PesoRegole.targetInterpolato`) — si chiama quella. Per la stessa ragione l'obiettivo attivo si
+decodifica con `Obiettivo.da` del modulo `peso`, che è già l'unico posto in cui `ps_objectives` e
+le sue milestone si leggono.
+
+Il **➕ prende lo schermo intero** invece di aprire un dialogo — ci stanno una ricerca, un elenco di
+risultati e la scelta della porzione, e coi caratteri di sistema grandi un dialogo sarebbe una
+feritoia — ed è in due passi, come nella pagina: si cerca (📗 catalogo e 🌐 rete sotto **due
+intestazioni**, mai concatenati) e poi si dice quanto (½/1/2 con l'etichetta dell'alimento, i
+pulsanti che **sommano**, l'↺ che azzera). La ricerca in rete passa dalla Edge Function
+`al-food-search` con la stessa pausa di digitazione del web: **Open Food Facts limita le ricerche
+testuali a una decina al minuto**, e cercare a ogni tasto premuto fa bandire l'indirizzo IP.
+
+Due differenze di forma, volute, entrambe per i caratteri di sistema grandi. I **numeri non sono
+una griglia di riquadri** ma una riga ciascuno, etichetta a sinistra e valore a destra: tre celle
+affiancate con testi di lunghezza diversa vanno a capo un numero diverso di volte e perdono
+l'allineamento. E un **tratto è una scheda, non una riga di tabella** — sette colonne o si tagliano
+o vanno a capo ognuna per conto suo — con l'ordine di lettura della pagina conservato: il
+**target** subito dopo i pesi, perché è la risposta per cui quella tabella esiste. Il grafico delle
+calorie è disegnato a mano su un `Canvas` scorrevole, con le misure in **dp e mai in pixel
+grezzi**; il grafico del peso resta di là, perché il peso è materia di «Ti pisasti?» e qui compare
+già nei riquadri e nel giorno per giorno.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -1785,24 +1909,33 @@ Due corollari, entrambi già in codice e da non disfare:
   `access_token`, ormai scaduto o già speso, e lo rimetterebbe al posto di una sessione buona.
   `gestisciDeepLink` azzera `intent.data` appena l'ha letto.
 
-### ⚠️ Il logo della barra in alto è un file solo, servito dal sito
+### ⚠️ Il marchio vive in tre posti, e vanno cambiati insieme
 
-Il marchio in cima — `GarsalTopBar` nel nativo, `#garsal-top-bar` e `#user-bar` nelle pagine —
-è **lo stesso PNG** che fa da icona di lancio dell'APK WebView e da favicon del sito:
-`icons/icon-192.png`, con `icons/logo-64.png` (10 KB) per le barre web e una copia in
-`appsphere-native/…/res/drawable-nodpi/logo_appsphere.png` per il nativo. Un marchio ridisegnato
-a parte in Compose o in SVG sarebbe una seconda verità su com'è fatto, e divergerebbe il giorno
-che una delle due cambia — è quello che era successo: il launcher portava già la faccia nuova e
-le barre mostravano ancora i cerchi olimpici.
+Il logo di AppSphere sono **cinque cerchi** — arancio, rosso, verde e viola che si toccano a due a
+due, e il blu al centro sopra a tutti — e sta scritto in tre file:
 
-⚠️ **I cerchi olimpici restano in `core/Logo.kt` e sono ancora in uso**: `CerchiOlimpici` disegna
-l'avvio e la schermata della biometria (`MainActivity`), e resta l'icona di lancio dell'APK
-nativo (`ic_launcher_foreground.xml`). La palette olimpica resta quella delle bolle.
+| Dove | File |
+|---|---|
+| Icone di lancio dei due APK | `app/…/ic_launcher_foreground.xml` e `appsphere-native/…/ic_launcher_foreground.xml` (fondo bianco per il WebView, nero per il nativo: è il segno che distingue le due app sul telefono) |
+| Barra in alto del nativo | `appsphere-native/…/drawable/logo_appsphere.xml` |
+| Barra in alto delle pagine | l'SVG in linea dentro `#garsal-top-bar` (e `#user-bar` / `.login-top-bar-icon` in `index.html`) |
 
-⚠️ **Le barre delle pagine non sono tutte lo stesso marchio**: quelle che portano *Garsal Apps*
-e rimandano a `/` sono il marchio di AppSphere e hanno il logo; `calorie.html` (🍽️),
-`finanza.html` e figlie (*GarsalFinanza*), `spese-ada.html`, `spese-personali.html` e le pagine
-ospiti hanno un'identità propria e **non** vanno allineate.
+⚠️ **È già successo che divergessero**: le icone di lancio erano passate al marchio nuovo e le
+barre mostravano ancora i cerchi olimpici — cioè il logo di due generazioni prima. Cambiando il
+marchio si toccano tutti e tre.
+
+⚠️ **Nella barra il marchio sta su un disco bianco**, e non è decorazione: la barra è `#0081C8` e
+il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno
+sparisce nel colore della barra. Sul launcher il fondo ce l'ha già.
+
+⚠️ **I cerchi olimpici NON sono spariti**: `CerchiOlimpici` in `core/Logo.kt` disegna ancora
+l'avvio e la schermata della biometria del nativo, e la palette olimpica resta quella delle bolle
+della home.
+
+⚠️ **Le barre delle pagine non sono tutte lo stesso marchio**: quelle che dicono *Garsal Apps* e
+rimandano a `/` portano il logo; `calorie.html` (🍽️), `finanza.html` e figlie (*GarsalFinanza*),
+`spese-ada.html`, `spese-personali.html` e le pagine ospiti hanno un'identità propria e **non**
+vanno allineate.
 
 ### ⚠️ `material-icons-extended` non va reintrodotto
 
@@ -1823,10 +1956,10 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Sette app ora esistono in due implementazioni
+### ⚠️ Otto app ora esistono in due implementazioni
 
 `spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html`, `weight-quest.html`,
-`memo.html` e `habit-tracker.html` hanno un gemello Kotlin che lavora sulle
+`memo.html`, `habit-tracker.html` e `calorie.html` hanno un gemello Kotlin che lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -1890,7 +2023,14 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   una copia in JavaScript non è mai esistita. Interrompi, Riprendi ed Elimina ci sono ora da tutt'e
   due le parti, con la stessa regola sulla data di ripartenza. Dettagli nella sezione qui sopra.
 
-(`tasks.html` è l'ottava, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
+- **Calorie** — il conto del target è duplicato riga per riga in `CalorieRegole`: deficit in due
+  addendi (ritmo del tratto + recupero dello scarto, mai sotto zero), peso finale solo con almeno
+  due traguardi, target congelato in `al_days` e ricalcolabile solo su richiesta, saldo spalmato
+  sui giorni che restano, giorno senza righe che non è un digiuno, e da oggi solo lo sforo. Il
+  nativo porta 📊 Dashboard, 📓 Diario e il ➕ che segna un alimento; 🍎 Alimenti e ⚙️ Impostazioni
+  restano di là, e da qui si leggono soltanto. Dettagli nella sezione qui sopra.
+
+(`tasks.html` è la nona, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -2256,11 +2396,16 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   il cassetto, scegli, il cassetto si chiude); sopra i 768 px la barra sparisce e resta la
   sidebar, dove le voci hanno il posto per il loro nome. La voce accesa si aggiorna in tutt'e due
   da `navigate()`, con un selettore solo: chi disegna non deve sapere quale delle due è a schermo.
-  ⚠️ La barra **scorre di lato e non stringe le icone**: coi caratteri di sistema grandi sei voci
-  su 360 px non ci stanno, e schiacciarle sotto il polpastrello le renderebbe non toccabili — è
-  la stessa regola delle righe di pulsanti che non vanno mai a capo. Per questo l'ordine conta:
-  prima le quattro **pagine**, poi il separatore, poi i due collegamenti (⚖️ Ti pisasti?, 🏠
-  AppSphere) — quel che esce dal bordo è quel che serve meno.
+  ⚠️ La barra **scorre di lato e non stringe le icone**: coi caratteri di sistema grandi le voci
+  su 360 px ci stanno appena, e schiacciarle sotto il polpastrello le renderebbe non toccabili — è
+  la stessa regola delle righe di pulsanti che non vanno mai a capo.
+  ⚠️ **Barra e sidebar elencano le sole quattro pagine di Calorie** (v1.17.2): i due collegamenti
+  in coda — ⚖️ Ti pisasti?, 🏠 AppSphere, col loro separatore — sono stati tolti da tutt'e due.
+  Erano navigazione che porta *fuori* mescolata a quella che porta *dentro*, e il 🏠 ripeteva
+  quello che la barra blu, che sta sopra ed è in ogni app, fa già. A «Ti pisasti?» si va da
+  AppSphere o dai collegamenti scritti dove si parla dell'obiettivo — che è il punto in cui serve
+  andarci. Rimettendone uno, va rimesso in tutt'e due: sono la stessa navigazione, mostrata in due
+  modi a seconda della larghezza.
   ⚠️ `min-width` è in `em`, quindi si misura sul font dell'**icona** e non su quello della pagina:
   a 3.2em faceva 74 px a voce e la barra scorreva già a carattere normale. Resta in `em` di
   proposito — il bersaglio da toccare deve crescere col testo di sistema — ma il valore va provato
@@ -2481,6 +2626,10 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   pulsanti «150 g» uno accanto all'altro sembrano due scelte diverse e non lo sono. Un alimento
   **senza** porzione non se ne inventa una — una porzione inventata chi la legge se la crede, e
   sono le calorie della giornata: si parte da 100 g e la finestra dice dove scriverla.
+- ⚠️ **Esiste anche in nativo** (`android-app/appsphere-native/app/.../calorie/`), ma solo per
+  📊 Dashboard e 📓 Diario più il ➕ che segna un alimento: 🍎 Alimenti e ⚙️ Impostazioni stanno
+  qui e basta, e di là si leggono. Il conto del target è duplicato in `CalorieRegole.kt` e **va
+  cambiato nelle due implementazioni insieme** — dettagli in *AppSphere nativa → Calorie nativo*.
 - Il **codice a barre** porta a due posti diversi a seconda di dove si parte (`S.scanPer`): dal
   diario finisce sulla porzione, dal catalogo archivia la voce e basta. La finestra dello scanner
   è la stessa.
@@ -3231,7 +3380,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Sette app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo e Abituati hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **Otto app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati e Calorie hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 

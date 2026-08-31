@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.15.0</title>
+  <title>Calorie v1.17.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -66,7 +66,6 @@
     .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
     .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
     .nav-item.active { background: #dcfce7; color: var(--c-primary); }
-    .nav-sep { height: 1px; background: var(--c-border); margin: 10px 4px 4px; }
     .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
     .view { display: none; }
     .view.active { display: block; }
@@ -116,6 +115,13 @@
        staccarsi dalle tre fonti interne a colpo d'occhio, non essere la quarta sfumatura di una
        fila di badge che si somigliano. */
     .badge-src-rete { background: #fef3c7; color: #92400e; }
+    /* «Verificato» non è una fonte e non prende un colore della fila delle fonti: sta accanto a
+       loro e dice un'altra cosa — non da dove viene il numero, ma se qualcuno l'ha guardato. */
+    .badge-verificato { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    /* Nella tabella il ✅ sta accanto al nome e non in una colonna sua: l'ultima colonna di una
+       tabella che scorre di lato sta oltre il bordo destro, e un segno che si vede solo
+       trascinando non si vede. */
+    .segno-verificato { font-size: .8em; vertical-align: middle; }
     .chart-wrap { height: 260px; }
     .chart-wrap canvas { max-height: 260px; }
     .chart-wrap-sm { height: 200px; }
@@ -147,8 +153,12 @@
        Sul telefono prende il posto del menù ☰: le quattro pagine si vedono tutte insieme e ci si
        sposta con un tocco solo invece di tre (apri, scegli, il cassetto si chiude). Sopra i
        768 px sparisce e resta la sidebar, dove le voci hanno il posto per il loro nome.
-       ⚠️ Scorre di lato invece di stringere le icone: coi caratteri di sistema grandi sei voci
-       su 360 px non ci stanno, e schiacciarle sotto il polpastrello le rende non toccabili —
+       ⚠️ Ci sono le SOLE quattro pagine di questa app: i due collegamenti in coda (⚖️ Ti pisasti?,
+       🏠 AppSphere) sono stati tolti dalla v1.17.2 — a casa si torna dalla barra blu, che sta
+       sopra e c'è comunque. Una navigazione che porta fuori mescolata a quella che porta dentro
+       fa contare i tocchi per capire dove si finisce.
+       ⚠️ Scorre di lato invece di stringere le icone: coi caratteri di sistema grandi quattro voci
+       su 360 px ci stanno appena, e schiacciarle sotto il polpastrello le rende non toccabili —
        è la stessa regola delle righe di pulsanti che non vanno mai a capo. */
     .icon-nav { display: none; align-items: center; background: #F3F4F6; border-bottom: 2px solid var(--c-border);
       box-shadow: 0 2px 10px rgba(0,0,0,.08); overflow-x: auto; scrollbar-width: none; }
@@ -158,7 +168,6 @@
       color: inherit; transition: background .15s; }
     .icon-nav-item:hover { background: rgba(255,255,255,.7); }
     .icon-nav-item.active { background: var(--c-primary); }
-    .icon-nav-sep { flex: 0 0 1px; align-self: stretch; background: var(--c-border); margin: 6px 2px; }
 
     /* ── Barra del consumo: quanto del target è già stato mangiato ── */
     .bar-track { height: 12px; border-radius: 999px; background: #e8ede8; overflow: hidden; }
@@ -232,10 +241,18 @@
   </style>
 </head>
 <body>
+<!-- La barra blu è di AppSphere, non della pagina: logo a cerchi olimpici, «Garsal Apps» e
+     href="/", identica in tutte le app. È il modo per tornare a casa da qualunque punto, e va
+     dove dice — fino alla v1.17.0 diceva «Calorie» e portava a «Ti pisasti?», cioè un nome che
+     non era né quello della pagina in cui si finiva né quello di casa. Il nome di QUESTA pagina
+     sta nella sidebar e nella barra della versione in fondo. ⚠️ Dalla v1.17.2 è anche l'UNICO
+     collegamento verso l'esterno che la navigazione offre: sidebar e barra delle icone elencano
+     le sole quattro pagine di Calorie. A «Ti pisasti?» si va da AppSphere, oppure dai
+     collegamenti scritti dove si parla dell'obiettivo — che è il punto in cui serve andarci. -->
 <div id="garsal-top-bar">
-  <a href="weight-quest.html" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
-    <span style="width:22px;height:22px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">🍽️</span>
-    <div id="garsal-top-bar-text">Calorie</div>
+  <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
+    <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
+    <div id="garsal-top-bar-text">Garsal Apps</div>
   </a>
 </div>
 <div id="loading-overlay">
@@ -249,9 +266,6 @@
     <button class="icon-nav-item" data-action="nav" data-view="diario" title="Diario" aria-label="Diario">📓</button>
     <button class="icon-nav-item" data-action="nav" data-view="alimenti" title="Alimenti" aria-label="Alimenti">🍎</button>
     <button class="icon-nav-item" data-action="nav" data-view="impostazioni" title="Impostazioni" aria-label="Impostazioni">⚙️</button>
-    <span class="icon-nav-sep"></span>
-    <a class="icon-nav-item" href="weight-quest.html" title="Torna a Ti pisasti?" aria-label="Torna a Ti pisasti?">⚖️</a>
-    <a class="icon-nav-item" href="/" title="AppSphere" aria-label="AppSphere">🏠</a>
   </nav>
   <div class="app-layout">
     <nav class="sidebar" id="sidebar">
@@ -259,9 +273,6 @@
       <button class="nav-item" data-action="nav" data-view="diario">📓 Diario</button>
       <button class="nav-item" data-action="nav" data-view="alimenti">🍎 Alimenti</button>
       <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
-      <div class="nav-sep"></div>
-      <a class="nav-item" href="weight-quest.html" style="text-decoration:none">← Torna a ⚖️ Ti pisasti?</a>
-      <a class="nav-item" href="/" style="text-decoration:none">🏠 AppSphere</a>
     </nav>
     <main class="app-main">
       <div id="view-dashboard" class="view active"></div>
@@ -328,8 +339,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.15.0';
-var BUILD_TIME  = '2026-08-31T09:00:00Z';
+var APP_VERSION = 'v1.17.2';
+var BUILD_TIME  = '2026-08-31T17:05:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -436,6 +447,10 @@ const S = {
   charts: {},
   ricerca: { q: '', locali: [], off: [], stato: '' },
   cercaAlimenti: '',
+  // 🍎 Alimenti: mostra i soli alimenti con la spunta «dati verificati». Vive in memoria e non in
+  // `localStorage`: è il taglio di una sessione di lavoro — «faccio l'inventario di quel che ho
+  // controllato» — e ritrovarlo acceso domani farebbe sembrare mezzo vuoto un catalogo pieno.
+  soloVerificati: false,
   // La ricerca su Open Food Facts fatta dalla pagina 🍎 Alimenti: quel che il catalogo non ha
   // ancora, si va a prenderlo lì e si aggiunge.
   cercaOff: { q: '', risultati: [], stato: '' },
@@ -1808,15 +1823,28 @@ const FONTI_SALVABILI = ['off', 'usda'];
 const iconaFonte = f => `<span class="fonte-ico" title="${esc(f.spiega)}" aria-hidden="true">${f.icona}</span>`;
 const badgeFonte = f => `<span class="badge badge-src-${f.classe}" title="${esc(f.spiega)}">${esc(f.etichetta)}</span>`;
 
+/* La spunta «dati verificati» in un elenco. ⚠️ Si scrive SOLO quando c'è: «non verificato» è lo
+   stato normale di quasi tutto, e un segno su ogni riga smetterebbe di distinguere qualcosa —
+   la stessa regola delle righe di ricerca del diario. Niente `aria-hidden`: qui il ✅ è l'unica
+   cosa che porta l'informazione, quindi il `title` deve poterla dire anche a chi non lo vede. */
+const segnoVerificato = a => a && a.verified
+  ? ' <span class="segno-verificato" title="Dati verificati: i valori li hai controllati tu">✅</span>' : '';
+
 function renderAlimenti() {
   const q = (S.cercaAlimenti || '').trim().toLowerCase();
-  const elenco = S.foods.filter(f => !q || (f.name || '').toLowerCase().includes(q) || (f.brand || '').toLowerCase().includes(q));
+  // ⚠️ Il filtro è un AND col testo, non una ricerca a sé: «solo verificati» restringe quel che
+  // la ricerca ha già trovato, come farebbe chiunque se lo aspetti — accendendolo mentre si sta
+  // cercando, l'elenco si accorcia, non riparte da capo.
+  const elenco = S.foods.filter(f =>
+    (!q || (f.name || '').toLowerCase().includes(q) || (f.brand || '').toLowerCase().includes(q))
+    && (!S.soloVerificati || f.verified));
+  const nVerificati = S.foods.filter(f => f.verified).length;
 
   let h = `
   <div class="view-header">
     <div>
       <div class="page-title">🍎 Alimenti</div>
-      <div class="page-sub">${S.foods.length} in archivio · i valori sono per 100 g</div>
+      <div class="page-sub">${S.foods.length} in archivio · ${nVerificati} verificati · i valori sono per 100 g</div>
     </div>
     <div class="hstack gap-8 wrap">
       <button class="btn btn-outline btn-sm" data-action="importa-tabella">📄 Importa una tabella</button>
@@ -1830,6 +1858,13 @@ function renderAlimenti() {
       <input type="search" class="form-input grow" data-action="cerca-alimenti" placeholder="Cerca un alimento — se non ce l'hai lo cerco in rete…" value="${esc(S.cercaAlimenti)}" />
       <button class="btn btn-outline btn-sm" data-action="${scanner ? 'apri-scanner-cat' : 'barcode-catalogo'}" title="Codice a barre">📷</button>
     </div>
+    <div class="hstack gap-8 wrap mt-8">
+      <button class="btn btn-sm ${S.soloVerificati ? 'btn-primary' : 'btn-outline'}" data-action="filtro-verificati"
+        title="Mostra i soli alimenti di cui hai controllato i valori">✅ Solo verificati</button>
+      <span class="text-xs text-muted">${S.soloVerificati
+        ? 'Elenco ristretto a quelli che hai controllato: gli altri ci sono, non li stai guardando.'
+        : nVerificati + ' su ' + S.foods.length + ' hanno la spunta.'}</span>
+    </div>
     <div id="scanner-wrap"><video id="scanner-video" playsinline muted></video>
       <div class="text-xs text-muted mt-8">Inquadra il codice a barre. <button class="btn-icon" data-action="chiudi-scanner">chiudi</button></div>
     </div>
@@ -1839,7 +1874,11 @@ function renderAlimenti() {
         <th class="text-right">Zuccheri</th><th class="text-right">Proteine</th><th>Fonte</th>
       </tr></thead><tbody>`;
   if (!elenco.length) {
-    h += '<tr><td colspan="8" class="text-center text-muted" style="padding:26px">Nessun alimento.</td></tr>';
+    // ⚠️ Un elenco vuoto col filtro acceso non è un catalogo vuoto: dirlo evita di andare a
+    // cercare l'alimento che c'è, non ha la spunta, e per questo non si vede.
+    h += `<tr><td colspan="8" class="text-center text-muted" style="padding:26px">${S.soloVerificati
+      ? 'Nessun alimento <strong>verificato</strong>' + (q ? ' con questo nome' : '') + '. Togli il filtro per vedere gli altri.'
+      : 'Nessun alimento.'}</td></tr>`;
   } else {
     elenco.slice(0, 400).forEach(f => {
       const fo = fonteDi(f);
@@ -1849,7 +1888,7 @@ function renderAlimenti() {
           <button class="btn-icon btn-icon-danger" data-action="elimina-alimento" data-id="${f.id}" title="Elimina">🗑</button>
         </td>
         <td><button class="btn-icon" data-action="preferito" data-id="${f.id}" title="Preferito">${f.favorite ? '⭐' : '☆'}</button></td>
-        <td><div class="fw-600">${esc(f.name)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
+        <td><div class="fw-600">${esc(f.name)}${segnoVerificato(f)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
         <td class="text-right mono">${fmtKcal(f.kcal_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.fat_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.sugars_100g)}</td>
@@ -1860,7 +1899,7 @@ function renderAlimenti() {
   }
   h += `</tbody></table></div>
     ${elenco.length > 400 ? '<div class="text-xs text-muted mt-8">Mostrati i primi 400: restringi la ricerca.</div>' : ''}
-    ${renderRisultatiOff()}
+    ${S.soloVerificati ? '' : renderRisultatiOff()}
   </div>
   <div class="note-box">Gli alimenti «base» sono valori indicativi presi dalle tabelle di composizione pubbliche
     (per l'Italia il riferimento è il CREA): dove un numero conta davvero, confrontalo con la tabella e correggilo —
@@ -2332,12 +2371,18 @@ function renderRisultati() {
 function rigaRisultato(a, indiceOff) {
   const attr = indiceOff == null ? `data-food-id="${a.id}"` : `data-off="${indiceOff}"`;
   const f = fonteDi(a, indiceOff != null);
+  // ⚠️ La spunta si mostra solo sulle righe del CATALOGO: un risultato di rete non è ancora in
+  // archivio, quindi nessuno l'ha potuto verificare — un ✅ lì direbbe il falso. E si mostra solo
+  // quando c'è: «non verificato» è lo stato normale di quasi tutto, e un badge su ogni riga
+  // smetterebbe di distinguere qualcosa.
+  const verif = indiceOff == null && a.verified
+    ? `<span class="badge badge-verificato" title="Valori controllati contro l'etichetta o la tabella">✅ verificato</span>` : '';
   return `<button class="search-row" data-action="scegli" ${attr}>
     ${iconaFonte(f)}
     <span class="grow">
       <span class="fw-600">${esc(a.name)}</span>
       ${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
-      <span class="food-sub riga-fonte">${badgeFonte(f)}<span>${fmtKcal(a.kcal_100g)} kcal/100 g</span></span>
+      <span class="food-sub riga-fonte">${badgeFonte(f)}${verif}<span>${fmtKcal(a.kcal_100g)} kcal/100 g</span></span>
     </span>
     ${indiceOff == null && a.favorite ? '<span>⭐</span>' : ''}
   </button>`;
@@ -2624,6 +2669,18 @@ function openFormAlimento(f) {
     <div class="note-box" id="f-anteprima"></div>
     <div class="form-hint">Una casella lasciata vuota resta vuota e non conta zero: «non lo so» e «zero grammi»
       sono due cose diverse, e uno zero falso farebbe sembrare senza grassi un alimento di cui non si sa niente.</div>
+
+    <div class="form-group mt-16">
+      <label class="hstack gap-8">
+        <input type="checkbox" id="f-verified" ${v.verified ? 'checked' : ''} />
+        <span class="fw-600">✅ Dati verificati</span>
+      </label>
+      <div class="form-hint">Spuntalo quando hai <strong>guardato tu</strong> questi numeri — etichetta o
+        tabella alla mano. Non è la stessa cosa della fonte: un prodotto letto da Open Food Facts e
+        confrontato con la confezione è verificato, uno scritto a mano di fretta no. Serve a sapere,
+        mesi dopo, di quali righe ci si può fidare.</div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" data-action="close-modal">Annulla</button>
       <button class="btn btn-primary" data-action="salva-alimento" ${f ? `data-id="${f.id}"` : ''}>💾 Salva</button>
@@ -2665,6 +2722,10 @@ function leggiFormAlimento() {
     // (il ½ e l'1 leggono il singolare) e resterebbe una casella scritta che non fa niente.
     portion_label: t('f-porz-nome'),
     portion_label_plural: t('f-porz-nome') ? t('f-porz-nome-pl') : null,
+    // ⚠️ Booleano secco e non `|| null` come le caselle di testo: qui «non spuntato» vuol dire
+    // «non verificato», non «non lo so» — la colonna è NOT NULL e togliere la spunta a un
+    // alimento è una risposta, non una casella lasciata in bianco.
+    verified: !!$('f-verified')?.checked,
   };
 }
 
@@ -3023,6 +3084,13 @@ document.addEventListener('click', async e => {
       await reload();
     }
 
+    // ⚠️ Ridisegna e basta: il filtro è un taglio della lettura, non un dato da salvare, quindi
+    // niente scrittura e niente `reload()` — che rileggerebbe l'archivio per mostrarne di meno.
+    else if (action === 'filtro-verificati') {
+      S.soloVerificati = !S.soloVerificati;
+      renderAlimenti();
+    }
+
     else if (action === 'salva-profilo') {
       // Solo l'attività: data di nascita, altezza e sesso vivono in cm_profile e da qui non si
       // toccano. al_profile resta per questo campo solo — le sue colonne birth_date, height_cm
@@ -3145,7 +3213,10 @@ document.addEventListener('input', e => {
   else if (/^f-(kcal|prot|fat|sat|carb|sug|fib|salt)$/.test(el.id)) aggiornaAnteprimaAlimento();
   else if (el.matches('[data-action="cerca-alimenti"]')) {
     S.cercaAlimenti = el.value;
-    cercaOffCatalogo(el.value);   // la rete si consulta da sé, dopo la pausa di digitazione
+    // ⚠️ Col filtro «solo verificati» acceso la rete non si consulta affatto: i suoi risultati
+    // non sono in archivio, quindi nessuno li ha verificati e non verrebbero comunque mostrati —
+    // e Open Food Facts le ricerche testuali le conta, una decina al minuto.
+    if (!S.soloVerificati) cercaOffCatalogo(el.value);   // dopo la pausa di digitazione
     clearTimeout(window._timerAlimenti);
     window._timerAlimenti = setTimeout(() => {
       renderAlimenti();

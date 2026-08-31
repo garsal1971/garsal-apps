@@ -29,19 +29,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -54,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.garsal.appsphere.core.Palette
+import com.garsal.appsphere.core.RigaScorrevole
 import java.time.LocalDate
 
 /**
@@ -64,6 +64,25 @@ import java.time.LocalDate
  * sua **fine**, futuro compreso, perché la spezzata del target racconta tutto
  * il piano e non solo il pezzo già passato. All'apertura è centrato su oggi
  * con un paio di settimane prima e dopo in vista; da lì si scorre col dito.
+ *
+ * ⚠️ **Di ogni giornata si disegnano minimo e massimo, non il solo minimo.**
+ * Il minimo è la pesata del mattino — quella che fa punti, e per questo è la
+ * linea piena — ma il peso dentro la stessa giornata balla di un chilo e
+ * passa, e con la sola linea del minimo quel ballo non si vedeva affatto: la
+ * fascia fra le due linee è quanto si è oscillato quel giorno. ⚠️ Un giorno
+ * **ricostruito** ha un minimo interpolato e nessun massimo
+ * ([PesoRegole.RigaGiorno.massimo] è `null`): lì la fascia si chiude su sé
+ * stessa, che è il modo onesto di dire che non c'è nessuna oscillazione da
+ * mostrare — inventarne una vorrebbe dire disegnare una misura mai fatta.
+ *
+ * ⚠️ **Il colore dice se si sta dentro il piano**: quel che sta **sotto o
+ * pari al target è verde, quel che lo supera è rosso** — fascia e linee
+ * insieme, tagliate esattamente sulla spezzata del target. Non è una
+ * decorazione: è la stessa domanda che decide i punti della giornata
+ * ([PesoRegole.punti]), e il taglio si fa sulla **stessa** spezzata che si
+ * vede disegnata, quindi il colore non può mai contraddire quel che l'occhio
+ * legge. Una giornata a cavallo del target è per metà verde e per metà rossa,
+ * ed è giusto così: il minimo può essere dentro il piano e il massimo fuori.
  *
  * Le due serie non sono ricalcolate qui: il peso arriva dalle stesse righe
  * della tabella (quindi grafico e tabella non possono raccontare due storie
@@ -76,8 +95,10 @@ import java.time.LocalDate
  * spiegazione che stavano lì raccontavano quello che si vede — che si scorre,
  * che la linea piena è il peso e la tratteggiata il target — e per dirlo si
  * prendevano un terzo dello schermo del telefono. Quel che serve davvero
- * (legenda e minimo del periodo) sta ora in **una riga sola sopra** il
- * grafico.
+ * (legenda, minimo e massimo del periodo) sta ora in **una riga sola sopra**
+ * il grafico, che **scorre di lato** invece di andare a capo: coi caratteri
+ * di sistema grandi tre voci di legenda e due numeri non ci stanno, ed è la
+ * stessa regola delle righe di pulsanti.
  *
  * ⚠️ **Le misure del disegno sono in `dp`, mai in pixel grezzi.** Prima
  * spessori, margini e la fascia delle date erano numeri in px (`4f`, `34f`):
@@ -108,16 +129,18 @@ fun VistaGrafico(stato: PesoState) {
     // il mese di respiro che il caricamento tiene per la prima interpolazione
     // — affollerebbero la lettura senza dire niente su questo obiettivo.
     //
-    // Il terzo valore dice se quel giorno è **ricostruito**: la linea li
-    // attraversa tutti (togliendoli cambierebbe la forma della curva, e i
-    // punti valgono per il punteggio), ma il pallino si disegna solo sulle
-    // pesate vere — un pallino su un giorno interpolato sembrerebbe una
-    // misura che non c'è mai stata.
+    // `ricostruito` dice che quel giorno non si è saliti sulla bilancia: la
+    // linea li attraversa tutti (togliendoli cambierebbe la forma della
+    // curva, e i punti valgono per il punteggio), ma il pallino si disegna
+    // solo sulle pesate vere — un pallino su un giorno interpolato
+    // sembrerebbe una misura che non c'è mai stata. Per la stessa ragione lì
+    // il massimo **ripiega sul minimo** invece di essere inventato: la fascia
+    // si chiude, e non racconta un'oscillazione che nessuno ha misurato.
     val punti = righe.mapNotNull { riga ->
         val giorno = PesoRegole.giornoDa(riga.giorno) ?: return@mapNotNull null
-        val peso = riga.minimo ?: return@mapNotNull null
+        val minimo = riga.minimo ?: return@mapNotNull null
         if (giorno.isBefore(inizio)) return@mapNotNull null
-        Triple(giorno, peso, riga.interpolata)
+        PuntoGiorno(giorno, minimo, riga.massimo ?: minimo, riga.interpolata)
     }
 
     if (punti.size < 2) {
@@ -150,7 +173,17 @@ fun VistaGrafico(stato: PesoState) {
         sortBy { it.first }
     }
 
-    val valori = punti.map { it.second } + target.map { it.second }
+    // Il colore di un valore: la **stessa** domanda che decide i punti della
+    // giornata (`peso ≤ target`, confrontati a un decimale come nel web).
+    // Senza target — meno di due traguardi — non c'è niente da dire, e resta
+    // il colore neutro del peso.
+    fun coloreDi(peso: Double, giorno: LocalDate): Color {
+        val t = PesoRegole.targetInterpolato(traguardi, giorno.toString()) ?: return Palette.primary
+        return if (PesoRegole.arrotonda(peso, 1) <= PesoRegole.arrotonda(t, 1)) VerdePeso
+        else Palette.danger
+    }
+
+    val valori = punti.flatMap { listOf(it.minimo, it.massimo) } + target.map { it.second }
     val minimo = valori.min()
     val massimo = valori.max()
     // Un filo di aria sopra e sotto: con la curva appiccicata al bordo non si
@@ -215,19 +248,18 @@ fun VistaGrafico(stato: PesoState) {
         Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Tutto quello che c'è da dire, in una riga: chi è chi e dov'è il
-        // minimo del periodo. Il resto lo dice il disegno.
-        Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        // Tutto quello che c'è da dire, in una riga sola che **scorre** invece
+        // di andare a capo: cosa vuol dire ciascun colore, e dove sono finiti
+        // il minimo e il massimo del periodo. Il resto lo dice il disegno.
+        RigaScorrevole(
+            disposizione = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(top = 4.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Legenda("Peso", Palette.primary)
-                Legenda("Target", Verde)
-            }
+            Legenda("Sotto il target", VerdePeso)
+            Legenda("Sopra", Palette.danger)
+            Legenda("Target", Verde, segno = "┄")
             Text(
-                text = "min ${kg(punti.minOf { it.second })} kg",
+                text = "min ${kg(punti.minOf { it.minimo })} · max ${kg(punti.maxOf { it.massimo })} kg",
                 color = Palette.muted,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -314,14 +346,14 @@ fun VistaGrafico(stato: PesoState) {
                                         // dipende quindi da quanto è largo il
                                         // telefono e da quanto dura
                                         // l'obiettivo.
-                                        val minimo =
+                                        val minimoDp =
                                             if (viewportPx > 0)
                                                 (viewportPx.toDp().value / (giorniTotali + 1))
                                                     .toFloat()
                                                     .coerceAtLeast(DP_GIORNO_MINIMO)
                                             else DP_GIORNO_MINIMO
                                         dpGiorno = (dpGiorno * fattore)
-                                            .coerceIn(minimo, DP_GIORNO_MASSIMO)
+                                            .coerceIn(minimoDp, DP_GIORNO_MASSIMO)
                                     }
                                     evento.changes.forEach { it.consume() }
                                 }
@@ -448,73 +480,136 @@ fun VistaGrafico(stato: PesoState) {
                         )
                     }
 
-                    // La curva del peso — non va oltre l'ultima pesata: il
-                    // futuro non si può disegnare, solo il piano lo promette.
-                    val strada = Path().apply {
-                        punti.forEachIndexed { indice, (giorno, peso, _) ->
-                            val px = x(giorno)
-                            val py = y(peso)
+                    // Le due curve del peso — il minimo della giornata e il
+                    // massimo — non vanno oltre l'ultima pesata: il futuro non
+                    // si può disegnare, solo il piano lo promette.
+                    val stradaMin = Path().apply {
+                        punti.forEachIndexed { indice, p ->
+                            val px = x(p.giorno)
+                            val py = y(p.minimo)
                             if (indice == 0) moveTo(px, py) else lineTo(px, py)
                         }
                     }
-
-                    // Sotto la curva una sfumatura che si spegne: dà al
-                    // disegno un peso visivo che una linea sola non ha, e
-                    // separa a colpo d'occhio il fatto (pieno) dalla promessa
-                    // (tratteggiata).
-                    val area = Path().apply {
-                        addPath(strada)
-                        lineTo(x(punti.last().first), fondo)
-                        lineTo(x(punti.first().first), fondo)
+                    val stradaMax = Path().apply {
+                        punti.forEachIndexed { indice, p ->
+                            val px = x(p.giorno)
+                            val py = y(p.massimo)
+                            if (indice == 0) moveTo(px, py) else lineTo(px, py)
+                        }
+                    }
+                    // La fascia fra le due: il massimo all'andata, il minimo al
+                    // ritorno. Dove i due valori coincidono — una pesata sola,
+                    // o un giorno ricostruito — si chiude su sé stessa e non si
+                    // vede, che è quel che deve succedere.
+                    val fascia = Path().apply {
+                        addPath(stradaMax)
+                        for (i in punti.indices.reversed()) {
+                            lineTo(x(punti[i].giorno), y(punti[i].minimo))
+                        }
                         close()
                     }
-                    drawPath(
-                        path = area,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Palette.primary.copy(alpha = 0.26f),
-                                Palette.primary.copy(alpha = 0.02f),
-                            ),
-                            startY = 0f,
-                            endY = fondo,
-                        ),
-                    )
 
-                    drawPath(
-                        path = strada,
-                        color = Palette.primary,
-                        style = Stroke(
-                            width = 2.5.dp.toPx(),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round,
-                        ),
-                    )
+                    // Il disegno del peso, in un colore solo: si chiama due
+                    // volte, una per ciascuna delle due metà tagliate dal
+                    // target. Il massimo è la linea sottile e sbiadita, il
+                    // minimo quella piena: è lui che fa punti.
+                    fun disegnaPeso(colore: Color) {
+                        drawPath(path = fascia, color = colore.copy(alpha = 0.20f))
+                        drawPath(
+                            path = stradaMax,
+                            color = colore.copy(alpha = 0.55f),
+                            style = Stroke(
+                                width = 1.5.dp.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round,
+                            ),
+                        )
+                        drawPath(
+                            path = stradaMin,
+                            color = colore,
+                            style = Stroke(
+                                width = 2.5.dp.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round,
+                            ),
+                        )
+                    }
+
+                    // ⚠️ Il taglio verde/rosso si fa **ritagliando sulla
+                    // spezzata del target**, non spezzando le curve del peso
+                    // a mano: così il confine cade esattamente sulla linea
+                    // che si vede disegnata, fascia compresa, e una giornata
+                    // a cavallo del target viene per metà verde e per metà
+                    // rossa senza nessun calcolo di intersezioni. Le due
+                    // regioni si prolungano ai bordi del disegno, perché il
+                    // peso non finisca fuori da tutt'e due.
+                    fun regioneTarget(sottoIlTarget: Boolean): Path = Path().apply {
+                        // Sotto il target vuol dire **più in basso** sullo
+                        // schermo: meno chili, y più grande.
+                        val chiusura = if (sottoIlTarget) size.height else 0f
+                        moveTo(0f, y(target.first().second))
+                        target.forEach { (giorno, peso) -> lineTo(x(giorno), y(peso)) }
+                        lineTo(size.width, y(target.last().second))
+                        lineTo(size.width, chiusura)
+                        lineTo(0f, chiusura)
+                        close()
+                    }
+
+                    if (target.size >= 2) {
+                        clipPath(regioneTarget(sottoIlTarget = true)) { disegnaPeso(VerdePeso) }
+                        clipPath(regioneTarget(sottoIlTarget = false)) { disegnaPeso(Palette.danger) }
+                    } else {
+                        // Senza curva di traguardi non c'è nessun target da
+                        // superare: il peso resta del suo colore, e dire
+                        // «verde» o «rosso» sarebbe un giudizio inventato.
+                        disegnaPeso(Palette.primary)
+                    }
 
                     // Un pallino su ogni pesata **vera**, col contorno del
                     // colore dello sfondo perché non si impastino fra loro
-                    // quando cadono vicine.
-                    punti.forEach { (giorno, peso, ricostruito) ->
+                    // quando cadono vicine. Il colore è quello del suo valore,
+                    // deciso dalla stessa regola dei punti.
+                    punti.forEach { p ->
                         // Sotto una certa scala due giorni distano meno del
                         // pallino stesso: una collana di pallini appiccicati
                         // nasconde la curva invece di raccontarla.
-                        if (ricostruito || dpGiorno < 8f) return@forEach
-                        val centro = Offset(x(giorno), y(peso))
+                        if (p.ricostruito || dpGiorno < 8f) return@forEach
+                        val centro = Offset(x(p.giorno), y(p.minimo))
                         drawCircle(Palette.cardBg, radius = 3.5.dp.toPx(), center = centro)
-                        drawCircle(Palette.primary, radius = 2.dp.toPx(), center = centro)
+                        drawCircle(coloreDi(p.minimo, p.giorno), radius = 2.dp.toPx(), center = centro)
+                        // Il massimo prende un pallino solo quando c'è davvero
+                        // — cioè quando quel giorno ci si è pesati più di una
+                        // volta — e più piccolo: la giornata la conta il
+                        // minimo, il massimo dice solo quanto si è oscillato.
+                        if (p.massimo > p.minimo) {
+                            val alto2 = Offset(x(p.giorno), y(p.massimo))
+                            drawCircle(Palette.cardBg, radius = 2.5.dp.toPx(), center = alto2)
+                            drawCircle(
+                                coloreDi(p.massimo, p.giorno).copy(alpha = 0.7f),
+                                radius = 1.5.dp.toPx(),
+                                center = alto2,
+                            )
+                        }
                     }
 
                     // L'ultima pesata è quella che si cerca: pallino più
                     // grande e il numero scritto accanto, perché il valore di
                     // oggi non si debba leggere sul righello delle etichette.
-                    val (ultimoGiorno, ultimoPeso, _) = punti.last()
-                    val fine2 = Offset(x(ultimoGiorno), y(ultimoPeso))
+                    // Quando quel giorno ha più di una pesata si scrivono
+                    // tutt'e due gli estremi, che è la novità che il grafico
+                    // ora racconta.
+                    val ultimo = punti.last()
+                    val coloreUltimo = coloreDi(ultimo.minimo, ultimo.giorno)
+                    val fine2 = Offset(x(ultimo.giorno), y(ultimo.minimo))
                     drawCircle(Palette.cardBg, radius = 6.dp.toPx(), center = fine2)
-                    drawCircle(Palette.primary, radius = 4.dp.toPx(), center = fine2)
+                    drawCircle(coloreUltimo, radius = 4.dp.toPx(), center = fine2)
 
                     val valore = misuratore.measure(
-                        text = kg(ultimoPeso),
+                        text = if (ultimo.massimo > ultimo.minimo)
+                            "${kg(ultimo.minimo)}–${kg(ultimo.massimo)}"
+                        else kg(ultimo.minimo),
                         style = TextStyle(
-                            color = Palette.primary,
+                            color = coloreUltimo,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -535,8 +630,33 @@ fun VistaGrafico(stato: PesoState) {
     }
 }
 
+/**
+ * Una giornata sul grafico: il minimo (la pesata che fa punti), il massimo e
+ * se la giornata è stata **ricostruita** invece che misurata.
+ *
+ * ⚠️ Su un giorno ricostruito `massimo` vale quanto `minimo`: la fascia si
+ * chiude, perché un'oscillazione che nessuno ha misurato non si disegna.
+ */
+private data class PuntoGiorno(
+    val giorno: LocalDate,
+    val minimo: Double,
+    val massimo: Double,
+    val ricostruito: Boolean,
+)
+
 /** L'altezza della fascia sotto l'asse, dove vanno le date. */
 private val ASSE = 26.dp
+
+/**
+ * Il verde del peso quando sta **dentro** il piano.
+ *
+ * ⚠️ Non è lo stesso [Verde] della spezzata del target, di un passo più
+ * scuro: le due linee si incrociano di continuo, e con lo stesso identico
+ * verde nel punto in cui si toccano non si distinguerebbe più quale delle due
+ * si sta guardando. È lo stesso ritocco di contrasto fatto in
+ * `obiettivi.html` per le barre delle azioni.
+ */
+private val VerdePeso = Color(0xFF00967A)
 
 /**
  * La scala di partenza e i suoi estremi, in dp per giorno.
@@ -552,9 +672,9 @@ private const val DP_GIORNO_MINIMO = 1.2f
 private const val DP_GIORNO_MASSIMO = 48f
 
 @Composable
-private fun Legenda(testo: String, colore: Color) {
+private fun Legenda(testo: String, colore: Color, segno: String = "▬") {
     Text(
-        text = "▬ $testo",
+        text = "$segno $testo",
         color = colore,
         fontWeight = FontWeight.SemiBold,
         style = MaterialTheme.typography.bodyMedium,

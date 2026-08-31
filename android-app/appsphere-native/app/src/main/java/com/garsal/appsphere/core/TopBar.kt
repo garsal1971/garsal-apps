@@ -85,12 +85,13 @@ fun GarsalTopBar(
                     .clickable(onClick = onIndietro),
             )
         } else {
-            // ⚠️ Il logo è **lo stesso file** che il sito serve in `/icons/` e che
-            // fa da icona di lancio dell'APK WebView: un marchio disegnato a
-            // parte in Compose sarebbe una seconda verità su com'è fatto, e
-            // divergerebbe il giorno che una delle due cambia. I cerchi
-            // olimpici restano in `Logo.kt` — li usano ancora l'avvio e la
-            // schermata della biometria.
+            // ⚠️ Il marchio è quello dell'icona di lancio — i cinque cerchi —
+            // e non più i cerchi olimpici, che qui erano rimasti indietro
+            // rispetto al launcher. Sta in `logo_appsphere.xml`, che è il
+            // disegno del launcher su un disco bianco: la barra è blu e il
+            // cerchio centrale del marchio è blu, quindi senza fondo il pezzo
+            // che regge il disegno sparirebbe. `CerchiOlimpici` resta in
+            // `Logo.kt` — lo usano ancora l'avvio e la biometria.
             Image(
                 painter = painterResource(R.drawable.logo_appsphere),
                 contentDescription = "AppSphere",
