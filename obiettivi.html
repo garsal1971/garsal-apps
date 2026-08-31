@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.9.1</title>
+    <title>Obiettivi v1.10.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -456,6 +456,27 @@
         .hist-val { font-family: 'Space Mono', monospace; font-weight: 700; width: 62px; text-align: right; flex-shrink: 0; }
         .hist-note { flex: 1; color: var(--muted); font-size: 0.9rem; min-width: 0; }
 
+        /* ── ESECUZIONI DI UN'AZIONE ──
+           ⚠️ Il 🗑 sta a SINISTRA del record, non in coda: su un telefono la riga
+           scorre di lato e la coda finisce oltre il bordo — la prima colonna è
+           l'unica che si vede comunque sia largo lo schermo. */
+        .exec-row {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.45rem 0; border-bottom: 1px solid var(--border);
+        }
+        .exec-when {
+            font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted);
+            width: 92px; flex-shrink: 0; line-height: 1.3;
+        }
+        .exec-what { flex: 1; min-width: 0; font-size: 0.95rem; overflow-wrap: anywhere; }
+        .exec-pts {
+            font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.85rem;
+            width: 54px; text-align: right; flex-shrink: 0;
+        }
+        .exec-pts.neg { color: var(--danger); }
+        .exec-pts.pos { color: var(--success); }
+        .exec-del { flex-shrink: 0; padding: 0.3rem 0.5rem; }
+
         /* ── SECTION ── */
         .section-title {
             font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
@@ -574,7 +595,7 @@
         }
         #confirmDialog.active { display: flex; }
         .confirm-box { background: white; padding: 2rem; max-width: 380px; width: 90%; }
-        .confirm-msg { font-size: 1.1rem; margin-bottom: 1.5rem; line-height: 1.4; }
+        .confirm-msg { font-size: 1.1rem; margin-bottom: 1.5rem; line-height: 1.4; white-space: pre-line; }
         .confirm-btns { display: flex; gap: 0.75rem; justify-content: flex-end; }
 
         /* ── AUTH ── */
@@ -1262,6 +1283,26 @@
     </div>
 </div>
 
+<!-- ══════════════ MODAL: ESECUZIONI DI UN'AZIONE ══════════════ -->
+<div class="modal" id="execModal">
+    <div class="modal-content narrow">
+        <div class="modal-header">
+            <div class="modal-title" id="execTitle">Esecuzioni</div>
+            <button class="modal-close" onclick="closeModal('execModal')">&times;</button>
+        </div>
+        <div class="page-hint" style="margin-bottom:1rem;">
+            Ogni volta che l'azione è stata chiusa, con i punti che ha fatto.
+            Cancellare una riga toglie i suoi punti e rifà la barra dell'esecuzione
+            senza di essa: <strong>l'azione però resta dov'è</strong> — la prossima
+            occorrenza non torna indietro.
+        </div>
+        <div id="execBody"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('execModal')">Chiudi</button>
+        </div>
+    </div>
+</div>
+
 <!-- ══════════════ MODAL: SALTA DI N GIORNI ══════════════ -->
 <div class="modal" id="skipModal">
     <div class="modal-content narrow">
@@ -1285,8 +1326,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.9.1';
-var BUILD_TIME  = '2026-08-30T23:30:00Z';
+var APP_VERSION = 'v1.10.0';
+var BUILD_TIME  = '2026-08-31T09:15:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2590,7 +2631,7 @@ function renderActionsPage() {
                 <span>${gr.titolo}</span>
                 <span class="act-count">${gr.righe.length}</span>
             </div>
-            ${gr.righe.map(a => renderActionCard(a, { showObjective: true })).join('')}
+            ${gr.righe.map(a => renderActionCard(a, { showObjective: true, esecuzioni: true })).join('')}
         </div>`).join('');
 }
 
@@ -2609,11 +2650,16 @@ function renderActionCard(a, opts) {
     // completandolo di forza si salterebbero gli step ancora aperti.
     const isWf  = a.type === 'workflow';
     const vivo  = actionIsAlive(a);
-    const bottoni = (opts.soloDefinizione || !vivo) ? '' : `
-        ${isWf
+    // ⚠️ «Esecuzioni» non segue `vivo` come gli altri due pulsanti: le volte già
+    // chiuse si guardano soprattutto su un'azione conclusa, che è proprio quella
+    // che di pulsanti non ne ha nessun altro.
+    const nEsec = opts.esecuzioni ? esecuzioniDi(a.id).length : 0;
+    const bottoni = opts.soloDefinizione ? '' : `
+        ${!vivo ? '' : (isWf
             ? `<button class="btn btn-accent btn-small" onclick="openWorkflow('${a.id}')">Step</button>`
-            : `<button class="btn btn-success btn-small" onclick="completeAction('${a.id}')">Completa</button>`}
-        ${PUO_SALTARE.includes(a.type) ? `<button class="btn btn-ghost btn-small" onclick="openSkip('${a.id}')">Salta</button>` : ''}`;
+            : `<button class="btn btn-success btn-small" onclick="completeAction('${a.id}')">Completa</button>`)}
+        ${vivo && PUO_SALTARE.includes(a.type) ? `<button class="btn btn-ghost btn-small" onclick="openSkip('${a.id}')">Salta</button>` : ''}
+        ${opts.esecuzioni ? `<button class="btn btn-ghost btn-small" onclick="openEsecuzioni('${a.id}')">Esecuzioni${nEsec ? ' · ' + nEsec : ''}</button>` : ''}`;
 
     const stepInfo = isWf && Array.isArray(a.workflow_steps)
         ? ` · ${a.workflow_steps.filter(x => x.status === 'completed' || x.status === 'failed').length}/${a.workflow_steps.length} step`
@@ -2639,6 +2685,107 @@ function renderActionCard(a, opts) {
         </div>
         <div class="act-buttons">${bottoni}</div>
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// ESECUZIONI DI UN'AZIONE
+//
+// Le volte che l'azione è stata chiusa, con i punti che ciascuna ha fatto: sono
+// le righe di `ob_action_history` di quell'azione, che è l'unico posto dove è
+// scritto com'è andata.
+//
+// ⚠️ Cancellarne una **non riporta indietro l'azione**: la prossima occorrenza
+// l'ha spostata la RPC quando la riga è nata, e rifarne il conto all'indietro
+// vorrebbe dire riapplicare in ordine tutta la storia. La riga se ne va con i
+// suoi punti — e con essi la barra dell'esecuzione, che li rilegge — l'azione
+// resta dov'è. È la stessa scelta della cancellazione di un giro in SOS.
+// ════════════════════════════════════════════════════════════
+let esecAzione = null;
+
+// ⚠️ Le righe `terminated` NON sono esecuzioni e restano fuori, come in
+// `esitoDi()`: chiudendo una singola la RPC ne scrive due nello stesso istante
+// — l'esito («completata», con i suoi punti) e la chiusura («conclusa», sempre a
+// zero punti, che nessun conto guarda) — e mostrarle tutt'e due farebbe sembrare
+// chiusa due volte un'azione chiusa una volta sola.
+//
+// Già in ordine dal più recente: `loadAll` legge lo storico con
+// `.order('timestamp', { ascending: false })`.
+function esecuzioniDi(actionId) {
+    return actionHistory.filter(h => h.action_id === actionId && h.action !== 'terminated');
+}
+
+// La riga di chiusura scritta insieme a questa esecuzione: stessa azione, stesso
+// istante (nella RPC i due INSERT stanno nella stessa transazione, quindi `now()`
+// è identico). Va via con lei, o resterebbe una riga che non si vede da nessuna
+// parte e che nessuno può più togliere.
+function chiusuraGemella(h) {
+    return actionHistory.filter(x => x.action === 'terminated'
+                                  && x.action_id === h.action_id
+                                  && x.timestamp === h.timestamp);
+}
+
+function openEsecuzioni(actionId) {
+    esecAzione = actionId;
+    const a = actions.find(x => x.id === actionId);
+    document.getElementById('execTitle').textContent = a ? a.title : 'Esecuzioni';
+    renderEsecuzioni();
+    openModal('execModal');
+}
+
+function renderEsecuzioni() {
+    const host = document.getElementById('execBody');
+    if (!host) return;
+    const righe = esecuzioniDi(esecAzione);
+
+    if (!righe.length) {
+        host.innerHTML = `<div class="form-hint">Nessuna esecuzione: questa azione
+            non è ancora stata chiusa nemmeno una volta.</div>`;
+        return;
+    }
+
+    const tot = righe.reduce((s, h) => s + (h.points || 0), 0);
+    host.innerHTML = righe.map(h => {
+        const pt = h.points || 0;
+        return `
+        <div class="exec-row">
+            <button class="btn btn-danger btn-small exec-del" title="Cancella questa esecuzione"
+                    onclick="cancellaEsecuzione('${h.id}')">🗑</button>
+            <div class="exec-when">${fmtDate(localDay(h.timestamp))}<br>${localTime(h.timestamp)}</div>
+            <div class="exec-what">${esc(ACTION_LABEL[h.action] || h.action)}</div>
+            <div class="exec-pts ${pt > 0 ? 'pos' : pt < 0 ? 'neg' : ''}">${pt > 0 ? '+' : ''}${pt} pt</div>
+        </div>`;
+    }).join('')
+    + `<div class="form-hint" style="margin-top:0.7rem;">
+         ${righe.length} ${righe.length === 1 ? 'esecuzione' : 'esecuzioni'} ·
+         ${tot > 0 ? '+' : ''}${tot} pt in tutto</div>`;
+}
+
+async function cancellaEsecuzione(histId) {
+    const h = actionHistory.find(x => x.id === histId);
+    if (!h) return;
+    const pt = h.points || 0;
+
+    const ok = await customConfirm(
+        'Cancello «' + (ACTION_LABEL[h.action] || h.action) + '» del '
+        + fmtDate(localDay(h.timestamp)) + '?\n\n'
+        + (pt ? 'Se ne vanno anche i suoi ' + (pt > 0 ? '+' : '') + pt
+                + ' pt, e la barra dell\'esecuzione si rifà senza questa volta.\n\n'
+              : 'La barra dell\'esecuzione si rifà senza questa volta.\n\n')
+        + 'L\'azione resta dov\'è: la prossima occorrenza non torna indietro.');
+    if (!ok) return;
+
+    // Il filtro su user_id è ridondante rispetto alla RLS ed è voluto, come in
+    // ogni DELETE di questa pagina.
+    const ids = [histId, ...chiusuraGemella(h).map(x => x.id)];
+    const { error } = await sb.from('ob_action_history')
+        .delete().in('id', ids).eq('user_id', h.user_id);
+    if (error) { if (handleAuthError(error)) return; showToast('❌ ' + error.message); return; }
+
+    showToast('🗑 Esecuzione cancellata');
+    await loadAll();
+    // Il popup resta aperto sull'elenco rifatto: chi ne cancella una spesso ne
+    // cancella due, e richiuderlo ogni volta vorrebbe dire riaprirlo ogni volta.
+    if (document.getElementById('execModal').classList.contains('active')) renderEsecuzioni();
 }
 
 // Com'è finita: lo dice lo storico, che è il posto dove è scritto. Lo status
