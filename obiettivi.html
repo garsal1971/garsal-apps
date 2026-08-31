@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obiettivi v1.10.0</title>
+    <title>Obiettivi v1.11.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -459,23 +459,34 @@
         /* ── ESECUZIONI DI UN'AZIONE ──
            ⚠️ Il 🗑 sta a SINISTRA del record, non in coda: su un telefono la riga
            scorre di lato e la coda finisce oltre il bordo — la prima colonna è
-           l'unica che si vede comunque sia largo lo schermo. */
+           l'unica che si vede comunque sia largo lo schermo.
+
+           ⚠️ Le due date NON sono due colonne affiancate a larghezza fissa: coi
+           caratteri di sistema grandi «programmata 07/08/2026» e «eseguita
+           31/08/2026 · 09:12» non ci stanno su una riga, e due colonne si
+           taglierebbero a vicenda. Vanno a capo da sé (`flex-wrap`) e ciascuna
+           porta la sua etichetta, così una sopra l'altra si leggono lo stesso. */
         .exec-row {
-            display: flex; align-items: center; gap: 0.6rem;
-            padding: 0.45rem 0; border-bottom: 1px solid var(--border);
+            display: flex; align-items: flex-start; gap: 0.6rem;
+            padding: 0.55rem 0; border-bottom: 1px solid var(--border);
         }
-        .exec-when {
-            font-family: 'Space Mono', monospace; font-size: 0.72rem; color: var(--muted);
-            width: 92px; flex-shrink: 0; line-height: 1.3;
+        .exec-del { flex-shrink: 0; padding: 0.3rem 0.5rem; }
+        .exec-body { flex: 1; min-width: 0; }
+        .exec-head {
+            display: flex; flex-wrap: wrap; gap: 0.15rem 0.6rem;
+            align-items: baseline; justify-content: space-between;
         }
-        .exec-what { flex: 1; min-width: 0; font-size: 0.95rem; overflow-wrap: anywhere; }
-        .exec-pts {
-            font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.85rem;
-            width: 54px; text-align: right; flex-shrink: 0;
-        }
+        .exec-what { font-size: 0.95rem; overflow-wrap: anywhere; }
+        .exec-pts { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.85rem; }
         .exec-pts.neg { color: var(--danger); }
         .exec-pts.pos { color: var(--success); }
-        .exec-del { flex-shrink: 0; padding: 0.3rem 0.5rem; }
+        .exec-dates {
+            display: flex; flex-wrap: wrap; gap: 0.1rem 0.9rem;
+            font-family: 'Space Mono', monospace; font-size: 0.72rem;
+            color: var(--muted); margin-top: 0.2rem;
+        }
+        .exec-lab { text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .exec-gap { color: var(--danger); font-weight: 700; }
 
         /* ── SECTION ── */
         .section-title {
@@ -1291,7 +1302,10 @@
             <button class="modal-close" onclick="closeModal('execModal')">&times;</button>
         </div>
         <div class="page-hint" style="margin-bottom:1rem;">
-            Ogni volta che l'azione è stata chiusa, con i punti che ha fatto.
+            Ogni volta che l'azione è stata chiusa: il giorno per cui era
+            <strong>programmata</strong>, quello in cui è stata <strong>eseguita</strong>
+            e i punti che ha fatto. Le righe più vecchie di questa colonna, e le azioni
+            a libera ripetizione, un giorno programmato non ce l'hanno.<br>
             Cancellare una riga toglie i suoi punti e rifà la barra dell'esecuzione
             senza di essa: <strong>l'azione però resta dov'è</strong> — la prossima
             occorrenza non torna indietro.
@@ -1326,8 +1340,8 @@
 // ════════════════════════════════════════════════════════════
 // OBIETTIVI — versione
 // ════════════════════════════════════════════════════════════
-var APP_VERSION = 'v1.10.0';
-var BUILD_TIME  = '2026-08-31T09:15:00Z';
+var APP_VERSION = 'v1.11.0';
+var BUILD_TIME  = '2026-08-31T09:40:00Z';
 console.log('%c 🎯 OBIETTIVI ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#6C5CE7;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2732,6 +2746,21 @@ function openEsecuzioni(actionId) {
     openModal('execModal');
 }
 
+// Quanto l'esecuzione si scosta dal giorno programmato. È la ragione per cui le
+// due date stanno una accanto all'altra: l'etichetta dice «in ritardo» soltanto
+// per una `single` con scadenza (`completed_late`), quindi su una ricorrente
+// chiusa tre settimane dopo il ritardo non si vedeva da nessuna parte.
+// Torna stringa vuota quando le due date coincidono o quando il giorno
+// programmato non c'è: un trattino l'ha già detto.
+function scartoEsecuzione(prog, fatt) {
+    if (!prog || !fatt) return '';
+    const gg = daysBetween(prog, fatt);
+    if (!gg) return '';
+    return gg > 0
+        ? ` <span class="exec-gap">· ${gg} gg dopo</span>`
+        : ` · ${-gg} gg prima`;
+}
+
 function renderEsecuzioni() {
     const host = document.getElementById('execBody');
     if (!host) return;
@@ -2745,14 +2774,23 @@ function renderEsecuzioni() {
 
     const tot = righe.reduce((s, h) => s + (h.points || 0), 0);
     host.innerHTML = righe.map(h => {
-        const pt = h.points || 0;
+        const pt   = h.points || 0;
+        const prog = h.occurrence_date ? String(h.occurrence_date).slice(0, 10) : null;
+        const fatt = localDay(h.timestamp);
         return `
         <div class="exec-row">
             <button class="btn btn-danger btn-small exec-del" title="Cancella questa esecuzione"
                     onclick="cancellaEsecuzione('${h.id}')">🗑</button>
-            <div class="exec-when">${fmtDate(localDay(h.timestamp))}<br>${localTime(h.timestamp)}</div>
-            <div class="exec-what">${esc(ACTION_LABEL[h.action] || h.action)}</div>
-            <div class="exec-pts ${pt > 0 ? 'pos' : pt < 0 ? 'neg' : ''}">${pt > 0 ? '+' : ''}${pt} pt</div>
+            <div class="exec-body">
+                <div class="exec-head">
+                    <span class="exec-what">${esc(ACTION_LABEL[h.action] || h.action)}</span>
+                    <span class="exec-pts ${pt > 0 ? 'pos' : pt < 0 ? 'neg' : ''}">${pt > 0 ? '+' : ''}${pt} pt</span>
+                </div>
+                <div class="exec-dates">
+                    <span><span class="exec-lab">programmata</span> ${prog ? fmtDate(prog) : '—'}</span>
+                    <span><span class="exec-lab">eseguita</span> ${fmtDate(fatt)} · ${localTime(h.timestamp)}${scartoEsecuzione(prog, fatt)}</span>
+                </div>
+            </div>
         </div>`;
     }).join('')
     + `<div class="form-hint" style="margin-top:0.7rem;">

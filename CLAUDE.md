@@ -567,7 +567,7 @@ in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo 
 | `ob_measurements` | Rilevazioni: `value` e `note`, una per metrica e per giorno |
 | `ob_milestones` | Curva attesa (`expected_value` per data) — base del semaforo |
 | `ob_actions` | Le azioni: il «cosa faccio». Gemella di `ts_tasks`, stessi sei tipi |
-| `ob_action_history` | Storico e punti delle azioni. Gemella di `ts_history` |
+| `ob_action_history` | Storico e punti delle azioni. Gemella di `ts_history`. `occurrence_date` = il giorno **per cui** l'azione era in calendario, accanto al `timestamp` che dice quando è stata chiusa |
 | `ob_action_metrics` | Quali metriche un'azione dovrebbe muovere (anche più d'una) |
 
 `ob_metrics.role` distingue **`primary`** (il risultato, alimenta la barra e il semaforo — **una sola per
@@ -2019,12 +2019,28 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   **Step** al posto di *Completa*: si chiude dai suoi step, e un pulsante che lo chiudesse di forza
   salterebbe quelli ancora aperti.
 - **Esecuzioni** (v1.10.0): ogni scheda della pagina ✅ Azioni porta il pulsante *Esecuzioni*, col
-  numero di volte che l'azione è stata chiusa, e apre l'elenco di quelle volte — quando, com'è
-  andata, quanti punti — con un 🗑 per ciascuna. ⚠️ È l'**unico pulsante che compare anche su
+  numero di volte che l'azione è stata chiusa, e apre l'elenco di quelle volte — **programmata**,
+  **eseguita**, com'è andata, quanti punti — con un 🗑 per ciascuna. ⚠️ È l'**unico pulsante che compare anche su
   un'azione conclusa**: è lì che le esecuzioni ci sono, ed è la scheda che di pulsanti non ne ha
   nessun altro. Resta invece fuori dal 📆 Piano quotidiano e dal Dettaglio dell'obiettivo — un
   piano dice cosa resta da fare e il Dettaglio com'è definito l'obiettivo: le volte già fatte sono
   memoria.
+  ⚠️ **Le due date sono due cose diverse e vanno lette insieme**
+  (`20260831100000_ob_action_history_occurrence_date.sql`): lo storico diceva *quando* un'azione
+  era stata chiusa (`timestamp`) e non *per quando* era programmata, e su un'occorrenza arretrata
+  chiusa tre settimane dopo il ritardo non si vedeva da nessuna parte — l'etichetta lo dice solo
+  per una `single` con scadenza (`completed_late`). Ora `ob_action_history.occurrence_date` porta
+  il giorno di calendario, e la riga marca in rosso lo scarto (*24 gg dopo*).
+  ⚠️ **La data si legge PRIMA che la RPC sposti `next_occurrence_date`**, dentro le tre
+  `ob_action_*`: subito dopo la riga è già sulla volta successiva e quella che si stava chiudendo
+  non è più leggibile da nessuna parte. È la stessa ragione per cui `occorrenzaDi()` nella pagina
+  la legge prima di chiamare la RPC.
+  ⚠️ **Niente backfill sulle righe già in archivio, e NULL su ogni libera ripetizione**: la data
+  che le vecchie righe avevano non è più ricostruibile, e riempirla col `timestamp` direbbe che
+  sono state tutte puntuali; una libera ripetizione un giorno programmato non ce l'ha per
+  costruzione — `start_date` lì è quando è nata. In tutt'e due i casi la pagina mostra un
+  trattino: un dato che non c'è si vede, un dato inventato no. È la stessa scelta delle caselle
+  vuote di `fnz_income` e delle misure non registrate di Memo.
   ⚠️ **Le righe `terminated` non sono esecuzioni e non si elencano**, come in `esitoDi()`:
   chiudendo una singola la RPC ne scrive due nello stesso istante — l'esito, coi suoi punti, e la
   chiusura, sempre a zero punti e che nessun conto guarda — e mostrarle tutt'e due farebbe sembrare
