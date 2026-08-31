@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.17.1</title>
+  <title>Calorie v1.17.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -66,7 +66,6 @@
     .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--c-muted); cursor: pointer; transition: background .12s, color .12s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
     .nav-item:hover { background: var(--c-bg); color: var(--c-text); }
     .nav-item.active { background: #dcfce7; color: var(--c-primary); }
-    .nav-sep { height: 1px; background: var(--c-border); margin: 10px 4px 4px; }
     .app-main { flex: 1; padding: 24px 28px; overflow-y: auto; }
     .view { display: none; }
     .view.active { display: block; }
@@ -154,8 +153,12 @@
        Sul telefono prende il posto del menù ☰: le quattro pagine si vedono tutte insieme e ci si
        sposta con un tocco solo invece di tre (apri, scegli, il cassetto si chiude). Sopra i
        768 px sparisce e resta la sidebar, dove le voci hanno il posto per il loro nome.
-       ⚠️ Scorre di lato invece di stringere le icone: coi caratteri di sistema grandi sei voci
-       su 360 px non ci stanno, e schiacciarle sotto il polpastrello le rende non toccabili —
+       ⚠️ Ci sono le SOLE quattro pagine di questa app: i due collegamenti in coda (⚖️ Ti pisasti?,
+       🏠 AppSphere) sono stati tolti dalla v1.17.2 — a casa si torna dalla barra blu, che sta
+       sopra e c'è comunque. Una navigazione che porta fuori mescolata a quella che porta dentro
+       fa contare i tocchi per capire dove si finisce.
+       ⚠️ Scorre di lato invece di stringere le icone: coi caratteri di sistema grandi quattro voci
+       su 360 px ci stanno appena, e schiacciarle sotto il polpastrello le rende non toccabili —
        è la stessa regola delle righe di pulsanti che non vanno mai a capo. */
     .icon-nav { display: none; align-items: center; background: #F3F4F6; border-bottom: 2px solid var(--c-border);
       box-shadow: 0 2px 10px rgba(0,0,0,.08); overflow-x: auto; scrollbar-width: none; }
@@ -165,7 +168,6 @@
       color: inherit; transition: background .15s; }
     .icon-nav-item:hover { background: rgba(255,255,255,.7); }
     .icon-nav-item.active { background: var(--c-primary); }
-    .icon-nav-sep { flex: 0 0 1px; align-self: stretch; background: var(--c-border); margin: 6px 2px; }
 
     /* ── Barra del consumo: quanto del target è già stato mangiato ── */
     .bar-track { height: 12px; border-radius: 999px; background: #e8ede8; overflow: hidden; }
@@ -243,8 +245,10 @@
      href="/", identica in tutte le app. È il modo per tornare a casa da qualunque punto, e va
      dove dice — fino alla v1.17.0 diceva «Calorie» e portava a «Ti pisasti?», cioè un nome che
      non era né quello della pagina in cui si finiva né quello di casa. Il nome di QUESTA pagina
-     sta nella sidebar e nella barra della versione in fondo; a «Ti pisasti?» si va con il ⚖️
-     della barra delle icone. -->
+     sta nella sidebar e nella barra della versione in fondo. ⚠️ Dalla v1.17.2 è anche l'UNICO
+     collegamento verso l'esterno che la navigazione offre: sidebar e barra delle icone elencano
+     le sole quattro pagine di Calorie. A «Ti pisasti?» si va da AppSphere, oppure dai
+     collegamenti scritti dove si parla dell'obiettivo — che è il punto in cui serve andarci. -->
 <div id="garsal-top-bar">
   <a href="/" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;flex:1;min-width:0;">
     <svg width="22" height="22" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="15" r="7" fill="rgba(255,255,255,0.85)"/><circle cx="20" cy="7" r="4.5" fill="#00A651"/><circle cx="6" cy="6" r="3.5" fill="#FCB131"/><circle cx="3" cy="17" r="2.5" fill="#1A1A1A"/></svg>
@@ -262,9 +266,6 @@
     <button class="icon-nav-item" data-action="nav" data-view="diario" title="Diario" aria-label="Diario">📓</button>
     <button class="icon-nav-item" data-action="nav" data-view="alimenti" title="Alimenti" aria-label="Alimenti">🍎</button>
     <button class="icon-nav-item" data-action="nav" data-view="impostazioni" title="Impostazioni" aria-label="Impostazioni">⚙️</button>
-    <span class="icon-nav-sep"></span>
-    <a class="icon-nav-item" href="weight-quest.html" title="Torna a Ti pisasti?" aria-label="Torna a Ti pisasti?">⚖️</a>
-    <a class="icon-nav-item" href="/" title="AppSphere" aria-label="AppSphere">🏠</a>
   </nav>
   <div class="app-layout">
     <nav class="sidebar" id="sidebar">
@@ -272,9 +273,6 @@
       <button class="nav-item" data-action="nav" data-view="diario">📓 Diario</button>
       <button class="nav-item" data-action="nav" data-view="alimenti">🍎 Alimenti</button>
       <button class="nav-item" data-action="nav" data-view="impostazioni">⚙️ Impostazioni</button>
-      <div class="nav-sep"></div>
-      <a class="nav-item" href="weight-quest.html" style="text-decoration:none">← Torna a ⚖️ Ti pisasti?</a>
-      <a class="nav-item" href="/" style="text-decoration:none">🏠 AppSphere</a>
     </nav>
     <main class="app-main">
       <div id="view-dashboard" class="view active"></div>
@@ -341,8 +339,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.17.1';
-var BUILD_TIME  = '2026-08-31T15:40:00Z';
+var APP_VERSION = 'v1.17.2';
+var BUILD_TIME  = '2026-08-31T17:05:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
