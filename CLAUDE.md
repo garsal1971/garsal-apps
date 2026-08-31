@@ -1118,6 +1118,17 @@ Netlify dentro una `WebView`.
 (contro `com.garsalapps`), quindi i due si installano insieme sullo stesso telefono e leggono lo
 stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire quello WebView.
 
+⚠️ **I due APK si chiamano diversamente sul telefono**: il nativo è **AppSphere**, il WebView è
+**AppSfera Web** (`app_name` in `strings.xml`; si chiamava *GarsalApps*). ⚠️ Il nome che si legge
+nel cassetto delle app è l'unica cosa che è cambiata: `applicationId` resta `com.garsalapps`, e
+non si tocca — cambiarlo farebbe di quell'APK **un'app diversa**, che si installerebbe accanto
+alla vecchia invece di aggiornarla, lasciando indietro dati e permessi. Per la stessa ragione
+restano `releases/GarsalApps-latest.apk` e `.json`: gli APK già installati interrogano
+**quei** percorsi per sapere se c'è un aggiornamento, e rinominarli li lascerebbe su un 404 per
+sempre. Segue `app_name` anche il messaggio di `HealthConnectBridge`, che dice sotto quale nome
+cercare l'app in Health Connect — se restasse indietro manderebbe a cercare un nome che lì non
+esiste.
+
 ⚠️ **Le due icone portano lo stesso disegno e si distinguono per il fondo**: i cinque cerchi di
 AppSphere — quattro che si toccano a due a due (arancio, rosso / verde, viola) e il blu al centro,
 sopra a tutti — su **fondo bianco per la WebView** e **nero per la nativa**. È l'unica cosa che le

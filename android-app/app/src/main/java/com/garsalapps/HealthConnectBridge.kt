@@ -156,7 +156,7 @@ class HealthConnectBridge(
                 """{"ok":false,"error":"PERMISSION_REQUESTED","retry":true}"""
             } else {
                 permissionsRequested = false
-                """{"ok":false,"error":"Permessi HC non attivi. Vai in Impostazioni → Connessione Salute → GarsalApps e abilita la lettura del Peso."}"""
+                """{"ok":false,"error":"Permessi HC non attivi. Vai in Impostazioni → Connessione Salute → AppSfera Web e abilita la lettura del Peso."}"""
             }
 
         } catch (e: Exception) {
