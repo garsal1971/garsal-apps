@@ -2276,11 +2276,16 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   il cassetto, scegli, il cassetto si chiude); sopra i 768 px la barra sparisce e resta la
   sidebar, dove le voci hanno il posto per il loro nome. La voce accesa si aggiorna in tutt'e due
   da `navigate()`, con un selettore solo: chi disegna non deve sapere quale delle due è a schermo.
-  ⚠️ La barra **scorre di lato e non stringe le icone**: coi caratteri di sistema grandi sei voci
-  su 360 px non ci stanno, e schiacciarle sotto il polpastrello le renderebbe non toccabili — è
-  la stessa regola delle righe di pulsanti che non vanno mai a capo. Per questo l'ordine conta:
-  prima le quattro **pagine**, poi il separatore, poi i due collegamenti (⚖️ Ti pisasti?, 🏠
-  AppSphere) — quel che esce dal bordo è quel che serve meno.
+  ⚠️ La barra **scorre di lato e non stringe le icone**: coi caratteri di sistema grandi le voci
+  su 360 px ci stanno appena, e schiacciarle sotto il polpastrello le renderebbe non toccabili — è
+  la stessa regola delle righe di pulsanti che non vanno mai a capo.
+  ⚠️ **Barra e sidebar elencano le sole quattro pagine di Calorie** (v1.17.2): i due collegamenti
+  in coda — ⚖️ Ti pisasti?, 🏠 AppSphere, col loro separatore — sono stati tolti da tutt'e due.
+  Erano navigazione che porta *fuori* mescolata a quella che porta *dentro*, e il 🏠 ripeteva
+  quello che la barra blu, che sta sopra ed è in ogni app, fa già. A «Ti pisasti?» si va da
+  AppSphere o dai collegamenti scritti dove si parla dell'obiettivo — che è il punto in cui serve
+  andarci. Rimettendone uno, va rimesso in tutt'e due: sono la stessa navigazione, mostrata in due
+  modi a seconda della larghezza.
   ⚠️ `min-width` è in `em`, quindi si misura sul font dell'**icona** e non su quello della pagina:
   a 3.2em faceva 74 px a voce e la barra scorreva già a carattere normale. Resta in `em` di
   proposito — il bersaglio da toccare deve crescere col testo di sistema — ma il valore va provato
