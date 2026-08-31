@@ -1122,7 +1122,7 @@ stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire q
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
 
 ### ⚠️ Righe di pulsanti e liste di scelta: due componenti condivisi, non uno per schermata
 
@@ -1634,6 +1634,56 @@ sua copia in JavaScript (`checkMissedDays`, `checkCompletedStacks`, `checkExpire
 modifica alle regole va fatta in tutt'e due**. Il passaggio del web è il pezzo che manca, ed è
 quello che rende vera la frase «una regola sola».
 
+### ⚠️ Calorie nativo: due pagine, e il conto è quello della pagina
+
+`calorie/` porta in nativo le due schermate che si aprono **col telefono in mano**:
+📊 **Dashboard** — le cinque sezioni della pagina nello stesso ordine (⚖️ le pesate, 🔥 le calorie
+di oggi, 📐 le calorie per tratto, 📈 come sta andando, e il giorno per giorno dell'intera dieta) —
+e 📓 **Diario**, un giorno per volta coi pasti configurati, la barra del target, il riquadro che
+spiega da dove esce il numero, *📋 Ricopia da ieri*, i macro e ✏️/🗑 su ogni riga. Più il
+**+ galleggiante**, che è la ragione per cui questa app sta sul telefono: si segna l'alimento nel
+momento in cui lo si mangia, non la sera al computer.
+
+**Restano sul web 🍎 Alimenti e ⚙️ Impostazioni**, e non è una mancanza: curare il catalogo,
+configurare i pasti e scegliere il fattore di attività sono cose che si fanno da seduti e una
+volta sola. Il nativo quelle scelte le **legge** — `cm_settings.al_pasti`, `al_profile.activity`,
+`cm_profile` — e non le può cambiare. Restano di là anche il **codice a barre** (qui non c'è né
+`BarcodeDetector` né una fotocamera accesa per questo) e lo *scrivilo a mano*, che è il form di
+🍎 Alimenti: sono le due strade per mettere in dispensa. Come sul web, la **dieta non si decide
+qui**: l'obiettivo si crea in «Ti pisasti?» e da questa parte si legge soltanto.
+
+Le regole stanno in `calorie/CalorieRegole.kt`, ricalcate dalla pagina una per una, e **vanno
+cambiate nelle due implementazioni insieme**: deficit in due addendi (ritmo del tratto + recupero
+dello scarto, mai sotto zero), l'ultimo traguardo che vale come peso finale solo se i traguardi
+sono almeno due, il target **congelato** in `al_days` alla prima riga del giorno e ricalcolabile
+solo su richiesta esplicita, il saldo spalmato su **tutti** i giorni che restano, un giorno senza
+righe che non entra nel saldo, e da **oggi** solo lo sforo — perché un diario a metà non è un
+digiuno.
+
+⚠️ **Una duplicazione che la pagina ha e qui no**: `pesoPianoAl()` è la copia di
+`getInterpolatedTarget()` di `weight-quest.html`, e in nativo quella funzione esiste già
+(`PesoRegole.targetInterpolato`) — si chiama quella. Per la stessa ragione l'obiettivo attivo si
+decodifica con `Obiettivo.da` del modulo `peso`, che è già l'unico posto in cui `ps_objectives` e
+le sue milestone si leggono.
+
+Il **➕ prende lo schermo intero** invece di aprire un dialogo — ci stanno una ricerca, un elenco di
+risultati e la scelta della porzione, e coi caratteri di sistema grandi un dialogo sarebbe una
+feritoia — ed è in due passi, come nella pagina: si cerca (📗 catalogo e 🌐 rete sotto **due
+intestazioni**, mai concatenati) e poi si dice quanto (½/1/2 con l'etichetta dell'alimento, i
+pulsanti che **sommano**, l'↺ che azzera). La ricerca in rete passa dalla Edge Function
+`al-food-search` con la stessa pausa di digitazione del web: **Open Food Facts limita le ricerche
+testuali a una decina al minuto**, e cercare a ogni tasto premuto fa bandire l'indirizzo IP.
+
+Due differenze di forma, volute, entrambe per i caratteri di sistema grandi. I **numeri non sono
+una griglia di riquadri** ma una riga ciascuno, etichetta a sinistra e valore a destra: tre celle
+affiancate con testi di lunghezza diversa vanno a capo un numero diverso di volte e perdono
+l'allineamento. E un **tratto è una scheda, non una riga di tabella** — sette colonne o si tagliano
+o vanno a capo ognuna per conto suo — con l'ordine di lettura della pagina conservato: il
+**target** subito dopo i pesi, perché è la risposta per cui quella tabella esiste. Il grafico delle
+calorie è disegnato a mano su un `Canvas` scorrevole, con le misure in **dp e mai in pixel
+grezzi**; il grafico del peso resta di là, perché il peso è materia di «Ti pisasti?» e qui compare
+già nei riquadri e nel giorno per giorno.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -1843,10 +1893,10 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Sette app ora esistono in due implementazioni
+### ⚠️ Otto app ora esistono in due implementazioni
 
 `spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html`, `weight-quest.html`,
-`memo.html` e `habit-tracker.html` hanno un gemello Kotlin che lavora sulle
+`memo.html`, `habit-tracker.html` e `calorie.html` hanno un gemello Kotlin che lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -1910,7 +1960,14 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   una copia in JavaScript non è mai esistita. Interrompi, Riprendi ed Elimina ci sono ora da tutt'e
   due le parti, con la stessa regola sulla data di ripartenza. Dettagli nella sezione qui sopra.
 
-(`tasks.html` è l'ottava, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
+- **Calorie** — il conto del target è duplicato riga per riga in `CalorieRegole`: deficit in due
+  addendi (ritmo del tratto + recupero dello scarto, mai sotto zero), peso finale solo con almeno
+  due traguardi, target congelato in `al_days` e ricalcolabile solo su richiesta, saldo spalmato
+  sui giorni che restano, giorno senza righe che non è un digiuno, e da oggi solo lo sforo. Il
+  nativo porta 📊 Dashboard, 📓 Diario e il ➕ che segna un alimento; 🍎 Alimenti e ⚙️ Impostazioni
+  restano di là, e da qui si leggono soltanto. Dettagli nella sezione qui sopra.
+
+(`tasks.html` è la nona, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -2506,6 +2563,10 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   pulsanti «150 g» uno accanto all'altro sembrano due scelte diverse e non lo sono. Un alimento
   **senza** porzione non se ne inventa una — una porzione inventata chi la legge se la crede, e
   sono le calorie della giornata: si parte da 100 g e la finestra dice dove scriverla.
+- ⚠️ **Esiste anche in nativo** (`android-app/appsphere-native/app/.../calorie/`), ma solo per
+  📊 Dashboard e 📓 Diario più il ➕ che segna un alimento: 🍎 Alimenti e ⚙️ Impostazioni stanno
+  qui e basta, e di là si leggono. Il conto del target è duplicato in `CalorieRegole.kt` e **va
+  cambiato nelle due implementazioni insieme** — dettagli in *AppSphere nativa → Calorie nativo*.
 - Il **codice a barre** porta a due posti diversi a seconda di dove si parte (`S.scanPer`): dal
   diario finisce sulla porzione, dal catalogo archivia la voce e basta. La finestra dello scanner
   è la stessa.
@@ -3256,7 +3317,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Sette app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo e Abituati hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **Otto app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati e Calorie hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 
