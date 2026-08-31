@@ -1118,6 +1118,20 @@ Netlify dentro una `WebView`.
 (contro `com.garsalapps`), quindi i due si installano insieme sullo stesso telefono e leggono lo
 stesso database. Per tutto ciò che non è ancora nativo si continua ad aprire quello WebView.
 
+⚠️ **Le due icone portano lo stesso disegno e si distinguono per il fondo**: i cinque cerchi di
+AppSphere — quattro che si toccano a due a due (arancio, rosso / verde, viola) e il blu al centro,
+sopra a tutti — su **fondo bianco per la WebView** e **nero per la nativa**. È l'unica cosa che le
+distingue in un cassetto delle app, dove il nome è lo stesso e sta scritto piccolo. Il disegno vive
+in `drawable/ic_launcher_foreground.xml`, **identico nei due progetti**, e il fondo in
+`values/colors.xml` (`ic_launcher_background`): cambiando il disegno va copiato in tutt'e due, o le
+due app smettono di sembrare la stessa app.
+
+⚠️ **Il raggio dei cerchi non è scelto a occhio.** Un'icona adattiva è una tela da 108 dp di cui il
+launcher garantisce solo il **cerchio centrale da 36 dp di raggio**: col disegno a `r = 14` dp
+l'angolo più esterno cade a `r·(1+√2) = 33,8` dp dal centro, dentro quel cerchio. Allargandolo per
+riempire di più la maschera quadrata, la maschera **tonda** taglierebbe i quattro cerchi esterni —
+e non si vedrebbe finché non lo si prova su un launcher che la usa.
+
 | Cosa | Dove |
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
