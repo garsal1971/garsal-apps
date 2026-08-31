@@ -569,7 +569,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("GarsalApps")
+            .setTitle("AppSfera Web")
             .setSubtitle("Sblocca con impronta digitale o PIN")
             .setAllowedAuthenticators(authenticators)
 

@@ -102,11 +102,11 @@ jobs:
           BYTES=$(stat -c%s /tmp/GarsalApps-latest.apk)
           MB=$(awk "BEGIN {printf \"%.1f\", $BYTES/1048576}")
           SHA=$(sha256sum /tmp/GarsalApps-latest.apk | cut -d' ' -f1)
-          echo "📦 GarsalApps v$VERSION — ${MB} MB (${BYTES} byte)"
+          echo "📦 AppSfera Web v$VERSION — ${MB} MB (${BYTES} byte)"
           echo "🔑 SHA-256: $SHA"
           cat > /tmp/GarsalApps-latest.json <<EOF
           {
-            "app": "GarsalApps",
+            "app": "AppSfera Web",
             "version": "$VERSION",
             "versionCode": $VERSION_CODE,
             "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
