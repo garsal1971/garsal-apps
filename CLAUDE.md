@@ -1760,6 +1760,20 @@ zero il totale di SOS e Decisioni — con quelli, da −40 a 0 la bolla mostrava
 malus non esisteva. Le altre `score_query` non stanno in nessuna migration: se una ha lo stesso
 clamp, si toglie dal pannello ⚙️ delle badge query in `index.html`.
 
+⚠️ **Il pavimento di 6 cm² è in «cm» del web, non col righello** (`sizeOf()` in `index.html`,
+`BubbleLayout.diametro` nel nativo): `sizeOf` lavora in CSS px e li converte a 96 dpi, ma su
+Android un CSS px **è** un dp — 1/160 di pollice — quindi quei 6 cm² valgono ~2,1 cm² veri, cioè
+un pavimento di **104,5 dp** di diametro. Il nativo usava la densità vera (`160f`) e otteneva un
+pavimento di 6 cm² fisici, **174 dp**: su uno schermo da 393 dp ci finivano sopra quasi tutte le
+bolle, e la home diventava una fila di cerchi uguali — fra 10 punti e 5952 correva il 26 % invece
+del 110 %. La proporzionalità *è* il senso delle bolle, quindi il fattore è quello del web,
+`96f`: qui si convertono dp, non centimetri.
+
+⚠️ **Il massimo su cui si normalizza è quello delle bolle mostrate**, non di tutte le app: il web
+le mostra tutte, il nativo solo le portate, quindi ciascuna home scala sulla sua bolla più
+grande. È voluto — con il massimo globale, in nativo la bolla più grande non arriverebbe mai a
+220 dp — ma è la ragione per cui le stesse app possono avere due diametri diversi nei due APK.
+
 ⚠️ Il numero continua invece a **dimensionare** la bolla, anche quando non si vede: quella di
 Spuntiamola che si sgonfia man mano che i giorni finiscono è la cosa che rende utile guardarla, e
 con l'area a zero resterebbe al minimo per sempre. Un punteggio negativo dà la bolla **al minimo**,
