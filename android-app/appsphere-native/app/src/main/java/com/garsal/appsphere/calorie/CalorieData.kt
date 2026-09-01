@@ -512,6 +512,29 @@ object CalorieRepository {
                 ?.let { numero(it, "times_used")?.toInt() }
         }.getOrNull() ?: 0
 
+    /**
+     * Cambia l'unità di un alimento del catalogo: `'g'` o `'ml'`.
+     *
+     * ⚠️ Tocca **soltanto** `al_foods`, e le righe già segnate non le guarda
+     * nemmeno: `al_log.unit` è congelata sulla riga, come i valori
+     * nutrizionali, quindi un latte corretto oggi non riscrive all'indietro
+     * i bicchieri di ieri. È tutta la ragione per cui la colonna sta su due
+     * tabelle invece che su una.
+     *
+     * ⚠️ E non converte niente: i valori per 100 restano i numeri che sono —
+     * l'unità dice su che base sono scritti, non quanto pesa quel che si
+     * versa. Convertirli qui vorrebbe dire inventare una densità.
+     */
+    suspend fun cambiaUnitaAlimento(id: String, unita: String) = withContext(Dispatchers.IO) {
+        db.from("al_foods").update(
+            buildJsonObject {
+                put("unit", unita)
+                put("updated_at", java.time.Instant.now().toString())
+            }
+        ) { filter { eq("id", id) } }
+        Unit
+    }
+
     suspend fun cambiaGrammi(id: String, grammi: Double) = withContext(Dispatchers.IO) {
         db.from("al_log").update(buildJsonObject { put("grams", grammi) }) {
             filter { eq("id", id) }

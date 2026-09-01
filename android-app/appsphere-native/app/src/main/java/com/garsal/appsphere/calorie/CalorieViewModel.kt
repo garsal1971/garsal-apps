@@ -199,6 +199,52 @@ class CalorieViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Grammi o millilitri per **questo alimento**, deciso dal telefono.
+     *
+     * ⚠️ È una proprietà dell'alimento e non una scelta di questa volta: si
+     * scrive su `al_foods`, e da lì in poi vale ovunque — qui, sul web, e
+     * nella finestra della porzione la prossima volta. Chiederla ad ogni riga
+     * sarebbe una domanda a cui la risposta è sempre la stessa.
+     *
+     * ⚠️ Le righe già segnate non si toccano: portano la loro `unit`
+     * congelata. Correggere il latte oggi non riscrive i bicchieri di ieri.
+     *
+     * ⚠️ Un prodotto **non ancora in catalogo** non ha una riga da aggiornare:
+     * la scelta resta in mano alla schermata e parte insieme all'alimento
+     * quando entra in archivio, con la riga del diario. Per questo l'esito
+     * torna indietro con [onEsito] invece di essere letto da `alimenti`, dove
+     * quel prodotto non c'è ancora.
+     *
+     * [onEsito] riceve l'alimento **come va mostrato**: quello nuovo se la
+     * scrittura è andata, quello di prima se il database ha detto di no — così
+     * non resta a schermo una scelta finta che sparisce al ricarico. È lo
+     * stesso rollback delle spunte di Spuntiamola.
+     */
+    fun cambiaUnitaAlimento(alimento: Alimento, unita: String, onEsito: (Alimento) -> Unit) {
+        // Normalizzata subito e in un posto solo: quel che finisce in memoria è
+        // quel che finisce in archivio, e il CHECK della colonna non ha niente
+        // da rifiutare. È la stessa regola di `misura`.
+        val pulita = if (unita == "ml") "ml" else "g"
+        val nuovo = alimento.copy(unit = pulita)
+        onEsito(nuovo)
+        val id = alimento.id ?: return       // di rete: nessuna riga da aggiornare
+        viewModelScope.launch {
+            try {
+                CalorieRepository.cambiaUnitaAlimento(id, pulita)
+                _state.value = _state.value.copy(
+                    alimenti = _state.value.alimenti.map { if (it.id == id) nuovo else it },
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "unità non cambiata", e)
+                onEsito(alimento)
+                _state.value = _state.value.copy(
+                    messaggio = "Unità non salvata: ${e.message ?: "connessione assente"}"
+                )
+            }
+        }
+    }
+
     fun cambiaGrammi(riga: RigaDiario, grammi: Double) {
         viewModelScope.launch {
             try {
