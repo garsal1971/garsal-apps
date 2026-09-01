@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.26</title>
+  <title>GarsalFinanza v1.3.27</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -570,8 +570,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.26';
-const APP_BUILD   = '2026-09-01T15:10:00Z';
+const APP_VERSION = 'v1.3.27';
+const APP_BUILD   = '2026-09-01T15:45:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3724,7 +3724,8 @@ const COVERAGE_ITEMS = [
   { side: 'dotazione',  key: 'casa_mia',      icon: '🏡', label: 'Casa Mia',     fonte: 'asset' },
   { side: 'dotazione',  key: 'finanza',       icon: '📈', label: 'Finanza',
     hint: 'Valore quota dei portafogli, liquidità compresa.', fonte: 'auto', auto: coverageFinanza },
-  { side: 'dotazione',  key: 'pensione_ada',  icon: '👛', label: 'Pensione Ada', fonte: 'asset' },
+  { side: 'dotazione',  key: 'pensione_ada',  icon: '👛', label: 'Pensione Ada',
+    hint: 'Pensione INPS dell\'anno più recente in 💶 Reddito.', fonte: 'auto', auto: coveragePensioneAda },
 ];
 const COVERAGE_SIDES = [
   { key: 'fabbisogno', icon: '🎯', title: 'Fabbisogno', sub: 'Quello che servirà' },
@@ -3754,6 +3755,17 @@ function coveragePensioneLorda() {
   const sc = PENSION_SCENARIOS.find(s => s.key === r.scenario);
   return { value: parseFloat(r.gross_amount),
     label: `${sc ? sc.label : r.scenario}${r.issued_at ? ` · simulazione del ${fmtDate(r.issued_at)}` : ''}` };
+}
+
+// ⚠️ Si legge da 💶 Reddito → riquadro Redditi, riga «Pensione INPS» dell'anno più recente che
+// ce l'ha — non dall'ultimo anno in tabella: un anno appena aperto e ancora da compilare
+// azzererebbe la voce in silenzio. È un importo annuo archiviato a mano, quindi resta quello
+// finché non lo si riscrive di là: qui non si ricopia, si legge.
+function coveragePensioneAda() {
+  const righe = (S.income || []).filter(r => r.kind === 'pensione' && r.amount != null);
+  if (!righe.length) return null;
+  const r = righe.reduce((a, b) => (b.year > a.year ? b : a));
+  return { value: parseFloat(r.amount), label: `Reddito ${r.year} · Pensione INPS` };
 }
 
 async function loadCoverage() {
@@ -3804,6 +3816,13 @@ function renderCoperture() {
     S.pensionForecast = [];
     loadPensionForecast().then(() => { if (S.view === 'coperture') renderCoperture(); })
                          .catch(e => console.error('Coperture (previsione INPS):', e));
+  }
+  // Il reddito serve alla voce «Pensione Ada»: senza, resterebbe vuota finché non si apre
+  // 💶 Reddito — cioè sembrerebbe un dato mancante invece che un dato non ancora letto.
+  if (S.income === null) {
+    S.income = [];
+    loadIncome().then(() => { if (S.view === 'coperture') renderCoperture(); })
+                .catch(e => console.error('Coperture (reddito):', e));
   }
   const fab = coverageTotal('fabbisogno');
   const dot = coverageTotal('dotazione');

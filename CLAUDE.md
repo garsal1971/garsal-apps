@@ -353,7 +353,11 @@ silenzio. È la stessa scelta di `fnz_income`.
 |---|---|
 | `manuale` | Lo scrive l'utente e basta (costo della vita, rendita per Ada, università, assicurazione) |
 | `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli (`portfolioStats`), importo lordo dell'ultima simulazione INPS |
-| `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia, Pensione Ada) |
+| `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
+
+⚠️ **«Pensione Ada» è `auto` e non `asset`**: si legge da 💶 Reddito, riquadro *Redditi*, riga
+**Pensione INPS** dell'anno più recente **che ce l'ha** — non dell'ultimo anno in tabella, o un
+anno appena aperto e ancora da compilare azzererebbe la voce in silenzio.
 
 ⚠️ **L'asset si collega per id e non si indovina dal titolo**: una voce agganciata al nome
 smetterebbe di leggere il giorno che qualcuno rinomina «Casa Rosa» in «Casa di Rosa», e lo
