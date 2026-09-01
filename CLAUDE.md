@@ -3087,6 +3087,23 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
   — sei scoppi scaglionati, ognuno con lampo centrale e raggiera di scintille/stelle con
   gravità — più un toast dorato da 5 s. Le giornate chiave si modificano su una copia
   (`tmpKeyDays`) e si applicano solo con "Salva", così "Annulla" butta via tutto davvero.
+  ⚠️ **Sono facoltative**, e la stecca si salva senza. Il tasto *Aggiungi* è un `btn-ghost`
+  **spento finché non c'è una data** e non un `btn-primary` che a data vuota rispondeva
+  `alert('Errore: scegli la data della giornata chiave.')`: sta a due righe dal *Salva* ed era
+  identico a lui, quindi premuto per sbaglio al posto di quello quell'errore si leggeva come
+  «non mi fa salvare se non metto una giornata chiave».
+  ⚠️ **Una giornata chiave fuori dal periodo si salva e poi NON C'È**: la griglia disegna i
+  giorni di `giorniDelPeriodo()`, e quel giorno lì dentro non compare — non si può spuntare e i
+  fuochi non partiranno mai, senza che niente lo dica. `perchePuoNonEsserci()` la rifiuta
+  all'aggiunta, spiegando quale dei due motivi è (fuori dall'intervallo, oppure un sabato o una
+  domenica su una stecca che salta i fine settimana: la conseguenza è la stessa), e
+  `inKeyDate` porta `min`/`max` così il calendarietto si apre già sul periodo. Il periodo si
+  legge dai **campi del form** e non da `S`: lì si sta ancora scegliendo, e `S` porta quello di
+  prima. Il periodo però si può accorciare **dopo**, e allora una chiave già salvata resta fuori:
+  nell'elenco delle Impostazioni quella riga si marca in rosso invece di sparire in silenzio.
+  ⚠️ **`.btn:disabled` non aveva nessuno stile**: un pulsante spento era identico a uno acceso —
+  si premeva, non succedeva niente, e si leggeva come un tocco andato a vuoto. Riguardava anche
+  *Chiudi la stecca* e *Cancella il traguardo*.
 - **Memoria delle stecche** (`sp_stecche`, migration `20260810150000_sp_stecche.sql`): una stecca
   finita non sparisce più. Quando non c'è più niente da spuntare — tutti i giorni fatti *oppure*
   l'ultimo giorno passato — il pulsante della hero diventa *🏁 Chiudi la stecca* e parte una
