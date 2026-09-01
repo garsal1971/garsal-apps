@@ -334,12 +334,25 @@ e intestato all'utente cercato per email, e salta senza fallire se quell'utente 
 ### Coperture per esigenze future (`fnz_coverage_items`)
 | Table | Purpose |
 |---|---|
-| `fnz_coverage_items` | Le voci di copertura, **una riga per voce**: `side` (`fabbisogno`\|`dotazione`), `item_key`, `amount`, `linked_other_asset_id`, `note` |
+| `fnz_coverage_items` | Le voci di copertura, **una riga per voce**: `side` (`fabbisogno`\|`dotazione`), `item_key`, `amount`, `periodicity`, `revaluation_pct`, `linked_other_asset_id`, `note` |
 
 Si compila da `finanza.html` → Previdenza → 🛡️ **Coperture per esigenze future**, la voce di menù
-sotto 🏛️ Simulazione INPS. Due colonne che si guardano in faccia — quello che servirà e quello con
-cui ci si arriva — e il saldo in cima: **scopertura** se il fabbisogno è più grande, **eccedenza**
-altrimenti.
+sotto 🏛️ Simulazione INPS. Quello che servirà, quello con cui ci si arriva, e quanto manca.
+
+⚠️ **Il fabbisogno non è un numero solo: si conta fino a una data, e le date sono tre.** «Costo
+della vita» e «contribuzione alla pensione» sono flussi che durano finché non si smette di
+lavorare, quindi valgono di più uscendo a vecchiaia che cinque anni prima — ed è esattamente la
+differenza che la pagina esiste per mostrare.
+
+| Scenario | Data |
+|---|---|
+| 🧭 Accompagnamento | Anticipata **− 5 anni** (`COVERAGE_ANNI_ACCOMPAGNAMENTO`) |
+| 🚪 Pensione anticipata | `fnz_pension_forecast.pension_date`, scenario `anticipata` |
+| 🏛️ Pensione di vecchiaia | `fnz_pension_forecast.pension_date`, scenario `vecchiaia` |
+
+⚠️ **Una data che manca non si inventa**: la colonna resta vuota e lo dice. Un fabbisogno contato
+su un orizzonte immaginario è peggio di un fabbisogno che non c'è, perché sembra un numero.
+Per la stessa ragione `coverageValoreA` torna `null` — non zero — su un flusso senza orizzonte.
 
 ⚠️ **Le voci non stanno nel database**: vivono in `COVERAGE_ITEMS` dentro `finanza.html`, come
 `INCOME_SECTIONS` per il reddito, e aggiungerne una è una riga di JavaScript, non una migration.
@@ -347,13 +360,14 @@ altrimenti.
 su cui la pagina scrive in **upsert** — senza, ricompilare una voce raddoppierebbe il totale in
 silenzio. È la stessa scelta di `fnz_income`.
 
-⚠️ **Tre fonti diverse, e la differenza è la funzionalità**:
+⚠️ **Quattro fonti diverse, e la differenza è la funzionalità**:
 
 | `fonte` | Da dove viene il numero |
 |---|---|
-| `manuale` | Lo scrive l'utente e basta (costo della vita, rendita per Ada, università, assicurazione) |
-| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli (`portfolioStats`), importo lordo dell'ultima simulazione INPS |
+| `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada) |
+| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS da 💶 Reddito |
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
+| `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
 
 ⚠️ **«Pensione Ada» è `auto` e non `asset`**: si legge da 💶 Reddito, riquadro *Redditi*, riga
 **Pensione INPS** dell'anno più recente **che ce l'ha** — non dell'ultimo anno in tabella, o un
@@ -365,31 +379,58 @@ farebbe **in silenzio** — il totale scenderebbe senza che niente lo dica. `lin
 è `ON DELETE SET NULL`: cancellato l'asset la voce resta e torna a chiedere un importo, invece di
 sparire dal totale.
 
+⚠️ **`periodicity` decide se l'importo è un capitale o un flusso**, e le colonne del database sono
+**nullable di proposito**: `NULL` significa «vale quello che dice `COVERAGE_ITEMS`». Un DEFAULT
+scritto nel database congelerebbe lì una scelta che vive nella pagina, e cambiarla nella pagina
+non avrebbe più effetto sulle righe già salvate — che è il modo più silenzioso di far divergere
+le due. Per togliere la rivalutazione si scrive **0**, che è una cosa diversa da «non l'ho deciso
+io».
+
+| `periodicity` | Come si conta |
+|---|---|
+| `una_tantum` | Un capitale: **stesso importo** su tutti e tre gli orizzonti |
+| `annuo` | Un flusso: sommato anno per anno fino alla data, rivalutato di `revaluation_pct` composto (`sommaFlusso`) |
+
+⚠️ **L'ultimo anno parziale entra per la sua frazione**: fermarsi all'anno intero perderebbe fino
+a undici mesi di spesa. E ⚠️ **il FOI non si usa come tasso**: `fnz_foi_index` è storico e gli anni
+da rivalutare sono tutti futuri — il form ne mostra la crescita media (`coverageFoiMedia`, CAGR
+sulla **distanza fra gli anni**, non sul numero di righe: con i buchi dell'indice due valori a
+dieci anni di distanza darebbero il 18 % invece dell'1,7 %) come **spunto**, e il tasso resta una
+scelta.
+
+⚠️ **L'assicurazione non è una voce del fabbisogno e non entra nel totale**: è la **copertura** di
+quello che manca, quindi vive fuori dall'elenco (`COVERAGE_ASSICURAZIONE`), nel riepilogo, come
+riga calcolata scenario per scenario — `max(0, fabbisogno − dotazioni)`. Sommarla al fabbisogno
+che deve coprire lo conterebbe due volte.
+
+⚠️ **Le dotazioni sono quelle di OGGI, uguali nei tre scenari**, e non si proiettano in avanti:
+un TFR o un portafoglio proiettati sarebbero un rendimento inventato messo accanto a numeri veri.
+
 ⚠️ **`amount` NULL non è zero**, ed è la stessa scelta di `fnz_income` e delle misure di Memo. Su
 una voce manuale dice «non l'ho ancora scritto»; su una automatica dice «vale il dato di Finanza»
 — l'importo scritto a mano è un **override** che vince, si vede col badge *scritto a mano* accanto
 al dato che ha coperto, e si toglie col ↺. Un override silenzioso resterebbe fermo mentre il dato
-vero cambia sotto. Le voci senza valore si **contano sotto la tabella** invece di sparire dal
-totale.
+vero cambia sotto. Le voci senza valore si **contano accanto al totale** invece di sparirci dentro.
 
-⚠️ **La voce «Contribuzione alla pensione» è un flusso annuo, non un capitale**: è l'importo lordo
-della simulazione INPS più recente per `issued_at` (fra i due scenari possono convivere, e quello
-vecchio parla di un'altra età di uscita). Sommarla ai capitali è quello che è stato chiesto, e la
-riga lo scrive.
+**Quando comincia l'università di Ada si ricava, non si scrive**: `ADA_SCUOLA` dice classe e anno
+scolastico in corso (3ª superiore nel 2026/27) e `adaUniversita()` ne ricava inizio (settembre
+2029), fine e anni che mancano. Scritto a mano, fra due anni direbbe ancora 2029 senza che niente
+lo segnali.
 
-⚠️ **Nelle due tabelle l'importo viene PRIMA della voce**, che è l'unico posto in Finanza dove
-l'ordine di lettura abituale si rovescia: `.table td` è `nowrap` in tutta la pagina (colonne di
-numeri) e la voce è prosa — coi caratteri di sistema grandi va a capo tre volte e spingerebbe
-oltre il bordo destro proprio il numero per cui la tabella esiste. La sola cella della voce torna
-ad andare a capo; ✎, 💬 e ↺ restano in testa alla riga come in `calorie.html`.
+I due 💬 (università di Ada, capitale da assicurare) aprono un popup col **prompt già scritto** da
+incollare in una chat con l'IA. Quello dell'assicurazione ci mette dentro i numeri che la pagina
+già conosce — le tre date, il fabbisogno voce per voce **su ciascuno dei tre orizzonti**, le
+dotazioni, le scoperture — perché riscriverli a memoria è il modo più semplice di far ragionare
+l'IA su cifre sbagliate. ⚠️ La voce dell'assicurazione **resta fuori dal proprio prompt**: il
+capitale da assicurare è quello che si sta chiedendo.
 
-I due 💬 (università di Ada, assicurazione caso morte e invalidità) aprono un popup col **prompt
-già scritto** da incollare in una chat con l'IA. Quello dell'assicurazione ci mette dentro i numeri
-che la pagina già conosce — fabbisogno voce per voce, dotazioni, scopertura — perché riscriverli a
-memoria è il modo più semplice di far ragionare l'IA su cifre sbagliate. ⚠️ La voce
-dell'assicurazione **resta fuori dal proprio prompt**: il capitale da assicurare è quello che si
-sta chiedendo, e metterlo fra i dati di partenza vorrebbe dire farsi ricalcolare una cifra già
-scritta da soli.
+⚠️ **Le voci NON sono una tabella, sono schede** (`.cov-item` + `.cov-vals`): tre colonne di
+importi accanto a una voce che è prosa, coi caratteri di sistema grandi, danno righe alte mezzo
+schermo col testo oltre il bordo destro — provato e ritirato. I tre importi sono una griglia
+etichettata che **va a capo da sé** (`auto-fit` con la soglia in `rem`, quindi cresce col testo)
+invece di scorrere di lato: un numero oltre il bordo è un numero che non si legge. È la stessa
+scelta della tabella di «Ti pisasti?» in nativo. Il **riepilogo** resta una tabella — poche righe
+ed etichette corte — con l'anno in intestazione e il nome breve sotto.
 
 ### Memorandum (`mm_`)
 | Table | Purpose |
