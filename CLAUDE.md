@@ -365,7 +365,7 @@ silenzio. È la stessa scelta di `fnz_income`.
 | `fonte` | Da dove viene il numero |
 |---|---|
 | `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada) |
-| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS da 💶 Reddito |
+| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS da 💶 Reddito |
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
 | `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
 
@@ -411,6 +411,12 @@ che deve coprire lo conterebbe due volte.
 
 ⚠️ **Le dotazioni sono quelle di OGGI, uguali nei tre scenari**, e non si proiettano in avanti:
 un TFR o un portafoglio proiettati sarebbero un rendimento inventato messo accanto a numeri veri.
+
+⚠️ **La dotazione «Finanza» è il valore NETTO dei portafogli** (`coverageFinanza`), ed è l'unico
+posto in Finanza dove il netto prende il posto del lordo invece di affiancarlo: una dotazione è
+quello con cui ci si arriva davvero, e le imposte sulle plusvalenze si pagano vendendo — cioè
+proprio nel momento in cui quella dotazione servirebbe. L'etichetta della riga porta il lordo
+accanto, così i due numeri si vedono insieme.
 
 ⚠️ **`amount` NULL non è zero**, ed è la stessa scelta di `fnz_income` e delle misure di Memo. Su
 una voce manuale dice «non l'ho ancora scritto»; su una automatica dice «vale il dato di Finanza»
