@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.6.0</title>
+  <title>GarsalFinanza v1.6.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.6.0';
-const APP_BUILD   = '2026-09-01T18:35:00Z';
+const APP_VERSION = 'v1.6.1';
+const APP_BUILD   = '2026-09-01T19:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3835,11 +3835,18 @@ async function deletePensionContribution(id) {
 /* Ada: l'anno scolastico in cui frequenta la classe indicata. Da qui si ricava quando comincia
    l'università, che è l'unica cosa che alla pagina serve sapere — e si ricava invece di essere
    scritto a mano, o fra due anni direbbe ancora 2029 senza che niente lo segnali. */
-const ADA_SCUOLA = { annoScolastico: 2026, classe: 3, classiSuperiori: 5, anniUniversita: 7 };
+/* ⚠️ Due durate diverse, e non è una svista: `anniUniversita` (7) è quanto si prevede di
+   MANTENERLA agli studi — laurea più specializzazione — mentre `anniCorsoRegolare` (3+2) è la
+   durata legale del corso, che è quella a cui guarda l'INPS per la pensione ai superstiti di un
+   figlio studente. La prima decide il fabbisogno, la seconda fino a quando quella pensione si
+   incassa: usarne una sola farebbe sbagliare per eccesso l'una o per difetto l'altra. */
+const ADA_SCUOLA = { annoScolastico: 2026, classe: 3, classiSuperiori: 5,
+                     anniUniversita: 7, anniCorsoRegolare: 5 };
 function adaUniversita() {
   const mancano = ADA_SCUOLA.classiSuperiori - ADA_SCUOLA.classe + 1;   // superiori che restano
   const inizio  = ADA_SCUOLA.annoScolastico + mancano;
-  return { mancano, inizio, fine: inizio + ADA_SCUOLA.anniUniversita, anni: ADA_SCUOLA.anniUniversita };
+  return { mancano, inizio, fine: inizio + ADA_SCUOLA.anniUniversita, anni: ADA_SCUOLA.anniUniversita,
+           fineCorsoRegolare: inizio + ADA_SCUOLA.anniCorsoRegolare };
 }
 
 // Lo scenario più vicino: si esce cinque anni prima dell'anticipata.
@@ -3951,14 +3958,29 @@ function coveragePensioneLorda() {
   return { value: parseFloat(r.gross_amount),
     label: `${sc ? sc.label : r.scenario}${r.issued_at ? ` · simulazione del ${fmtDate(r.issued_at)}` : ''}` };
 }
-// ⚠️ Si legge da 💶 Reddito → riquadro Redditi, riga «Pensione INPS» dell'anno più recente che
-// ce l'ha — non dall'ultimo anno in tabella: un anno appena aperto e ancora da compilare
-// azzererebbe la voce in silenzio.
+/* ⚠️ Si legge da 💶 Reddito → riquadro Redditi, riga «Pensione INPS» dell'anno più recente che
+   ce l'ha — non dall'ultimo anno in tabella: un anno appena aperto e ancora da compilare
+   azzererebbe la voce in silenzio.
+
+   ⚠️ È un importo ANNUO e la dotazione è quanto se ne incasserà in tutto: si moltiplica per gli
+   anni che mancano alla fine del CORSO REGOLARE di Ada (l'ultimo in cui quella pensione spetta a
+   un figlio studente), non per gli anni di mantenimento agli studi del fabbisogno, che sono
+   sette e comprendono la specializzazione. La differenza fra le due durate è scritta accanto ad
+   ADA_SCUOLA.
+
+   ⚠️ La fine si ricava — inizio dell'università più la durata legale del corso — e non si
+   scrive: un 2034 messo a mano fra due anni direbbe ancora 2034 senza che niente lo segnali. Il
+   conto è in anni interi, `2034 − anno in corso`, così il numero si rifà a mente; finito il
+   corso vale zero, che è quello che sarà. */
 function coveragePensioneAda() {
   const righe = (S.income || []).filter(r => r.kind === 'pensione' && r.amount != null);
   if (!righe.length) return null;
-  const r = righe.reduce((a, b) => (b.year > a.year ? b : a));
-  return { value: parseFloat(r.amount), label: `Reddito ${r.year} · Pensione INPS` };
+  const r     = righe.reduce((a, b) => (b.year > a.year ? b : a));
+  const annuo = parseFloat(r.amount);
+  const fine  = adaUniversita().fineCorsoRegolare;
+  const anni  = Math.max(0, fine - new Date().getFullYear());
+  return { value: annuo * anni,
+    label: `Reddito ${r.year} · Pensione INPS ${fmtEUR(annuo)}/anno × ${anni} ann${anni === 1 ? 'o' : 'i'}, fino al ${fine} (ultimo anno di corso regolare)` };
 }
 
 async function loadCoverage() {
