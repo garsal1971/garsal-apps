@@ -503,9 +503,8 @@ dei valori nutrizionali sulla riga, un passo più in là. ⚠️ **`NOT NULL DEF
 backfill «intelligente»**: indovinare i liquidi dal nome marcherebbe in ml anche il latte in
 polvere e l'olio di semi di una tabella di composizione, che in grammi ci stanno di proposito.
 
-La scelta si fa **da 🍎 Alimenti → ✏️** sul web e **dalla schermata della porzione** nel nativo
-(gli stessi due pulsanti *⚖️ Grammi* / *🥛 Millilitri*: due posti diversi perché di là 🍎 Alimenti
-non c'è, ma la colonna scritta è la stessa), e da lì in poi si legge dappertutto: la finestra della porzione chiede «Quantità (millilitri)» invece di
+La scelta si fa **da 🍎 Alimenti → ✏️** (i due pulsanti *⚖️ Grammi* / *🥛 Millilitri*), e da lì
+in poi si legge dappertutto: la finestra della porzione chiede «Quantità (millilitri)» invece di
 «Peso (grammi)» e offre i tagli dei liquidi (`ML_RAPIDI`: 50, 100, 150, 200, 250, 330, 500 — un
 bicchiere, una lattina, una bottiglietta), le righe del diario si leggono «250 ml», e nella
 tabella di 🍎 Alimenti un liquido porta il badge `100 ml` accanto al nome. ⚠️ **Il badge compare
@@ -1738,27 +1737,18 @@ momento in cui lo si mangia, non la sera al computer.
 **Restano sul web 🍎 Alimenti e ⚙️ Impostazioni**, e non è una mancanza: curare il catalogo,
 configurare i pasti e scegliere il fattore di attività sono cose che si fanno da seduti e una
 volta sola. Il nativo quelle scelte le **legge** — `cm_settings.al_pasti`, `al_profile.activity`,
-`cm_profile` — e non le può cambiare. ⚠️ **`al_foods.unit` è l'eccezione, e si cambia anche da
-qui**: nella schermata della porzione ci sono i due pulsanti *⚖️ Grammi* / *🥛 Millilitri*, che
-scrivono sull'alimento (`cambiaUnitaAlimento`) e valgono da lì in poi ovunque. È una differenza
-di **forma** e non di regola — sul web la scelta sta nel form di 🍎 Alimenti, che di qua non c'è —
-e il posto è quello giusto: la bottiglia la si ha in mano proprio mentre l'app chiede dei grammi.
-Da lì discendono tre cose che sono la funzionalità:
+`cm_profile`, e `al_foods.unit` — e non le può cambiare. ⚠️ L'unità è fra queste: un liquido si
+segna in ml anche dal telefono (la casella dice «Quantità (millilitri)» e i tagli sono quelli dei
+liquidi), ma **quale alimento sia un liquido si decide di là**. Il `put("unit", …)` sulle righe
+del diario però c'è, e non è facoltativo: senza, una riga segnata dal telefono nascerebbe in
+grammi per il valore di DEFAULT della colonna, cioè con un'etichetta sbagliata e nessun errore.
 
-- ⚠️ **è ottimistica con rollback** (`onEsito` riceve l'alimento *come va mostrato*): se il
-  database rifiuta, l'unità torna quella di prima invece di restare a schermo una scelta finta
-  che sparisce al ricarico. È la stessa scelta delle spunte di Spuntiamola;
-- ⚠️ **un prodotto non ancora in catalogo non ha una riga da aggiornare**: la scelta resta nella
-  schermata e parte con l'alimento quando entra in archivio, insieme alla riga del diario. Per
-  questo l'esito torna dal callback e non si rilegge da `alimenti`, dove quel prodotto non c'è;
-- ⚠️ **i `remember` della schermata si agganciano all'identità dell'alimento**
-  (`id ?: barcode ?: name`) e non all'oggetto: `copy()` ne fa uno nuovo, e con `remember(alimento)`
-  la quantità già scritta si azzererebbe sotto le dita — 250 digitati e il campo che torna a 100
-  al tocco su «🥛 Millilitri». L'unità non è una quantità e non deve toccarla.
-
-Il `put("unit", …)` sulle righe del diario non è facoltativo: senza, una riga segnata dal telefono
-nascerebbe in grammi per il valore di DEFAULT della colonna, cioè con un'etichetta sbagliata e
-nessun errore. Restano di là anche il **codice a barre** (qui non c'è né
+⚠️ **I due pulsanti g/ml nella schermata della porzione sono stati provati e tolti** (v1.0.63,
+ritirata dalla 1.0.64): quella schermata risponde a una domanda sola — «quanto ne hai mangiato?» —
+e una scelta su com'è fatto l'alimento, con la riga che la spiega, si prendeva mezzo schermo per
+una cosa che lì non si sta chiedendo; coi caratteri di sistema grandi il campo della quantità
+finiva sotto la piega. Il posto di quella scelta è una schermata degli alimenti, che in nativo non
+c'è — non il caricamento del pasto. Restano di là anche il **codice a barre** (qui non c'è né
 `BarcodeDetector` né una fotocamera accesa per questo) e lo *scrivilo a mano*, che è il form di
 🍎 Alimenti: sono le due strade per mettere in dispensa. Come sul web, la **dieta non si decide
 qui**: l'obiettivo si crea in «Ti pisasti?» e da questa parte si legge soltanto.
