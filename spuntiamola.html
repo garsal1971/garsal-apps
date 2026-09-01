@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.3.1</title>
+    <title>✅ Spuntiamola v1.3.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -1073,7 +1073,7 @@
     <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.3.1</span>
+        <span class="app-version" id="versionBadge">v1.3.2</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </div>
@@ -1149,7 +1149,7 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.3.1</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.3.2</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -1177,17 +1177,18 @@
         <div class="field">
             <label>Che stecca è?</label>
             <div class="mood-grid">
+                <!-- emoji, nome e sottotitolo li riempie renderMood() da MOODS:
+                     scritti qui a mano sarebbero una seconda copia dei testi,
+                     che diverge il giorno che una delle due cambia. -->
                 <div class="mood-opt" id="moodAttesa" data-mood="attesa">
-                    <div class="mood-opt-emoji">⏳</div>
-                    <div class="mood-opt-title">Attesa</div>
-                    <div class="mood-opt-sub">Aspetti qualcosa. Ogni giorno
-                        spuntato è un giorno in meno da aspettare.</div>
+                    <div class="mood-opt-emoji"></div>
+                    <div class="mood-opt-title"></div>
+                    <div class="mood-opt-sub"></div>
                 </div>
                 <div class="mood-opt" id="moodBeiGiorni" data-mood="bei_giorni">
-                    <div class="mood-opt-emoji">🌅</div>
-                    <div class="mood-opt-title">Bei giorni</div>
-                    <div class="mood-opt-sub">Ci sei dentro. Ogni giorno
-                        spuntato è un bel giorno che se ne va.</div>
+                    <div class="mood-opt-emoji"></div>
+                    <div class="mood-opt-title"></div>
+                    <div class="mood-opt-sub"></div>
                 </div>
             </div>
             <div class="field-hint" id="moodHint"></div>
@@ -1321,8 +1322,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.3.1';
-var BUILD_TIME  = '2026-09-01T12:30:00Z';
+var APP_VERSION = 'v1.3.2';
+var BUILD_TIME  = '2026-09-01T14:00:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1507,7 +1508,10 @@ var MOODS = {
         emoji: '⏳',
         nome:  'Attesa',
         badge: '⏳ Attesa',
-        // cosa cambia scegliendolo, detto nelle impostazioni
+        // che stecca è, sulla scheda che si sceglie
+        sub:   'Aspetti qualcosa. Ogni giorno spuntato è un giorno in meno '
+             + 'da aspettare.',
+        // cosa cambia scegliendolo, sotto le due schede
         hint:  'Le frasi e i traguardi parlano di quanto manca: ogni spunta '
              + 'è un giorno tolto di mezzo.',
         labelGoal:       'Cosa stai aspettando?',
@@ -1595,6 +1599,8 @@ var MOODS = {
         emoji: '🌅',
         nome:  'Bei giorni',
         badge: '🌅 Bei giorni',
+        sub:   'Ci sei dentro. Ogni giorno spuntato è un bel giorno che se '
+             + 'ne va.',
         hint:  'Le frasi e i traguardi parlano di quel che finisce: ogni '
              + 'spunta è un bel giorno che se ne va.',
         labelGoal:       'Cosa stai vivendo?',
@@ -2496,7 +2502,11 @@ function renderMood() {
     var m = MOODS[moodValido(tmpMood)];
     ['moodAttesa', 'moodBeiGiorni'].forEach(function(id) {
         var el = document.getElementById(id);
+        var v  = MOODS[moodValido(el.dataset.mood)];
         el.classList.toggle('on', el.dataset.mood === tmpMood);
+        el.querySelector('.mood-opt-emoji').textContent = v.emoji;
+        el.querySelector('.mood-opt-title').textContent = v.nome;
+        el.querySelector('.mood-opt-sub').textContent   = v.sub;
     });
     document.getElementById('moodHint').textContent   = m.hint;
     document.getElementById('lblGoal').textContent    = m.labelGoal;

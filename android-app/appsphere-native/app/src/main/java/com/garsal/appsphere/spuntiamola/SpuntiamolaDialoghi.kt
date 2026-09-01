@@ -124,12 +124,19 @@ fun ImpostazioniDialog(
                             color = Palette.dark,
                         )
                         Text(
-                            voce.spiegazione,
+                            voce.sottotitolo,
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = Palette.muted,
                         )
                     }
                 }
+                // cosa cambia davvero scegliendolo: la riga che il web mostra
+                // sotto le due schede
+                Text(
+                    moodDi(mood).spiegazione,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = Palette.muted,
+                )
 
                 OutlinedTextField(
                     value = traguardo,

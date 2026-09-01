@@ -110,7 +110,9 @@ data class Mood(
     val emoji: String,
     val nome: String,
     val badge: String,
-    /** cosa cambia scegliendolo, detto nelle impostazioni */
+    /** che stecca è, sulla scheda che si sceglie */
+    val sottotitolo: String,
+    /** cosa cambia scegliendolo, sotto le due schede */
     val spiegazione: String,
     val etichettaTraguardo: String,
     val etichettaEmoji: String,
@@ -148,7 +150,9 @@ private val MOOD_DI_ATTESA = Mood(
     emoji = "⏳",
     nome = "Attesa",
     badge = "⏳ Attesa",
-    spiegazione = "Aspetti qualcosa. Ogni giorno spuntato è un giorno in meno da aspettare.",
+    sottotitolo = "Aspetti qualcosa. Ogni giorno spuntato è un giorno in meno da aspettare.",
+    spiegazione = "Le frasi e i traguardi parlano di quanto manca: ogni spunta è un giorno " +
+        "tolto di mezzo.",
     etichettaTraguardo = "Cosa stai aspettando?",
     etichettaEmoji = "Emoji del traguardo",
     etichettaRestano = "mancano",
@@ -235,7 +239,9 @@ private val MOOD_DI_BEI_GIORNI = Mood(
     emoji = "🌅",
     nome = "Bei giorni",
     badge = "🌅 Bei giorni",
-    spiegazione = "Ci sei dentro. Ogni giorno spuntato è un bel giorno che se ne va.",
+    sottotitolo = "Ci sei dentro. Ogni giorno spuntato è un bel giorno che se ne va.",
+    spiegazione = "Le frasi e i traguardi parlano di quel che finisce: ogni spunta è un bel " +
+        "giorno che se ne va.",
     etichettaTraguardo = "Cosa stai vivendo?",
     etichettaEmoji = "Emoji di questi giorni",
     etichettaRestano = "restano",
