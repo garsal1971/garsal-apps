@@ -33,7 +33,7 @@ const OFF_PRODOTTI = 'https://it.openfoodfacts.org';
 const OFF_RICERCA   = 'https://search.openfoodfacts.org/search';
 const USDA          = 'https://api.nal.usda.gov/fdc/v1';
 
-const OFF_CAMPI = 'code,product_name,product_name_it,generic_name,brands,quantity,serving_quantity,nutriments';
+const OFF_CAMPI = 'code,product_name,product_name_it,generic_name,brands,quantity,product_quantity_unit,serving_quantity,serving_quantity_unit,nutriments';
 
 // Open Food Facts chiede a chi la usa di identificarsi. Da un server lo User-Agent si può
 // impostare davvero, quindi qui si fa come chiedono — non col ripiego dei parametri in query
@@ -45,6 +45,9 @@ type Alimento = {
   kcal_100g: number; proteins_100g: number | null; fat_100g: number | null;
   sat_fat_100g: number | null; carbs_100g: number | null; sugars_100g: number | null;
   fiber_100g: number | null; salt_100g: number | null; default_grams: number | null;
+  // 'g' o 'ml': su che base sono scritti i valori. Non è una densità e non converte niente —
+  // dice solo se quel prodotto si pesa o si versa.
+  unit: 'g' | 'ml';
   quantita?: string | null;
 };
 
@@ -82,6 +85,26 @@ function kcalDa(n: Record<string, unknown>): number | null {
   return null;
 }
 
+/* Solido o liquido? La risposta è **scritta sul prodotto**, non indovinata: Open Food Facts
+   porta l'unità della confezione (`product_quantity_unit`) e quella della porzione
+   (`serving_quantity_unit`), e in mancanza di entrambe la quantità in chiaro — «1 l», «33 cl»,
+   «500 ml». Si legge quella. ⚠️ Quel che NON si fa è dedurlo dal nome: «latte» marcherebbe in
+   ml anche il latte in polvere, e «olio» l'olio di semi di una tabella di composizione, che in
+   grammi ci stanno di proposito. Senza nessuna unità dichiarata si resta su 'g', che è quel che
+   l'archivio ha sempre voluto dire — e chi ha in mano la bottiglia lo corregge in un tocco. */
+const UNITA_LIQUIDE = ['ml', 'mlt', 'cl', 'dl', 'l', 'litro', 'litri', 'lt'];
+
+function unitaDa(...campi: unknown[]): 'g' | 'ml' {
+  for (const c of campi) {
+    const t = String(c ?? '').trim().toLowerCase();
+    if (!t) continue;
+    // La sola unità («ml»), oppure la coda di una quantità in chiaro («1,5 l», «33cl»).
+    const coda = t.match(/([a-z]+)\s*$/)?.[1];
+    if (coda && UNITA_LIQUIDE.includes(coda)) return 'ml';
+  }
+  return 'g';
+}
+
 function daOFF(p: Record<string, any>): Alimento | null {
   const n = (p?.nutriments || {}) as Record<string, unknown>;
   const kcal = kcalDa(n);
@@ -97,6 +120,7 @@ function daOFF(p: Record<string, any>): Alimento | null {
     sat_fat_100g: num(n['saturated-fat_100g']), carbs_100g: num(n.carbohydrates_100g),
     sugars_100g: num(n.sugars_100g), fiber_100g: num(n.fiber_100g), salt_100g: num(n.salt_100g),
     default_grams: num(p.serving_quantity),
+    unit: unitaDa(p.product_quantity_unit, p.serving_quantity_unit, p.quantity),
     quantita: p.quantity ? String(p.quantity) : null,
   };
 }
@@ -127,6 +151,8 @@ function daUSDA(f: Record<string, any>): Alimento | null {
     // USDA dà il sodio in mg; il sale è sodio × 2,5, che è la conversione dell'etichetta europea.
     salt_100g: sodio == null ? null : Math.round((sodio / 1000) * 2.5 * 100) / 100,
     default_grams: null,
+    // USDA scrive l'unità della porzione a parte, e per i liquidi vale 'ml' o 'MLT'.
+    unit: unitaDa(f.servingSizeUnit),
   };
 }
 

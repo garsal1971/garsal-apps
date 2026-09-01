@@ -126,7 +126,8 @@ object Pasti {
  * perché la normalizzazione la fa una volta sola la Edge Function
  * `al-food-search`.
  *
- * I valori sono **sempre per 100 g**, in archivio come in rete.
+ * I valori sono **sempre per 100**, in archivio come in rete: per 100 g su un
+ * solido, per 100 ml su un liquido, che è quel che dice `unit`.
  */
 @Serializable
 data class Alimento(
@@ -149,9 +150,20 @@ data class Alimento(
     val favorite: Boolean = false,
     @SerialName("times_used") val volteUsato: Int = 0,
     val verified: Boolean = false,
+    /**
+     * ⚠️ `"g"` o `"ml"`: su che base sono scritti i valori qui sopra — 100 g per
+     * un solido, 100 ml per un liquido, che è come li scrive l'etichetta. **Non
+     * è una densità e non converte niente**: il conto resta quantità × valore /
+     * 100. Si sceglie da 🍎 Alimenti nella pagina, che di qua non c'è: qui si
+     * legge soltanto, come i pasti e il fattore di attività.
+     */
+    val unit: String = "g",
     /** Solo per i risultati di rete: la pezzatura scritta sulla confezione. */
     val quantita: String? = null,
 ) {
+    /** L'unità, letta da un posto solo: quel che non è "ml" sono grammi. */
+    val misura: String get() = if (unit == "ml") "ml" else "g"
+
     /** Vero se sta già nel catalogo: è un dato tuo, già guardato e correggibile. */
     val inCatalogo: Boolean get() = id != null
 
@@ -170,7 +182,7 @@ data class Alimento(
     }
 }
 
-/** Una riga del diario: i valori per 100 g sono **congelati sulla riga**. */
+/** Una riga del diario: i valori per 100 (g o ml) sono **congelati sulla riga**. */
 @Serializable
 data class RigaDiario(
     val id: String,
@@ -188,8 +200,18 @@ data class RigaDiario(
     @SerialName("sugars_100g") val zuccheri: Double? = null,
     @SerialName("fiber_100g") val fibre: Double? = null,
     @SerialName("salt_100g") val sale: Double? = null,
+    /**
+     * ⚠️ Congelata sulla riga come i valori nutrizionali, e non letta
+     * dall'alimento: cambiare un alimento da ml a g — o cancellarlo, che porta
+     * `food_id` a NULL — riscriverebbe all'indietro l'etichetta di righe già
+     * segnate, o gliela toglierebbe del tutto.
+     */
+    val unit: String = "g",
 ) {
-    /** Il valore di un nutriente per i grammi di **questa** riga. */
+    /** L'unità, letta da un posto solo: quel che non è "ml" sono grammi. */
+    val misura: String get() = if (unit == "ml") "ml" else "g"
+
+    /** Il valore di un nutriente per la quantità di **questa** riga. */
     private fun per(valore: Double?): Double? = valore?.let { it * grams / 100.0 }
 
     val kcalRiga: Double get() = per(kcal) ?: 0.0
@@ -247,11 +269,11 @@ private const val TAG = "AppSphereCalorie"
 private const val COLONNE_ALIMENTO =
     "id,name,brand,barcode,source,kcal_100g,proteins_100g,fat_100g,sat_fat_100g," +
         "carbs_100g,sugars_100g,fiber_100g,salt_100g,default_grams," +
-        "portion_label,portion_label_plural,favorite,times_used,verified"
+        "portion_label,portion_label_plural,favorite,times_used,verified,unit"
 
 private const val COLONNE_RIGA =
     "id,day,meal,food_id,name,brand,grams,kcal_100g,proteins_100g,fat_100g," +
-        "sat_fat_100g,carbs_100g,sugars_100g,fiber_100g,salt_100g"
+        "sat_fat_100g,carbs_100g,sugars_100g,fiber_100g,salt_100g,unit"
 
 /** I nutrienti che si copiano **sulla riga** del diario, in un posto solo. */
 private fun nutrientiDi(a: Alimento): Map<String, Double?> = mapOf(
@@ -443,7 +465,7 @@ object CalorieRepository {
         }
 
     /**
-     * Aggiunge una riga al diario. I valori per 100 g si copiano **sulla
+     * Aggiunge una riga al diario. I valori per 100 si copiano **sulla
      * riga**: correggere domani le calorie di un alimento non deve riscrivere
      * quel che si è mangiato oggi, e cancellarlo non fa sparire le calorie già
      * contate (`food_id` va a NULL, la riga resta).
@@ -462,6 +484,9 @@ object CalorieRepository {
             put("name", alimento.name)
             put("brand", alimento.brand)
             put("grams", grammi)
+            // ⚠️ L'unità si congela con i valori: senza, cambiare l'alimento da
+            // ml a g riscriverebbe all'indietro righe già segnate.
+            put("unit", alimento.misura)
             nutrientiDi(alimento).forEach { (chiave, valore) -> put(chiave, valore) }
         }
         db.from("al_log").insert(riga)
@@ -520,6 +545,7 @@ object CalorieRepository {
                 put("name", r.name)
                 put("brand", r.brand)
                 put("grams", r.grams)
+                put("unit", r.misura)
                 put("kcal_100g", r.kcal)
                 put("proteins_100g", r.proteine)
                 put("fat_100g", r.grassi)
@@ -552,6 +578,9 @@ object CalorieRepository {
                 put("source", a.source)
                 nutrientiDi(a).forEach { (chiave, valore) -> put(chiave, valore) }
                 put("default_grams", a.grammiPorzione)
+                // L'unità arriva dalla Edge Function, che l'ha letta dalla
+                // confezione: mezzo litro entra in catalogo già in ml.
+                put("unit", a.misura)
                 put("updated_at", java.time.Instant.now().toString())
             }
             if (esistente?.id != null) {
