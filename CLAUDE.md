@@ -558,10 +558,20 @@ periodo — nessuna colonna in più, `amount` è già con segno.
 ### Spuntiamola (`sp_`)
 | Table | Purpose |
 |---|---|
-| `sp_settings` | Una riga per utente: traguardo, emoji, periodo (`start_date` → `end_date`), `skip_weekend` |
+| `sp_settings` | Una riga per utente: traguardo, emoji, periodo (`start_date` → `end_date`), `skip_weekend`, `mood` |
 | `sp_checks` | Una riga per giorno spuntato (`UNIQUE (user_id, day)`); `emoji` è quella pescata a caso alla spunta |
 | `sp_key_days` | Giornate chiave (`UNIQUE (user_id, day)`); `label` è l'etichetta libera mostrata alla spunta |
-| `sp_stecche` | Archivio delle stecche chiuse: traguardo e periodo com'erano, `total_days`/`done_days`, `satisfaction` (1-100), `note`, e la fotografia jsonb di `checks` e `key_days` |
+| `sp_stecche` | Archivio delle stecche chiuse: traguardo e periodo com'erano, `mood`, `total_days`/`done_days`, `satisfaction` (1-100), `note`, e la fotografia jsonb di `checks` e `key_days` |
+
+`mood` (`20260901100000_sp_mood_stecca.sql`) dice **con che voce l'app commenta la griglia**, e
+ammette due valori: `'attesa'` — il tempo che passa avvicina qualcosa, quindi ogni spunta è un
+giorno tolto di mezzo — e `'bei_giorni'` — il tempo che passa porta via qualcosa, quindi ogni
+spunta è un bel giorno che se ne va e l'ultimo giorno è un addio, non un arrivo.
+
+⚠️ **La colonna sta sulla STECCA e non sull'utente**: si aspettano le ferie e nel frattempo le
+si vive, e le due cose convivono nel tempo senza essere la stessa. Sta anche in `sp_stecche`
+perché riaprendo l'archivio non si saprebbe più di che stecca si trattava. Le righe nate prima
+restano `'attesa'`, che è quello che erano davvero: l'app sapeva parlare in un modo solo.
 
 ### SOS (`sos_*`)
 | Table | Purpose |
@@ -1999,6 +2009,16 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Spuntiamola** — la chiusura della stecca scrive **prima** in `sp_stecche` e cancella **dopo**
   (`SpuntiamolaRepository.chiudiStecca`, come `dbCloseStecca()`); le spunte sono ottimistiche con
   rollback; frasi, emoji e messaggi dei traguardi sono copiati parola per parola.
+  ⚠️ **L'umore della stecca esiste solo nel web** (`sp_settings.mood` / `sp_stecche.mood`, vedi lo
+  schema `sp_`): il gemello Kotlin la colonna non la legge e parla sempre con la voce dell'attesa,
+  quindi una stecca di **bei giorni** creata dal PC sul telefono si commenta da sé nel modo
+  sbagliato — «giorni che mancano», «FINITO! Campione!» sull'ultimo giorno di una vacanza. **Non
+  si rompe niente**: `SpSettings` non porta la colonna, quindi l'upsert di `salvaImpostazioni`
+  non la nomina e sull'`ON CONFLICT DO UPDATE` la lascia com'è — una stecca di bei giorni
+  modificata dal telefono resta di bei giorni; una creata di là nasce col DEFAULT `'attesa'`. E
+  `Columns.ALL` su `sp_stecche` regge la chiave in più perché `ignoreUnknownKeys` è attivo nel
+  serializer di supabase-kt. Finché il porting non c'è, **una stecca di bei giorni si crea dal
+  web**. È una divergenza **nota e temporanea**: portare `MOODS` in Kotlin è il pezzo che manca.
 - **Obiettivi** — il progresso resta in `ob_objective_progress` e la scrittura in
   `ob_record_measurement`, che è anche l'unica a dire se un voto sta dentro la scala. Gli estremi
   di una metrica si leggono da `ob_metric_scale`, ricalcata in `scaleOf()` e in `ObMetrica.scala`:
@@ -3073,9 +3093,29 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
   cerimonia in tre passi: **l'ultima spunta** (un bersaglio grosso che si preme una volta sola e
   lascia la sua emoji come sigillo), la **barra della soddisfazione da 1 a 100**, la **nota**.
   Solo allora la stecca finisce in archivio e il messaggio finale — pescato per fascia da
-  `MSG_CHIUSURA`, dal consolatorio (`.toast.dolce`) al complimento vivo — arriva con i fuochi
-  d'artificio di `fuochiFinali()`, da 8 a 24 scoppi più il gran finale a seconda di quanto si è
-  soddisfatti. Le stecche chiuse si rileggono nella card *🏅 Le stecche chiuse*.
+  `msgChiusura` dell'umore, dal consolatorio (`.toast.dolce`) al complimento vivo — arriva con i
+  fuochi d'artificio di `fuochiFinali()`, da 8 a 24 scoppi più il gran finale a seconda di quanto
+  si è soddisfatti. Le stecche chiuse si rileggono nella card *🏅 Le stecche chiuse*.
+- **L'umore della stecca** (`sp_settings.mood`, prima scelta nelle Impostazioni): ⏳ **Attesa** o
+  🌅 **Bei giorni**. La griglia, le spunte, i traguardi e la chiusura restano identici — cambia
+  **con che voce l'app li commenta**, perché il tempo che passa avvicina qualcosa oppure lo porta
+  via, e sono due letture opposte dello stesso numero. Seguono l'umore: le 30 frasi della spunta,
+  le emoji che restano sul giorno, l'etichetta sotto il numero grande (*giorni che mancano* /
+  *giorni che restano*), il badge in cima alla card, le due etichette del form (*Cosa stai
+  aspettando?* / *Cosa stai vivendo?*), il banner di oggi, i quattro traguardi 25/50/75/100 % e i
+  sei messaggi di chiusura.
+  ⚠️ **Tutto passa da `MOODS`, una tabella di testi e non due rami di codice**: nessuna delle due
+  voci è scritta a mano da un'altra parte, e un terzo umore sarebbe una voce lì dentro. `mood()`
+  legge quello della stecca in corso; `moodValido()` riporta ad `'attesa'` un valore che non
+  conosce — ed è per questo che **l'elenco dei due id è scritto dentro quella funzione** e non in
+  una costante accanto a `MOODS`: la chiama anche l'inizializzazione di `S`, che gira prima che
+  quelle `var` siano assegnate.
+  ⚠️ **Al 100 % i fuochi d'artificio dipendono dall'umore** (`fuochiAl100`): su una stecca di bei
+  giorni l'ultimo giorno è un addio, e festeggiarlo coi fuochi suonerebbe come una presa in giro —
+  i coriandoli restano, che sono un saluto.
+  ⚠️ **`festeggiaChiusura(sodd, voce)` riceve l'umore come parametro e non da `mood()`**: gira
+  dopo che la stecca è stata archiviata, quando `S` descrive già il campo libero, e salutare dei
+  bei giorni con la voce dell'attesa sarebbe il modo peggiore di finirli.
 - **La chiusura scrive prima e cancella dopo**: `dbCloseStecca()` inserisce in `sp_stecche` e solo
   se l'insert riesce svuota `sp_checks`, `sp_key_days` e `sp_settings`. Non è l'ottimismo con
   rollback usato per le spunte, di proposito: nell'ordine inverso una rete che cade cancellerebbe
