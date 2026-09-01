@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.2.6</title>
+    <title>✅ Spuntiamola v1.3.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -539,6 +539,69 @@
             font-weight: 600;
         }
 
+        /* ── L'UMORE DELLA STECCA ──
+           Due schede affiancate invece di un interruttore: non sono «acceso /
+           spento» ma due letture opposte della stessa griglia, e ciascuna ha
+           bisogno di una riga che spieghi quale. Sotto i 420 px vanno una
+           sopra l'altra — coi caratteri di sistema grandi due colonne di testo
+           si sfilacciano, ognuna andando a capo un numero diverso di volte. */
+        .mood-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        @media (max-width: 420px) { .mood-grid { grid-template-columns: 1fr; } }
+
+        .mood-opt {
+            padding: 12px 12px 13px;
+            background: #F9FAFB;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            min-height: 0;
+        }
+        .mood-opt:hover { border-color: #CBD2DA; }
+        .mood-opt.on { border-color: var(--secondary); background: #F3F1FF; }
+        .mood-opt-emoji { font-size: 1.5rem; line-height: 1.1; }
+        .mood-opt-title {
+            font-size: 0.95rem;
+            font-weight: 800;
+            color: var(--dark);
+            margin-top: 4px;
+        }
+        .mood-opt-sub {
+            font-size: 0.76rem;
+            font-weight: 600;
+            color: var(--muted);
+            margin-top: 3px;
+            line-height: 1.35;
+        }
+
+        /* L'umore in cima alla card: dice con che voce sta parlando l'app.
+           ⚠️ La .card è bianca, non colorata: un badge chiaro su chiaro qui
+           sparisce — il fondo tinto e il testo scuro sono quel che lo rende
+           leggibile, non una decorazione. */
+        .hero-mood {
+            display: inline-block;
+            margin-bottom: 10px;
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            background: #EEF0F4;
+            color: var(--dark);
+            border: 2px solid var(--border);
+        }
+        .hero-mood.vuoto { display: none; }
+
+        .stecca-mood {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: var(--muted);
+        }
+
         .toggle-row {
             display: flex;
             align-items: center;
@@ -981,7 +1044,7 @@
     <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.2.6</span>
+        <span class="app-version" id="versionBadge">v1.3.0</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </div>
@@ -990,6 +1053,7 @@
 
     <!-- HERO -->
     <div class="card hero">
+        <div class="hero-mood vuoto" id="heroMood"></div>
         <div class="hero-goal" id="heroGoal">Traguardo</div>
         <div class="hero-number" id="heroNumber">—</div>
         <div class="hero-label" id="heroLabel">giorni che mancano</div>
@@ -1010,7 +1074,7 @@
             </div>
             <div class="stat">
                 <div class="stat-value" id="statLeft">0</div>
-                <div class="stat-label">Mancano</div>
+                <div class="stat-label" id="statLeftLabel">Mancano</div>
             </div>
             <div class="stat">
                 <div class="stat-value" id="statStreak">0</div>
@@ -1056,7 +1120,7 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.2.6</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.3.0</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -1079,13 +1143,34 @@
     <div class="modal">
         <div class="modal-title">⚙️ Impostazioni</div>
 
+        <!-- L'umore viene prima di tutto: decide come si legge la griglia,
+             e quindi anche come si chiamano i due campi qui sotto. -->
         <div class="field">
-            <label for="inGoal">Cosa stai aspettando?</label>
+            <label>Che stecca è?</label>
+            <div class="mood-grid">
+                <div class="mood-opt" id="moodAttesa" data-mood="attesa">
+                    <div class="mood-opt-emoji">⏳</div>
+                    <div class="mood-opt-title">Attesa</div>
+                    <div class="mood-opt-sub">Aspetti qualcosa. Ogni giorno
+                        spuntato è un giorno in meno da aspettare.</div>
+                </div>
+                <div class="mood-opt" id="moodBeiGiorni" data-mood="bei_giorni">
+                    <div class="mood-opt-emoji">🌅</div>
+                    <div class="mood-opt-title">Bei giorni</div>
+                    <div class="mood-opt-sub">Ci sei dentro. Ogni giorno
+                        spuntato è un bel giorno che se ne va.</div>
+                </div>
+            </div>
+            <div class="field-hint" id="moodHint"></div>
+        </div>
+
+        <div class="field">
+            <label for="inGoal" id="lblGoal">Cosa stai aspettando?</label>
             <input type="text" id="inGoal" maxlength="60" placeholder="Es. Le ferie in Sicilia">
         </div>
 
         <div class="field">
-            <label for="inEmoji">Emoji del traguardo</label>
+            <label for="inEmoji" id="lblEmoji">Emoji del traguardo</label>
             <input type="text" id="inEmoji" maxlength="4" placeholder="🏖️">
             <div class="field-hint">Compare accanto al conto alla rovescia.</div>
         </div>
@@ -1151,7 +1236,7 @@
         <div class="close-step on" id="closeStep1">
             <div class="close-head">
                 <div class="close-head-emoji" id="closeEmoji">🏁</div>
-                <div class="close-head-title">Ci siamo!</div>
+                <div class="close-head-title" id="closeTitle">Ci siamo!</div>
                 <div class="close-head-sub" id="closeSub">Il periodo è finito.</div>
             </div>
             <div class="final-check" id="finalCheck">
@@ -1170,7 +1255,7 @@
         <div class="close-step" id="closeStep2">
             <div class="close-head">
                 <div class="close-head-emoji">📊</div>
-                <div class="close-head-title">Quanto sei soddisfatto?</div>
+                <div class="close-head-title" id="satTitle">Quanto sei soddisfatto?</div>
                 <div class="close-head-sub">Da 1 a 100, senza pensarci troppo.</div>
             </div>
             <div class="sat-value" id="satValue">70</div>
@@ -1187,7 +1272,7 @@
             <div class="close-head">
                 <div class="close-head-emoji">✍️</div>
                 <div class="close-head-title">Due parole</div>
-                <div class="close-head-sub">Com'è andata? Resta scritta nell'archivio.</div>
+                <div class="close-head-sub" id="notaSub">Com'è andata? Resta scritta nell'archivio.</div>
             </div>
             <div class="field">
                 <label for="inNota">La nota (facoltativa)</label>
@@ -1206,8 +1291,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.2.6';
-var BUILD_TIME  = '2026-08-31T15:30:00Z';
+var APP_VERSION = 'v1.3.0';
+var BUILD_TIME  = '2026-09-01T10:00:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1242,6 +1327,7 @@ var currentUserId = null;
 var LS = {
     goal:    'sp_goal',
     emoji:   'sp_emoji',
+    mood:    'sp_mood',
     start:   'sp_startDate',
     end:     'sp_endDate',
     weekend: 'sp_skipWeekend',
@@ -1299,6 +1385,8 @@ function loadObjCache(chiave, nome) {
 var S = {
     goal:        localStorage.getItem(LS.goal)    || 'Il traguardo',
     emoji:       localStorage.getItem(LS.emoji)   || '🎯',
+    // 'attesa' | 'bei_giorni' — con che voce parla l'app: vedi MOODS
+    mood:        moodValido(localStorage.getItem(LS.mood)),
     startDate:   localStorage.getItem(LS.start)   || todayISO(),
     endDate:     localStorage.getItem(LS.end)     || defaultEnd(),
     skipWeekend: localStorage.getItem(LS.weekend) === '1',
@@ -1319,7 +1407,7 @@ function salvaCacheStecche() {
     try {
         var leggere = S.stecche.map(function(s) {
             var c = {};
-            ['id','goal','emoji','start_date','end_date','skip_weekend','total_days',
+            ['id','goal','emoji','mood','start_date','end_date','skip_weekend','total_days',
              'done_days','final_emoji','satisfaction','note','closed_at']
                 .forEach(function(k) { c[k] = s[k]; });
             return c;
@@ -1335,13 +1423,14 @@ function salvaCache() {
     // prossimo avvio dbLoad ricaricherebbe sul DB il periodo appena archiviato
     // scambiandolo per dati locali da salvare.
     if (!S.configured) {
-        [LS.goal, LS.emoji, LS.start, LS.end, LS.weekend, LS.checks, LS.keyDays]
+        [LS.goal, LS.emoji, LS.mood, LS.start, LS.end, LS.weekend, LS.checks, LS.keyDays]
             .forEach(function(k) { localStorage.removeItem(k); });
         salvaCacheStecche();
         return;
     }
     localStorage.setItem(LS.goal,    S.goal);
     localStorage.setItem(LS.emoji,   S.emoji);
+    localStorage.setItem(LS.mood,    S.mood);
     localStorage.setItem(LS.start,   S.startDate);
     localStorage.setItem(LS.end,     S.endDate);
     localStorage.setItem(LS.weekend, S.skipWeekend ? '1' : '0');
@@ -1351,55 +1440,229 @@ function salvaCache() {
 }
 
 // ============================================================
-// ROBA SIMPATICA — una frase + un'emoji per ogni spunta
+// L'UMORE DELLA STECCA — due voci per la stessa griglia
+//
+// Lo stesso conto alla rovescia si fa in due situazioni opposte. Si aspetta
+// qualcosa: allora il tempo che passa è impazienza, e ogni giorno spuntato è
+// un ostacolo tolto di mezzo. Oppure ci si sta dentro — una vacanza, una
+// visita, un periodo che finirà — e allora il tempo che passa non avvicina
+// niente, porta via: l'ultimo giorno non è un arrivo, è un addio.
+//
+// La griglia, le spunte, i traguardi e la chiusura restano identici: cambia
+// solo con che voce l'app li commenta. Per questo l'umore è una tabella di
+// testi e non due rami di codice — aggiungerne un terzo un giorno sarebbe
+// una voce qui dentro, non un `if` sparso per la pagina.
+//
+// ⚠️ La scelta sta sulla STECCA (`sp_settings.mood`) e non sull'utente: si
+// aspettano le ferie e nel frattempo le si vive, e le due cose convivono
+// senza essere la stessa.
 // ============================================================
-var FRASI = [
-    "Grande! ...anche se non dipende da te. 😄",
-    "E uno! Il traguardo trema. 😏",
-    "Giorno archiviato. Prossimo!",
-    "Un altro se n'è andato. Ciao ciao! 👋",
-    "Bravo, hai aspettato benissimo. 🏅",
-    "Complimenti: è passato un giorno. Merito tuo? Mah. 🤷",
-    "Spuntato. La matematica non mente. 🧮",
-    "Questo giorno non tornerà. Meglio così!",
-    "Piano piano si arriva ovunque. 🐢",
-    "Hai battuto il calendario. Di nuovo.",
-    "Un giorno in meno, zero rimpianti.",
-    "Il tempo passa, tu spunti. Squadra perfetta.",
-    "Chi spunta, arriva. Regola numero uno. 📏",
-    "Fatto! Ora puoi anche riposarti.",
-    "Sei una macchina da spunte. 🤖",
-    "Il calendario ti teme, ormai.",
-    "Ancora uno? Ancora uno. 💪",
-    "Segnato! La strada si accorcia.",
-    "Oggi c'eri. È già tantissimo.",
-    "Un mattoncino in più nel muro. 🧱",
-    "Spunta fatta, coscienza a posto. 😌",
-    "Il conto alla rovescia ringrazia.",
-    "Costanza batte entusiasmo. Sempre. 🔁",
-    "Nessuno ti toglie questo giorno.",
-    "Eccellente. Continua così, campione! 🏆",
-    "Un altro giorno domato. 🦁",
-    "Questa spunta profuma di libertà. 🌬️",
-    "Che soddisfazione, eh? 😎",
-    "Piccolo passo, grande direzione. 🚶",
-    "Spuntato con stile. ✨",
-    "Fatto. Si torna a vivere. 🎈"
-];
+// Un umore che non conosciamo non ripiega su niente di sensato — le frasi
+// verrebbero da una tabella che non esiste — quindi si torna sempre a quello
+// che l'app sapeva fare prima che questa colonna esistesse.
+//
+// ⚠️ L'elenco è scritto qui dentro e non in una costante accanto a MOODS:
+// questa funzione la chiama anche l'inizializzazione di S, che gira PRIMA
+// che quelle var siano assegnate — la dichiarazione è issata, il valore no,
+// e con `MOODS` o un `MOOD_IDS` esterno la pagina morirebbe all'avvio con
+// un «undefined» prima ancora di disegnare la griglia.
+function moodValido(m) {
+    return (m === 'attesa' || m === 'bei_giorni') ? m : 'attesa';
+}
 
-var EMOJI_SPUNTA = [
-    '✅','🎉','⭐','🔥','💪','🚀','🌟','🏆','😎','🍀',
-    '🎯','⚡','🥳','👏','💎','🌈','🦾','🧨','🎊','☀️'
-];
+var MOODS = {
+
+    // ── ATTESA — il tempo che passa avvicina qualcosa ──────────────
+    attesa: {
+        emoji: '⏳',
+        nome:  'Attesa',
+        badge: '⏳ Attesa',
+        // cosa cambia scegliendolo, detto nelle impostazioni
+        hint:  'Le frasi e i traguardi parlano di quanto manca: ogni spunta '
+             + 'è un giorno tolto di mezzo.',
+        labelGoal:       'Cosa stai aspettando?',
+        placeholderGoal: 'Es. Le ferie in Sicilia',
+        labelEmoji:      'Emoji del traguardo',
+        // il conto alla rovescia sotto il numero grande
+        heroLabel: function(n) { return n === 1 ? 'giorno che manca' : 'giorni che mancano'; },
+        statLeft: 'Mancano',
+        bannerEmoji: '⏳',
+        bannerTesto: function(data) { return 'Oggi (' + data + ') non l\'hai ancora spuntato!'; },
+        toastDespunta: 'Spunta tolta. Ci hai ripensato?',
+        // la cerimonia di chiusura
+        closeTitolo:  'Ci siamo!',
+        soddDomanda:  'Quanto sei soddisfatto?',
+        notaSub:      'Com\'è andata? Resta scritta nell\'archivio.',
+        notaPlaceholder: 'Cosa ti porti dietro da questa stecca?',
+        dopoArchivio: 'Stecca archiviata! Che cosa aspettiamo adesso?',
+        // al 100 % il traguardo è raggiunto davvero: fuochi
+        fuochiAl100: true,
+
+        frasi: [
+            "Grande! ...anche se non dipende da te. 😄",
+            "E uno! Il traguardo trema. 😏",
+            "Giorno archiviato. Prossimo!",
+            "Un altro se n'è andato. Ciao ciao! 👋",
+            "Bravo, hai aspettato benissimo. 🏅",
+            "Complimenti: è passato un giorno. Merito tuo? Mah. 🤷",
+            "Spuntato. La matematica non mente. 🧮",
+            "Questo giorno non tornerà. Meglio così!",
+            "Piano piano si arriva ovunque. 🐢",
+            "Hai battuto il calendario. Di nuovo.",
+            "Un giorno in meno, zero rimpianti.",
+            "Il tempo passa, tu spunti. Squadra perfetta.",
+            "Chi spunta, arriva. Regola numero uno. 📏",
+            "Fatto! Ora puoi anche riposarti.",
+            "Sei una macchina da spunte. 🤖",
+            "Il calendario ti teme, ormai.",
+            "Ancora uno? Ancora uno. 💪",
+            "Segnato! La strada si accorcia.",
+            "Oggi c'eri. È già tantissimo.",
+            "Un mattoncino in più nel muro. 🧱",
+            "Spunta fatta, coscienza a posto. 😌",
+            "Il conto alla rovescia ringrazia.",
+            "Costanza batte entusiasmo. Sempre. 🔁",
+            "Nessuno ti toglie questo giorno.",
+            "Eccellente. Continua così, campione! 🏆",
+            "Un altro giorno domato. 🦁",
+            "Questa spunta profuma di libertà. 🌬️",
+            "Che soddisfazione, eh? 😎",
+            "Piccolo passo, grande direzione. 🚶",
+            "Spuntato con stile. ✨",
+            "Fatto. Si torna a vivere. 🎈"
+        ],
+
+        emojiSpunta: [
+            '✅','🎉','⭐','🔥','💪','🚀','🌟','🏆','😎','🍀',
+            '🎯','⚡','🥳','👏','💎','🌈','🦾','🧨','🎊','☀️'
+        ],
+
+        traguardi: [
+            { perc: 25,  emoji: '🌱', testo: 'Un quarto fatto! Il difficile è cominciare.' },
+            { perc: 50,  emoji: '⛰️', testo: 'Metà strada! Da qui si vede il traguardo.' },
+            { perc: 75,  emoji: '🔥', testo: 'Tre quarti! Ormai è in discesa.' },
+            { perc: 100, emoji: '🏁', testo: 'FINITO! Li hai spuntati tutti. Campione!' }
+        ],
+
+        msgChiusura: [
+            { max: 20,  emoji: '🫂', classe: 'dolce',
+              testo: 'Non è andata come volevi. Però ci sei arrivato in fondo, e quello non te lo toglie nessuno.' },
+            { max: 40,  emoji: '💪', classe: 'dolce',
+              testo: 'Poteva andare meglio, è vero. Ma l\'hai chiusa lo stesso: chiuderla era la parte difficile.' },
+            { max: 60,  emoji: '👍', classe: 'big',
+              testo: 'Nel complesso ci sta! Una stecca chiusa è una stecca chiusa.' },
+            { max: 80,  emoji: '🎉', classe: 'big',
+              testo: 'Bella soddisfazione! Te la sei guadagnata un giorno alla volta.' },
+            { max: 95,  emoji: '🏆', classe: 'chiave',
+              testo: 'Grandissimo! Questa è di quelle da ricordare.' },
+            { max: 100, emoji: '🎆', classe: 'chiave',
+              testo: 'PERFETTA! Meglio di così non si poteva chiudere. Che spettacolo!' }
+        ]
+    },
+
+    // ── BEI GIORNI — il tempo che passa porta via qualcosa ─────────
+    bei_giorni: {
+        emoji: '🌅',
+        nome:  'Bei giorni',
+        badge: '🌅 Bei giorni',
+        hint:  'Le frasi e i traguardi parlano di quel che finisce: ogni '
+             + 'spunta è un bel giorno che se ne va.',
+        labelGoal:       'Cosa stai vivendo?',
+        placeholderGoal: 'Es. Le due settimane a Terrasini',
+        labelEmoji:      'Emoji di questi giorni',
+        heroLabel: function(n) { return n === 1 ? 'giorno che resta' : 'giorni che restano'; },
+        statLeft: 'Restano',
+        bannerEmoji: '🌅',
+        bannerTesto: function(data) {
+            return 'Oggi (' + data + ') non l\'hai ancora spuntato: non lasciarlo passare così.';
+        },
+        toastDespunta: 'Spunta tolta. Te lo riprendi? 🌿',
+        closeTitolo:  'È finita.',
+        soddDomanda:  'Quanto sono stati belli?',
+        notaSub:      'Cosa ti resta di questi giorni? Va nell\'archivio.',
+        notaPlaceholder: 'Cosa ti porti dietro da questi giorni?',
+        dopoArchivio: 'Stecca archiviata. E adesso? Si torna ad aspettare qualcosa.',
+        // ⚠️ Al 100 % qui non c'è niente da festeggiare: è il giorno in cui
+        // finisce. I coriandoli restano — è comunque un saluto — ma i fuochi
+        // d'artificio sopra un addio suonerebbero come una presa in giro.
+        fuochiAl100: false,
+
+        frasi: [
+            "Un giorno bello, e adesso è tuo per sempre. 🤍",
+            "Segnato. Peccato solo che sia già passato.",
+            "Uno in meno da vivere. Falli valere. 🌿",
+            "Bello, vero? Domani ce n'è ancora.",
+            "Questo giorno non torna. Ma c'è stato. ✨",
+            "Spuntato, con un po' di magone. 🥲",
+            "Archiviato fra le cose belle. 📦",
+            "Il calendario si accorcia. Che peccato. 🍂",
+            "Un altro pezzo di bello se n'è andato.",
+            "Godilo finché dura. Sta durando. ☀️",
+            "Giorno pieno. Di quelli che si ricordano.",
+            "Se ne va uno dei buoni. 🌙",
+            "Un giorno in meno, e sì: dispiace un po'.",
+            "Fatto. E ne resta ancora un po'. 🌻",
+            "Che bello essere stati qui, oggi.",
+            "Spunta dolceamara. Le migliori. 🍯",
+            "Il tempo corre proprio quando è bello, eh?",
+            "Questo te lo porti dietro. 🎒",
+            "Un giorno da tenere. Segnato. 📌",
+            "Anche oggi è stato dei nostri. 🤝",
+            "Piano, che finisce. 🐌",
+            "Uno in meno. Ma che meraviglia. 🌊",
+            "Il bello passa. Passa bene, però.",
+            "Segnato. Domani ancora, per fortuna.",
+            "Un giorno così vale doppio. ⭐",
+            "Ci siamo stati. È già molto. 🕊️",
+            "Fine giornata, cuore pieno. 💛",
+            "Un altro da mettere da parte. 🫙",
+            "Non era un giorno qualunque. Spuntato.",
+            "Se ne va, ma resta. Funziona così. 🌱"
+        ],
+
+        emojiSpunta: [
+            '🤍','🌅','🌿','☀️','🍃','🌙','✨','🕊️','🌻','🐚',
+            '🍂','💛','🌊','🎐','🫧','🌸','🧡','🌤️','⛱️','📸'
+        ],
+
+        traguardi: [
+            { perc: 25,  emoji: '🌤️', testo: 'Un quarto se n\'è andato. Rallenta: è adesso che è bello.' },
+            { perc: 50,  emoji: '⏳', testo: 'Metà. Da qui in poi comincia a finire.' },
+            { perc: 75,  emoji: '🍂', testo: 'Tre quarti. Ne restano pochi: falli contare.' },
+            { perc: 100, emoji: '🌙', testo: 'È finita. Sono stati giorni belli, e li hai vissuti tutti.' }
+        ],
+
+        msgChiusura: [
+            { max: 20,  emoji: '🫂', classe: 'dolce',
+              testo: 'Dovevano essere bei giorni e non lo sono stati. Capita, e non è colpa tua.' },
+            { max: 40,  emoji: '🍃', classe: 'dolce',
+              testo: 'Non proprio come te li immaginavi. Qualcosa di buono però te lo porti dietro.' },
+            { max: 60,  emoji: '🌤️', classe: 'big',
+              testo: 'Giorni normali, nel complesso. E i giorni normali sono la gran parte della vita.' },
+            { max: 80,  emoji: '🌻', classe: 'big',
+              testo: 'Sono stati bei giorni. Adesso finiscono, ed è giusto dispiacersi un po\'.' },
+            { max: 95,  emoji: '🌅', classe: 'chiave',
+              testo: 'Che periodo. Di quelli che si raccontano. Finisce, ma non se ne va.' },
+            { max: 100, emoji: '🤍', classe: 'chiave',
+              testo: 'Indimenticabile. Non si poteva chiedere di meglio — ed è per questo che adesso fa un po\' male.' }
+        ]
+    }
+};
+
+// L'umore della stecca in corso. Tutto quel che si legge a schermo passa
+// di qui: nessuna delle due voci è scritta a mano da nessun'altra parte.
+function mood() { return MOODS[moodValido(S.mood)]; }
 
 var CONFETTI_COLORS = ['#FF3366','#6C5CE7','#00B894','#F39C12','#2563EB','#FFD700','#38ef7d'];
 
 function fraseRandom() {
-    return FRASI[Math.floor(Math.random() * FRASI.length)];
+    var f = mood().frasi;
+    return f[Math.floor(Math.random() * f.length)];
 }
 
 function emojiRandom() {
-    return EMOJI_SPUNTA[Math.floor(Math.random() * EMOJI_SPUNTA.length)];
+    var e = mood().emojiSpunta;
+    return e[Math.floor(Math.random() * e.length)];
 }
 
 // ============================================================
@@ -1631,6 +1894,9 @@ async function dbLoad() {
         if (st.data) {
             S.goal        = st.data.goal;
             S.emoji       = st.data.emoji;
+            // le stecche aperte prima di questa colonna sono attese: è quel
+            // che erano davvero, l'app sapeva parlare in un modo solo
+            S.mood        = moodValido(st.data.mood);
             S.startDate   = st.data.start_date;
             S.endDate     = st.data.end_date;
             S.skipWeekend = !!st.data.skip_weekend;
@@ -1698,6 +1964,7 @@ async function dbSaveSettings() {
         user_id:      currentUserId,
         goal:         S.goal,
         emoji:        S.emoji,
+        mood:         moodValido(S.mood),
         start_date:   S.startDate,
         end_date:     S.endDate,
         skip_weekend: S.skipWeekend
@@ -1809,11 +2076,19 @@ function render() {
     var mancano  = giorni.filter(function(g) { return !S.checks[g] && g >= oggi; }).length;
     var perc     = totali ? Math.round(spuntati / totali * 100) : 0;
 
+    var m = mood();
+
+    // ⚠️ Il badge compare solo quando una stecca c'è: senza periodo direbbe
+    // con che voce parlerebbe l'app di una cosa che non esiste ancora.
+    var badge = document.getElementById('heroMood');
+    badge.textContent = m.badge;
+    badge.classList.toggle('vuoto', !S.configured);
+
     document.getElementById('heroGoal').textContent   = S.emoji + ' ' + S.goal;
     document.getElementById('heroNumber').textContent = totali ? mancano : '—';
+    // «mancano» e «restano» sono lo stesso numero letto nei due versi
     document.getElementById('heroLabel').textContent  =
-        !totali ? 'imposta il periodo per iniziare'
-                : (mancano === 1 ? 'giorno che manca' : 'giorni che mancano');
+        !totali ? 'imposta il periodo per iniziare' : m.heroLabel(mancano);
     document.getElementById('heroRange').textContent  = totali
         ? 'dal ' + fmtIT(S.startDate) + ' al ' + fmtIT(S.endDate)
           + (S.skipWeekend ? ' · solo feriali' : '')
@@ -1825,6 +2100,8 @@ function render() {
 
     document.getElementById('statDone').textContent   = spuntati;
     document.getElementById('statLeft').textContent   = mancano;
+    // stesso numero, due letture: ciò che manca da aspettare o ciò che resta
+    document.getElementById('statLeftLabel').textContent = m.statLeft;
     document.getElementById('statStreak').textContent = calcolaSerie(giorni);
     document.getElementById('statTotal').textContent  = totali;
 
@@ -1862,11 +2139,11 @@ function render() {
     banner.classList.toggle('show', daFareOggi);
     if (daFareOggi) {
         var chiaveOggi = S.keyDays[oggi] !== undefined;
-        banner.querySelector('.todo-emoji').textContent = chiaveOggi ? '⭐' : '⏳';
+        banner.querySelector('.todo-emoji').textContent = chiaveOggi ? '⭐' : m.bannerEmoji;
         document.getElementById('todoText').textContent = chiaveOggi
             ? 'Oggi è una GIORNATA CHIAVE'
               + (S.keyDays[oggi] ? ' — ' + S.keyDays[oggi] : '') + ' e non l\'hai spuntata!'
-            : 'Oggi (' + fmtIT(oggi) + ') non l\'hai ancora spuntato!';
+            : m.bannerTesto(fmtIT(oggi));
     }
 
     renderCalendario(giorni, oggi);
@@ -1901,6 +2178,9 @@ function renderStecche() {
         var perc = tot ? Math.round(fatt / tot * 100) : 0;
         var sodd = s.satisfaction || 0;
         var chiusa = (s.closed_at || '').slice(0, 10);
+        // con che voce è stata vissuta: senza, riaprendo l'archivio non si
+        // saprebbe più se erano giorni aspettati o giorni vissuti
+        var voce = MOODS[moodValido(s.mood)];
 
         return '<div class="stecca">'
              + '<div class="stecca-top">'
@@ -1916,6 +2196,7 @@ function renderStecche() {
              +   (s.skip_weekend ? ' · solo feriali' : '')
              +   '<br>' + fatt + ' di ' + tot + ' spuntati · ' + perc + '%'
              +   (chiusa ? ' · chiusa il ' + fmtIT(chiusa) : '')
+             +   '<br><span class="stecca-mood">' + voce.badge + '</span>'
              + '</div>'
              + '<div class="stecca-sat-row">'
              +   '<div class="stecca-sat-bar">'
@@ -2051,7 +2332,7 @@ async function toggleGiorno(iso) {
         delete S.checks[iso];
         salvaCache();
         render();
-        toast('🤔', 'Spunta tolta. Ci hai ripensato?', { durata: 2000 });
+        toast('🤔', mood().toastDespunta, { durata: 2000 });
         try {
             await dbRemoveCheck(iso);
         } catch (e) {
@@ -2113,25 +2394,24 @@ function animaCella(iso) {
     setTimeout(function() { el.classList.remove('pop'); }, 500);
 }
 
-// Traguardi intermedi: 25 / 50 / 75 / 100 %
-var TRAGUARDI = [
-    { perc: 25,  emoji: '🌱', testo: 'Un quarto fatto! Il difficile è cominciare.' },
-    { perc: 50,  emoji: '⛰️', testo: 'Metà strada! Da qui si vede il traguardo.' },
-    { perc: 75,  emoji: '🔥', testo: 'Tre quarti! Ormai è in discesa.' },
-    { perc: 100, emoji: '🏁', testo: 'FINITO! Li hai spuntati tutti. Campione!' }
-];
-
+// Traguardi intermedi: 25 / 50 / 75 / 100 %. I testi stanno in MOODS,
+// perché metà strada vuol dire due cose opposte a seconda della stecca:
+// «da qui si vede il traguardo» oppure «da qui comincia a finire».
 function controllaTraguardi(spuntati, totali, ritardo) {
     if (!totali) return;
+    var m     = mood();
     var perc  = spuntati / totali * 100;
     var prima = (spuntati - 1) / totali * 100;
-    TRAGUARDI.forEach(function(t) {
+    m.traguardi.forEach(function(t) {
         if (prima < t.perc && perc >= t.perc) {
             setTimeout(function() {
                 toast(t.emoji, t.testo, { durata: 4500, big: true });
                 festeggia(t.perc === 100 ? 160 : 110);
                 if (t.perc === 100) {
-                    fuochiArtificio();
+                    // ⚠️ I fuochi al 100 % dipendono dall'umore: su una stecca di
+                    // bei giorni l'ultimo giorno è un addio, e festeggiarlo con
+                    // i fuochi suonerebbe come una presa in giro.
+                    if (m.fuochiAl100) fuochiArtificio();
                     // spuntati tutti: la chiusura si propone da sola,
                     // appena il messaggio del traguardo ha finito
                     segnaChiusuraProposta();
@@ -2172,11 +2452,38 @@ function festeggia(quanti) {
 var overlay    = document.getElementById('settingsOverlay');
 var swWeekend  = document.getElementById('switchWeekend');
 var tmpWeekend = false;
+// come le giornate chiave, l'umore si sceglie su una copia: "Annulla" deve
+// poter buttare via anche questo
+var tmpMood    = 'attesa';
 // Le giornate chiave si modificano su una copia: "Annulla" deve poter
 // buttare via tutto, "Salva" applica sia il periodo sia le giornate.
 var tmpKeyDays = {};
 
+// Le due schede dell'umore e le etichette che ne discendono: cambiando
+// stecca cambia anche la domanda che il primo campo pone — «cosa stai
+// aspettando?» non ha senso per dei giorni che stai già vivendo.
+function renderMood() {
+    var m = MOODS[moodValido(tmpMood)];
+    ['moodAttesa', 'moodBeiGiorni'].forEach(function(id) {
+        var el = document.getElementById(id);
+        el.classList.toggle('on', el.dataset.mood === tmpMood);
+    });
+    document.getElementById('moodHint').textContent   = m.hint;
+    document.getElementById('lblGoal').textContent    = m.labelGoal;
+    document.getElementById('lblEmoji').textContent   = m.labelEmoji;
+    document.getElementById('inGoal').placeholder     = m.placeholderGoal;
+}
+
+['moodAttesa', 'moodBeiGiorni'].forEach(function(id) {
+    document.getElementById(id).addEventListener('click', function() {
+        tmpMood = this.dataset.mood;
+        renderMood();
+    });
+});
+
 function apriImpostazioni() {
+    tmpMood = moodValido(S.mood);
+    renderMood();
     document.getElementById('inGoal').value  = S.goal;
     document.getElementById('inEmoji').value = S.emoji;
     document.getElementById('inStart').value = S.startDate;
@@ -2273,7 +2580,7 @@ document.getElementById('btnSave').addEventListener('click', async function() {
     }
 
     var prima = {
-        goal: S.goal, emoji: S.emoji, startDate: S.startDate,
+        goal: S.goal, emoji: S.emoji, mood: S.mood, startDate: S.startDate,
         endDate: S.endDate, skipWeekend: S.skipWeekend,
         configured: S.configured, keyDays: S.keyDays
     };
@@ -2283,6 +2590,7 @@ document.getElementById('btnSave').addEventListener('click', async function() {
 
     S.goal        = goal || 'Il traguardo';
     S.emoji       = emoji || '🎯';
+    S.mood        = moodValido(tmpMood);
     S.startDate   = start;
     S.endDate     = end;
     S.skipWeekend = tmpWeekend;
@@ -2300,7 +2608,7 @@ document.getElementById('btnSave').addEventListener('click', async function() {
     } catch (e) {
         if (!handleAuthError(e)) {
             console.warn('Impostazioni non sincronizzate:', e);
-            S.goal = prima.goal; S.emoji = prima.emoji;
+            S.goal = prima.goal; S.emoji = prima.emoji; S.mood = prima.mood;
             S.startDate = prima.startDate; S.endDate = prima.endDate;
             S.skipWeekend = prima.skipWeekend; S.configured = prima.configured;
             S.keyDays = prima.keyDays;
@@ -2373,6 +2681,7 @@ document.getElementById('btnDeleteGoal').addEventListener('click', async functio
     // le impostazioni non devono riproporre il traguardo appena buttato
     S.goal        = 'Il traguardo';
     S.emoji       = '🎯';
+    S.mood        = 'attesa';
     S.startDate   = todayISO();
     S.endDate     = defaultEnd();
     S.skipWeekend = false;
@@ -2413,23 +2722,6 @@ var SODD_ETICHETTE = [
     { max: 100, testo: 'Alla grande! 🤩' }
 ];
 
-// Il messaggio finale: si va dal consolatorio al complimento vivo,
-// e i fuochi crescono insieme alla soddisfazione.
-var MSG_CHIUSURA = [
-    { max: 20,  emoji: '🫂', classe: 'dolce',
-      testo: 'Non è andata come volevi. Però ci sei arrivato in fondo, e quello non te lo toglie nessuno.' },
-    { max: 40,  emoji: '💪', classe: 'dolce',
-      testo: 'Poteva andare meglio, è vero. Ma l\'hai chiusa lo stesso: chiuderla era la parte difficile.' },
-    { max: 60,  emoji: '👍', classe: 'big',
-      testo: 'Nel complesso ci sta! Una stecca chiusa è una stecca chiusa.' },
-    { max: 80,  emoji: '🎉', classe: 'big',
-      testo: 'Bella soddisfazione! Te la sei guadagnata un giorno alla volta.' },
-    { max: 95,  emoji: '🏆', classe: 'chiave',
-      testo: 'Grandissimo! Questa è di quelle da ricordare.' },
-    { max: 100, emoji: '🎆', classe: 'chiave',
-      testo: 'PERFETTA! Meglio di così non si poteva chiudere. Che spettacolo!' }
-];
-
 function perFascia(elenco, valore) {
     for (var i = 0; i < elenco.length; i++) {
         if (valore <= elenco[i].max) return elenco[i];
@@ -2450,6 +2742,12 @@ function apriChiusura() {
     var fatti = giorni.filter(function(g) { return S.checks[g]; }).length;
 
     chiusura = { sodd: 70, emojiFinale: null, quando: null };
+
+    var m = mood();
+    document.getElementById('closeTitle').textContent = m.closeTitolo;
+    document.getElementById('satTitle').textContent   = m.soddDomanda;
+    document.getElementById('notaSub').textContent    = m.notaSub;
+    document.getElementById('inNota').placeholder     = m.notaPlaceholder;
 
     document.getElementById('closeEmoji').textContent = S.emoji || '🏁';
     document.getElementById('closeSub').innerHTML =
@@ -2510,11 +2808,14 @@ document.getElementById('btnChiudiStecca').addEventListener('click', async funct
     var giorni = giorniDelPeriodo();
     var fatti  = giorni.filter(function(g) { return S.checks[g]; }).length;
     var sodd   = chiusura.sodd;
+    // l'umore con cui la stecca è stata vissuta, preso finché S ce l'ha
+    var voce   = mood();
 
     var riga = {
         user_id:        currentUserId,
         goal:           S.goal,
         emoji:          S.emoji,
+        mood:           moodValido(S.mood),
         start_date:     S.startDate,
         end_date:       S.endDate,
         skip_weekend:   S.skipWeekend,
@@ -2556,11 +2857,15 @@ document.getElementById('btnChiudiStecca').addEventListener('click', async funct
     chiudiChiusura();
     render();
 
-    festeggiaChiusura(sodd);
+    festeggiaChiusura(sodd, voce);
 });
 
-function festeggiaChiusura(sodd) {
-    var m = perFascia(MSG_CHIUSURA, sodd);
+// ⚠️ L'umore arriva come parametro e non da mood(): questa funzione gira
+// dopo che la stecca è stata archiviata, quando S descrive già il campo
+// libero. Chi chiude ce l'ha ancora sotto mano, e salutare dei bei giorni
+// con la voce dell'attesa sarebbe il modo peggiore di finirli.
+function festeggiaChiusura(sodd, voce) {
+    var m = perFascia(voce.msgChiusura, sodd);
     toast(m.emoji, m.testo, {
         durata: 7000,
         big:    m.classe === 'big',
@@ -2571,7 +2876,7 @@ function festeggiaChiusura(sodd) {
     fuochiFinali(sodd);
     // finito lo spettacolo, la domanda ovvia: e adesso cosa aspettiamo?
     setTimeout(function() {
-        toast('🎯', 'Stecca archiviata! Che cosa aspettiamo adesso?', { durata: 3500 });
+        toast('🎯', voce.dopoArchivio, { durata: 3500 });
         setTimeout(apriImpostazioni, 3600);
     }, 9000);
 }
