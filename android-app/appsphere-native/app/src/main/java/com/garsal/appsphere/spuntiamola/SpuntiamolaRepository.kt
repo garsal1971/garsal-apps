@@ -26,7 +26,7 @@ object SpuntiamolaRepository {
 
     suspend fun impostazioni(): SpSettings? = withContext(Dispatchers.IO) {
         db.from("sp_settings")
-            .select(Columns.raw("user_id,goal,emoji,start_date,end_date,skip_weekend")) { limit(1) }
+            .select(Columns.raw("user_id,goal,emoji,mood,start_date,end_date,skip_weekend")) { limit(1) }
             .decodeList<SpSettings>()
             .firstOrNull()
     }

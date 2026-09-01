@@ -48,6 +48,8 @@ data class SpuntiamolaState(
 ) {
     val giorni: List<LocalDate> get() = giorniDelPeriodo(impostazioni)
     val configurato: Boolean get() = impostazioni != null
+    /** La voce con cui l'app commenta questa stecca. Senza stecca, l'attesa. */
+    val mood: Mood get() = moodDi(impostazioni?.mood)
     val spuntati: Int get() = giorni.count { spunte.containsKey(it.toString()) }
     val totali: Int get() = giorni.size
     val percentuale: Int get() = if (totali == 0) 0 else (spuntati * 100f / totali).roundToInt()
@@ -106,7 +108,7 @@ class SpuntiamolaViewModel : ViewModel() {
             val precedente = stato.spunte.getValue(iso)
             _state.value = stato.copy(
                 spunte = stato.spunte - iso,
-                toast = Toast("🤔", "Spunta tolta. Ci hai ripensato?", durataMs = 2000),
+                toast = Toast("🤔", stato.mood.toastDespunta, durataMs = 2000),
             )
             viewModelScope.launch {
                 try {
@@ -123,7 +125,7 @@ class SpuntiamolaViewModel : ViewModel() {
         }
 
         val eChiave = stato.giornateChiave.containsKey(iso)
-        val emoji = if (eChiave) "🌟" else EMOJI_SPUNTA.random()
+        val emoji = if (eChiave) "🌟" else stato.mood.emojiSpunta.random()
         val spunteNuove = stato.spunte + (iso to emoji)
 
         _state.value = if (eChiave) {
@@ -142,7 +144,7 @@ class SpuntiamolaViewModel : ViewModel() {
         } else {
             stato.copy(
                 spunte = spunteNuove,
-                toast = Toast(emoji, FRASI.random()),
+                toast = Toast(emoji, stato.mood.frasi.random()),
                 festa = Festa(coriandoli = 45),
             )
         }
@@ -167,20 +169,31 @@ class SpuntiamolaViewModel : ViewModel() {
         }
     }
 
-    /** 25 / 50 / 75 / 100 %: scatta solo il giro in cui la soglia viene passata. */
+    /**
+     * 25 / 50 / 75 / 100 %: scatta solo il giro in cui la soglia viene passata.
+     * I testi vengono dall'umore, perché metà strada vuol dire due cose
+     * opposte a seconda della stecca: «da qui si vede il traguardo» oppure
+     * «da qui comincia a finire».
+     */
     private fun controllaTraguardi(spuntati: Int, totali: Int, ritardoMs: Long) {
         if (totali == 0) return
+        val mood = _state.value.mood
         val ora = spuntati * 100f / totali
         val prima = (spuntati - 1) * 100f / totali
 
-        TRAGUARDI.filter { prima < it.perc && ora >= it.perc }.forEach { traguardo ->
+        mood.traguardi.filter { prima < it.perc && ora >= it.perc }.forEach { traguardo ->
             viewModelScope.launch {
                 delay(ritardoMs)
+                // ⚠️ Gli scoppi al 100 % dipendono dall'umore: su una stecca di
+                // bei giorni l'ultimo giorno è un addio, e festeggiarlo coi
+                // fuochi suonerebbe come una presa in giro. I coriandoli
+                // restano, che sono un saluto.
+                val finita = traguardo.perc == 100
                 _state.value = _state.value.copy(
                     toast = Toast(traguardo.emoji, traguardo.testo, 4500, TonoToast.GRANDE),
                     festa = Festa(
-                        coriandoli = if (traguardo.perc == 100) 160 else 110,
-                        scoppi = if (traguardo.perc == 100) 6 else 0,
+                        coriandoli = if (finita) 160 else 110,
+                        scoppi = if (finita && mood.fuochiAl100) 6 else 0,
                     ),
                 )
             }
@@ -190,6 +203,7 @@ class SpuntiamolaViewModel : ViewModel() {
     fun salvaImpostazioni(
         traguardo: String,
         emoji: String,
+        mood: String,
         inizio: String,
         fine: String,
         saltaWeekend: Boolean,
@@ -198,6 +212,7 @@ class SpuntiamolaViewModel : ViewModel() {
             val nuove = SpSettings(
                 goal = traguardo.ifBlank { "Il traguardo" },
                 emoji = emoji.ifBlank { "🎯" },
+                mood = moodDi(mood).id,
                 startDate = inizio,
                 endDate = fine,
                 skipWeekend = saltaWeekend,
@@ -250,10 +265,17 @@ class SpuntiamolaViewModel : ViewModel() {
         }
 
         val giorni = stato.giorni
+        // ⚠️ La voce si prende ADESSO, finché lo stato descrive ancora questa
+        // stecca: più giù `impostazioni` va a null e moodDi() tornerebbe
+        // all'attesa — salutare dei bei giorni con la voce dell'attesa sarebbe
+        // il modo peggiore di finirli. È la stessa ragione per cui nel web
+        // festeggiaChiusura() riceve l'umore come parametro.
+        val voce = stato.mood
         val riga = SpSteccaNuova(
             userId = utente,
             goal = impostazioni.goal,
             emoji = impostazioni.emoji,
+            mood = voce.id,
             startDate = impostazioni.startDate,
             endDate = impostazioni.endDate,
             skipWeekend = impostazioni.skipWeekend,
@@ -284,7 +306,7 @@ class SpuntiamolaViewModel : ViewModel() {
                 return@launch
             }
 
-            val messaggio = messaggioChiusura(soddisfazione)
+            val messaggio = messaggioChiusura(soddisfazione, voce)
             // Da 8 a 24 scoppi secondo la soddisfazione: qualche fuoco parte
             // comunque, una stecca chiusa è una stecca chiusa.
             val scoppi = 8 + (soddisfazione / 100f * 16).roundToInt()
