@@ -412,11 +412,13 @@ che deve coprire lo conterebbe due volte.
 ⚠️ **Le dotazioni sono quelle di OGGI, uguali nei tre scenari**, e non si proiettano in avanti:
 un TFR o un portafoglio proiettati sarebbero un rendimento inventato messo accanto a numeri veri.
 
-⚠️ **La dotazione «Finanza» è il valore NETTO dei portafogli** (`coverageFinanza`), ed è l'unico
-posto in Finanza dove il netto prende il posto del lordo invece di affiancarlo: una dotazione è
-quello con cui ci si arriva davvero, e le imposte sulle plusvalenze si pagano vendendo — cioè
-proprio nel momento in cui quella dotazione servirebbe. L'etichetta della riga porta il lordo
-accanto, così i due numeri si vedono insieme.
+⚠️ **Le dotazioni sono al NETTO delle imposte**, ed è l'unico posto in Finanza dove il netto
+prende il posto del lordo invece di affiancarlo: una dotazione è quello con cui ci si arriva
+davvero, e l'imposta si paga vendendo — cioè proprio nel momento in cui quella dotazione
+servirebbe. Vale per «Finanza» (`coverageFinanza`, somma dei `netValue` dei portafogli) e per le
+voci collegate a un asset, che passano da `assetTax()` (vedi il regime fiscale degli asset).
+L'etichetta della riga porta sempre il lordo accanto, e quando l'imposta non si può stimare lo
+dice invece di tacere.
 
 ⚠️ **`amount` NULL non è zero**, ed è la stessa scelta di `fnz_income` e delle misure di Memo. Su
 una voce manuale dice «non l'ho ancora scritto»; su una automatica dice «vale il dato di Finanza»
@@ -1125,6 +1127,42 @@ il fondo resta agganciato a una riga che non sincronizzerà mai, oppure il conto
 (CEST, UTC+2): a fine ottobre, con il ritorno all'ora solare, vanno spostati avanti di un'ora o i
 job scatteranno un'ora prima del previsto. Riguarda `fnz-save-snapshot` (`0 21 * * *` = 23:00 CEST)
 e `revolut-auto-categorize`.
+
+### ⚠️ Il regime fiscale degli asset (`fnz_other_assets`)
+
+Due colonne (`20260901180000_...`): **`tax_regime`** dice con quale aliquota, **`cost_basis`** su
+quale base. Si compilano dal form dell'asset (💎 Patrimonio), e servono a **un posto solo**: le
+**dotazioni** delle 🛡️ Coperture, dove il valore di un asset compare al netto. Elenco asset,
+Dashboard, snapshot e totali del patrimonio restano al lordo.
+
+| `tax_regime` | Aliquota | Base |
+|---|---|---|
+| `CAP. GAIN 26%` | 26 % | plusvalenza |
+| `AGEVOLATA 12.5%` | 12,5 % | plusvalenza |
+| `TFR SEPARATA` | **stima 27 %** | **importo intero** |
+| `PIR`, `ESENTE` | 0 % | plusvalenza |
+| `ALTRO` | — | nessuna stima |
+| NULL | — | nessuna stima |
+
+⚠️ **`TFR SEPARATA` è l'unico che tassa l'importo intero**, ed è il motivo per cui esiste: il TFR
+è tassato tutto a tassazione separata, non sulla sola rivalutazione — lì il costo di acquisto non
+c'entra e non serve.
+
+⚠️ **Il 27 % è una stima dichiarata, non una costante di legge**: l'aliquota della tassazione
+separata è l'aliquota media IRPEF del reddito di riferimento degli ultimi cinque anni, quindi
+cambia da persona a persona e sta fra il 23 % e il 30 % per la gran parte dei dipendenti (fonti
+consultate il 1° settembre 2026: [centrofiscale.com](https://centrofiscale.com/tassazione-tfr-2026-aliquote-calcolo-netto-esempi/),
+[fiscoinvestimenti.it](https://fiscoinvestimenti.it/tassazione-tfr-2026-aliquota-media/) — più
+lungo il servizio, più bassa l'aliquota). `TAX_TFR_SEPARATA` la porta in chiaro e la pagina la
+scrive accanto al numero: una percentuale che sembra esatta e non lo è sarebbe peggio di una
+stima dichiarata. ⚠️ L'imposta sostitutiva del **17 %** sulla rivalutazione annua è un'altra cosa,
+già trattenuta anno per anno: non è questa e non si somma.
+
+⚠️ **NULL non vale 26 %, al contrario dei prodotti**: su uno strumento finanziario il 26 % è il
+regime ordinario, su una casa o un'auto un default non esiste — e metterlo scriverebbe una tassa
+dove non ce n'è nessuna. Regime assente, `ALTRO`, o costo di acquisto mancante su un regime che
+tassa la plusvalenza: **nessuna imposta stimata**, il valore resta il lordo e l'etichetta della
+dotazione dice *perché* (`assetTax().motivo`). Non si inventa una tassa, e non si tace che manca.
 
 ### ⚠️ Il valore netto dei portafogli: si affianca al lordo, non lo sostituisce
 

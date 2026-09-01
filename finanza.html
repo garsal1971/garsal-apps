@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.5.1</title>
+  <title>GarsalFinanza v1.6.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.5.1';
-const APP_BUILD   = '2026-09-01T18:00:00Z';
+const APP_VERSION = 'v1.6.0';
+const APP_BUILD   = '2026-09-01T18:35:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -862,6 +862,56 @@ async function reload() {
    ⚠️ La liquidità non si tassa: non è una plusvalenza, sono soldi versati e mai investiti. */
 const TAX_RATES = { 'CAP. GAIN 26%': 26, 'AGEVOLATA 12.5%': 12.5, 'PIR': 0, 'ESENTE': 0 };
 const TAX_DEFAULT = 26;
+
+/* ── Regime fiscale degli ASSET (fnz_other_assets.tax_regime) ──
+   Stessi valori del tag dei prodotti più «TFR SEPARATA», che è l'unico a tassare l'importo
+   INTERO e non la sola plusvalenza — il TFR è tassato tutto, non solo la rivalutazione.
+
+   ⚠️ L'aliquota del TFR NON è una costante di legge: è l'aliquota media IRPEF del reddito di
+   riferimento degli ultimi cinque anni, quindi cambia da persona a persona e sta fra il 23 % e
+   il 30 % per la gran parte dei lavoratori dipendenti (fonte: guide alla tassazione TFR 2026,
+   centrofiscale.com e fiscoinvestimenti.it, consultate il 1° settembre 2026 — più lungo il
+   servizio, più bassa l'aliquota). Il 27 % qui è una STIMA di mezzo, e la pagina lo scrive
+   accanto al numero: una percentuale che sembra esatta e non lo è sarebbe peggio di una stima
+   dichiarata. Il valore vero lo dice il conguaglio dell'Agenzia delle Entrate, anni dopo.
+   ⚠️ La rivalutazione annua del TFR ha invece un'imposta sostitutiva del 17 %, già trattenuta
+   anno per anno: non è questa, e non si somma.
+
+   ⚠️ Un regime assente NON vale 26 %, al contrario dei prodotti: su uno strumento finanziario
+   quello è il regime ordinario, su una casa o un'auto un default non esiste — e metterlo
+   significherebbe scrivere una tassa dove non ce n'è nessuna. Niente regime = nessuna imposta
+   stimata, e la riga lo dice. */
+const TAX_TFR_SEPARATA = 27;
+const ASSET_TAX_REGIMES = [
+  { key: 'CAP. GAIN 26%',   rate: 26,                 base: 'plus',   label: 'Capital gain 26 %' },
+  { key: 'AGEVOLATA 12.5%', rate: 12.5,               base: 'plus',   label: 'Agevolata 12,5 %' },
+  { key: 'TFR SEPARATA',    rate: TAX_TFR_SEPARATA,   base: 'intero', label: `TFR — tassazione separata (stima ${TAX_TFR_SEPARATA} %)` },
+  { key: 'PIR',             rate: 0,                  base: 'plus',   label: 'PIR — esente' },
+  { key: 'ESENTE',          rate: 0,                  base: 'plus',   label: 'Esente' },
+  { key: 'ALTRO',           rate: null,               base: 'plus',   label: 'Altro / non so' },
+];
+/* Il netto di un asset, alla sua quota di possesso. Torna sempre un oggetto, e `tax` è null
+   quando l'imposta non si può stimare — che è diverso da zero: «non lo so» e «non si paga»
+   sono due cose che non vanno confuse proprio in un totale. */
+function assetTax(a) {
+  const own    = (parseFloat(a.ownership_percentage) || 100) / 100;
+  const value  = (parseFloat(a.value) || 0) * own;
+  const regime = ASSET_TAX_REGIMES.find(r => r.key === a.tax_regime) || null;
+  if (!regime || regime.rate == null) {
+    return { value, tax: null, net: value, regime, motivo: regime ? 'regime non deciso' : 'tassazione non indicata' };
+  }
+  if (regime.base === 'intero') {
+    const tax = value * regime.rate / 100;
+    return { value, tax, net: value - tax, regime, motivo: null };
+  }
+  const cost = a.cost_basis == null ? null : parseFloat(a.cost_basis) * own;
+  if (cost == null) {
+    return { value, tax: null, net: value, regime, motivo: 'manca il costo di acquisto' };
+  }
+  const plus = Math.max(0, value - cost);
+  const tax  = plus * regime.rate / 100;
+  return { value, tax, net: value - tax, regime, motivo: null };
+}
 function taxRateOf(product) {
   const tag  = product?.tags?.TASSAZIONE;
   const nota = tag != null && Object.prototype.hasOwnProperty.call(TAX_RATES, tag);
@@ -3923,9 +3973,17 @@ function coverageAuto(item) {
     const id = coverageRow(item)?.linked_other_asset_id;
     const a  = id ? S.otherAssets.find(x => x.id === id) : null;
     if (!a) return null;
+    // ⚠️ Anche qui vale il netto, come per «Finanza»: una dotazione è quello con cui ci si
+    // arriva davvero, e l'imposta si paga proprio nel momento in cui servirebbe. Dove non si
+    // può stimare, il valore resta il lordo e l'etichetta dice perché — non si inventa una
+    // tassa, e non si tace che manca.
     const own = (parseFloat(a.ownership_percentage) || 100) / 100;
-    return { value: parseFloat(a.value) * own,
-      label: `Asset: ${esc(a.title || a.asset_type)}${own !== 1 ? ` · quota ${parseFloat(a.ownership_percentage)}%` : ''}` };
+    const t   = assetTax(a);
+    const quota = own !== 1 ? ` · quota ${parseFloat(a.ownership_percentage)}%` : '';
+    const nota  = t.tax != null
+      ? ` · netto ${t.regime.key === 'TFR SEPARATA' ? `di tassazione separata ${t.regime.rate} %` : `di ${t.regime.rate} %`} (lordo ${fmtEUR(t.value)})`
+      : ` · al lordo: ${t.motivo}`;
+    return { value: t.net, label: `Asset: ${esc(a.title || a.asset_type)}${quota}${nota}` };
   }
   return null;
 }
@@ -6365,6 +6423,21 @@ function openOtherAssetModal(assetId = null, preType = null, preTitle = null) {
           <input name="ownership_percentage" type="number" step="any" min="0" max="100" class="form-input mono" required value="${a?.ownership_percentage || '100'}" />
         </div>
       </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label class="form-label">Tassazione</label>
+          <select name="tax_regime" class="form-input form-select">
+            <option value="">— Non indicata (nessuna imposta stimata)</option>
+            ${ASSET_TAX_REGIMES.map(r => `<option value="${r.key}" ${a?.tax_regime === r.key ? 'selected' : ''}>${r.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Costo di acquisto (€)</label>
+          <input name="cost_basis" type="number" step="any" min="0" class="form-input mono"
+                 placeholder="vuoto = plusvalenza non calcolabile" value="${a?.cost_basis ?? ''}" />
+        </div>
+      </div>
+      <p class="text-muted text-sm mb-12">Il netto si usa nelle 🛡️ Coperture, fra le dotazioni. La tassa si calcola sulla plusvalenza (valore − costo), tranne il TFR che è tassato per intero: lì il costo non serve. L'aliquota del TFR è una stima — dipende dal tuo reddito di riferimento degli ultimi cinque anni.</p>
       <div class="form-group">
         <label class="form-label">Note</label>
         <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${a?.notes || ''}</textarea>
@@ -6397,6 +6470,10 @@ function openOtherAssetModal(assetId = null, preType = null, preTitle = null) {
       valuation_date: data.valuation_date,
       ownership_percentage: parseFloat(data.ownership_percentage),
       notes: data.notes.trim(),
+      // Vuoto resta vuoto e non diventa zero: «non l'ho indicato» e «costo zero» darebbero due
+      // imposte diverse sullo stesso asset.
+      tax_regime: data.tax_regime || null,
+      cost_basis: data.cost_basis === '' ? null : parseFloat(data.cost_basis),
     };
     
     if (isEdit) await sbUpd('fnz_other_assets', `id=eq.${a.id}`, payload);
