@@ -73,10 +73,6 @@ internal fun AggiungiAlimentoScreen(
             pasto = pasto,
             stato = stato,
             onPasto = { pasto = it },
-            // ⚠️ Si riscrive `scelto`, non si ricarica il catalogo: il prodotto
-            // di rete lì dentro non c'è ancora, e la sua unità deve valere
-            // comunque per la riga che si sta per segnare.
-            onUnita = { unita -> vm.cambiaUnitaAlimento(alimento, unita) { scelto = it } },
             onIndietro = { scelto = null },
             onConferma = { grammi ->
                 vm.aggiungi(alimento, grammi, pasto)
@@ -308,23 +304,22 @@ private fun SceltaPorzione(
     pasto: String,
     stato: CalorieState,
     onPasto: (String) -> Unit,
-    onUnita: (String) -> Unit,
     onIndietro: () -> Unit,
     onConferma: (Double) -> Unit,
 ) {
-    // Grammi o millilitri è una proprietà dell'alimento, non una scelta di
-    // questa volta: si sceglie qui sotto e si scrive sull'alimento, quindi la
-    // prossima volta è già giusta — di qua come sul web.
-    val u = alimento.misura
+    /* Grammi o millilitri lo dice l'alimento, non questa schermata: la scelta si
+       fa da 🍎 Alimenti sul web, una volta sola, e da qui si legge soltanto.
 
-    /* ⚠️ I `remember` si agganciano all'IDENTITÀ dell'alimento e non all'oggetto:
-       cambiando l'unità arriva un `Alimento` nuovo (è una `data class`, `copy()`
-       ne fa un altro), e con `remember(alimento)` la quantità già scritta si
-       azzererebbe sotto le dita — si scrive 250, si tocca «🥛 Millilitri» e il
-       campo torna a 100. L'unità non è una quantità e non deve toccarla. */
-    val chiave = alimento.id ?: alimento.barcode ?: alimento.name
-    val porzioni = remember(chiave) { porzioniDi(alimento) }
-    var testo by remember(chiave) {
+       ⚠️ I due pulsanti g/ml QUI sono già stati provati (v1.0.63) e tolti subito:
+       questa schermata risponde a una domanda sola — «quanto ne hai mangiato?» —
+       e una scelta che riguarda com'è fatto l'alimento, con la riga che la
+       spiega, si prendeva mezzo schermo per una cosa che non si stava
+       chiedendo. Coi caratteri di sistema grandi il campo della quantità
+       finiva sotto la piega. Se un giorno servirà cambiarla dal telefono, il
+       posto è una schermata degli alimenti, non il caricamento del pasto. */
+    val u = alimento.misura
+    val porzioni = remember(alimento) { porzioniDi(alimento) }
+    var testo by remember(alimento) {
         mutableStateOf((porzioni.getOrNull(1)?.grammi ?: 100).toString())
     }
     val grammi = testo.replace(',', '.').toDoubleOrNull()
@@ -375,42 +370,6 @@ private fun SceltaPorzione(
 
             item {
                 Riquadro {
-                    /* ── Si pesa o si versa? ──
-                       Sta qui, attaccato alla casella, perché è l'etichetta di
-                       quella casella a cambiare: le due cose si spiegano da sé
-                       solo se si vedono insieme. Sul web la scelta sta nel form
-                       di 🍎 Alimenti, che di qua non c'è — ed è una differenza
-                       di forma, non di regola: scrivono la stessa colonna. */
-                    Text("Si misura in…", color = Palette.muted, fontWeight = FontWeight.SemiBold)
-                    val larghezzaU = larghezzaPulsanti(listOf("⚖️ Grammi", "🥛 Millilitri"))
-                    RigaScorrevole(Arrangement.spacedBy(6.dp)) {
-                        Pillola(
-                            "⚖️ Grammi",
-                            if (u == "g") VerdeCalorie else Palette.muted,
-                            larghezzaU,
-                        ) { if (u != "g") onUnita("g") }
-                        Pillola(
-                            "🥛 Millilitri",
-                            if (u == "ml") VerdeCalorie else Palette.muted,
-                            larghezzaU,
-                        ) { if (u != "ml") onUnita("ml") }
-                    }
-                    Text(
-                        (if (u == "ml")
-                            "Un liquido: i valori sono per 100 ml, come sulla bottiglia, e nessuna " +
-                                "densità entra nel conto. "
-                        else
-                            "Un solido: i valori sono per 100 g. Per il latte, l'olio, il vino o " +
-                                "una spremuta scegli i millilitri. ") +
-                            (if (alimento.inCatalogo)
-                                "Resta scritto sull'alimento — vale anche le prossime volte e sul " +
-                                    "web — e le righe già segnate non cambiano."
-                            else
-                                "Vale per questa riga, e parte con l'alimento quando entra in catalogo."),
-                        color = Palette.muted,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-
                     OutlinedTextField(
                         value = testo,
                         onValueChange = { testo = it },
