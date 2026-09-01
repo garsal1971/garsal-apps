@@ -45,16 +45,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 private val MESI = listOf(
     "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
     "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
 )
-
-private val FORMATO_IT = DateTimeFormatter.ofPattern("dd/MM/yyyy")
-
-private fun LocalDate.italiana(): String = format(FORMATO_IT)
 
 @Composable
 fun SpuntiamolaScreen(
@@ -150,8 +145,8 @@ fun SpuntiamolaScreen(
         ImpostazioniDialog(
             stato = stato,
             onAnnulla = { impostazioniAperte = false },
-            onSalva = { traguardo, emoji, inizio, fine, weekend, chiave ->
-                vm.salvaImpostazioni(traguardo, emoji, inizio, fine, weekend)
+            onSalva = { traguardo, emoji, mood, inizio, fine, weekend, chiave ->
+                vm.salvaImpostazioni(traguardo, emoji, mood, inizio, fine, weekend)
                 vm.salvaGiornateChiave(chiave)
                 impostazioniAperte = false
             },
@@ -194,6 +189,22 @@ private fun Hero(
             Modifier.padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // ⚠️ Il badge compare solo quando una stecca c'è: senza periodo
+            // direbbe con che voce parlerebbe l'app di una cosa che non esiste.
+            if (impostazioni != null) {
+                Text(
+                    text = stato.mood.badge,
+                    color = Palette.light,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Palette.light.copy(alpha = 0.22f))
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+
             Text(
                 text = if (impostazioni != null) "${impostazioni.emoji} ${impostazioni.goal}"
                        else "🎯 Nessun traguardo",
@@ -210,11 +221,9 @@ private fun Hero(
                 fontSize = 64.sp,
             )
             Text(
-                text = when {
-                    stato.totali == 0 -> "imposta il periodo per iniziare"
-                    stato.mancano == 1 -> "giorno che manca"
-                    else -> "giorni che mancano"
-                },
+                // «mancano» e «restano» sono lo stesso numero letto nei due versi
+                text = if (stato.totali == 0) "imposta il periodo per iniziare"
+                       else stato.mood.etichettaConto(stato.mancano),
                 color = Palette.light.copy(alpha = 0.85f),
             )
             if (impostazioni != null && stato.totali > 0) {
@@ -251,7 +260,7 @@ private fun Hero(
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 Statistica("fatti", stato.spuntati)
-                Statistica("mancano", stato.mancano)
+                Statistica(stato.mood.etichettaRestano, stato.mancano)
                 Statistica("serie", stato.serie)
                 Statistica("totale", stato.totali)
             }
@@ -294,7 +303,7 @@ private fun Hero(
                         (if (etichetta.isNotBlank()) " — $etichetta" else "") +
                         " e non l'hai spuntata!"
                 } else {
-                    "⏳ Oggi (${oggi.italiana()}) non l'hai ancora spuntato!"
+                    stato.mood.banner(oggi.italiana())
                 },
                 color = Palette.dark,
                 modifier = Modifier.padding(14.dp),
@@ -480,6 +489,14 @@ private fun ArchivioStecche(stecche: List<SpStecca>) {
                     Text(
                         etichettaSoddisfazione(stecca.satisfaction),
                         style = MaterialTheme.typography.bodySmall,
+                        color = Palette.muted,
+                    )
+                    // Con che voce è stata vissuta: senza, riaprendo l'archivio
+                    // non si saprebbe più se erano giorni aspettati o vissuti.
+                    Text(
+                        moodDi(stecca.mood).badge,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
                         color = Palette.muted,
                     )
                     if (stecca.note.isNotBlank()) {

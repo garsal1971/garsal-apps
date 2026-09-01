@@ -2009,16 +2009,21 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
 - **Spuntiamola** — la chiusura della stecca scrive **prima** in `sp_stecche` e cancella **dopo**
   (`SpuntiamolaRepository.chiudiStecca`, come `dbCloseStecca()`); le spunte sono ottimistiche con
   rollback; frasi, emoji e messaggi dei traguardi sono copiati parola per parola.
-  ⚠️ **L'umore della stecca esiste solo nel web** (`sp_settings.mood` / `sp_stecche.mood`, vedi lo
-  schema `sp_`): il gemello Kotlin la colonna non la legge e parla sempre con la voce dell'attesa,
-  quindi una stecca di **bei giorni** creata dal PC sul telefono si commenta da sé nel modo
-  sbagliato — «giorni che mancano», «FINITO! Campione!» sull'ultimo giorno di una vacanza. **Non
-  si rompe niente**: `SpSettings` non porta la colonna, quindi l'upsert di `salvaImpostazioni`
-  non la nomina e sull'`ON CONFLICT DO UPDATE` la lascia com'è — una stecca di bei giorni
-  modificata dal telefono resta di bei giorni; una creata di là nasce col DEFAULT `'attesa'`. E
-  `Columns.ALL` su `sp_stecche` regge la chiave in più perché `ignoreUnknownKeys` è attivo nel
-  serializer di supabase-kt. Finché il porting non c'è, **una stecca di bei giorni si crea dal
-  web**. È una divergenza **nota e temporanea**: portare `MOODS` in Kotlin è il pezzo che manca.
+  ⚠️ **L'umore della stecca c'è da tutt'e due le parti** (`sp_settings.mood` / `sp_stecche.mood`,
+  vedi lo schema `sp_`): `MOODS` in `spuntiamola.html` e la `data class Mood` +
+  `MOODS`/`moodDi()` in `SpuntiamolaModel.kt` sono **la stessa tabella scritta due volte** — frasi,
+  emoji, traguardi, messaggi di chiusura, etichette e `fuochiAl100` — e **vanno cambiate insieme**,
+  o le due implementazioni commentano la stessa stecca in due modi diversi. Da tutt'e due la voce
+  della **chiusura si legge prima** che lo stato torni al campo libero (parametro `voce` nel web,
+  `val voce = stato.mood` nel nativo): dopo, l'umore è già tornato all'attesa e dei bei giorni
+  verrebbero salutati con la voce sbagliata.
+  ⚠️ **Le giornate chiave sono facoltative e devono cadere dentro il periodo** in tutt'e due:
+  `perchePuoNonEsserci()` è ricalcata riga per riga in `SpuntiamolaModel.kt`, coi due motivi
+  distinti (fuori dall'intervallo / sabato o domenica su una stecca che salta i fine settimana) e
+  la marcatura in rosso di una chiave che il periodo, accorciandosi, ha lasciato fuori. Differenza
+  di forma: sul web la data si sceglie da un calendarietto con `min`/`max`, nel nativo si scrive a
+  mano — quindi lì il motivo compare **solo su una data già completa**, o si leggerebbe un errore
+  a ogni carattere digitato.
 - **Obiettivi** — il progresso resta in `ob_objective_progress` e la scrittura in
   `ob_record_measurement`, che è anche l'unica a dire se un voto sta dentro la scala. Gli estremi
   di una metrica si leggono da `ob_metric_scale`, ricalcata in `scaleOf()` e in `ObMetrica.scala`:

@@ -1,6 +1,7 @@
 package com.garsal.appsphere.spuntiamola
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,11 +51,14 @@ import kotlin.math.roundToInt
 fun ImpostazioniDialog(
     stato: SpuntiamolaState,
     onAnnulla: () -> Unit,
-    onSalva: (String, String, String, String, Boolean, Map<String, String>) -> Unit,
+    onSalva: (String, String, String, String, String, Boolean, Map<String, String>) -> Unit,
 ) {
     val impostazioni = stato.impostazioni
     var traguardo by remember { mutableStateOf(impostazioni?.goal ?: "Il traguardo") }
     var emoji by remember { mutableStateOf(impostazioni?.emoji ?: "🎯") }
+    // come le giornate chiave, l'umore si sceglie su una copia: Annulla deve
+    // poter buttare via anche questo
+    var mood by remember { mutableStateOf(moodDi(impostazioni?.mood).id) }
     var inizio by remember { mutableStateOf(impostazioni?.startDate ?: LocalDate.now().toString()) }
     var fine by remember {
         mutableStateOf(impostazioni?.endDate ?: LocalDate.now().plusDays(30).toString())
@@ -69,6 +73,18 @@ fun ImpostazioniDialog(
         LocalDate.parse(fine) >= LocalDate.parse(inizio)
     }.getOrDefault(false)
 
+    // ⚠️ Il periodo si legge dai CAMPI e non dalle impostazioni salvate: qui
+    // si sta ancora scegliendo, e quelle salvate sono le precedenti.
+    //
+    // ⚠️ Il motivo si calcola solo su una data GIÀ COMPLETA e con un periodo
+    // valido: qui la data si scrive a mano, e "2026-09-" è una data a metà,
+    // non una data sbagliata. Un errore rosso a ogni carattere digitato si
+    // legge come un'app che brontola mentre scrivi.
+    val dataNuovaCompleta = runCatching { LocalDate.parse(nuovoGiorno) }.isSuccess
+    val motivoNuovoGiorno: String? =
+        if (!dataNuovaCompleta || !dateValide) null
+        else perchePuoNonEsserci(nuovoGiorno, inizio, fine, saltaWeekend)
+
     AlertDialog(
         onDismissRequest = onAnnulla,
         title = { Text("Impostazioni") },
@@ -77,17 +93,55 @@ fun ImpostazioniDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                // L'umore viene prima di tutto: decide come si legge la
+                // griglia, e quindi anche come si chiamano i due campi sotto.
+                Text("Che stecca è?", fontWeight = FontWeight.Bold)
+                // ⚠️ Una colonna e non due schede affiancate: coi caratteri di
+                // sistema grandi due blocchi di testo di lunghezza diversa
+                // vanno a capo un numero diverso di volte e perdono
+                // l'allineamento.
+                MOODS.forEach { voce ->
+                    val scelto = voce.id == mood
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (scelto) Palette.secondary.copy(alpha = 0.12f)
+                                else Palette.inputBg
+                            )
+                            .border(
+                                width = if (scelto) 2.dp else 1.dp,
+                                color = if (scelto) Palette.secondary else Palette.border,
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                            .clickable { mood = voce.id }
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            "${voce.emoji}  ${voce.nome}",
+                            fontWeight = FontWeight.Bold,
+                            color = Palette.dark,
+                        )
+                        Text(
+                            voce.spiegazione,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = Palette.muted,
+                        )
+                    }
+                }
+
                 OutlinedTextField(
                     value = traguardo,
                     onValueChange = { traguardo = it },
-                    label = { Text("Traguardo") },
+                    label = { Text(moodDi(mood).etichettaTraguardo) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = emoji,
                     onValueChange = { emoji = it },
-                    label = { Text("Emoji") },
+                    label = { Text(moodDi(mood).etichettaEmoji) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -118,30 +172,49 @@ fun ImpostazioniDialog(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    "Le giornate che contano: nella griglia sono dorate e alla spunta partono i fuochi.",
+                    "Sono facoltative: la stecca si salva anche senza. Nella griglia " +
+                        "sono dorate e alla spunta partono i fuochi.",
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     color = Palette.muted,
                 )
 
                 chiave.toSortedMap().forEach { (giorno, etichetta) ->
-                    Row(
+                    // ⚠️ Una chiave entra sempre dentro il periodo, ma il
+                    // periodo si può accorciare dopo: quella riga resta salvata
+                    // e nella griglia sparisce. Qui si dice, invece di lasciarla
+                    // scoprire dal fatto che non succede niente il giorno che
+                    // dovrebbe. Solo a periodo valido, però: mentre si riscrive
+                    // una delle due date, «fuori dal periodo» su tutte le righe
+                    // sarebbe rumore e non un avviso.
+                    val fuori = if (dateValide)
+                        perchePuoNonEsserci(giorno, inizio, fine, saltaWeekend) else null
+                    Column(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Palette.inputBg)
+                            .background(if (fuori != null) Palette.danger.copy(alpha = 0.10f) else Palette.inputBg)
                             .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "★ $giorno" + if (etichetta.isNotBlank()) " — $etichetta" else "",
-                            modifier = Modifier.weight(1f),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            text = "✕",
-                            color = Palette.danger,
-                            modifier = Modifier.clickable { chiave = chiave - giorno },
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "★ $giorno" + if (etichetta.isNotBlank()) " — $etichetta" else "",
+                                modifier = Modifier.weight(1f),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                text = "✕",
+                                color = Palette.danger,
+                                modifier = Modifier.clickable { chiave = chiave - giorno },
+                            )
+                        }
+                        if (fuori != null) {
+                            Text(
+                                "⚠️ Fuori dal periodo: nella griglia questo giorno non c'è.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Palette.danger,
+                            )
+                        }
                     }
                 }
 
@@ -151,6 +224,8 @@ fun ImpostazioniDialog(
                         onValueChange = { nuovoGiorno = it },
                         label = { Text("aaaa-mm-gg") },
                         singleLine = true,
+                        isError = motivoNuovoGiorno != null
+                            || (nuovoGiorno.isNotBlank() && !dataNuovaCompleta),
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
@@ -161,8 +236,18 @@ fun ImpostazioniDialog(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                // ⚠️ Il motivo si scrive PRIMA di premere, non dopo: qui non
+                // c'è nessun alert() a cui affidarlo, e un tasto spento senza
+                // spiegazione si legge come un difetto dell'app.
+                if (motivoNuovoGiorno != null) {
+                    Text(
+                        motivoNuovoGiorno,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = Palette.danger,
+                    )
+                }
                 TextButton(
-                    enabled = runCatching { LocalDate.parse(nuovoGiorno) }.isSuccess,
+                    enabled = dataNuovaCompleta && dateValide && motivoNuovoGiorno == null,
                     onClick = {
                         chiave = chiave + (nuovoGiorno to nuovaEtichetta.trim())
                         nuovoGiorno = ""
@@ -174,7 +259,7 @@ fun ImpostazioniDialog(
         confirmButton = {
             TextButton(
                 enabled = dateValide,
-                onClick = { onSalva(traguardo, emoji, inizio, fine, saltaWeekend, chiave) },
+                onClick = { onSalva(traguardo, emoji, mood, inizio, fine, saltaWeekend, chiave) },
             ) { Text("Salva") }
         },
         dismissButton = {
@@ -201,12 +286,15 @@ fun ChiusuraDialog(
     var nota by remember { mutableStateOf("") }
 
     val impostazioni = stato.impostazioni
+    // La cerimonia parla con la voce della stecca: «Ci siamo!» a chi
+    // aspettava, «È finita.» a chi ci stava dentro.
+    val voce = stato.mood
 
     AlertDialog(
         onDismissRequest = onRimanda,
         title = {
             Column {
-                Text("${impostazioni?.emoji ?: "🏁"} Chiudi la stecca")
+                Text("${impostazioni?.emoji ?: "🏁"} ${voce.titoloChiusura}")
                 if (impostazioni != null) {
                     Text(
                         text = impostazioni.goal + "\n" +
@@ -232,7 +320,7 @@ fun ChiusuraDialog(
                                     else Palette.success.copy(alpha = 0.2f)
                                 )
                                 .clickable(enabled = emojiFinale == null) {
-                                    emojiFinale = EMOJI_SPUNTA.random()
+                                    emojiFinale = voce.emojiSpunta.random()
                                     quando = OffsetDateTime.now(ZoneOffset.UTC).toString()
                                     passo = 2
                                 },
@@ -243,7 +331,7 @@ fun ChiusuraDialog(
                     }
 
                     2 -> {
-                        Text("Quanto sei soddisfatto di com'è andata?")
+                        Text(voce.domandaSoddisfazione)
                         Text(
                             "$soddisfazione",
                             fontSize = 34.sp,
@@ -265,7 +353,7 @@ fun ChiusuraDialog(
                     }
 
                     else -> {
-                        Text("Due parole su com'è andata (facoltative).")
+                        Text(voce.invitoNota)
                         OutlinedTextField(
                             value = nota,
                             onValueChange = { nota = it },
