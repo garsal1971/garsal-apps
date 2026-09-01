@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.27</title>
+  <title>GarsalFinanza v1.4.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -154,6 +154,16 @@
     .portfolio-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     /* ── Table ────────────────────────────────────────────────── */
     .table-wrap { overflow-x: auto; }
+    /* Coperture — ⚠️ le voci NON sono una tabella: tre colonne di importi accanto a una voce
+       che è prosa, coi caratteri di sistema grandi, danno righe alte mezzo schermo con il testo
+       fuori dal bordo destro. Ogni voce è una scheda, e i tre importi una griglia etichettata
+       che va a capo da sé — è la stessa scelta della tabella di «Ti pisasti?» in nativo. */
+    .cov-item { padding: 12px 0; border-top: 1px solid var(--c-border); }
+    .cov-item:first-child { border-top: 0; padding-top: 0; }
+    .cov-vals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 8px; margin-top: 8px; }
+    .cov-val { background: var(--c-bg); border-radius: 8px; padding: 6px 10px; }
+    .cov-val-label { font-size: .72rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .cov-tot { border-top: 2px solid var(--c-border); padding-top: 12px; margin-top: 4px; }
     .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
     .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
 .table th.th-has-filter { color: var(--c-primary); }
@@ -570,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.27';
-const APP_BUILD   = '2026-09-01T15:45:00Z';
+const APP_VERSION = 'v1.4.0';
+const APP_BUILD   = '2026-09-01T16:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3686,54 +3696,120 @@ async function deletePensionContribution(id) {
 /* ══════════════ COPERTURE PER ESIGENZE FUTURE ═══════════════════
    Due colonne che si guardano in faccia: quello che servirà (fabbisogno) e quello con cui ci
    si arriva (dotazioni). La pagina risponde a una domanda sola — quanto manca — e per questo
-   il saldo sta in cima e non in fondo.
+   il riepilogo sta in cima e non in fondo.
+
+   ⚠️ Il fabbisogno NON è un numero solo: si conta fino a una data, e le date sono tre
+   (accompagnamento, anticipata, vecchiaia). «Costo della vita» e «contribuzione alla pensione»
+   sono flussi che durano finché non si smette di lavorare: valgono di più uscendo a vecchiaia
+   che cinque anni prima, ed è esattamente la differenza che si sta cercando di vedere.
 
    ⚠️ Le voci vivono qui in COVERAGE_ITEMS e non nel database, come INCOME_SECTIONS per il
    reddito: aggiungerne una è una riga di JavaScript, non una migration. In fnz_coverage_items
-   finisce solo quello che l'utente scrive — importo, asset collegato, nota.
+   finisce solo quello che l'utente scrive — importo, periodicità, rivalutazione, asset
+   collegato, nota.
 
-   ⚠️ Tre fonti diverse, e la differenza è la funzionalità:
-     'manuale' — la cifra la scrive l'utente e basta;
-     'auto'    — la cifra si legge dal vivo dai dati di Finanza (mutuo, portafogli, INPS), e
-                 l'importo scritto a mano è un OVERRIDE che vince e si toglie col ↺;
-     'asset'   — come 'auto', ma la riga di fnz_other_assets da cui leggere la sceglie
-                 l'utente in tendina: i titoli degli asset non si indovinano dal codice, e una
-                 voce agganciata per nome smetterebbe di leggere il giorno che qualcuno
-                 rinomina «Casa Rosa» in «Casa di Rosa», senza dire niente.
+   ⚠️ Quattro fonti diverse, e la differenza è la funzionalità:
+     'manuale'   — la cifra la scrive l'utente e basta;
+     'auto'      — la cifra si legge dal vivo dai dati di Finanza (mutuo, portafogli, INPS,
+                   reddito), e l'importo scritto a mano è un OVERRIDE che vince e si toglie col ↺;
+     'asset'     — come 'auto', ma la riga di fnz_other_assets da cui leggere la sceglie
+                   l'utente in tendina: i titoli degli asset non si indovinano dal codice, e una
+                   voce agganciata per nome smetterebbe di leggere il giorno che qualcuno
+                   rinomina «Casa Rosa» in «Casa di Rosa», senza dire niente;
+     'calcolata' — non si scrive e non si archivia: è la scopertura dello scenario. Vale per la
+                   sola assicurazione, che deve coprire quello che manca.
 
    ⚠️ Una casella vuota resta vuota e non vale zero, come in fnz_income: su una voce manuale
    dice «non l'ho ancora scritto», su una automatica «vale il dato di Finanza». Le voci senza
    valore si contano sotto la tabella invece di sparire dal totale in silenzio. */
+
+/* Ada: l'anno scolastico in cui frequenta la classe indicata. Da qui si ricava quando comincia
+   l'università, che è l'unica cosa che alla pagina serve sapere — e si ricava invece di essere
+   scritto a mano, o fra due anni direbbe ancora 2029 senza che niente lo segnali. */
+const ADA_SCUOLA = { annoScolastico: 2026, classe: 3, classiSuperiori: 5, anniUniversita: 7 };
+function adaUniversita() {
+  const mancano = ADA_SCUOLA.classiSuperiori - ADA_SCUOLA.classe + 1;   // superiori che restano
+  const inizio  = ADA_SCUOLA.annoScolastico + mancano;
+  return { mancano, inizio, fine: inizio + ADA_SCUOLA.anniUniversita, anni: ADA_SCUOLA.anniUniversita };
+}
+
+// Lo scenario più vicino: si esce cinque anni prima dell'anticipata.
+const COVERAGE_ANNI_ACCOMPAGNAMENTO = 5;
+
 const COVERAGE_ITEMS = [
   { side: 'fabbisogno', key: 'universita',    icon: '🎓', label: 'Mantenimento università di Ada',
-    hint: 'Sette anni fuori sede: laurea e specializzazione.', fonte: 'manuale', prompt: 'universita' },
+    hint: () => { const u = adaUniversita();
+      return `${u.anni} anni fuori sede, da settembre ${u.inizio} a ${u.fine}: laurea e specializzazione.`; },
+    fonte: 'manuale', periodicita: 'una_tantum', prompt: 'universita' },
   { side: 'fabbisogno', key: 'mutuo',         icon: '🏠', label: 'Estinzione mutuo',
-    hint: 'Quanto servirebbe per chiudere il mutuo oggi.', fonte: 'auto', auto: coverageMutuoResiduo },
+    hint: () => 'Quanto servirebbe per chiudere il mutuo oggi.',
+    fonte: 'auto', periodicita: 'una_tantum', auto: coverageMutuoResiduo },
   { side: 'fabbisogno', key: 'costo_vita',    icon: '🧺', label: 'Costo della vita',
-    hint: 'Preso a spunto lo stipendio da insegnante.', fonte: 'manuale' },
-  { side: 'fabbisogno', key: 'assicurazione', icon: '🛡️', label: 'Assicurazione caso morte e invalidità',
-    hint: 'Capitale da assicurare e premio della polizza.', fonte: 'manuale', prompt: 'assicurazione' },
+    hint: () => 'Importo all\'anno, preso a spunto lo stipendio da insegnante.',
+    fonte: 'manuale', periodicita: 'annuo', rivalutazione: 2 },
   { side: 'fabbisogno', key: 'rendita_ada',   icon: '💐', label: 'Rendita per sostentamento Ada o acquisto casa',
-    hint: '', fonte: 'manuale' },
+    hint: () => '', fonte: 'manuale', periodicita: 'una_tantum' },
   { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
-    hint: 'Importo lordo dell\'ultima simulazione INPS: è un flusso annuo, non un capitale.',
-    fonte: 'auto', auto: coveragePensioneLorda },
+    hint: () => '',
+    fonte: 'auto', periodicita: 'annuo', rivalutazione: 2, auto: coveragePensioneLorda },
 
-  { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',          fonte: 'asset' },
-  { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa',    fonte: 'asset' },
-  { side: 'dotazione',  key: 'casa_mia',      icon: '🏡', label: 'Casa Mia',     fonte: 'asset' },
-  { side: 'dotazione',  key: 'finanza',       icon: '📈', label: 'Finanza',
-    hint: 'Valore quota dei portafogli, liquidità compresa.', fonte: 'auto', auto: coverageFinanza },
+  { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',       fonte: 'asset' },
+  { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa', fonte: 'asset' },
+  { side: 'dotazione',  key: 'casa_mia',      icon: '🏡', label: 'Casa Mia',  fonte: 'asset' },
+  { side: 'dotazione',  key: 'finanza',       icon: '📈', label: 'Finanza', fonte: 'auto', auto: coverageFinanza },
   { side: 'dotazione',  key: 'pensione_ada',  icon: '👛', label: 'Pensione Ada',
-    hint: 'Pensione INPS dell\'anno più recente in 💶 Reddito.', fonte: 'auto', auto: coveragePensioneAda },
+    fonte: 'auto', auto: coveragePensioneAda },
 ];
+// ⚠️ L'assicurazione non sta nell'elenco qui sopra ed è voluto: non è un fabbisogno in più — è
+// la copertura di quello che manca. Sommarla al fabbisogno che deve coprire lo conterebbe due
+// volte, quindi vive fuori dalla tabella, nel riepilogo, come riga calcolata.
+const COVERAGE_ASSICURAZIONE = { icon: '🛡️', label: 'Capitale da assicurare',
+  fonte: 'calcolata', prompt: 'assicurazione' };
 const COVERAGE_SIDES = [
   { key: 'fabbisogno', icon: '🎯', title: 'Fabbisogno', sub: 'Quello che servirà' },
   { key: 'dotazione',  icon: '🧰', title: 'Dotazioni',  sub: 'Quello con cui ci si arriva' },
 ];
 
-/* Le tre fonti automatiche. Tornano { value, label } oppure null — null è «il dato non c'è»,
-   non zero: un dato assente si vede come voce da compilare, uno zero finto no. */
+/* ── Le tre date ──────────────────────────────────────────────
+   Vecchiaia e anticipata sono quelle della simulazione INPS (Previdenza); l'accompagnamento è
+   l'anticipata meno cinque anni. Una data che manca non si inventa: la colonna resta vuota e lo
+   dice, invece di mostrare un fabbisogno contato su un orizzonte immaginario. */
+function spostaAnni(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setFullYear(d.getFullYear() + n);
+  return d.toISOString().slice(0, 10);
+}
+function anniFinoA(iso) {
+  if (!iso) return null;
+  const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+  return Math.max(0, (new Date(iso + 'T00:00:00') - oggi) / 86400000 / 365.25);
+}
+function coverageScenarios() {
+  const f   = pensionForecastByScenario();
+  const ant = f.anticipata?.pension_date || null;
+  const vec = f.vecchiaia?.pension_date  || null;
+  const acc = ant ? spostaAnni(ant, -COVERAGE_ANNI_ACCOMPAGNAMENTO) : null;
+  return [
+    { key: 'accompagnamento', icon: '🧭', label: 'Accompagnamento', breve: 'Accompagn.',
+      sub: `Anticipata − ${COVERAGE_ANNI_ACCOMPAGNAMENTO} anni`, date: acc },
+    { key: 'anticipata',      icon: '🚪',  label: 'Pensione anticipata',   breve: 'Anticipata', sub: 'Simulazione INPS', date: ant },
+    { key: 'vecchiaia',       icon: '🏛️', label: 'Pensione di vecchiaia', breve: 'Vecchiaia',  sub: 'Simulazione INPS', date: vec },
+  ].map(s => ({ ...s, anni: anniFinoA(s.date), anno: s.date ? s.date.slice(0, 4) : '—' }));
+}
+
+/* Un flusso annuo che dura `anni` (anche frazionari), rivalutato del `pct` per cento all'anno.
+   Gli anni interi si sommano con la progressione geometrica; l'ultimo anno parziale entra per
+   la sua frazione — fermarsi all'anno intero perderebbe fino a undici mesi di spesa. */
+function sommaFlusso(annuo, anni, pct) {
+  if (annuo == null || anni == null) return null;
+  const r = (pct || 0) / 100;
+  const interi = Math.floor(anni), resto = anni - interi;
+  const somma = r === 0 ? annuo * interi : annuo * (Math.pow(1 + r, interi) - 1) / r;
+  return somma + resto * annuo * Math.pow(1 + r, interi);
+}
+
+/* Le fonti automatiche. Tornano { value, label } oppure null — null è «il dato non c'è», non
+   zero: un dato assente si vede come voce da compilare, uno zero finto no. */
 function coverageMutuoResiduo() {
   const mutui = (S.loans || []).filter(l => l.type === 'MUTUO');
   if (!mutui.length) return null;
@@ -3756,11 +3832,9 @@ function coveragePensioneLorda() {
   return { value: parseFloat(r.gross_amount),
     label: `${sc ? sc.label : r.scenario}${r.issued_at ? ` · simulazione del ${fmtDate(r.issued_at)}` : ''}` };
 }
-
 // ⚠️ Si legge da 💶 Reddito → riquadro Redditi, riga «Pensione INPS» dell'anno più recente che
 // ce l'ha — non dall'ultimo anno in tabella: un anno appena aperto e ancora da compilare
-// azzererebbe la voce in silenzio. È un importo annuo archiviato a mano, quindi resta quello
-// finché non lo si riscrive di là: qui non si ricopia, si legge.
+// azzererebbe la voce in silenzio.
 function coveragePensioneAda() {
   const righe = (S.income || []).filter(r => r.kind === 'pensione' && r.amount != null);
   if (!righe.length) return null;
@@ -3788,25 +3862,48 @@ function coverageAuto(item) {
 }
 // L'importo scritto a mano vince sul dato di Finanza — ma si vede che è scritto a mano, e si
 // toglie col ↺: un override silenzioso resterebbe fermo mentre il dato vero cambia sotto.
-function coverageValue(item) {
+function coverageBase(item) {
   const row     = coverageRow(item);
   const manuale = row && row.amount != null ? parseFloat(row.amount) : null;
   const auto    = coverageAuto(item);
   if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row };
   return { value: auto ? auto.value : null, scrittoAMano: false, auto, row };
 }
-function coverageTotal(side) {
-  const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(coverageValue);
-  return {
-    total:   voci.reduce((s, v) => s + (v.value || 0), 0),
-    mancanti: voci.filter(v => v.value == null).length,
-  };
+// La riga del database vince sul registro, e NULL lì significa «vale quello che dice la voce».
+function coveragePeriodicita(item) {
+  return coverageRow(item)?.periodicity || item.periodicita || 'una_tantum';
+}
+function coverageRivalutazione(item) {
+  const r = coverageRow(item)?.revaluation_pct;
+  return r == null ? (item.rivalutazione || 0) : parseFloat(r);
+}
+/* Il valore di una voce su un orizzonte: un capitale è lo stesso su tutti e tre, un flusso no.
+   `anni` null (data della simulazione mancante) porta a null e non a zero — non sapere quanto
+   dura non è saperlo pari a niente. */
+function coverageValoreA(item, anni) {
+  const base = coverageBase(item);
+  if (base.value == null) return null;
+  if (coveragePeriodicita(item) !== 'annuo') return base.value;
+  return anni == null ? null : sommaFlusso(base.value, anni, coverageRivalutazione(item));
+}
+function coverageTotaleA(side, anni) {
+  const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(i => coverageValoreA(i, anni));
+  return { total: voci.reduce((s, v) => s + (v || 0), 0), mancanti: voci.filter(v => v == null).length };
+}
+// Le dotazioni sono quello che c'è OGGI: non si proiettano in avanti, perché una proiezione del
+// TFR o dei portafogli sarebbe un rendimento inventato messo accanto a numeri veri.
+function coverageDotazioni() { return coverageTotaleA('dotazione', null); }
+function coverageScopertura(scenario) {
+  const fab = coverageTotaleA('fabbisogno', scenario.anni);
+  const dot = coverageDotazioni();
+  return { fab, dot, scopertura: fab.total - dot.total, assicurare: Math.max(0, fab.total - dot.total) };
 }
 
 function renderCoperture() {
   // Primo ingresso: si disegna con quello che c'è e si ridisegna quando i dati arrivano, come
-  // renderPrevidenza. La previsione INPS serve alla voce «Contribuzione alla pensione», quindi
-  // si carica anche da qui: senza, quella voce resterebbe vuota finché non si apre l'altra pagina.
+  // renderPrevidenza. Previsione INPS e reddito servono alle voci automatiche, quindi si
+  // caricano anche da qui: senza, resterebbero vuote finché non si apre l'altra pagina — cioè
+  // sembrerebbero dati mancanti invece che dati non ancora letti.
   if (S.coverage === null) {
     S.coverage = [];
     loadCoverage().then(() => { if (S.view === 'coperture') renderCoperture(); })
@@ -3817,99 +3914,170 @@ function renderCoperture() {
     loadPensionForecast().then(() => { if (S.view === 'coperture') renderCoperture(); })
                          .catch(e => console.error('Coperture (previsione INPS):', e));
   }
-  // Il reddito serve alla voce «Pensione Ada»: senza, resterebbe vuota finché non si apre
-  // 💶 Reddito — cioè sembrerebbe un dato mancante invece che un dato non ancora letto.
   if (S.income === null) {
     S.income = [];
     loadIncome().then(() => { if (S.view === 'coperture') renderCoperture(); })
                 .catch(e => console.error('Coperture (reddito):', e));
   }
-  const fab = coverageTotal('fabbisogno');
-  const dot = coverageTotal('dotazione');
-  const saldo = fab.total - dot.total;          // > 0 = manca, < 0 = avanza
-  const mancanti = fab.mancanti + dot.mancanti;
-
+  const scen = coverageScenarios();
   setHtml('view-coperture', `
     <div class="view-header">
       <div>
         <h2 class="page-title">Coperture per esigenze future</h2>
-        <p class="page-sub">Quello che servirà, quello con cui ci si arriva, e quanto manca</p>
+        <p class="page-sub">Quello che servirà fino a ciascuna delle tre date, e quello con cui ci si arriva</p>
       </div>
     </div>
-    <div class="kpi-grid">
-      ${kpi('Fabbisogno', fmtEUR(fab.total), 'neg')}
-      ${kpi('Dotazioni',  fmtEUR(dot.total), 'pos')}
-      ${kpi(saldo > 0 ? 'Scopertura' : 'Eccedenza', fmtEUR(Math.abs(saldo)), saldo > 0 ? 'neg' : 'pos')}
-    </div>
-    ${mancanti ? `<p class="text-muted text-sm mb-12">⚠️ ${mancanti === 1 ? 'Una voce non compilata' : `${mancanti} voci non compilate`}: il saldo qui sopra ${mancanti === 1 ? 'la conta' : 'le conta'} come se non ${mancanti === 1 ? 'esistesse' : 'esistessero'}, non come zero.</p>` : ''}
-    ${COVERAGE_SIDES.map(renderCoverageSide).join('')}
+    ${renderCoverageRiepilogo(scen)}
+    ${renderCoverageSide(COVERAGE_SIDES[0], scen)}
+    ${renderCoverageSide(COVERAGE_SIDES[1], scen)}
   `);
 }
 
-function renderCoverageSide(side) {
-  const voci = COVERAGE_ITEMS.filter(i => i.side === side.key);
-  const tot  = coverageTotal(side.key);
+/* Il riepilogo: una colonna per data, e sotto le righe che portano dal fabbisogno al capitale
+   da assicurare. È la risposta della pagina, quindi sta in cima. */
+function renderCoverageRiepilogo(scen) {
+  const conti = scen.map(coverageScopertura);
+  const senzaData = scen.filter(s => !s.date);
+  const cella = (v, cls = '') => `<td class="mono text-right ${cls}">${fmtEUR(v)}</td>`;
+  const etichetta = (t, cls = 'fw-600') => `<td class="${cls}" style="white-space:normal;max-width:14ch">${t}</td>`;
   return `
     <div class="card">
       <div class="card-header-row">
-        <div class="card-title">${side.icon} ${side.title}</div>
-        <span class="text-muted text-sm">${side.sub}</span>
+        <div class="card-title">📅 Quanto manca, e per quando</div>
+        <span class="text-muted text-sm">Le dotazioni sono quelle di oggi</span>
       </div>
+      ${senzaData.length ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaData.map(s => s.label).join(' e ')}: manca la data. Compila la simulazione in 🏛️ Simulazione INPS — un fabbisogno contato su un orizzonte inventato non direbbe niente.</p>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr>
-          <th style="width:1%"></th><th class="text-right">Importo</th>
-          <th>Voce</th><th>Da dove viene</th>
+          <th></th>
+          ${scen.map(s => `<th class="text-right">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span></th>`).join('')}
         </tr></thead>
         <tbody>
-          ${voci.map(renderCoverageRow).join('')}
           <tr>
-            <td></td>
-            <td class="mono text-right fw-700">${fmtEUR(tot.total)}</td>
-            <td class="fw-600" style="white-space:normal">Totale ${side.title.toLowerCase()}</td>
-            <td class="text-muted text-sm">${tot.mancanti ? `${tot.mancanti} da compilare` : ''}</td>
+            ${etichetta('Data')}
+            ${scen.map(s => `<td class="mono text-right">${s.date ? fmtDate(s.date) : '—'}</td>`).join('')}
+          </tr>
+          <tr>
+            ${etichetta('Anni che mancano')}
+            ${scen.map(s => `<td class="mono text-right">${s.anni == null ? '—' : s.anni.toFixed(1).replace('.', ',')}</td>`).join('')}
+          </tr>
+          <tr>
+            ${etichetta('Fabbisogno')}
+            ${conti.map(c => cella(c.fab.total)).join('')}
+          </tr>
+          <tr>
+            ${etichetta('Dotazioni')}
+            ${conti.map(c => cella(c.dot.total)).join('')}
+          </tr>
+          <tr>
+            ${etichetta('Scopertura', 'fw-700')}
+            ${conti.map(c => cella(c.scopertura, c.scopertura > 0 ? 'neg fw-700' : 'pos fw-700')).join('')}
+          </tr>
+          <tr>
+            <td style="white-space:normal;max-width:24ch">
+              <div class="hstack gap-4">
+                <button class="btn-icon" data-action="coverage-prompt" data-key="assicurazione" title="Prompt per l'analisi con l'IA">💬</button>
+                <span class="fw-600">${COVERAGE_ASSICURAZIONE.icon} ${COVERAGE_ASSICURAZIONE.label}</span>
+              </div>
+              <div class="text-muted text-sm">Copre la scopertura: non è a sua volta un fabbisogno e non entra nel totale.</div>
+            </td>
+            ${conti.map(c => cella(c.assicurare, 'fw-700')).join('')}
           </tr>
         </tbody>
       </table></div>
     </div>`;
 }
 
-/* ⚠️ ✎ e gli altri comandi stanno in TESTA alla riga e non in coda: su un telefono la tabella
-   scorre di lato e l'ultima colonna sta oltre il bordo destro — per raggiungerla bisognerebbe
-   già sapere che c'è dell'altro da trascinare.
-   ⚠️ Per la stessa ragione l'IMPORTO viene prima della voce, che è l'unico posto in cui questa
-   tabella non segue l'ordine di lettura abituale: la voce è prosa e coi caratteri di sistema
-   grandi va a capo tre volte, spingendo oltre il bordo proprio il numero per cui la tabella
-   esiste. `.table td` è `nowrap` in tutta la pagina (colonne di numeri): qui la sola cella
-   della voce torna a andare a capo. */
-function renderCoverageRow(item) {
-  const v    = coverageValue(item);
-  const note = coverageRow(item)?.note;
-  const fonte = v.scrittoAMano
-    ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span>${v.auto ? ` <span class="text-muted text-sm">al posto di ${fmtEUR(v.auto.value)}</span>` : ''}`
-    : (v.auto ? `<span class="text-muted text-sm">${v.auto.label}</span>`
-              : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : item.fonte === 'auto' ? 'Dato non disponibile in Finanza' : 'Da scrivere a mano'}</span>`);
+function renderCoverageSide(side, scen) {
+  const voci = COVERAGE_ITEMS.filter(i => i.side === side.key);
+  const fabbisogno = side.key === 'fabbisogno';
+  // Le dotazioni non dipendono dalla data: una cella sola, e tre celle identiche sarebbero solo
+  // rumore da leggere.
+  const colonne = fabbisogno ? scen
+    : [{ key: 'oggi', icon: '', anno: 'Valore', breve: 'oggi', anni: null }];
+  const tot = colonne.map(c => coverageTotaleA(side.key, c.anni));
   return `
-    <tr>
-      <td><div class="hstack gap-4">
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">${side.icon} ${side.title}</div>
+        <span class="text-muted text-sm">${side.sub}</span>
+      </div>
+      ${voci.map(i => renderCoverageRow(i, colonne)).join('')}
+      <div class="cov-item cov-tot">
+        <div class="fw-700">Totale ${side.title.toLowerCase()}${tot[0].mancanti
+          ? ` <span class="text-muted text-sm fw-600">· ${tot[0].mancanti} da compilare</span>` : ''}</div>
+        ${renderCoverageVals(colonne, tot.map(t => t.total), 'fw-700')}
+      </div>
+    </div>`;
+}
+
+// Le celle degli importi: una per scenario, ciascuna con la sua etichetta. Vanno a capo da sé
+// (`auto-fit` in `rem`, quindi la soglia cresce col testo) invece di scorrere di lato: un
+// numero che sta oltre il bordo è un numero che non si legge.
+function renderCoverageVals(colonne, valori, cls = 'fw-600') {
+  return `<div class="cov-vals">${colonne.map((c, k) => `
+    <div class="cov-val">
+      <div class="cov-val-label">${c.icon ? c.icon + ' ' : ''}${c.anno} · ${c.breve}</div>
+      <div class="mono ${cls}">${fmtEUR(valori[k])}</div>
+    </div>`).join('')}</div>`;
+}
+
+/* ⚠️ ✎ e gli altri comandi stanno in TESTA alla scheda e non in coda: su un telefono quel che
+   sta a destra finisce oltre il bordo, e per raggiungerlo bisognerebbe già sapere che c'è. */
+function renderCoverageRow(item, colonne) {
+  const base   = coverageBase(item);
+  const annuo  = coveragePeriodicita(item) === 'annuo';
+  const note   = coverageRow(item)?.note;
+  const hint   = item.hint ? item.hint() : '';
+  // ⚠️ La fonte si scrive solo quando dice qualcosa. Su una voce manuale «scritto a mano» è
+  // l'unica cosa che l'importo può essere, e ripeterlo su ogni riga smette di distinguere
+  // alcunché: il badge serve dove c'è un dato di Finanza che l'importo sta coprendo.
+  const fonte  = base.scrittoAMano
+    ? (base.auto ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span> <span class="text-muted text-sm">al posto di ${fmtEUR(base.auto.value)}</span>` : '')
+    : (base.auto ? `<span class="text-muted text-sm">${base.auto.label}</span>`
+                 : (item.fonte === 'manuale' ? '' : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : 'Dato non disponibile in Finanza'}</span>`));
+  const rival = coverageRivalutazione(item);
+  return `
+    <div class="cov-item">
+      <div class="hstack gap-4" style="flex-wrap:wrap">
         <button class="btn-icon" data-action="edit-coverage" data-side="${item.side}" data-key="${item.key}" title="Compila / modifica">✎</button>
-        ${item.prompt ? `<button class="btn-icon" data-action="coverage-prompt" data-key="${item.key}" title="Prompt per l'analisi con l'IA">💬</button>` : ''}
-        ${v.scrittoAMano && v.auto ? `<button class="btn-icon" data-action="coverage-reset" data-side="${item.side}" data-key="${item.key}" title="Torna al dato di Finanza">↺</button>` : ''}
-      </div></td>
-      <td class="mono text-right fw-600">${fmtEUR(v.value)}</td>
-      <td style="white-space:normal;min-width:11ch">
-        <div class="fw-600">${item.icon} ${item.label}</div>
-        ${item.hint ? `<div class="text-muted text-sm">${item.hint}</div>` : ''}
-        ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
-      </td>
-      <td>${fonte}</td>
-    </tr>`;
+        ${item.prompt ? `<button class="btn-icon" data-action="coverage-prompt" data-key="${item.prompt}" title="Prompt per l'analisi con l'IA">💬</button>` : ''}
+        ${base.scrittoAMano && base.auto ? `<button class="btn-icon" data-action="coverage-reset" data-side="${item.side}" data-key="${item.key}" title="Torna al dato di Finanza">↺</button>` : ''}
+        <span class="fw-600">${item.icon} ${item.label}</span>
+      </div>
+      ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno${rival ? `, +${String(rival).replace('.', ',')}% l'anno` : ', senza rivalutazione'}</div>` : ''}
+      ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
+      ${fonte ? `<div>${fonte}</div>` : ''}
+      ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
+      ${renderCoverageVals(colonne, colonne.map(c => coverageValoreA(item, c.anni)))}
+    </div>`;
+}
+
+// Spunto per il tasso di rivalutazione: la media del FOI degli ultimi anni. ⚠️ È uno spunto e
+// non il tasso: l'indice è storico e gli anni da rivalutare sono tutti futuri — usarlo come se
+// fosse una previsione sarebbe leggere il passato per il domani senza dirlo.
+function coverageFoiMedia(anni = 10) {
+  const idx = (S.foiIndex || []).filter(r => r.value != null).slice().sort((a, b) => a.year - b.year);
+  if (idx.length < 2) return null;
+  const ultimi = idx.slice(-(anni + 1));
+  const primo = ultimi[0], fine = ultimi[ultimi.length - 1];
+  const a = parseFloat(primo.value), b = parseFloat(fine.value);
+  // ⚠️ Gli anni sono la distanza fra i due anni, non il numero di righe: l'indice può avere
+  // buchi, e contando le righe due valori a dieci anni di distanza darebbero il 18% invece
+  // dell'1,7% — un tasso dieci volte più alto, e plausibile abbastanza da non insospettire.
+  const n = fine.year - primo.year;
+  if (!(a > 0) || !(b > 0) || n < 1) return null;
+  return (Math.pow(b / a, 1 / n) - 1) * 100;
 }
 
 function openCoverageModal(side, key) {
   const item = COVERAGE_ITEMS.find(i => i.side === side && i.key === key);
   if (!item) return;
-  const row  = coverageRow(item);
-  const v    = coverageValue(item);
+  const row   = coverageRow(item);
+  const base  = coverageBase(item);
+  const per   = coveragePeriodicita(item);
+  const rival = coverageRivalutazione(item);
+  const foi   = coverageFoiMedia();
   const assetOptions = S.otherAssets
     .filter(a => a.asset_type !== 'danaro_rosa')
     .map(a => `<option value="${a.id}" ${row?.linked_other_asset_id === a.id ? 'selected' : ''}>${esc(a.title || a.asset_type)} · ${fmtEUR(parseFloat(a.value))}</option>`)
@@ -3924,13 +4092,28 @@ function openCoverageModal(side, key) {
           ${assetOptions}
         </select>
       </div>` : ''}
+      ${item.fonte === 'manuale' ? `
       <div class="form-group">
-        <label class="form-label">Importo (€)</label>
+        <label class="form-label">Come si conta</label>
+        <select name="periodicity" class="form-input form-select">
+          <option value="una_tantum" ${per === 'una_tantum' ? 'selected' : ''}>Una volta sola — un capitale, uguale su tutte e tre le date</option>
+          <option value="annuo"      ${per === 'annuo'      ? 'selected' : ''}>Ogni anno — sommato fino alla data di ciascuno scenario</option>
+        </select>
+      </div>` : ''}
+      <div class="form-group">
+        <label class="form-label">Importo${per === 'annuo' ? ' all\'anno' : ''} (€)</label>
         <input name="amount" type="number" step="any" class="form-input mono"
                placeholder="${item.fonte === 'manuale' ? 'vuoto = dato assente' : 'vuoto = vale il dato di Finanza'}"
                value="${row?.amount ?? ''}" />
-        ${v.auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(v.auto.value)}</strong> (${v.auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
+        ${base.auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(base.auto.value)}</strong> (${base.auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
       </div>
+      ${per === 'annuo' || item.fonte === 'manuale' ? `
+      <div class="form-group">
+        <label class="form-label">Rivalutazione annua (%)</label>
+        <input name="revaluation_pct" type="number" step="any" min="0" class="form-input mono"
+               placeholder="vuoto = ${String(item.rivalutazione || 0).replace('.', ',')} %" value="${row?.revaluation_pct ?? ''}" />
+        <p class="text-muted text-sm" style="margin-top:6px">Conta solo se la voce si somma ogni anno. 0 = nessuna rivalutazione.${foi != null ? ` Spunto: il FOI degli ultimi dieci anni è cresciuto in media del <strong>${foi.toFixed(1).replace('.', ',')} %</strong> all'anno — ma è passato, e questi anni sono futuri.` : ''}</p>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Nota</label>
         <textarea name="note" class="form-input" rows="2" placeholder="Opzionale">${esc(row?.note || '')}</textarea>
@@ -3941,11 +4124,14 @@ function openCoverageModal(side, key) {
       </div>
     </form>
   `, async data => {
-    await saveCoverage(item, {
+    const campi = {
       amount: data.amount === '' ? null : parseFloat(data.amount),
-      linked_other_asset_id: item.fonte === 'asset' ? (data.linked_other_asset_id || null) : null,
       note: (data.note || '').trim() || null,
-    });
+    };
+    if (item.fonte === 'asset')   campi.linked_other_asset_id = data.linked_other_asset_id || null;
+    if ('periodicity' in data)      campi.periodicity = data.periodicity;
+    if ('revaluation_pct' in data)  campi.revaluation_pct = data.revaluation_pct === '' ? null : parseFloat(data.revaluation_pct);
+    await saveCoverage(item, campi);
     closeModal();
     render();
   });
@@ -3953,15 +4139,18 @@ function openCoverageModal(side, key) {
 
 async function saveCoverage(item, fields) {
   const row = coverageRow(item);
+  // Quello che il chiamante non nomina resta com'era: il ↺ tocca l'importo e non deve portarsi
+  // via l'asset collegato, la periodicità o la nota.
+  const tieni = (k, def = null) => (k in fields ? fields[k] : (row?.[k] ?? def));
   await sbUpsert('fnz_coverage_items', {
     user_id: S.session.user.id,
     side: item.side,
     item_key: item.key,
-    // Quello che il chiamante non nomina resta com'era: il ↺ tocca l'importo e non deve
-    // portarsi via l'asset collegato o la nota.
-    amount: 'amount' in fields ? fields.amount : (row?.amount ?? null),
-    linked_other_asset_id: 'linked_other_asset_id' in fields ? fields.linked_other_asset_id : (row?.linked_other_asset_id ?? null),
-    note: 'note' in fields ? fields.note : (row?.note ?? null),
+    amount: tieni('amount'),
+    linked_other_asset_id: tieni('linked_other_asset_id'),
+    periodicity: tieni('periodicity'),
+    revaluation_pct: tieni('revaluation_pct'),
+    note: tieni('note'),
     updated_at: new Date().toISOString(),
   }, 'user_id,side,item_key');
   await loadCoverage();
@@ -3976,16 +4165,23 @@ async function resetCoverageAmount(side, key) {
 }
 
 /* ⚠️ Il prompt si scrive qui e non a mano ogni volta: una domanda posta bene contiene i numeri
-   che la pagina già conosce (mutuo residuo, fabbisogno, dotazioni), e riscriverli a memoria in
-   una chat è il modo più semplice di far ragionare l'IA su cifre sbagliate. Il popup mostra il
-   testo e lo copia: l'analisi si fa dove si preferisce. */
+   che la pagina già conosce (le tre date, il fabbisogno voce per voce, le dotazioni), e
+   riscriverli a memoria in una chat è il modo più semplice di far ragionare l'IA su cifre
+   sbagliate. Il popup mostra il testo e lo copia: l'analisi si fa dove si preferisce. */
 const COVERAGE_PROMPTS = {
-  universita: () => `Fammi un'analisi dettagliata del costo di mantenimento di una figlia fuori sede
-per studi universitari in Europa, su un orizzonte di 7 anni (laurea triennale + magistrale/specializzazione).
+  universita: () => {
+    const u = adaUniversita();
+    return `Fammi un'analisi dettagliata del costo di mantenimento di mia figlia fuori sede per studi
+universitari in Europa, su un orizzonte di ${u.anni} anni (laurea triennale + magistrale/specializzazione).
+
+Quando comincia: sta frequentando la ${ADA_SCUOLA.classe}ª superiore nell'anno scolastico
+${ADA_SCUOLA.annoScolastico}/${String(ADA_SCUOLA.annoScolastico + 1).slice(-2)}, quindi le mancano ${u.mancano} anni di scuola e l'università parte da
+settembre ${u.inizio}, per finire nel ${u.fine}. Tienine conto nella rivalutazione: i prezzi di allora non sono
+quelli di oggi.
 
 Confronta le principali città universitarie europee (indicativamente: Milano, Bologna, Roma, Madrid,
 Barcellona, Lisbona, Vienna, Monaco, Berlino, Amsterdam, Parigi, Dublino, Londra, Copenaghen) e per
-ciascuna dammi il costo ANNUO e il costo TOTALE sui 7 anni, in euro, distinguendo queste voci:
+ciascuna dammi il costo ANNUO e il costo TOTALE sui ${u.anni} anni, in euro, distinguendo queste voci:
 
 - alloggio (posto letto in condivisione e monolocale, indica entrambi);
 - vitto e spesa quotidiana;
@@ -3998,63 +4194,70 @@ ciascuna dammi il costo ANNUO e il costo TOTALE sui 7 anni, in euro, distinguend
 
 Poi:
 1. una tabella riassuntiva delle città ordinate dalla più economica alla più cara;
-2. il totale sui 7 anni in euro di oggi e rivalutato con un'inflazione del 2% annuo;
+2. il totale sui ${u.anni} anni in euro di oggi e rivalutato con un'inflazione del 2% annuo, tenendo conto che
+   la spesa comincia nel ${u.inizio};
 3. quanto bisognerebbe accantonare OGGI, in un'unica soluzione, per coprire quel totale, ipotizzando
    un rendimento reale netto dell'1,5% e del 3% annuo (dammi entrambi gli scenari);
-4. in alternativa, quanto accantonare ogni mese da qui all'inizio degli studi;
+4. in alternativa, quanto accantonare ogni mese da qui a settembre ${u.inizio};
 5. quali borse di studio, agevolazioni per reddito (ISEE), alloggi pubblici e programmi Erasmus
    possono abbassare quel conto, e di quanto indicativamente.
 
-Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre sono stime.`,
+Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre sono stime.`;
+  },
 
   assicurazione: () => {
-    const eur  = n => n == null ? 'da definire' : fmtEUR(n);
-    const riga = i => `- ${i.label}: ${eur(coverageValue(i).value)}`;
-    // ⚠️ La voce dell'assicurazione resta fuori dal proprio prompt: il capitale da assicurare è
-    // quello che si sta chiedendo, e metterlo fra i dati di partenza vorrebbe dire farsi
-    // ricalcolare una cifra che si è già scritta da soli.
-    const vociFab = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
-    const vociDot = COVERAGE_ITEMS.filter(i => i.side === 'dotazione');
-    const conta   = vv => ({
-      total:    vv.map(coverageValue).reduce((s, v) => s + (v.value || 0), 0),
-      mancanti: vv.map(coverageValue).filter(v => v.value == null).length,
-    });
-    const fab = conta(vociFab);
-    const dot = conta(vociDot);
+    const eur   = n => n == null ? 'da definire' : fmtEUR(n);
+    const scen  = coverageScenarios();
+    const conti = scen.map(coverageScopertura);
+    const colonna = s => `${s.label} (${s.date ? fmtDate(s.date) : 'data da definire'}${s.anni != null ? `, fra ${s.anni.toFixed(1).replace('.', ',')} anni` : ''})`;
+    const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s.anni))}`;
+    const blocco = i => `- ${i.label}${coveragePeriodicita(i) === 'annuo'
+        ? ` — ${eur(coverageBase(i).value)} all'anno, rivalutati del ${String(coverageRivalutazione(i)).replace('.', ',')}% annuo:` : ' (una volta sola):'}
+${scen.map(s => voce(i, s)).join('\n')}`;
     return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano:
 una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia.
 
-Questo è il quadro che ho già messo a fuoco.
+Questo è il quadro che ho già messo a fuoco. Il punto è che il fabbisogno non è un numero solo: dipende
+da quando smetto di lavorare, e gli scenari sono tre.
 
-FABBISOGNO — quello che servirebbe se io venissi a mancare o non potessi più lavorare
-(la copertura assicurativa non è in elenco: è quella che ti sto chiedendo di dimensionare):
-${vociFab.map(riga).join('\n')}
-Totale fabbisogno: ${fmtEUR(fab.total)}${fab.mancanti ? ` (${fab.mancanti} voci ancora da quantificare)` : ''}
+LE TRE DATE:
+${scen.map(s => `- ${colonna(s)}`).join('\n')}
 
-DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi:
-${vociDot.map(riga).join('\n')}
-Totale dotazioni: ${fmtEUR(dot.total)}${dot.mancanti ? ` (${dot.mancanti} voci ancora da quantificare)` : ''}
+FABBISOGNO — quello che servirebbe se io venissi a mancare o non potessi più lavorare, contato fino a
+ciascuna delle tre date (la copertura assicurativa non è in elenco: è quella che ti sto chiedendo di
+dimensionare):
+${COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno').map(blocco).join('\n')}
 
-SCOPERTURA: ${fmtEUR(fab.total - dot.total)}
+Totale fabbisogno:
+${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].fab.total)}${conti[k].fab.mancanti ? ` (${conti[k].fab.mancanti} voci ancora da quantificare)` : ''}`).join('\n')}
+
+DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi (valori di oggi, non proiettati):
+${COVERAGE_ITEMS.filter(i => i.side === 'dotazione').map(i => `- ${i.label}: ${eur(coverageValoreA(i, null))}`).join('\n')}
+Totale dotazioni: ${fmtEUR(conti[0].dot.total)}${conti[0].dot.mancanti ? ` (${conti[0].dot.mancanti} voci ancora da quantificare)` : ''}
+
+SCOPERTURA, cioè quello che l'assicurazione dovrebbe coprire:
+${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].scopertura)}`).join('\n')}
 
 Dati miei da completare prima di rispondere, chiedimeli se ti servono: età, stato di salute, se fumo,
 professione e reddito annuo netto, età e situazione di coniuge e figlia, eventuali coperture già in essere
 (polizze aziendali, CCNL, assicurazione legata al mutuo).
 
 Quello che ti chiedo:
-1. quale capitale TCM ha senso assicurare, partendo dalla scopertura qui sopra: spiega quali voci del
-   fabbisogno vanno coperte per intero e quali no, e perché;
-2. per quanti anni tenere la copertura (durata della polizza) e se conviene capitale costante o decrescente,
-   viste le voci legate al mutuo e agli studi che si esauriscono nel tempo;
-3. la stessa cosa per l'invalidità permanente: quale capitale o rendita, quale soglia di invalidità
+1. quale capitale TCM ha senso assicurare in ciascuno dei tre scenari, partendo dalle scoperture qui
+   sopra: spiega quali voci del fabbisogno vanno coperte per intero e quali no, e perché;
+2. quale dei tre scenari conviene prendere come riferimento per la polizza, e perché;
+3. per quanti anni tenere la copertura e se conviene capitale costante o decrescente, viste le voci
+   legate al mutuo e agli studi che si esauriscono nel tempo — e come far combaciare la scadenza della
+   polizza con la data che avrò scelto;
+4. la stessa cosa per l'invalidità permanente: quale capitale o rendita, quale soglia di invalidità
    (franchigia), e la differenza fra copertura da infortunio e da malattia — quest'ultima è quella che
    di solito manca;
-4. una stima del premio annuo indicativo in Italia per quei capitali, per fasce d'età (35, 40, 45, 50 anni),
+5. una stima del premio annuo indicativo in Italia per quei capitali, per fasce d'età (35, 40, 45, 50 anni),
    fumatore e non fumatore;
-5. le clausole su cui stare attenti nei contratti italiani: questionario sanitario e dichiarazioni,
+6. le clausole su cui stare attenti nei contratti italiani: questionario sanitario e dichiarazioni,
    carenze, esclusioni, rivalutazione, vincolo a favore della banca sul mutuo, tassazione e detraibilità
    fiscale dei premi, designazione dei beneficiari;
-6. se conviene una polizza sola o due contratti separati, e se ha senso affiancare una copertura
+7. se conviene una polizza sola o due contratti separati, e se ha senso affiancare una copertura
    temporanea caso morte a capitale decrescente legata al mutuo.
 
 Dammi i numeri in euro e spiegami il ragionamento che c'è dietro ciascuno, non solo il risultato.`;
@@ -4062,10 +4265,12 @@ Dammi i numeri in euro e spiegami il ragionamento che c'è dietro ciascuno, non 
 };
 
 function openCoveragePromptModal(key) {
-  const item  = COVERAGE_ITEMS.find(i => i.prompt === key);
+  const titolo = key === 'assicurazione'
+    ? COVERAGE_ASSICURAZIONE.label
+    : (COVERAGE_ITEMS.find(i => i.prompt === key)?.label || '');
   const testo = COVERAGE_PROMPTS[key]?.();
-  if (!item || !testo) return;
-  openModal(`💬 ${item.label}`, `
+  if (!testo) return;
+  openModal(`💬 ${titolo}`, `
     <p class="text-muted text-sm mb-12">Copia questo testo e incollalo in una chat con l'IA che preferisci.
     I numeri che Finanza già conosce sono dentro il prompt: non riscriverli a memoria.</p>
     <textarea id="coverage-prompt-text" class="form-input mono" rows="16" readonly style="font-size:.72rem">${esc(testo)}</textarea>
@@ -4092,7 +4297,6 @@ async function copyCoveragePrompt(btn) {
   btn.textContent = '✓ Copiato';
   setTimeout(() => { btn.textContent = orig; }, 1500);
 }
-
 /* ── Movimenti del conto di Rosa ──────────────────────────────
    Il conto si collega come tutti gli altri (Configurazione → 🏦 Banche e Conti) e si spunta
    come «🌹 Danaro di Rosa». Qui i movimenti si leggono e si archiviano in
