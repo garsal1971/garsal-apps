@@ -144,7 +144,7 @@ internal fun VistaDiario(stato: CalorieState, vm: CalorieViewModel) {
         AlertDialog(
             onDismissRequest = { rigaDaTogliere = null },
             title = { Text("Togliere dal diario?") },
-            text = { Text("«${riga.name}» — ${kgIt(riga.grams)} g, ${kcalIt(riga.kcalRiga)} kcal.") },
+            text = { Text("«${riga.name}» — ${kgIt(riga.grams)} ${riga.misura}, ${kcalIt(riga.kcalRiga)} kcal.") },
             confirmButton = {
                 TextButton(onClick = {
                     vm.elimina(riga)
@@ -374,7 +374,7 @@ private fun RigaAlimento(riga: RigaDiario, onCambia: () -> Unit, onTogli: () -> 
                 Text(it, color = Palette.muted, style = MaterialTheme.typography.labelMedium)
             }
             Text(
-                "${kgIt(riga.grams)} g · ${kcalIt(riga.kcal)} kcal/100 g",
+                "${kgIt(riga.grams)} ${riga.misura} · ${kcalIt(riga.kcal)} kcal/100 ${riga.misura}",
                 color = Palette.muted,
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -424,7 +424,10 @@ private fun DialogoGrammi(riga: RigaDiario, onAnnulla: () -> Unit, onConferma: (
                 OutlinedTextField(
                     value = testo,
                     onValueChange = { testo = it },
-                    label = { Text("Quanti grammi?") },
+                    // ⚠️ L'unità è quella congelata sulla RIGA, non quella
+                    // dell'alimento di adesso: correggere la quantità di una riga
+                    // vecchia non deve cambiare in che unità era stata segnata.
+                    label = { Text(if (riga.misura == "ml") "Quanti millilitri?" else "Quanti grammi?") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                 )

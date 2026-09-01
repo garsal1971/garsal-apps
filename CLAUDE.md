@@ -397,8 +397,8 @@ di dire la stessa cosa.
 | Table | Purpose |
 |---|---|
 | `al_profile` | Una riga per utente. ⚠️ Di questa tabella si usa **solo `activity`** (fattore LAF): data di nascita, altezza e sesso si leggono da `cm_profile` |
-| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100 g**. `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama. `verified` = i numeri li ha guardati l'utente |
-| `al_log` | Le righe del diario: `day`, `meal`, `grams`, e i valori per 100 g **congelati sulla riga** |
+| `al_foods` | Gli alimenti conosciuti. `source` `'base'` (voci generiche di partenza) \| `'off'` (Open Food Facts, col `barcode`) \| `'usda'` \| `'manuale'`; valori **per 100** di `unit` (`'g'` \| `'ml'`). `default_grams` è la porzione abituale e `portion_label`/`portion_label_plural` come si chiama. `verified` = i numeri li ha guardati l'utente |
+| `al_log` | Le righe del diario: `day`, `meal`, `grams`, `unit`, e i valori per 100 **congelati sulla riga** |
 | `al_days` | Il target di calorie di una giornata, **congelato**, con gli ingredienti del conto (`weight_kg`, `bmr`, `tdee`, `deficit_kcal`) |
 
 ⚠️ **I dati anagrafici stanno in `cm_profile` e da qui si leggono soltanto.** Chiederli di nuovo
@@ -486,6 +486,40 @@ singolare, e senza nessuna etichetta si legge «porzione / porzioni», vero per 
 ⚠️ Un'etichetta **non si inventa**: chi la legge scritta se la crede, e sono le calorie della
 giornata — `20260830120000_al_porzione_etichetta.sql` ne compila 17 sulle 44 voci base, e le
 altre (petto di pollo, insalata, zucchine) restano senza perché «1 porzione» è già quel che sono.
+
+⚠️ **`unit` dice se quell'alimento si pesa o si versa** (`20260901120000_al_unita_g_ml.sql`):
+`'g'` = i valori sono per 100 g, `'ml'` = per 100 ml, che è come l'etichetta scrive il latte,
+l'olio, il vino e una spremuta. **Non è una conversione e nessuna densità entra in gioco**: il
+conto resta la stessa moltiplicazione — 250 ml × (kcal per 100 ml) / 100 — e convertire i ml in
+grammi vorrebbe dire inventare un numero (l'olio sta a 0,91, il miele a 1,42) per rimoltiplicarlo
+poi per valori che quella densità l'avevano già dentro. Le colonne restano `*_100g` e `grams` coi
+loro nomi: dicono «per cento unità di questo alimento», e `unit` dice quali — rinominarle sarebbe
+una migration che tocca due implementazioni e una Edge Function senza cambiare nessun numero.
+
+⚠️ **Sta anche su `al_log`, e non è un doppione**: la riga porta già i valori congelati, e
+l'unità è parte di quei valori — senza, cambiare un alimento da ml a g (o cancellarlo, che porta
+`food_id` a NULL) riscriverebbe all'indietro l'etichetta di righe già segnate. È la stessa scelta
+dei valori nutrizionali sulla riga, un passo più in là. ⚠️ **`NOT NULL DEFAULT 'g'` e nessun
+backfill «intelligente»**: indovinare i liquidi dal nome marcherebbe in ml anche il latte in
+polvere e l'olio di semi di una tabella di composizione, che in grammi ci stanno di proposito.
+
+La scelta si fa **da 🍎 Alimenti → ✏️** (i due pulsanti *⚖️ Grammi* / *🥛 Millilitri*), e da lì
+in poi si legge dappertutto: la finestra della porzione chiede «Quantità (millilitri)» invece di
+«Peso (grammi)» e offre i tagli dei liquidi (`ML_RAPIDI`: 50, 100, 150, 200, 250, 330, 500 — un
+bicchiere, una lattina, una bottiglietta), le righe del diario si leggono «250 ml», e nella
+tabella di 🍎 Alimenti un liquido porta il badge `100 ml` accanto al nome. ⚠️ **Il badge compare
+solo sui liquidi**, per la stessa ragione del ✅: i grammi sono quel che è quasi tutto, e un «g»
+su ogni riga smetterebbe di distinguere qualcosa.
+
+⚠️ **Nel form dell'alimento le due scelte vicine sono diverse e si comportano al contrario**: la
+misura (g/ml) è una proprietà dell'alimento e **si riapre su quel che c'è in archivio**; l'unità
+dei valori (100 / 1 porzione) è una dichiarazione sui numeri scritti adesso e **riparte sempre da
+100** — ricordarla farebbe dividere i valori una seconda volta al primo salvataggio.
+
+⚠️ **L'unità di un prodotto di rete la legge `al-food-search`, non la pagina**: viene da
+`product_quantity_unit`, `serving_quantity_unit` o dalla quantità in chiaro («1 l», «33 cl»),
+cioè è **scritta sul prodotto** e non dedotta dal nome. Senza nessuna unità dichiarata resta
+`'g'`. È la stessa regola per cui la normalizzazione vive solo nella Edge Function.
 
 ⚠️ **`verified` non è una seconda `source`, ed è ortogonale a lei**
 (`20260831120000_al_foods_verified.sql`): `source` dice **da dove viene** un numero, `verified`
@@ -1703,7 +1737,11 @@ momento in cui lo si mangia, non la sera al computer.
 **Restano sul web 🍎 Alimenti e ⚙️ Impostazioni**, e non è una mancanza: curare il catalogo,
 configurare i pasti e scegliere il fattore di attività sono cose che si fanno da seduti e una
 volta sola. Il nativo quelle scelte le **legge** — `cm_settings.al_pasti`, `al_profile.activity`,
-`cm_profile` — e non le può cambiare. Restano di là anche il **codice a barre** (qui non c'è né
+`cm_profile`, e `al_foods.unit` — e non le può cambiare. ⚠️ L'unità è fra queste: un liquido si
+segna in ml anche dal telefono (la casella dice «Quantità (millilitri)» e i tagli sono quelli dei
+liquidi), ma **quale alimento sia un liquido si decide di là**. Il `put("unit", …)` sulle righe
+del diario però c'è, e non è facoltativo: senza, una riga segnata dal telefono nascerebbe in
+grammi per il valore di DEFAULT della colonna, cioè con un'etichetta sbagliata e nessun errore. Restano di là anche il **codice a barre** (qui non c'è né
 `BarcodeDetector` né una fotocamera accesa per questo) e lo *scrivilo a mano*, che è il form di
 🍎 Alimenti: sono le due strade per mettere in dispensa. Come sul web, la **dieta non si decide
 qui**: l'obiettivo si crea in «Ti pisasti?» e da questa parte si legge soltanto.

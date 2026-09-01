@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calorie v1.17.3</title>
+  <title>Calorie v1.18.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -122,6 +122,10 @@
        tabella che scorre di lato sta oltre il bordo destro, e un segno che si vede solo
        trascinando non si vede. */
     .segno-verificato { font-size: .8em; vertical-align: middle; }
+    /* «100 ml» non è né una fonte né un giudizio sul numero: dice in che unità è scritto. Perciò
+       non prende nessuno dei colori pieni della fila dei badge — è un contorno, che si legge come
+       un'etichetta e non come una quarta fonte. */
+    .badge-unita { background: #fff; color: #0369a1; border: 1px solid #7dd3fc; font-size: .68rem; }
     .chart-wrap { height: 260px; }
     .chart-wrap canvas { max-height: 260px; }
     .chart-wrap-sm { height: 200px; }
@@ -339,8 +343,8 @@
    scelta di ps_weight_tracking.target_weight.
    ═══════════════════════════════════════════════════════════════ */
 
-var APP_VERSION = 'v1.17.3';
-var BUILD_TIME  = '2026-08-31T18:25:00Z';
+var APP_VERSION = 'v1.18.0';
+var BUILD_TIME  = '2026-09-01T09:10:00Z';
 console.log('%c CALORIE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#16a34a;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -524,6 +528,26 @@ const num = n => (n == null || isNaN(n)) ? null : +n;
 const fmtKcal = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('it-IT');
 const fmtG = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 10) / 10).toLocaleString('it-IT');
 const fmtKg = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 10) / 10).toLocaleString('it-IT', { minimumFractionDigits: 1 });
+
+/* ── Grammi o millilitri ─────────────────────────────────────────
+   Il latte, l'olio, la birra e una spremuta non si pesano: si versano, e la loro etichetta
+   scrive i valori «per 100 ml». L'unità dice soltanto **su che base** sono scritti quei numeri,
+   e il conto resta la stessa moltiplicazione — 250 ml × (kcal per 100 ml) / 100.
+
+   ⚠️ Nessuna densità, mai. Convertire i ml in grammi vorrebbe dire inventare un numero (l'olio
+   sta a 0,91, il miele a 1,42) per poi rimoltiplicarlo per valori che quella densità l'avevano
+   già dentro: due errori invece di zero. Le colonne restano `*_100g` e `grams` — «per cento
+   unità di questo alimento» — e `unit` dice quali.
+
+   ⚠️ Si legge SEMPRE da qui e mai con un `x.unit` sparso: un valore inatteso (una riga di un
+   client più vecchio, un NULL) deve leggersi come grammi, che è quel che l'archivio ha sempre
+   voluto dire, invece di far comparire un'unità inventata accanto a un numero. */
+const unitaDi   = x => (x && x.unit === 'ml') ? 'ml' : 'g';
+const simboloU  = u => u === 'ml' ? 'ml' : 'g';
+const fmtQta    = (n, u) => fmtG(n) + ' ' + simboloU(u);
+const per100    = u => 'per 100 ' + simboloU(u);
+// Un liquido non ha un «peso» da scrivere in un'etichetta di campo: si chiede quanto se n'è bevuto.
+const nomeQta   = u => u === 'ml' ? 'Quantità (millilitri)' : 'Peso (grammi)';
 // Il ritmo di un tratto va a due decimali: a uno solo, 0,12 kg a settimana diventa «0,1» e un
 // tratto lento è indistinguibile da un tratto fermo.
 const fmtRitmo = n => (n == null || isNaN(n)) ? '—' : (Math.round(n * 100) / 100).toLocaleString('it-IT', { minimumFractionDigits: 2 });
@@ -1044,6 +1068,9 @@ async function salvaAlimentoDiRete(a) {
     kcal_100g: a.kcal_100g, proteins_100g: a.proteins_100g, fat_100g: a.fat_100g,
     sat_fat_100g: a.sat_fat_100g, carbs_100g: a.carbs_100g, sugars_100g: a.sugars_100g,
     fiber_100g: a.fiber_100g, salt_100g: a.salt_100g, default_grams: a.default_grams,
+    // L'unità arriva dalla Edge Function, che l'ha letta dalla confezione: un prodotto da mezzo
+    // litro entra in catalogo già in ml, senza che nessuno debba correggerlo dopo.
+    unit: unitaDi(a),
     updated_at: new Date().toISOString(),
   };
   if (esistente) {
@@ -1054,12 +1081,17 @@ async function salvaAlimentoDiRete(a) {
   return r;
 }
 
-// Aggiunge una riga al diario. I valori per 100 g si copiano SULLA RIGA: correggere domani le
-// calorie di un alimento non deve riscrivere quel che si è mangiato oggi.
+// Aggiunge una riga al diario. I valori per 100 g (o per 100 ml) si copiano SULLA RIGA:
+// correggere domani le calorie di un alimento non deve riscrivere quel che si è mangiato oggi.
+//
+// ⚠️ L'unità si congela con loro, e non è un doppione di `al_foods.unit`: senza, cambiare un
+// alimento da ml a g — o cancellarlo, che porta `food_id` a NULL — riscriverebbe all'indietro
+// l'etichetta di righe già segnate, o gliela toglierebbe del tutto.
 async function aggiungiAlDiario({ giorno, meal, alimento, grammi, foodId }) {
   const riga = {
     day: giorno, meal, food_id: foodId || null,
     name: alimento.name, brand: alimento.brand || null, grams: grammi,
+    unit: unitaDi(alimento),
   };
   CAMPI_NUTRIENTI.forEach(c => { riga[c] = num(alimento[c]); });
   await congelaGiorno(giorno);
@@ -1091,7 +1123,7 @@ async function ricopiaDalGiornoPrima(giorno) {
   await congelaGiorno(giorno);
   const nuove = righe.map(r => {
     const n = { day: giorno, meal: r.meal, food_id: r.food_id || null,
-                name: r.name, brand: r.brand || null, grams: r.grams };
+                name: r.name, brand: r.brand || null, grams: r.grams, unit: unitaDi(r) };
     CAMPI_NUTRIENTI.forEach(c => { n[c] = num(r[c]); });
     return n;
   });
@@ -1103,8 +1135,10 @@ async function ricopiaDalGiornoPrima(giorno) {
    CONTI SULLE RIGHE DEL DIARIO
    ═══════════════════════════════════════════════════════════════ */
 
-// Una riga porta i valori per 100 g e i grammi: le calorie sono la moltiplicazione. Si fa qui e
+// Una riga porta i valori per 100 e la quantità: le calorie sono la moltiplicazione. Si fa qui e
 // in un posto solo, così non c'è modo che due schermate diano due numeri per la stessa riga.
+// ⚠️ L'unità non entra nel conto e non deve entrarci: 250 ml × (kcal per 100 ml) / 100 è già
+// giusto: dice su che base sono scritti i valori, non quanto pesa quel che si è versato.
 const perRiga = (r, campo) => (num(r[campo]) == null ? null : +r[campo] * (+r.grams) / 100);
 const kcalDi = r => perRiga(r, 'kcal_100g') || 0;
 
@@ -1275,12 +1309,13 @@ function renderDiario() {
       h += '<div class="meal-empty">Niente ancora.</div>';
     } else {
       rp.forEach(r => {
+        const u = unitaDi(r);
         h += `<div class="food-row">
-          <button class="btn-icon" data-action="modifica-riga" data-id="${r.id}" title="Cambia i grammi">✏️</button>
+          <button class="btn-icon" data-action="modifica-riga" data-id="${r.id}" title="Cambia la quantità">✏️</button>
           <button class="btn-icon btn-icon-danger" data-action="elimina-riga" data-id="${r.id}" title="Elimina">🗑</button>
           <div class="grow">
             <div class="food-name">${esc(r.name)}${r.brand ? ' <span class="text-muted text-xs">' + esc(r.brand) + '</span>' : ''}</div>
-            <div class="food-sub">${fmtG(r.grams)} g · ${fmtKcal(r.kcal_100g)} kcal/100 g</div>
+            <div class="food-sub">${fmtQta(r.grams, u)} · ${fmtKcal(r.kcal_100g)} kcal/100 ${simboloU(u)}</div>
           </div>
           <span class="food-kcal">${fmtKcal(kcalDi(r))}</span>
         </div>`;
@@ -1830,6 +1865,13 @@ const badgeFonte = f => `<span class="badge badge-src-${f.classe}" title="${esc(
 const segnoVerificato = a => a && a.verified
   ? ' <span class="segno-verificato" title="Dati verificati: i valori li hai controllati tu">✅</span>' : '';
 
+/* ⚠️ Il segno dell'unità compare SOLO sui liquidi, per la stessa ragione del ✅: i grammi sono
+   quel che è quasi tutto, e un «g» su ogni riga smetterebbe di distinguere qualcosa. Sta accanto
+   al nome e non in una colonna sua — l'ultima colonna di una tabella che scorre di lato sta
+   oltre il bordo destro. */
+const segnoUnita = a => unitaDi(a) === 'ml'
+  ? ' <span class="badge badge-unita" title="Liquido: i valori sono per 100 ml">100 ml</span>' : '';
+
 function renderAlimenti() {
   const q = (S.cercaAlimenti || '').trim().toLowerCase();
   // ⚠️ Il filtro è un AND col testo, non una ricerca a sé: «solo verificati» restringe quel che
@@ -1844,7 +1886,7 @@ function renderAlimenti() {
   <div class="view-header">
     <div>
       <div class="page-title">🍎 Alimenti</div>
-      <div class="page-sub">${S.foods.length} in archivio · ${nVerificati} verificati · i valori sono per 100 g</div>
+      <div class="page-sub">${S.foods.length} in archivio · ${nVerificati} verificati · i valori sono per 100 g, per 100 ml sui liquidi</div>
     </div>
     <div class="hstack gap-8 wrap">
       <button class="btn btn-outline btn-sm" data-action="importa-tabella">📄 Importa una tabella</button>
@@ -1888,7 +1930,7 @@ function renderAlimenti() {
           <button class="btn-icon btn-icon-danger" data-action="elimina-alimento" data-id="${f.id}" title="Elimina">🗑</button>
         </td>
         <td><button class="btn-icon" data-action="preferito" data-id="${f.id}" title="Preferito">${f.favorite ? '⭐' : '☆'}</button></td>
-        <td><div class="fw-600">${esc(f.name)}${segnoVerificato(f)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
+        <td><div class="fw-600">${esc(f.name)}${segnoVerificato(f)}${segnoUnita(f)}</div>${f.brand ? '<div class="text-xs text-muted">' + esc(f.brand) + '</div>' : ''}</td>
         <td class="text-right mono">${fmtKcal(f.kcal_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.fat_100g)}</td>
         <td class="text-right mono text-muted">${fmtG(f.sugars_100g)}</td>
@@ -1931,7 +1973,7 @@ function renderRisultatiOff() {
         ${iconaFonte(fonteDi(a, true))}
         <span class="grow">
           <span class="fw-600">${esc(a.name)}</span>${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
-          <span class="food-sub riga-fonte">${badgeFonte(fonteDi(a, true))}<span>${fmtKcal(a.kcal_100g)} kcal · grassi ${fmtG(a.fat_100g)} g · zuccheri ${fmtG(a.sugars_100g)} g per 100 g</span></span>
+          <span class="food-sub riga-fonte">${badgeFonte(fonteDi(a, true))}<span>${fmtKcal(a.kcal_100g)} kcal · grassi ${fmtG(a.fat_100g)} g · zuccheri ${fmtG(a.sugars_100g)} g ${per100(unitaDi(a))}</span></span>
         </span>
         <button class="btn btn-outline btn-sm" data-action="aggiungi-al-catalogo" data-off="${i}">➕ Aggiungi</button>
       </div>`).join('')}
@@ -2382,7 +2424,7 @@ function rigaRisultato(a, indiceOff) {
     <span class="grow">
       <span class="fw-600">${esc(a.name)}</span>
       ${a.brand ? '<span class="text-muted text-xs"> · ' + esc(a.brand) + '</span>' : ''}
-      <span class="food-sub riga-fonte">${badgeFonte(f)}${verif}<span>${fmtKcal(a.kcal_100g)} kcal/100 g</span></span>
+      <span class="food-sub riga-fonte">${badgeFonte(f)}${verif}<span>${fmtKcal(a.kcal_100g)} kcal/100 ${simboloU(unitaDi(a))}</span></span>
     </span>
     ${indiceOff == null && a.favorite ? '<span>⭐</span>' : ''}
   </button>`;
@@ -2431,6 +2473,11 @@ function cercaAlimento(q) {
    usano davvero — «due uova», «mezza pizza» — e una scaletta di multipli più fitta chiederebbe
    di leggere invece di far scegliere. */
 const GRAMMI_RAPIDI = [30, 50, 100, 125, 150, 200, 250];
+/* ⚠️ I tagli dei liquidi non sono quelli dei solidi: un bicchiere è 200 ml, una lattina 330, una
+   bottiglietta 500. La scaletta dei grammi (30, 125, 150…) su una bibita chiederebbe di leggere
+   ogni volta invece di far scegliere — sono gli stessi numeri, ma non sono le stesse quantità. */
+const ML_RAPIDI = [50, 100, 150, 200, 250, 330, 500];
+const rapidiDi = u => u === 'ml' ? ML_RAPIDI : GRAMMI_RAPIDI;
 
 /* I multipli della porzione di QUESTO alimento. Vuoto se l'alimento non ne ha una: una porzione
    inventata è peggio di nessuna porzione — chi la vede scritta le crede, e sono le calorie della
@@ -2455,6 +2502,9 @@ function porzioniDi(alimento) {
   const p = num(alimento && alimento.default_grams);
   if (p == null || p <= 0) return [];
   const uno = etichettaPorzione(alimento, false), tanti = etichettaPorzione(alimento, true);
+  // ⚠️ `default_grams` porta il NUMERO della porzione, non i grammi: per un liquido sono ml, e
+  // il nome della colonna resta quello che è per non rinominarla in due implementazioni e in una
+  // Edge Function senza cambiare nessun valore.
   return [
     { etichetta: '½ ' + uno, g: Math.round(p / 2) },
     { etichetta: '1 ' + uno, g: Math.round(p) },
@@ -2465,9 +2515,13 @@ function porzioniDi(alimento) {
 function openPorzione(alimento, meal, foodId) {
   const porz = porzioniDi(alimento);
   const g = porz.length ? porz[1].g : 100;
+  // Grammi o millilitri lo dice l'alimento, non questa finestra: chiedere ogni volta «è un
+  // liquido?» sarebbe una domanda a cui la risposta è sempre la stessa per lo stesso alimento.
+  // Si cambia da 🍎 Alimenti → ✏️, una volta sola, e da lì in poi si legge qui.
+  const u = unitaDi(alimento);
   // ⚠️ La scaletta fissa si toglie i valori che le porzioni già coprono: due pulsanti «50 g» uno
   // accanto all'altro sembrano due scelte diverse e non lo sono.
-  const rapidi = GRAMMI_RAPIDI.filter(v => !porz.some(x => x.g === v));
+  const rapidi = rapidiDi(u).filter(v => !porz.some(x => x.g === v));
   const dallaRete = !foodId;
   const fonte = fonteDi(alimento, dallaRete);
   const entraInCatalogo = dallaRete && FONTI_SALVABILI.includes(alimento.source);
@@ -2475,29 +2529,29 @@ function openPorzione(alimento, meal, foodId) {
     <div class="mb-16">
       <div class="fw-700 hstack gap-6" style="align-items:flex-start">${iconaFonte(fonte)}<span>${esc(alimento.name)}</span></div>
       ${alimento.brand ? '<div class="text-sm text-muted">' + esc(alimento.brand) + '</div>' : ''}
-      <div class="riga-fonte mt-4">${badgeFonte(fonte)}<span class="text-sm text-muted">${fmtKcal(alimento.kcal_100g)} kcal per 100 g${alimento.quantita ? ' · confezione ' + esc(alimento.quantita) : ''}</span></div>
+      <div class="riga-fonte mt-4">${badgeFonte(fonte)}<span class="text-sm text-muted">${fmtKcal(alimento.kcal_100g)} kcal ${per100(u)}${alimento.quantita ? ' · confezione ' + esc(alimento.quantita) : ''}</span></div>
       ${!dallaRete ? '' : entraInCatalogo
         ? '<div class="text-xs text-muted mt-4">Non è ancora fra i tuoi alimenti: lo aggiungo al catalogo insieme alla riga del diario, così la prossima volta è già qui.</div>'
         : '<div class="text-xs text-muted mt-4">I valori restano su questa riga del diario, ma il prodotto non entra nel catalogo: dovrai ricercarlo la prossima volta.</div>'}
     </div>
     <div class="form-group">
-      <label class="form-label" for="por-g">Peso (grammi)</label>
+      <label class="form-label" for="por-g">${nomeQta(u)}</label>
       <div class="hstack gap-8">
         <input type="number" class="form-input grow" id="por-g" step="1" min="1" max="5000" value="${g}" />
-        <button class="btn btn-outline btn-sm" data-action="azzera-grammi" title="Azzera il peso">↺</button>
+        <button class="btn btn-outline btn-sm" data-action="azzera-grammi" title="Azzera la quantità">↺</button>
       </div>
       ${porz.length ? `
-        <div class="form-hint">Porzione abituale: <strong>${esc(porz[1].etichetta)}</strong> · ${fmtG(porz[1].g)} g — il campo parte da lì.
+        <div class="form-hint">Porzione abituale: <strong>${esc(porz[1].etichetta)}</strong> · ${fmtQta(porz[1].g, u)} — il campo parte da lì.
           Ogni pulsante <strong>si somma</strong> a quel che c'è scritto; ↺ azzera.</div>
         <div class="hstack gap-6 wrap mt-8">
-          ${porz.map(v => `<button class="btn btn-porz btn-sm" data-action="grammi" data-g="${v.g}">${v.etichetta} · ${fmtG(v.g)} g</button>`).join('')}
+          ${porz.map(v => `<button class="btn btn-porz btn-sm" data-action="grammi" data-g="${v.g}">${v.etichetta} · ${fmtQta(v.g, u)}</button>`).join('')}
         </div>
-        <div class="form-hint mt-8">Oppure a peso:</div>` : `
-        <div class="form-hint">Per questo alimento non è scritta nessuna porzione abituale: parto da 100 g.
+        <div class="form-hint mt-8">Oppure ${u === 'ml' ? 'a volume' : 'a peso'}:</div>` : `
+        <div class="form-hint">Per questo alimento non è scritta nessuna porzione abituale: parto da 100 ${simboloU(u)}.
           La si scrive una volta sola da 🍎 Alimenti → ✏️, e da lì in poi la trovi qui.
           Ogni pulsante <strong>si somma</strong> a quel che c'è scritto; ↺ azzera.</div>`}
       <div class="hstack gap-6 wrap mt-8">
-        ${rapidi.map(v => `<button class="btn btn-outline btn-sm" data-action="grammi" data-g="${v}">${v} g</button>`).join('')}
+        ${rapidi.map(v => `<button class="btn btn-outline btn-sm" data-action="grammi" data-g="${v}">${v} ${simboloU(u)}</button>`).join('')}
       </div>
     </div>
     <div class="form-group">
@@ -2523,7 +2577,7 @@ function aggiornaAnteprimaPorzione() {
   if (!p || !el) return;
   const g = parseFloat($('por-g')?.value) || 0;
   const q = c => (num(p.alimento[c]) == null ? null : +p.alimento[c] * g / 100);
-  el.innerHTML = `<strong>${fmtKcal(q('kcal_100g'))} kcal</strong> per ${fmtG(g)} g`
+  el.innerHTML = `<strong>${fmtKcal(q('kcal_100g'))} kcal</strong> per ${fmtQta(g, unitaDi(p.alimento))}`
     + ` · grassi ${fmtG(q('fat_100g'))} g · zuccheri ${fmtG(q('sugars_100g'))} g · proteine ${fmtG(q('proteins_100g'))} g`;
   // Quale pulsante corrisponde a quel che c'è scritto nel campo. Si aggiorna anche scrivendo a
   // mano: la traccia deve seguire il valore, non il tocco, o dopo una correzione a tastiera
@@ -2533,23 +2587,29 @@ function aggiornaAnteprimaPorzione() {
   });
 }
 
-/* ── Per 100 g o per una porzione? ─────────────────────────────
-   ⚠️ In `al_foods` i valori stanno SEMPRE per 100 g, e questa scelta non cambia dove finiscono:
-   cambia solo come si leggono quelli che si scrivono qui, e la conversione si fa una volta sola,
-   al salvataggio. Non è un secondo modo di archiviare — una colonna «unità» sulla riga vorrebbe
-   dire che ogni conto della pagina (il diario, il target, il grafico, la Edge Function) deve
-   ricordarsi di guardarla, e il giorno che uno se ne dimentica il totale è sbagliato senza che
-   compaia nessun errore. Per 100 g è anche come li scrivono l'etichetta europea e le tabelle di
-   composizione, quindi un numero è già la sua percentuale in peso.
+/* ── Per 100 o per una porzione? ───────────────────────────────
+   ⚠️ In `al_foods` i valori stanno SEMPRE per 100 (grammi o millilitri, quel che dice `unit`), e
+   questa scelta non cambia dove finiscono: cambia solo come si leggono quelli che si scrivono
+   qui, e la conversione si fa una volta sola, al salvataggio. Non è un secondo modo di
+   archiviare — una base che cambia da riga a riga vorrebbe dire che ogni conto della pagina (il
+   diario, il target, il grafico, la Edge Function) deve ricordarsi di guardarla, e il giorno che
+   uno se ne dimentica il totale è sbagliato senza che compaia nessun errore. Per 100 è anche come
+   li scrivono l'etichetta europea e le tabelle di composizione, quindi un numero è già la sua
+   percentuale.
+
+   ⚠️ `unit` è un'altra cosa e non contraddice niente di tutto questo: dice se quel 100 sono
+   grammi o millilitri, cioè **come si chiama** la quantità, non su quanta se ne conta. Il conto
+   resta la stessa moltiplicazione e nessuna densità entra in gioco.
 
    Serve perché molte etichette danno i valori **per confezione o per porzione**, e ricopiarli
    dividendo a mente è il modo migliore per sbagliare: la «Pizza condita» stava in archivio a
    1225 kcal per 100 g — impossibile, il grasso puro ne fa 899 — perché quei numeri erano
    dell'intera pizza, e nessuno se n'era accorto perché la riga sembrava una riga qualunque.
 
-   ⚠️ La scelta parte SEMPRE da «100 g», anche riaprendo un alimento salvato: è quel che c'è
+   ⚠️ La scelta parte SEMPRE da «100», anche riaprendo un alimento salvato: è quel che c'è
    davvero in archivio. Ricordarla sulla riga la farebbe riaprire su «porzione» e un salvataggio
-   senza toccare niente dividerebbe i valori una seconda volta. */
+   senza toccare niente dividerebbe i valori una seconda volta. È la differenza con la misura
+   (g/ml), che invece si riapre su quel che è archiviato — vedi `misuraForm`. */
 /* Il tetto fisico: 100 g di grasso puro fanno 899 kcal, quindi non c'è niente al mondo che stia
    sopra. Non è un vincolo di gusto ed è per questo che si può controllare — un valore più alto è
    un errore di unità, non un alimento insolito. */
@@ -2557,12 +2617,60 @@ const KCAL_IMPOSSIBILI = 900;
 
 function unitaValori() { return (window._formAlimento || {}).unita || '100'; }
 
+/* ── Si pesa o si versa? ───────────────────────────────────────
+   ⚠️ Sono DUE scelte diverse in due caselle vicine, e vanno tenute distinte: `misura` (g o ml) è
+   una proprietà dell'alimento che finisce in archivio — il latte è un liquido oggi e domani —
+   mentre `unita` (100 g o 1 porzione) è una dichiarazione su come vanno letti i numeri scritti
+   qui adesso, e non si archivia da nessuna parte.
+
+   Da lì la differenza che salta all'occhio riaprendo un alimento: la misura si riapre su quel
+   che c'è in archivio, `unita` riparte SEMPRE da «100» — ricordarla farebbe dividere i valori
+   una seconda volta al primo salvataggio. */
+function misuraForm() { return (window._formAlimento || {}).misura === 'ml' ? 'ml' : 'g'; }
+
+/* Ridisegna i due pulsanti della misura e tutto quel che porta scritta l'unità: l'etichetta
+   della porzione, i suggerimenti dei nomi, i pulsanti di `unita` e l'anteprima. ⚠️ Non ridisegna
+   la finestra: sostituire le caselle mentre uno ci scrive dentro gli toglie il cursore da sotto
+   le dita — la stessa ragione per cui `aggiornaUnitaAlimento` tocca solo il suo riquadro. */
+function aggiornaMisuraAlimento() {
+  const box = $('f-misura');
+  if (!box) return;
+  const m = misuraForm();
+  box.innerHTML = [
+    { u: 'g',  testo: '⚖️ Grammi' },
+    { u: 'ml', testo: '🥛 Millilitri' },
+  ].map(b => `<button class="btn btn-sm ${m === b.u ? 'btn-primary' : 'btn-outline'}"
+      data-action="misura-alimento" data-u="${b.u}">${b.testo}</button>`).join('');
+
+  const nota = $('f-misura-nota');
+  if (nota) nota.innerHTML = m === 'ml'
+    ? 'Un liquido: i valori qui sotto sono <strong>per 100 ml</strong>, come sulla bottiglia, e quando lo segni ti chiedo quanti ml. Nessuna densità entra nel conto — non serve sapere quanto pesa.'
+    : 'Un solido: i valori sono <strong>per 100 g</strong> e quando lo segni ti chiedo quanti grammi. Per il latte, l\'olio, il vino o una spremuta scegli i millilitri.';
+
+  const lbl = $('lbl-porz');
+  if (lbl) lbl.textContent = `Porzione abituale (${m})`;
+  const n1 = $('f-porz-nome'), n2 = $('f-porz-nome-pl');
+  if (n1) n1.placeholder = m === 'ml' ? 'bicchiere, tazzina, lattina…' : 'uovo, fetta, cucchiaio…';
+  if (n2) n2.placeholder = m === 'ml' ? 'bicchieri, tazzine, lattine…' : 'uova, fette, cucchiai…';
+
+  // L'esempio segue la misura: «1 uovo · 55 g» su una bottiglia d'acqua non dice niente a nessuno.
+  const nota2 = $('f-porz-nota');
+  if (nota2) nota2.innerHTML = m === 'ml'
+    ? `I nomi fanno leggere «1 bicchiere · 200 ml» invece di «1 porzione · 200 ml» quando segni quel che bevi.
+       Lasciandoli vuoti si legge «porzione», che va bene per quasi tutto.
+       ⚠️ Il plurale si scrive perché l'italiano non lo ricava a regola: <em>uovo</em> fa <em>uova</em>.`
+    : `I nomi fanno leggere «1 uovo · 55 g» invece di «1 porzione · 55 g» quando segni quel che mangi.
+       Lasciandoli vuoti si legge «porzione», che va bene per quasi tutto.
+       ⚠️ Il plurale si scrive perché l'italiano non lo ricava a regola: <em>uovo</em> fa <em>uova</em>.`;
+  aggiornaUnitaAlimento();
+}
+
 function grammiPorzioneForm() {
   const g = parseFloat($('f-porz')?.value);
   return (!g || isNaN(g) || g <= 0) ? null : g;
 }
 
-// Per quanto va moltiplicato ciò che è scritto nelle caselle per averlo per 100 g.
+// Per quanto va moltiplicato ciò che è scritto nelle caselle per averlo per 100 (g o ml).
 // `null` = non si può convertire, perché manca il divisore.
 function fattorePer100() {
   if (unitaValori() !== 'porzione') return 1;
@@ -2575,14 +2683,14 @@ function fattorePer100() {
 function aggiornaUnitaAlimento() {
   const box = $('f-unita');
   if (!box) return;
-  const u = unitaValori(), g = grammiPorzioneForm();
+  const u = unitaValori(), g = grammiPorzioneForm(), m = misuraForm();
   const nome = etichettaPorzione({
     portion_label: ($('f-porz-nome')?.value || '').trim(),
     portion_label_plural: ($('f-porz-nome-pl')?.value || '').trim(),
   }, false);
   box.innerHTML = [
-    { u: '100', testo: '100 g' },
-    { u: 'porzione', testo: g ? `1 ${nome} · ${fmtG(g)} g` : `1 ${nome}` },
+    { u: '100', testo: `100 ${m}` },
+    { u: 'porzione', testo: g ? `1 ${nome} · ${fmtQta(g, m)}` : `1 ${nome}` },
   ].map(b => `<button class="btn btn-sm ${u === b.u ? 'btn-primary' : 'btn-outline'}"
       data-action="unita-valori" data-u="${b.u}"${b.u === 'porzione' && !g ? ' disabled' : ''}>${esc(b.testo)}</button>`).join('');
 
@@ -2590,8 +2698,8 @@ function aggiornaUnitaAlimento() {
   if (nota) {
     nota.innerHTML = u !== 'porzione'
       ? 'Come sull\'etichetta europea e sulle tabelle di composizione.'
-      : (g ? `Li divido io: quel che scrivi vale per ${fmtG(g)} g, in archivio va il corrispondente per 100 g.`
-           : '⚠️ Scrivi prima <strong>quanti grammi</strong> è una porzione, qui sopra: senza non c\'è niente per cui dividere.');
+      : (g ? `Li divido io: quel che scrivi vale per ${fmtQta(g, m)}, in archivio va il corrispondente ${per100(m)}.`
+           : `⚠️ Scrivi prima <strong>quanti ${m === 'ml' ? 'millilitri' : 'grammi'}</strong> è una porzione, qui sopra: senza non c'è niente per cui dividere.`);
   }
   aggiornaAnteprimaAlimento();
 }
@@ -2608,18 +2716,21 @@ function aggiornaAnteprimaAlimento() {
   if (unitaValori() !== 'porzione' || fattore == null) { el.style.display = 'none'; return; }
   el.style.display = '';
   const q = id => { const n = parseFloat($(id)?.value); return isNaN(n) ? null : n * fattore; };
+  const m = misuraForm();
   const kcal = q('f-kcal');
-  el.innerHTML = `In archivio: <strong>${fmtKcal(kcal)} kcal</strong> per 100 g`
+  el.innerHTML = `In archivio: <strong>${fmtKcal(kcal)} kcal</strong> ${per100(m)}`
     + ` · proteine ${fmtG(q('f-prot'))} g · grassi ${fmtG(q('f-fat'))} g · carboidrati ${fmtG(q('f-carb'))} g`
     + (kcal != null && kcal > KCAL_IMPOSSIBILI
-        ? `<div class="text-xs mt-4" style="color:var(--c-danger)">⚠️ ${fmtKcal(kcal)} kcal per 100 g non esistono:
-             nemmeno il grasso puro ci arriva (899). Controlla i grammi della porzione.</div>` : '');
+        ? `<div class="text-xs mt-4" style="color:var(--c-danger)">⚠️ ${fmtKcal(kcal)} kcal ${per100(m)} non esistono:
+             nemmeno il grasso puro ci arriva (899). Controlla la porzione.</div>` : '');
 }
 
 /* ── Alimento scritto a mano / modifica ───────────────────────── */
 function openFormAlimento(f) {
   const v = f || {};
-  window._formAlimento = { unita: '100' };
+  // ⚠️ La misura si riapre su quel che c'è in archivio (è una proprietà dell'alimento), `unita`
+  // riparte sempre da «100» (è una dichiarazione sui numeri di adesso). Vedi `misuraForm`.
+  window._formAlimento = { unita: '100', misura: unitaDi(v) };
   openModal(f ? 'Modifica alimento' : 'Nuovo alimento', `
     <div class="form-row-2">
       <div class="form-group"><label class="form-label" for="f-name">Nome</label>
@@ -2627,15 +2738,20 @@ function openFormAlimento(f) {
       <div class="form-group"><label class="form-label" for="f-brand">Marca <span class="text-muted text-xs">(facoltativa)</span></label>
         <input class="form-input" id="f-brand" value="${esc(v.brand || '')}" /></div>
     </div>
+    <div class="form-group mt-16">
+      <label class="form-label">Si misura in…</label>
+      <div class="hstack gap-6 wrap" id="f-misura"></div>
+      <div class="form-hint" id="f-misura-nota"></div>
+    </div>
     <div class="form-row-3">
-      <div class="form-group"><label class="form-label" for="f-porz">Porzione abituale (g)</label>
+      <div class="form-group"><label class="form-label" for="f-porz" id="lbl-porz">Porzione abituale (g)</label>
         <input type="number" class="form-input" id="f-porz" step="1" min="0" value="${v.default_grams ?? ''}" /></div>
       <div class="form-group"><label class="form-label" for="f-porz-nome">Si chiama…</label>
-        <input class="form-input" id="f-porz-nome" value="${esc(v.portion_label || '')}" placeholder="uovo, fetta, cucchiaio…" /></div>
+        <input class="form-input" id="f-porz-nome" value="${esc(v.portion_label || '')}" /></div>
       <div class="form-group"><label class="form-label" for="f-porz-nome-pl">…al plurale</label>
-        <input class="form-input" id="f-porz-nome-pl" value="${esc(v.portion_label_plural || '')}" placeholder="uova, fette, cucchiai…" /></div>
+        <input class="form-input" id="f-porz-nome-pl" value="${esc(v.portion_label_plural || '')}" /></div>
     </div>
-    <div class="form-hint">I nomi fanno leggere «1 uovo · 55 g» invece di «1 porzione · 55 g» quando segni
+    <div class="form-hint" id="f-porz-nota">I nomi fanno leggere «1 uovo · 55 g» invece di «1 porzione · 55 g» quando segni
       quel che mangi. Lasciandoli vuoti si legge «porzione», che va bene per quasi tutto.
       ⚠️ Il plurale si scrive perché l'italiano non lo ricava a regola: <em>uovo</em> fa <em>uova</em>.</div>
 
@@ -2686,7 +2802,7 @@ function openFormAlimento(f) {
       <button class="btn btn-primary" data-action="salva-alimento" ${f ? `data-id="${f.id}"` : ''}>💾 Salva</button>
     </div>
   `);
-  aggiornaUnitaAlimento();
+  aggiornaMisuraAlimento();   // ridisegna anche i pulsanti di `unita` e l'anteprima
   setTimeout(() => $('f-name')?.focus(), 50);
 }
 
@@ -2696,9 +2812,11 @@ function leggiFormAlimento() {
   const name = ($('f-name')?.value || '').trim();
   if (!name) { alert('Serve un nome.'); return null; }
 
+  const misura = misuraForm();
   const fattore = fattorePer100();
   if (fattore == null) {
-    alert('Hai detto che i valori sono di una porzione, ma non hai scritto quanti grammi è.\nScrivilo in «Porzione abituale (g)».');
+    alert(`Hai detto che i valori sono di una porzione, ma non hai scritto quanti ${misura === 'ml' ? 'millilitri' : 'grammi'} è.`
+        + `\nScrivilo in «Porzione abituale (${misura})».`);
     return null;
   }
   // ⚠️ Una casella vuota resta vuota anche qui: `null` non si converte, o «non lo so»
@@ -2708,15 +2826,19 @@ function leggiFormAlimento() {
   const kcal = per100('f-kcal');
   if (kcal == null) { alert('Servono almeno le calorie: senza, la riga non conterebbe niente.'); return null; }
   if (kcal > KCAL_IMPOSSIBILI &&
-      !confirm(`${kcal} kcal per 100 g non esistono: nemmeno il grasso puro ci arriva (899).\n\n`
+      !confirm(`${kcal} kcal ${per100(misura)} non esistono: nemmeno il grasso puro ci arriva (899).\n\n`
              + 'Di solito vuol dire che i valori sono di una porzione o della confezione: scegli '
-             + '«1 porzione» qui sopra e scrivi quanti grammi è.\n\nSalvo lo stesso?')) return null;
+             + `«1 porzione» qui sopra e scrivi quant'è.\n\nSalvo lo stesso?`)) return null;
 
   return {
     name, brand: ($('f-brand')?.value || '').trim() || null,
     kcal_100g: kcal, proteins_100g: per100('f-prot'), fat_100g: per100('f-fat'), sat_fat_100g: per100('f-sat'),
     carbs_100g: per100('f-carb'), sugars_100g: per100('f-sug'), fiber_100g: per100('f-fib'), salt_100g: per100('f-salt'),
-    // ⚠️ I grammi della porzione NON si convertono: sono il divisore, non un valore nutrizionale.
+    // ⚠️ Grammi o millilitri: dice su che base sono scritti i valori qui sopra, e nient'altro.
+    // Non è una densità e non converte niente — vedi la migration `al_unita_g_ml`.
+    unit: misura,
+    // ⚠️ La porzione NON si converte: è il divisore, non un valore nutrizionale. Ed è nell'unità
+    // dell'alimento, quindi 200 su un liquido vuol dire 200 ml.
     default_grams: v('f-porz'),
     // ⚠️ Il plurale senza il singolare non si archivia: da solo non comparirebbe mai a schermo
     // (il ½ e l'1 leggono il singolare) e resterebbe una casella scritta che non fa niente.
@@ -3008,7 +3130,7 @@ document.addEventListener('click', async e => {
     else if (action === 'conferma-porzione') {
       const p = window._porzione;
       const g = parseFloat($('por-g')?.value);
-      if (!p || !g || g <= 0) { alert('Scrivi quanti grammi.'); return; }
+      if (!p || !g || g <= 0) { alert(`Scrivi quanti ${unitaDi(p?.alimento) === 'ml' ? 'millilitri' : 'grammi'}.`); return; }
       const meal = $('por-meal')?.value || pastoDellOra();
       btn.disabled = true;
       let foodId = p.foodId;
@@ -3022,7 +3144,7 @@ document.addEventListener('click', async e => {
       }
       await aggiungiAlDiario({ giorno: S.day, meal, alimento: p.alimento, grammi: g, foodId });
       closeModal();
-      showToast(`➕ ${p.alimento.name} · ${fmtKcal(p.alimento.kcal_100g * g / 100)} kcal`
+      showToast(`➕ ${p.alimento.name} · ${fmtQta(g, unitaDi(p.alimento))} · ${fmtKcal(p.alimento.kcal_100g * g / 100)} kcal`
                 + (nuovoInCatalogo ? ' · aggiunto al catalogo' : ''));
       await reload();
     }
@@ -3030,10 +3152,13 @@ document.addEventListener('click', async e => {
     else if (action === 'modifica-riga') {
       const r = S.logs.find(x => x.id === btn.dataset.id);
       if (!r) return;
-      const g = prompt(`${r.name}\nQuanti grammi?`, r.grams);
+      // ⚠️ L'unità è quella CONGELATA sulla riga, non quella dell'alimento di adesso: correggere
+      // la quantità di una riga vecchia non deve cambiare in che unità era stata segnata.
+      const u = unitaDi(r);
+      const g = prompt(`${r.name}\nQuanti ${u === 'ml' ? 'millilitri' : 'grammi'}?`, r.grams);
       if (g == null) return;
       const n = parseFloat(String(g).replace(',', '.'));
-      if (!n || n <= 0) { alert('Grammi non validi.'); return; }
+      if (!n || n <= 0) { alert(`Valore non valido: scrivi un numero di ${simboloU(u)}.`); return; }
       await sbUpd('al_log', `id=eq.${r.id}`, { grams: n });
       await reload();
     }
@@ -3050,8 +3175,14 @@ document.addEventListener('click', async e => {
       openFormAlimento(btn.dataset.nome ? { name: btn.dataset.nome } : null);
     }
     else if (action === 'unita-valori') {
-      window._formAlimento = { unita: btn.dataset.u };
+      // ⚠️ Si aggiorna la chiave, non si riscrive l'oggetto: `misura` vive lì accanto, e
+      // sostituendolo per intero cambiare «1 porzione» rimetterebbe in grammi un liquido.
+      window._formAlimento = { ...(window._formAlimento || {}), unita: btn.dataset.u };
       aggiornaUnitaAlimento();
+    }
+    else if (action === 'misura-alimento') {
+      window._formAlimento = { ...(window._formAlimento || {}), misura: btn.dataset.u };
+      aggiornaMisuraAlimento();
     }
     else if (action === 'modifica-alimento') {
       openFormAlimento(S.foods.find(f => f.id === btn.dataset.id));

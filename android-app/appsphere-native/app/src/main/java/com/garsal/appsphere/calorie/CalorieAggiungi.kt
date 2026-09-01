@@ -234,7 +234,7 @@ private fun RigaRisultato(a: Alimento, onScegli: () -> Unit) {
                 }
             }
             Text(
-                "${kcalIt(a.kcal)} kcal/100 g",
+                "${kcalIt(a.kcal)} kcal/100 ${a.misura}",
                 color = Palette.muted,
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -245,6 +245,19 @@ private fun RigaRisultato(a: Alimento, onScegli: () -> Unit) {
 
 /** La scaletta fissa dei grammi, come nella pagina. */
 private val GRAMMI_RAPIDI = listOf(30, 50, 100, 125, 150, 200, 250)
+
+/**
+ * ⚠️ I tagli dei liquidi non sono quelli dei solidi: un bicchiere è 200 ml, una
+ * lattina 330, una bottiglietta 500. Sono gli stessi numeri della scaletta dei
+ * grammi, ma non sono le stesse quantità — e va tenuta uguale a `ML_RAPIDI`
+ * nella pagina.
+ */
+private val ML_RAPIDI = listOf(50, 100, 150, 200, 250, 330, 500)
+
+private fun rapidiDi(u: String) = if (u == "ml") ML_RAPIDI else GRAMMI_RAPIDI
+
+/** «250 ml» / «250 g». L'unità non entra mai nel conto: dice come si chiama. */
+private fun qtaIt(n: Double?, u: String) = "${kgIt(n)} $u"
 
 /**
  * I multipli della porzione di **questo** alimento. Vuota se non ne ha una: una
@@ -294,6 +307,9 @@ private fun SceltaPorzione(
     onIndietro: () -> Unit,
     onConferma: (Double) -> Unit,
 ) {
+    // Grammi o millilitri lo dice l'alimento, non questa schermata: la scelta si
+    // fa da 🍎 Alimenti sul web, una volta sola, e da qui si legge soltanto.
+    val u = alimento.misura
     val porzioni = remember(alimento) { porzioniDi(alimento) }
     var testo by remember(alimento) {
         mutableStateOf((porzioni.getOrNull(1)?.grammi ?: 100).toString())
@@ -326,7 +342,7 @@ private fun SceltaPorzione(
                     }
                     alimento.brand?.let { Text(it, color = Palette.muted) }
                     Text(
-                        etichettaFonte(alimento) + " · ${kcalIt(alimento.kcal)} kcal per 100 g" +
+                        etichettaFonte(alimento) + " · ${kcalIt(alimento.kcal)} kcal per 100 $u" +
                             (alimento.quantita?.let { " · confezione $it" } ?: ""),
                         color = if (alimento.inCatalogo) Palette.muted else AmbraCalorie,
                         style = MaterialTheme.typography.bodySmall,
@@ -349,7 +365,7 @@ private fun SceltaPorzione(
                     OutlinedTextField(
                         value = testo,
                         onValueChange = { testo = it },
-                        label = { Text("Peso (grammi)") },
+                        label = { Text(if (u == "ml") "Quantità (millilitri)" else "Peso (grammi)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -358,10 +374,10 @@ private fun SceltaPorzione(
                     Text(
                         if (porzioni.isEmpty())
                             "Per questo alimento non è scritta nessuna porzione abituale: parto da " +
-                                "100 g. La si scrive una volta sola da 🍎 Alimenti sul web, e da lì in " +
+                                "100 $u. La si scrive una volta sola da 🍎 Alimenti sul web, e da lì in " +
                                 "poi la trovi qui. Ogni pulsante si somma a quel che c'è scritto; ↺ azzera."
                         else
-                            "Porzione abituale: ${porzioni[1].etichetta} · ${porzioni[1].grammi} g — il " +
+                            "Porzione abituale: ${porzioni[1].etichetta} · ${porzioni[1].grammi} $u — il " +
                                 "campo parte da lì. Ogni pulsante si somma a quel che c'è scritto; ↺ azzera.",
                         color = Palette.muted,
                         style = MaterialTheme.typography.bodySmall,
@@ -370,15 +386,15 @@ private fun SceltaPorzione(
                     // ⚠️ La scaletta fissa si toglie i valori che le porzioni già
                     // coprono: due pulsanti «150 g» uno accanto all'altro sembrano
                     // due scelte diverse e non lo sono.
-                    val rapidi = GRAMMI_RAPIDI.filterNot { v -> porzioni.any { it.grammi == v } }
-                    val etichette = porzioni.map { "${it.etichetta} · ${it.grammi} g" } +
-                        rapidi.map { "$it g" } + "↺"
+                    val rapidi = rapidiDi(u).filterNot { v -> porzioni.any { it.grammi == v } }
+                    val etichette = porzioni.map { "${it.etichetta} · ${it.grammi} $u" } +
+                        rapidi.map { "$it $u" } + "↺"
                     val larghezza = larghezzaPulsanti(etichette)
 
                     if (porzioni.isNotEmpty()) {
                         RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                             porzioni.forEach { p ->
-                                Pillola("${p.etichetta} · ${p.grammi} g", VerdeCalorie, larghezza) {
+                                Pillola("${p.etichetta} · ${p.grammi} $u", VerdeCalorie, larghezza) {
                                     somma(p.grammi)
                                 }
                             }
@@ -386,7 +402,7 @@ private fun SceltaPorzione(
                     }
                     RigaScorrevole(Arrangement.spacedBy(6.dp)) {
                         rapidi.forEach { v ->
-                            Pillola("$v g", Palette.muted, larghezza) { somma(v) }
+                            Pillola("$v $u", Palette.muted, larghezza) { somma(v) }
                         }
                         Pillola("↺", Palette.dark, larghezza) { testo = "" }
                     }
@@ -411,7 +427,7 @@ private fun SceltaPorzione(
             }
 
             item {
-                Anteprima(alimento, grammi)
+                Anteprima(alimento, grammi, u)
             }
 
             item {
@@ -432,7 +448,7 @@ private fun SceltaPorzione(
 }
 
 @Composable
-private fun Anteprima(alimento: Alimento, grammi: Double?) {
+private fun Anteprima(alimento: Alimento, grammi: Double?, u: String) {
     val g = grammi ?: 0.0
     fun per(valore: Double?): Double? = valore?.let { it * g / 100 }
     Box(
@@ -444,7 +460,7 @@ private fun Anteprima(alimento: Alimento, grammi: Double?) {
     ) {
         Column {
             Text(
-                "${kcalIt(per(alimento.kcal))} kcal per ${kgIt(g)} g",
+                "${kcalIt(per(alimento.kcal))} kcal per ${qtaIt(g, u)}",
                 fontWeight = FontWeight.Bold,
                 color = Palette.dark,
             )
