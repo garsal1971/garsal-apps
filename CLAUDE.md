@@ -1120,6 +1120,44 @@ il fondo resta agganciato a una riga che non sincronizzerà mai, oppure il conto
 job scatteranno un'ora prima del previsto. Riguarda `fnz-save-snapshot` (`0 21 * * *` = 23:00 CEST)
 e `revolut-auto-categorize`.
 
+### ⚠️ Il valore netto dei portafogli: si affianca al lordo, non lo sostituisce
+
+`finanza.html` mostra accanto al valore di un portafoglio anche il **valore al netto delle
+imposte sulle plusvalenze** — nella Dashboard (riga sotto il totale e colonna *Netto tasse*),
+nell'elenco 💼 Portafogli, nel dettaglio di un portafoglio (KPI e le colonne *Tasse* / *Netto* su
+ogni posizione) e nel dettaglio di un Dossier.
+
+L'aliquota è il **tag `TASSAZIONE`** di `fnz_products.tags` — lo stesso che si sceglie dal form
+del prodotto e che si vede già come colonna:
+
+| Tag | Aliquota |
+|---|---|
+| `CAP. GAIN 26%` | 26 % |
+| `AGEVOLATA 12.5%` | 12,5 % |
+| `PIR`, `ESENTE` | 0 % |
+| `ALTRO`, o tag assente | **26 %**, e la pagina lo dice |
+
+⚠️ **Un prodotto senza tag si tassa al 26 %, non a zero**: è l'aliquota ordinaria italiana, e uno
+0 % silenzioso gonfierebbe il patrimonio proprio dove si sta cercando di essere prudenti. Le
+posizioni in guadagno senza tag si contano in un avviso sopra la tabella e portano un ⚠️ nella
+cella della tassa: un default che non si vede è un numero sbagliato che sembra vero.
+
+⚠️ **La tassa si calcola posizione per posizione sulla sola plusvalenza, ed è zero dove si è in
+perdita**: le minusvalenze **non compensano** le plusvalenze di un'altra posizione. Quella
+compensazione passa dallo zainetto fiscale — quando è stata realizzata, entro quanti anni, su
+quali strumenti — e nessuno di quei dati sta in questa app: contarla darebbe un numero più bello
+e sbagliato. ⚠️ **La liquidità non si tassa**: non è una plusvalenza, sono soldi versati e mai
+investiti, quindi entra intera nel netto.
+
+⚠️ **Lo snapshot resta al LORDO, ed è voluto**: `fnz_dashboard_snapshots`, il Patrimonio Netto
+della Dashboard, `buildSnapshotPayload`, la Edge Function `save-snapshot` e
+`fetchPortfolioLiveValue` in `index.html` non conoscono le tasse. `computeHoldings` e
+`portfolioStats` hanno campi in più (`taxRate`, `taxDeclared`, `taxDue`, `netValue`,
+`taxUndeclared`) ma i totali che la Edge Function replica — `totalValue`, `totalCost`, `pnl` —
+sono **identici a prima**: la tripla copia dello snapshot resta allineata senza toccare niente,
+e la serie storica continua a confrontare grandezze omogenee. Portando il netto nello snapshot,
+i valori salvati fino a oggi diventerebbero non confrontabili con quelli nuovi.
+
 ### ⚠️ Logica dello snapshot duplicata
 
 Il calcolo del patrimonio esiste in **due copie che devono restare allineate**:

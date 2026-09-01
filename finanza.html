@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.4.1</title>
+  <title>GarsalFinanza v1.5.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.4.1';
-const APP_BUILD   = '2026-09-01T17:05:00Z';
+const APP_VERSION = 'v1.5.0';
+const APP_BUILD   = '2026-09-01T17:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -847,6 +847,27 @@ async function reload() {
   render();
 }
 /* ── Business logic — costo medio ponderato ──────────────────── */
+/* ── Tassazione delle plusvalenze ──────────────────────────────
+   L'aliquota di un prodotto è il tag TASSAZIONE (`fnz_products.tags`), quello che si sceglie
+   dal form del prodotto e che si vede già come colonna nelle tabelle. Qui diventa un numero.
+
+   ⚠️ Un prodotto senza il tag, o con «ALTRO», si tassa al 26 % — l'aliquota ordinaria italiana —
+   e la pagina dice quanti sono: un 0 % silenzioso gonfierebbe il patrimonio netto proprio dove
+   si sta cercando di essere prudenti, ed è l'errore che non si vede.
+   ⚠️ La tassa si calcola POSIZIONE PER POSIZIONE sulla sola plusvalenza, ed è zero dove si è in
+   perdita: le minusvalenze non compensano le plusvalenze di un'altra posizione, perché quella
+   compensazione passa dallo zainetto fiscale — quando è stata realizzata, entro quanti anni, su
+   quali strumenti — e nessuno di quei dati sta in questa app. Contarla qui darebbe un numero
+   più bello e sbagliato.
+   ⚠️ La liquidità non si tassa: non è una plusvalenza, sono soldi versati e mai investiti. */
+const TAX_RATES = { 'CAP. GAIN 26%': 26, 'AGEVOLATA 12.5%': 12.5, 'PIR': 0, 'ESENTE': 0 };
+const TAX_DEFAULT = 26;
+function taxRateOf(product) {
+  const tag  = product?.tags?.TASSAZIONE;
+  const nota = tag != null && Object.prototype.hasOwnProperty.call(TAX_RATES, tag);
+  return { rate: nota ? TAX_RATES[tag] : TAX_DEFAULT, dichiarata: nota, tag: tag || null };
+}
+
 function computeHoldings(filter = null) {
   const portfolioId = typeof filter === 'string' ? filter : (filter?.portfolioId ?? null);
   const dossierId   = (filter && typeof filter === 'object') ? (filter.dossierId ?? null) : null;
@@ -882,7 +903,15 @@ function computeHoldings(filter = null) {
       const currentValue = currentPrice != null ? h.qty * currentPrice : null;
       const pnl          = currentValue != null ? currentValue - h.costBasis : null;
       const pnlPct       = h.costBasis > 0 && pnl != null ? (pnl / h.costBasis) * 100 : null;
-      return { product, qty: h.qty, avgCost, costBasis: h.costBasis, currentPrice, currentValue, pnl, pnlPct, pd };
+      // Senza prezzo il valore ripiega sul costo, come in tutti i totali della pagina: la
+      // plusvalenza è allora zero, e con lei la tassa — non un buco da riempire a occhio.
+      const { rate, dichiarata } = taxRateOf(product);
+      const valoreOggi = currentValue ?? h.costBasis;
+      const plus       = valoreOggi - h.costBasis;
+      const taxDue     = plus > 0 ? plus * rate / 100 : 0;
+      const netValue   = valoreOggi - taxDue;
+      return { product, qty: h.qty, avgCost, costBasis: h.costBasis, currentPrice, currentValue, pnl, pnlPct, pd,
+               taxRate: rate, taxDeclared: dichiarata, taxDue, netValue };
     }).filter(Boolean);
 }
 /* Liquidità di un portafoglio: i soldi versati nel fondo collegato e non ancora usati per
@@ -932,6 +961,8 @@ function portfolioStats() {
     const dailyChangePct = previousCloseValue > 0
       ? ((titoli - previousCloseValue) / previousCloseValue) * 100
       : null;
+    // Le tasse valgono sui soli titoli; la liquidità entra intera nel netto.
+    const taxDue = h.reduce((s, x) => s + x.taxDue, 0) * own;
     return {
       portfolio: p,
       holdings: h,
@@ -943,6 +974,9 @@ function portfolioStats() {
       pnlPct: cost > 0 ? (pnl / cost) * 100 : 0,
       previousCloseValue,
       dailyChangePct,
+      taxDue,
+      netValue: tot - taxDue,
+      taxUndeclared: h.filter(x => !x.taxDeclared && x.taxDue > 0).length,
     };
   });
 }
@@ -1735,6 +1769,8 @@ function renderDashboard() {
   const grandPct   = grandCost > 0 ? (grandPnl / grandCost) * 100 : 0;
   
   const grandFullValue = stats.reduce((s, x) => s + (x.totalValue / ((parseFloat(x.portfolio.ownership_percentage) || 100) / 100)), 0);
+  const grandNet   = stats.reduce((s, x) => s + x.netValue, 0);
+  const grandTax   = stats.reduce((s, x) => s + x.taxDue, 0);
 
   const totalLoans = S.loans.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
   const totalOther = S.otherAssets.filter(a => a.asset_type !== 'danaro_rosa').reduce((s, a) => s + (parseFloat(a.value) * (parseFloat(a.ownership_percentage) || 100) / 100), 0);
@@ -1772,19 +1808,22 @@ function renderDashboard() {
         <div class="mb-16">
           <div class="kpi-label">Valore totale quota</div>
           <div class="mono text-lg fw-700 pos text-right">${deltaHtml(grandValue, prev ? parseFloat(prev.portafogli_totali) : null)} ${fmtEUR0(grandValue)}</div>
+          <div class="kpi-label mt-4">Al netto delle tasse${grandTax > 0 ? ` (−${fmtEUR0(grandTax)})` : ''}</div>
+          <div class="mono fw-700 text-right">${fmtEUR0(grandNet)}</div>
         </div>
         <div class="table-wrap">
           <table class="table table-2col" style="table-layout:fixed;width:100%">
             <thead>
               <tr>
-                <th style="width:55%">Portafoglio</th>
-                <th class="text-right" style="width:45%">Valore Quota</th>
+                <th style="width:40%">Portafoglio</th>
+                <th class="text-right" style="width:30%">Valore Quota</th>
+                <th class="text-right" style="width:30%">Netto tasse</th>
               </tr>
             </thead>
             <tbody>
               ${stats.length === 0
-                ? `<tr><td colspan="2" class="empty-sm">Nessun portafoglio ancora.</td></tr>`
-                : stats.map(({ portfolio: p, totalValue: tv, pnl, pnlPct, holdings: h }) => {
+                ? `<tr><td colspan="3" class="empty-sm">Nessun portafoglio ancora.</td></tr>`
+                : stats.map(({ portfolio: p, totalValue: tv, netValue: nv, pnl, pnlPct, holdings: h }) => {
                     const prevTv = prevPtfMap[p.id] != null ? parseFloat(prevPtfMap[p.id]) : null;
                     const d = deltaHtml(tv, prevTv);
                     return `
@@ -1798,6 +1837,7 @@ function renderDashboard() {
                       <td class="text-right">
                         <span class="mono fw-600" style="font-size:.85rem">${fmtEUR0(tv)}</span>${d ? `<br><span style="font-size:.72rem">${d}</span>` : ''}
                       </td>
+                      <td class="text-right mono" style="font-size:.85rem">${fmtEUR0(nv)}</td>
                     </tr>`;
                   }).join('')
               }
@@ -1880,7 +1920,7 @@ function renderPortafogli() {
     </div>
     ${S.portfolios.length === 0
       ? `<div class="empty-state"><div class="empty-icon">💼</div><p>Nessun portafoglio ancora.<br/>Creane uno per iniziare.</p></div>`
-      : `<div class="portfolio-grid">${stats.map(({ portfolio: p, totalValue: tv, dailyChangePct }) => `
+      : `<div class="portfolio-grid">${stats.map(({ portfolio: p, totalValue: tv, netValue: nv, taxDue, dailyChangePct }) => `
         <div class="portfolio-card" style="border-top: 4px solid ${p.color}">
           <div class="portfolio-card-header">
             <div>
@@ -1904,6 +1944,9 @@ function renderPortafogli() {
             </div>
           </div>
           <div class="text-sm text-muted mt-12">
+            Al netto delle tasse: <strong>${fmtEUR(nv)}</strong>${taxDue > 0 ? ` <span class="text-muted">(−${fmtEUR(taxDue)})</span>` : ''}
+          </div>
+          <div class="text-sm text-muted mt-2">
             Valore intero: <strong>${fmtEUR(tv / ((parseFloat(p.ownership_percentage) || 100) / 100))}</strong>
           </div>
           <button class="btn btn-outline btn-sm mt-12" data-action="view-portfolio" data-id="${p.id}">Apri →</button>
@@ -1927,6 +1970,9 @@ function renderPortafoglioDetail() {
   const totalPct  = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const totalDailyPnl = holdings.reduce((s, h) => s + (h.pd?.change_amt != null ? h.pd.change_amt * h.qty * own : 0), 0);
   const totalDailyPct = (totalTitoli - totalDailyPnl) > 0 ? (totalDailyPnl / (totalTitoli - totalDailyPnl)) * 100 : 0;
+  const totalTax  = holdings.reduce((s, h) => s + h.taxDue, 0) * own;
+  const totalNet  = totalVal - totalTax;
+  const senzaTax  = holdings.filter(h => !h.taxDeclared && h.taxDue > 0).length;
   const txs       = S.transactions.filter(t => t.portfolio_id === portfolio.id);
   const ptfFilters = S.ptfFilters || {};
   let visibleHoldings = holdings;
@@ -1948,6 +1994,7 @@ function renderPortafoglioDetail() {
     </div>
     <div class="kpi-grid">
       ${kpi('Valore portafoglio (quota)', fmtEUR(totalVal),  'neutral')}
+      ${kpi('Netto tasse (quota)',         fmtEUR(totalNet),  'neutral')}
       ${totalCash > 0 ? kpi('di cui liquidità (quota)', fmtEUR(totalCash), 'neutral') : ''}
       ${kpi('Investito (quota)',          fmtEUR(totalCost), 'neutral')}
       ${kpi('P&amp;L (quota)',            fmtEUR(totalPnl),  pnlCls(totalPnl))}
@@ -1962,6 +2009,7 @@ function renderPortafoglioDetail() {
           <div class="card-title">Posizioni aperte (quota del ${portfolio.ownership_percentage || 100}%)</div>
           ${holdings.length > 0 ? `<div class="chart-wrap" style="height:180px;width:280px;flex-shrink:0"><canvas id="chart-ptf-alloc"></canvas></div>` : ''}
         </div>
+        ${senzaTax ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaTax === 1 ? 'Una posizione in guadagno non ha' : `${senzaTax} posizioni in guadagno non hanno`} il tag TASSAZIONE: ${senzaTax === 1 ? 'le è' : 'gli è'} stato applicato il ${TAX_DEFAULT} %, che è l'aliquota ordinaria — mettere il tag dà il numero vero.</p>` : ''}
         ${holdings.length === 0
           ? `<div class="empty-sm">Nessuna posizione. Aggiungi una transazione BUY.</div>`
           : `<div class="table-wrap"><table class="table table-posizioni">
@@ -1975,7 +2023,7 @@ function renderPortafoglioDetail() {
               </th>
               <th>Qtà</th>
               <th>Costo medio</th><th>Prezzo att.</th><th>Var. %</th>
-              <th>Valore (quota)</th><th>P&amp;L (quota)</th><th style="cursor:pointer;user-select:none;white-space:nowrap" data-action="toggle-ptf-pnl-mode" title="${S.ptfPnlMode === 'daily' ? 'Clicca per rendimento totale' : 'Clicca per rendimento giornaliero'}">${S.ptfPnlMode === 'daily' ? 'Var. % 1d ⇄' : 'P&amp;L % ⇄'}</th>
+              <th>Valore (quota)</th><th>Tasse (quota)</th><th>Netto (quota)</th><th>P&amp;L (quota)</th><th style="cursor:pointer;user-select:none;white-space:nowrap" data-action="toggle-ptf-pnl-mode" title="${S.ptfPnlMode === 'daily' ? 'Clicca per rendimento totale' : 'Clicca per rendimento giornaliero'}">${S.ptfPnlMode === 'daily' ? 'Var. % 1d ⇄' : 'P&amp;L % ⇄'}</th>
               ${S.tagCats.map(tc => {
                 const af = ptfFilters[tc.name] || '';
                 return `<th class="${af ? 'th-has-filter' : ''}">${tc.name}
@@ -1987,7 +2035,7 @@ function renderPortafoglioDetail() {
               }).join('')}
             </tr></thead>
             <tbody>${visibleHoldings.length === 0
-              ? `<tr><td colspan="${10 + S.tagCats.length}" style="text-align:center;padding:20px;color:var(--c-muted)">Nessuna posizione corrisponde ai filtri attivi.</td></tr>`
+              ? `<tr><td colspan="${12 + S.tagCats.length}" style="text-align:center;padding:20px;color:var(--c-muted)">Nessuna posizione corrisponde ai filtri attivi.</td></tr>`
               : visibleHoldings.map(h => `
               <tr data-action="open-position-transactions" data-product-id="${h.product.id}" style="cursor:pointer">
                 <td class="mono fw-600">${h.product.symbol}</td>
@@ -1998,6 +2046,8 @@ function renderPortafoglioDetail() {
                 <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.currentPrice != null ? fmtEURc(h.currentPrice) : '—'}</td>
                 <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.pd ? fmtPct(h.pd.change_pct) : '—'}</td>
                 <td class="mono fw-600">${fmtEUR(h.currentValue * own)}</td>
+                <td class="mono text-muted" title="${h.taxDeclared ? `Aliquota ${h.taxRate}% dal tag TASSAZIONE` : `Tassazione non indicata: applicato il ${TAX_DEFAULT}%`}">${h.taxDue > 0 ? `−${fmtEUR(h.taxDue * own)}${h.taxDeclared ? '' : ' ⚠️'}` : '—'}</td>
+                <td class="mono fw-600">${fmtEUR(h.netValue * own)}</td>
                 <td class="mono ${pnlCls(h.pnl * own)}">${fmtEUR(h.pnl * own)}</td>
                 <td>${S.ptfPnlMode === 'daily'
                   ? `<span class="badge ${h.pd?.change_pct != null && h.pd.change_pct >= 0 ? 'badge-pos' : 'badge-neg'}">${h.pd ? fmtPct(h.pd.change_pct) : '—'}</span>`
@@ -2265,6 +2315,7 @@ function renderDossierDetail() {
     </div>
     <div class="kpi-grid">
       ${kpi('Valore Dossier', fmtEUR(totalVal),  'neutral')}
+      ${kpi('Netto tasse',    fmtEUR(totalVal - holdings.reduce((s, h) => s + h.taxDue, 0)), 'neutral')}
       ${kpi('Investito',      fmtEUR(totalCost), 'neutral')}
       ${kpi('P&amp;L',        fmtEUR(totalPnl),  pnlCls(totalPnl))}
       ${kpi('Rendimento',     fmtPct(totalPct),  pnlCls(totalPct))}
@@ -2278,7 +2329,7 @@ function renderDossierDetail() {
             <thead><tr>
               <th>Simbolo</th><th>Nome</th><th>Tipo</th><th>Qtà</th>
               <th>Costo medio</th><th>Prezzo att.</th><th>Var. %</th>
-              <th>Valore</th><th>P&amp;L</th><th>P&amp;L %</th>
+              <th>Valore</th><th>Tasse</th><th>Netto</th><th>P&amp;L</th><th>P&amp;L %</th>
             </tr></thead>
             <tbody>${holdings.map(h => `
               <tr data-action="open-dossier-position-transactions" data-product-id="${h.product.id}" style="cursor:pointer">
@@ -2290,6 +2341,8 @@ function renderDossierDetail() {
                 <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.currentPrice != null ? fmtEURc(h.currentPrice) : '—'}</td>
                 <td class="mono ${pnlCls(h.pd?.change_pct ?? null)}">${h.pd ? fmtPct(h.pd.change_pct) : '—'}</td>
                 <td class="mono fw-600">${fmtEUR(h.currentValue ?? h.costBasis)}</td>
+                <td class="mono text-muted" title="${h.taxDeclared ? `Aliquota ${h.taxRate}% dal tag TASSAZIONE` : `Tassazione non indicata: applicato il ${TAX_DEFAULT}%`}">${h.taxDue > 0 ? `−${fmtEUR(h.taxDue)}${h.taxDeclared ? '' : ' ⚠️'}` : '—'}</td>
+                <td class="mono fw-600">${fmtEUR(h.netValue)}</td>
                 <td class="mono ${pnlCls(h.pnl)}">${h.pnl != null ? fmtEUR(h.pnl) : '—'}</td>
                 <td><span class="badge ${h.pnlPct != null && h.pnlPct >= 0 ? 'badge-pos' : 'badge-neg'}">${fmtPct(h.pnlPct)}</span></td>
               </tr>`).join('')}
