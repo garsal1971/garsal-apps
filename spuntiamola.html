@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>✅ Spuntiamola v1.3.0</title>
+    <title>✅ Spuntiamola v1.3.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -668,11 +668,27 @@
         .key-item {
             display: flex;
             align-items: center;
+            /* l'avviso va a capo su una riga sua: dentro .key-item-label, che
+               è nowrap con l'ellissi, verrebbe tagliato dal bordo */
+            flex-wrap: wrap;
             gap: 10px;
             background: linear-gradient(135deg, #FFF7E0, #FFEFC7);
             border: 1.5px solid #F5CE7A;
             border-radius: 12px;
             padding: 9px 12px;
+        }
+        /* una chiave che il periodo, accorciandosi, ha lasciato fuori */
+        .key-item.fuori {
+            background: linear-gradient(135deg, #FDECEA, #FADBD8);
+            border-color: #E9A79F;
+        }
+        .key-item.fuori .key-item-date { color: #A83227; }
+        .key-item-warn {
+            flex-basis: 100%;
+            font-size: 0.76rem;
+            font-weight: 700;
+            color: #A83227;
+            line-height: 1.35;
         }
         .key-item-date {
             font-family: 'Space Mono', monospace;
@@ -685,7 +701,11 @@
             font-size: 1rem;
             font-weight: 700;
             color: var(--dark);
-            flex: 1;
+            /* ⚠️ La base in `rem` cresce col testo di sistema: sotto quella
+               soglia l'etichetta va a capo su una riga sua invece di essere
+               schiacciata dalla data, che è nowrap. A 200 % «Gita in barca»
+               si leggeva «G..». */
+            flex: 1 1 8rem;
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -942,6 +962,15 @@
         }
         .btn:hover { transform: translateY(-2px); filter: brightness(1.06); }
         .btn:active { transform: scale(0.97); }
+        /* ⚠️ Senza questo un .btn spento è identico a uno acceso: si preme,
+           non succede niente, e si legge come un tocco andato a vuoto. Vale
+           per tutti — «Chiudi la stecca», «Cancella il traguardo», Aggiungi. */
+        .btn:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+        .btn:disabled:hover  { transform: none; filter: none; }
+        .btn:disabled:active { transform: none; }
 
         .btn-primary { background: var(--secondary); color: white; }
         .btn-ghost   { background: #EEF0F3; color: var(--dark); }
@@ -1044,7 +1073,7 @@
     <div class="topbar-spacer"></div>
     <div class="header-right">
         <span class="sync-badge" id="syncBadge" title="Stato sincronizzazione">···</span>
-        <span class="app-version" id="versionBadge">v1.3.0</span>
+        <span class="app-version" id="versionBadge">v1.3.1</span>
         <button class="btn-icon" id="btnSettings" title="Impostazioni">⚙️</button>
     </div>
 </div>
@@ -1120,7 +1149,7 @@
 </div>
 
 <footer class="app-footer">
-    Spuntiamola <span id="versionFooter">v1.3.0</span> &nbsp;·&nbsp; un giorno alla volta ✌️
+    Spuntiamola <span id="versionFooter">v1.3.1</span> &nbsp;·&nbsp; un giorno alla volta ✌️
 </footer>
 
 <!-- TOAST -->
@@ -1199,10 +1228,11 @@
             <div class="key-add">
                 <input type="date" id="inKeyDate">
                 <input type="text" id="inKeyLabel" maxlength="40" placeholder="Cosa succede? (facoltativo)">
-                <button type="button" class="btn btn-primary key-add-btn" id="btnAddKey">Aggiungi</button>
+                <button type="button" class="btn btn-ghost key-add-btn" id="btnAddKey" disabled>Aggiungi</button>
             </div>
             <div class="field-hint">
-                Quando spunti una giornata chiave parte un'esplosione di stelle e fuochi d'artificio.
+                <strong>Sono facoltative</strong>: la stecca si salva anche senza. Quando ne spunti
+                una parte un'esplosione di stelle e fuochi d'artificio.
             </div>
             <div class="key-list" id="keyList"></div>
         </div>
@@ -1291,8 +1321,8 @@
 <div class="confetti-layer" id="confettiLayer"></div>
 
 <script>
-var APP_VERSION = 'v1.3.0';
-var BUILD_TIME  = '2026-09-01T10:00:00Z';
+var APP_VERSION = 'v1.3.1';
+var BUILD_TIME  = '2026-09-01T12:30:00Z';
 console.log('%c ✅ SPUNTIAMOLA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#00B894;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2495,6 +2525,8 @@ function apriImpostazioni() {
     Object.keys(S.keyDays).forEach(function(g) { tmpKeyDays[g] = S.keyDays[g]; });
     document.getElementById('inKeyDate').value  = '';
     document.getElementById('inKeyLabel').value = '';
+    aggiornaLimitiKeyDate();
+    aggiornaBtnAddKey();
     renderKeyList();
 
     // niente traguardo, niente da cancellare: alla prima apertura queste
@@ -2516,13 +2548,20 @@ function renderKeyList() {
     }
 
     box.innerHTML = giorni.map(function(g) {
-        return '<div class="key-item">'
+        // ⚠️ Una chiave entra sempre dentro il periodo, ma il periodo si può
+        // accorciare dopo: quella riga resta salvata e nella griglia sparisce.
+        // Qui si dice, invece di lasciarla scoprire dal fatto che non succede
+        // niente il giorno che dovrebbe.
+        var fuori = perchePuoNonEsserci(g);
+        return '<div class="key-item' + (fuori ? ' fuori' : '') + '">'
              + '<span class="key-item-date">' + fmtIT(g) + '</span>'
              + '<span class="key-item-label">'
              + (tmpKeyDays[g] ? escapeAttr(tmpKeyDays[g]) : '<em>senza nome</em>')
              + '</span>'
              + '<button type="button" class="key-item-del" data-date="' + g
              + '" title="Togli">✕</button>'
+             + (fuori ? '<div class="key-item-warn">⚠️ Fuori dal periodo: '
+                      + 'nella griglia questo giorno non c\'è.</div>' : '')
              + '</div>';
     }).join('');
 
@@ -2534,13 +2573,72 @@ function renderKeyList() {
     });
 }
 
+// ⚠️ Una giornata chiave fuori dal periodo si salva, si vede nell'elenco qui
+// sotto e poi NON C'È: la griglia disegna i giorni di giorniDelPeriodo(), e
+// quel giorno lì dentro non compare — non si può spuntare, e i fuochi non
+// partiranno mai. Non si accorge nessuno finché non si va a cercarla.
+//
+// Il periodo si legge dai CAMPI del form e non da S: qui si sta ancora
+// scegliendo, e il periodo salvato è quello di prima (o non esiste affatto).
+// Torna una stringa col motivo, o null se la data va bene.
+function perchePuoNonEsserci(data) {
+    var start = document.getElementById('inStart').value;
+    var end   = document.getElementById('inEnd').value;
+    if (!start || !end) return 'Scegli prima il periodo della stecca.';
+    if (parseISO(end) < parseISO(start)) return 'Il periodo non è valido: sistemalo prima.';
+
+    if (data < start || data > end) {
+        return 'Il ' + fmtIT(data) + ' è fuori dal periodo della stecca ('
+             + fmtIT(start) + ' → ' + fmtIT(end) + '), quindi nella griglia '
+             + 'quel giorno non ci sarebbe e non lo potresti spuntare.';
+    }
+    // stessa conseguenza, altra causa: col weekend saltato il sabato e la
+    // domenica non sono giorni della stecca
+    var dow = parseISO(data).getDay();
+    if (tmpWeekend && (dow === 0 || dow === 6)) {
+        return 'Il ' + fmtIT(data) + ' è un ' + (dow === 0 ? 'domenica' : 'sabato')
+             + ', e questa stecca salta i fine settimana: nella griglia quel '
+             + 'giorno non ci sarebbe.';
+    }
+    return null;
+}
+
+// Il calendarietto del campo si apre già sul periodo: steccare la data
+// giusta è meglio che spiegare dopo perché quella scelta non va.
+function aggiornaLimitiKeyDate() {
+    var campo = document.getElementById('inKeyDate');
+    var start = document.getElementById('inStart').value;
+    var end   = document.getElementById('inEnd').value;
+    if (start) campo.min = start; else campo.removeAttribute('min');
+    if (end)   campo.max = end;   else campo.removeAttribute('max');
+}
+
+// ⚠️ Il tasto sta spento finché non c'è una data, invece di rispondere con
+// un alert('Errore: …'). È un btn-primary uguale al Salva che sta due righe
+// sotto: premuto per sbaglio al posto di quello, quell'errore si legge come
+// «non mi fa salvare se non metto una giornata chiave» — e le giornate
+// chiave sono facoltative.
+function aggiornaBtnAddKey() {
+    document.getElementById('btnAddKey').disabled =
+        !document.getElementById('inKeyDate').value;
+}
+
+document.getElementById('inKeyDate').addEventListener('input', aggiornaBtnAddKey);
+document.getElementById('inStart').addEventListener('change', aggiornaLimitiKeyDate);
+document.getElementById('inEnd').addEventListener('change', aggiornaLimitiKeyDate);
+
 document.getElementById('btnAddKey').addEventListener('click', function() {
     var data = document.getElementById('inKeyDate').value;
     var lab  = document.getElementById('inKeyLabel').value.trim();
-    if (!data) { alert('Errore: scegli la data della giornata chiave.'); return; }
+    if (!data) return;
+
+    var motivo = perchePuoNonEsserci(data);
+    if (motivo) { alert(motivo); return; }
+
     tmpKeyDays[data] = lab;
     document.getElementById('inKeyDate').value  = '';
     document.getElementById('inKeyLabel').value = '';
+    aggiornaBtnAddKey();
     renderKeyList();
 });
 
