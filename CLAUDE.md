@@ -331,6 +331,62 @@ I dati storici 2017-2025 ricavati dai 730 e dalle CU sono in
 e intestato all'utente cercato per email, e salta senza fallire se quell'utente non esiste
 (progetto dev).
 
+### Coperture per esigenze future (`fnz_coverage_items`)
+| Table | Purpose |
+|---|---|
+| `fnz_coverage_items` | Le voci di copertura, **una riga per voce**: `side` (`fabbisogno`\|`dotazione`), `item_key`, `amount`, `linked_other_asset_id`, `note` |
+
+Si compila da `finanza.html` → Previdenza → 🛡️ **Coperture per esigenze future**, la voce di menù
+sotto 🏛️ Simulazione INPS. Due colonne che si guardano in faccia — quello che servirà e quello con
+cui ci si arriva — e il saldo in cima: **scopertura** se il fabbisogno è più grande, **eccedenza**
+altrimenti.
+
+⚠️ **Le voci non stanno nel database**: vivono in `COVERAGE_ITEMS` dentro `finanza.html`, come
+`INCOME_SECTIONS` per il reddito, e aggiungerne una è una riga di JavaScript, non una migration.
+`item_key` è testo libero di proposito; il vincolo che conta è `UNIQUE (user_id, side, item_key)`,
+su cui la pagina scrive in **upsert** — senza, ricompilare una voce raddoppierebbe il totale in
+silenzio. È la stessa scelta di `fnz_income`.
+
+⚠️ **Tre fonti diverse, e la differenza è la funzionalità**:
+
+| `fonte` | Da dove viene il numero |
+|---|---|
+| `manuale` | Lo scrive l'utente e basta (costo della vita, rendita per Ada, università, assicurazione) |
+| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli (`portfolioStats`), importo lordo dell'ultima simulazione INPS |
+| `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia, Pensione Ada) |
+
+⚠️ **L'asset si collega per id e non si indovina dal titolo**: una voce agganciata al nome
+smetterebbe di leggere il giorno che qualcuno rinomina «Casa Rosa» in «Casa di Rosa», e lo
+farebbe **in silenzio** — il totale scenderebbe senza che niente lo dica. `linked_other_asset_id`
+è `ON DELETE SET NULL`: cancellato l'asset la voce resta e torna a chiedere un importo, invece di
+sparire dal totale.
+
+⚠️ **`amount` NULL non è zero**, ed è la stessa scelta di `fnz_income` e delle misure di Memo. Su
+una voce manuale dice «non l'ho ancora scritto»; su una automatica dice «vale il dato di Finanza»
+— l'importo scritto a mano è un **override** che vince, si vede col badge *scritto a mano* accanto
+al dato che ha coperto, e si toglie col ↺. Un override silenzioso resterebbe fermo mentre il dato
+vero cambia sotto. Le voci senza valore si **contano sotto la tabella** invece di sparire dal
+totale.
+
+⚠️ **La voce «Contribuzione alla pensione» è un flusso annuo, non un capitale**: è l'importo lordo
+della simulazione INPS più recente per `issued_at` (fra i due scenari possono convivere, e quello
+vecchio parla di un'altra età di uscita). Sommarla ai capitali è quello che è stato chiesto, e la
+riga lo scrive.
+
+⚠️ **Nelle due tabelle l'importo viene PRIMA della voce**, che è l'unico posto in Finanza dove
+l'ordine di lettura abituale si rovescia: `.table td` è `nowrap` in tutta la pagina (colonne di
+numeri) e la voce è prosa — coi caratteri di sistema grandi va a capo tre volte e spingerebbe
+oltre il bordo destro proprio il numero per cui la tabella esiste. La sola cella della voce torna
+ad andare a capo; ✎, 💬 e ↺ restano in testa alla riga come in `calorie.html`.
+
+I due 💬 (università di Ada, assicurazione caso morte e invalidità) aprono un popup col **prompt
+già scritto** da incollare in una chat con l'IA. Quello dell'assicurazione ci mette dentro i numeri
+che la pagina già conosce — fabbisogno voce per voce, dotazioni, scopertura — perché riscriverli a
+memoria è il modo più semplice di far ragionare l'IA su cifre sbagliate. ⚠️ La voce
+dell'assicurazione **resta fuori dal proprio prompt**: il capitale da assicurare è quello che si
+sta chiedendo, e metterlo fra i dati di partenza vorrebbe dire farsi ricalcolare una cifra già
+scritta da soli.
+
 ### Memorandum (`mm_`)
 | Table | Purpose |
 |---|---|
