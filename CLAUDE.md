@@ -389,14 +389,20 @@ io».
 | `periodicity` | Come si conta |
 |---|---|
 | `una_tantum` | Un capitale: **stesso importo** su tutti e tre gli orizzonti |
-| `annuo` | Un flusso: sommato anno per anno fino alla data, rivalutato di `revaluation_pct` composto (`sommaFlusso`) |
+| `annuo` | Un flusso: **importo × anni** che mancano alla data (`sommaFlusso`) |
 
-⚠️ **L'ultimo anno parziale entra per la sua frazione**: fermarsi all'anno intero perderebbe fino
-a undici mesi di spesa. E ⚠️ **il FOI non si usa come tasso**: `fnz_foi_index` è storico e gli anni
-da rivalutare sono tutti futuri — il form ne mostra la crescita media (`coverageFoiMedia`, CAGR
-sulla **distanza fra gli anni**, non sul numero di righe: con i buchi dell'indice due valori a
-dieci anni di distanza darebbero il 18 % invece dell'1,7 %) come **spunto**, e il tasso resta una
-scelta.
+⚠️ **Tutto è al VALORE ATTUALE, cioè in euro di oggi**: un flusso è importo per anni, senza
+rivalutazione. Le dotazioni sono in euro di oggi per costruzione — sono quello che c'è — e
+rivalutare il solo fabbisogno metterebbe a confronto due grandezze che non si possono sottrarre.
+Un domani più caro si tiene in conto scrivendo un importo annuo più alto: una scelta visibile nel
+form, non un moltiplicatore nascosto nel codice. Fino alla v1.4.0 il flusso si rivalutava di una
+percentuale composta, e il fabbisogno usciva in euro del giorno in cui sarebbe stato speso.
+⚠️ L'ultimo anno parziale entra per la sua frazione: fermarsi all'anno intero perderebbe fino a
+undici mesi di spesa.
+
+⚠️ La colonna **`revaluation_pct` esiste ancora in tabella e non la legge più nessuno**
+(`20260901160000_...`): va tolta con una migration quando si tocca di nuovo questa parte — una
+colonna che nessuno riempie è un invito a reimplementare la rivalutazione una seconda volta.
 
 ⚠️ **L'assicurazione non è una voce del fabbisogno e non entra nel totale**: è la **copertura** di
 quello che manca, quindi vive fuori dall'elenco (`COVERAGE_ASSICURAZIONE`), nel riepilogo, come

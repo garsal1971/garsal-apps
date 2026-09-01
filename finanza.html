@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.4.0</title>
+  <title>GarsalFinanza v1.4.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.4.0';
-const APP_BUILD   = '2026-09-01T16:20:00Z';
+const APP_VERSION = 'v1.4.1';
+const APP_BUILD   = '2026-09-01T17:05:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3703,6 +3703,12 @@ async function deletePensionContribution(id) {
    sono flussi che durano finché non si smette di lavorare: valgono di più uscendo a vecchiaia
    che cinque anni prima, ed è esattamente la differenza che si sta cercando di vedere.
 
+   ⚠️ Tutto è AL VALORE ATTUALE, cioè in euro di oggi: un flusso è importo × anni, senza
+   rivalutazione. Le dotazioni sono in euro di oggi per costruzione — sono quello che c'è — e
+   rivalutare il solo fabbisogno metterebbe a confronto due grandezze che non si possono
+   sottrarre. Un domani più caro si tiene in conto scrivendo un importo annuo più alto, che è
+   una scelta visibile nel form, non un moltiplicatore nascosto nel codice.
+
    ⚠️ Le voci vivono qui in COVERAGE_ITEMS e non nel database, come INCOME_SECTIONS per il
    reddito: aggiungerne una è una riga di JavaScript, non una migration. In fnz_coverage_items
    finisce solo quello che l'utente scrive — importo, periodicità, rivalutazione, asset
@@ -3746,12 +3752,12 @@ const COVERAGE_ITEMS = [
     fonte: 'auto', periodicita: 'una_tantum', auto: coverageMutuoResiduo },
   { side: 'fabbisogno', key: 'costo_vita',    icon: '🧺', label: 'Costo della vita',
     hint: () => 'Importo all\'anno, preso a spunto lo stipendio da insegnante.',
-    fonte: 'manuale', periodicita: 'annuo', rivalutazione: 2 },
+    fonte: 'manuale', periodicita: 'annuo' },
   { side: 'fabbisogno', key: 'rendita_ada',   icon: '💐', label: 'Rendita per sostentamento Ada o acquisto casa',
     hint: () => '', fonte: 'manuale', periodicita: 'una_tantum' },
   { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
     hint: () => '',
-    fonte: 'auto', periodicita: 'annuo', rivalutazione: 2, auto: coveragePensioneLorda },
+    fonte: 'auto', periodicita: 'annuo', auto: coveragePensioneLorda },
 
   { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',       fonte: 'asset' },
   { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa', fonte: 'asset' },
@@ -3797,15 +3803,19 @@ function coverageScenarios() {
   ].map(s => ({ ...s, anni: anniFinoA(s.date), anno: s.date ? s.date.slice(0, 4) : '—' }));
 }
 
-/* Un flusso annuo che dura `anni` (anche frazionari), rivalutato del `pct` per cento all'anno.
-   Gli anni interi si sommano con la progressione geometrica; l'ultimo anno parziale entra per
-   la sua frazione — fermarsi all'anno intero perderebbe fino a undici mesi di spesa. */
-function sommaFlusso(annuo, anni, pct) {
+/* Un flusso annuo che dura `anni` (anche frazionari), sommato AL VALORE ATTUALE: importo per
+   anni, e nient'altro.
+   ⚠️ Fino alla v1.4.0 si rivalutava di una percentuale composta, e il fabbisogno usciva in euro
+   del giorno in cui sarebbe stato speso — un numero che non si può confrontare con le dotazioni,
+   che sono in euro di oggi, né con l'importo che si è scritto nel form. Tutta la pagina parla
+   ora in euro di oggi: il confronto torna a essere fra grandezze omogenee, e il costo della vita
+   di domani lo si tiene in conto scrivendo un importo annuo più alto, non moltiplicandolo di
+   nascosto.
+   L'ultimo anno parziale entra per la sua frazione: fermarsi all'anno intero perderebbe fino a
+   undici mesi di spesa. */
+function sommaFlusso(annuo, anni) {
   if (annuo == null || anni == null) return null;
-  const r = (pct || 0) / 100;
-  const interi = Math.floor(anni), resto = anni - interi;
-  const somma = r === 0 ? annuo * interi : annuo * (Math.pow(1 + r, interi) - 1) / r;
-  return somma + resto * annuo * Math.pow(1 + r, interi);
+  return annuo * anni;
 }
 
 /* Le fonti automatiche. Tornano { value, label } oppure null — null è «il dato non c'è», non
@@ -3873,10 +3883,6 @@ function coverageBase(item) {
 function coveragePeriodicita(item) {
   return coverageRow(item)?.periodicity || item.periodicita || 'una_tantum';
 }
-function coverageRivalutazione(item) {
-  const r = coverageRow(item)?.revaluation_pct;
-  return r == null ? (item.rivalutazione || 0) : parseFloat(r);
-}
 /* Il valore di una voce su un orizzonte: un capitale è lo stesso su tutti e tre, un flusso no.
    `anni` null (data della simulazione mancante) porta a null e non a zero — non sapere quanto
    dura non è saperlo pari a niente. */
@@ -3884,7 +3890,7 @@ function coverageValoreA(item, anni) {
   const base = coverageBase(item);
   if (base.value == null) return null;
   if (coveragePeriodicita(item) !== 'annuo') return base.value;
-  return anni == null ? null : sommaFlusso(base.value, anni, coverageRivalutazione(item));
+  return anni == null ? null : sommaFlusso(base.value, anni);
 }
 function coverageTotaleA(side, anni) {
   const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(i => coverageValoreA(i, anni));
@@ -4036,7 +4042,6 @@ function renderCoverageRow(item, colonne) {
     ? (base.auto ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span> <span class="text-muted text-sm">al posto di ${fmtEUR(base.auto.value)}</span>` : '')
     : (base.auto ? `<span class="text-muted text-sm">${base.auto.label}</span>`
                  : (item.fonte === 'manuale' ? '' : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : 'Dato non disponibile in Finanza'}</span>`));
-  const rival = coverageRivalutazione(item);
   return `
     <div class="cov-item">
       <div class="hstack gap-4" style="flex-wrap:wrap">
@@ -4045,29 +4050,12 @@ function renderCoverageRow(item, colonne) {
         ${base.scrittoAMano && base.auto ? `<button class="btn-icon" data-action="coverage-reset" data-side="${item.side}" data-key="${item.key}" title="Torna al dato di Finanza">↺</button>` : ''}
         <span class="fw-600">${item.icon} ${item.label}</span>
       </div>
-      ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno${rival ? `, +${String(rival).replace('.', ',')}% l'anno` : ', senza rivalutazione'}</div>` : ''}
+      ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno, in euro di oggi</div>` : ''}
       ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
       ${fonte ? `<div>${fonte}</div>` : ''}
       ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
       ${renderCoverageVals(colonne, colonne.map(c => coverageValoreA(item, c.anni)))}
     </div>`;
-}
-
-// Spunto per il tasso di rivalutazione: la media del FOI degli ultimi anni. ⚠️ È uno spunto e
-// non il tasso: l'indice è storico e gli anni da rivalutare sono tutti futuri — usarlo come se
-// fosse una previsione sarebbe leggere il passato per il domani senza dirlo.
-function coverageFoiMedia(anni = 10) {
-  const idx = (S.foiIndex || []).filter(r => r.value != null).slice().sort((a, b) => a.year - b.year);
-  if (idx.length < 2) return null;
-  const ultimi = idx.slice(-(anni + 1));
-  const primo = ultimi[0], fine = ultimi[ultimi.length - 1];
-  const a = parseFloat(primo.value), b = parseFloat(fine.value);
-  // ⚠️ Gli anni sono la distanza fra i due anni, non il numero di righe: l'indice può avere
-  // buchi, e contando le righe due valori a dieci anni di distanza darebbero il 18% invece
-  // dell'1,7% — un tasso dieci volte più alto, e plausibile abbastanza da non insospettire.
-  const n = fine.year - primo.year;
-  if (!(a > 0) || !(b > 0) || n < 1) return null;
-  return (Math.pow(b / a, 1 / n) - 1) * 100;
 }
 
 function openCoverageModal(side, key) {
@@ -4076,8 +4064,6 @@ function openCoverageModal(side, key) {
   const row   = coverageRow(item);
   const base  = coverageBase(item);
   const per   = coveragePeriodicita(item);
-  const rival = coverageRivalutazione(item);
-  const foi   = coverageFoiMedia();
   const assetOptions = S.otherAssets
     .filter(a => a.asset_type !== 'danaro_rosa')
     .map(a => `<option value="${a.id}" ${row?.linked_other_asset_id === a.id ? 'selected' : ''}>${esc(a.title || a.asset_type)} · ${fmtEUR(parseFloat(a.value))}</option>`)
@@ -4107,13 +4093,6 @@ function openCoverageModal(side, key) {
                value="${row?.amount ?? ''}" />
         ${base.auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(base.auto.value)}</strong> (${base.auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
       </div>
-      ${per === 'annuo' || item.fonte === 'manuale' ? `
-      <div class="form-group">
-        <label class="form-label">Rivalutazione annua (%)</label>
-        <input name="revaluation_pct" type="number" step="any" min="0" class="form-input mono"
-               placeholder="vuoto = ${String(item.rivalutazione || 0).replace('.', ',')} %" value="${row?.revaluation_pct ?? ''}" />
-        <p class="text-muted text-sm" style="margin-top:6px">Conta solo se la voce si somma ogni anno. 0 = nessuna rivalutazione.${foi != null ? ` Spunto: il FOI degli ultimi dieci anni è cresciuto in media del <strong>${foi.toFixed(1).replace('.', ',')} %</strong> all'anno — ma è passato, e questi anni sono futuri.` : ''}</p>
-      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Nota</label>
         <textarea name="note" class="form-input" rows="2" placeholder="Opzionale">${esc(row?.note || '')}</textarea>
@@ -4129,8 +4108,7 @@ function openCoverageModal(side, key) {
       note: (data.note || '').trim() || null,
     };
     if (item.fonte === 'asset')   campi.linked_other_asset_id = data.linked_other_asset_id || null;
-    if ('periodicity' in data)      campi.periodicity = data.periodicity;
-    if ('revaluation_pct' in data)  campi.revaluation_pct = data.revaluation_pct === '' ? null : parseFloat(data.revaluation_pct);
+    if ('periodicity' in data) campi.periodicity = data.periodicity;
     await saveCoverage(item, campi);
     closeModal();
     render();
@@ -4149,7 +4127,6 @@ async function saveCoverage(item, fields) {
     amount: tieni('amount'),
     linked_other_asset_id: tieni('linked_other_asset_id'),
     periodicity: tieni('periodicity'),
-    revaluation_pct: tieni('revaluation_pct'),
     note: tieni('note'),
     updated_at: new Date().toISOString(),
   }, 'user_id,side,item_key');
@@ -4212,13 +4189,14 @@ Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre
     const colonna = s => `${s.label} (${s.date ? fmtDate(s.date) : 'data da definire'}${s.anni != null ? `, fra ${s.anni.toFixed(1).replace('.', ',')} anni` : ''})`;
     const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s.anni))}`;
     const blocco = i => `- ${i.label}${coveragePeriodicita(i) === 'annuo'
-        ? ` — ${eur(coverageBase(i).value)} all'anno, rivalutati del ${String(coverageRivalutazione(i)).replace('.', ',')}% annuo:` : ' (una volta sola):'}
+        ? ` — ${eur(coverageBase(i).value)} all'anno per gli anni che mancano:` : ' (una volta sola):'}
 ${scen.map(s => voce(i, s)).join('\n')}`;
     return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano:
 una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia.
 
 Questo è il quadro che ho già messo a fuoco. Il punto è che il fabbisogno non è un numero solo: dipende
-da quando smetto di lavorare, e gli scenari sono tre.
+da quando smetto di lavorare, e gli scenari sono tre. Tutti gli importi qui sotto sono in EURO DI OGGI,
+senza rivalutazione: dimmi tu se e come tenerne conto.
 
 LE TRE DATE:
 ${scen.map(s => `- ${colonna(s)}`).join('\n')}
