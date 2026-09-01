@@ -2013,7 +2013,13 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   vedi lo schema `sp_`): `MOODS` in `spuntiamola.html` e la `data class Mood` +
   `MOODS`/`moodDi()` in `SpuntiamolaModel.kt` sono **la stessa tabella scritta due volte** — frasi,
   emoji, traguardi, messaggi di chiusura, etichette e `fuochiAl100` — e **vanno cambiate insieme**,
-  o le due implementazioni commentano la stessa stecca in due modi diversi. Da tutt'e due la voce
+  o le due implementazioni commentano la stessa stecca in due modi diversi. Il modo per
+  accorgersene: far stampare a tutt'e due la propria tabella e confrontarla campo per campo — i
+  **quattordici** campi per umore devono coincidere alla lettera, comprese le 31 frasi dell'attesa
+  e le 30 dei bei giorni. ⚠️ Anche il **sottotitolo delle due schede** sta in `MOODS` (`sub` /
+  `sottotitolo`) e non nel markup: scritto a mano nell'HTML era una seconda copia di quei testi,
+  ed è già divergito una volta dalla riga che spiega cosa cambia (`hint` / `spiegazione`), che è
+  una cosa diversa e sta sotto le schede. Da tutt'e due la voce
   della **chiusura si legge prima** che lo stato torni al campo libero (parametro `voce` nel web,
   `val voce = stato.mood` nel nativo): dopo, l'umore è già tornato all'attesa e dei bei giorni
   verrebbero salutati con la voce sbagliata.
