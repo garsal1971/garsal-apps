@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.3.25</title>
+  <title>GarsalFinanza v1.3.26</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -470,6 +470,7 @@
       <div class="nav-sublabel">Previdenza</div>
       <div class="nav-group">
         <button class="nav-item"        data-action="nav" data-view="previdenza">🏛️ Simulazione INPS</button>
+        <button class="nav-item"        data-action="nav" data-view="coperture">🛡️ Coperture per esigenze future</button>
       </div>
 
       <div class="nav-label">Spese</div>
@@ -523,6 +524,7 @@
       <div id="view-other-assets"       class="view"></div>
       <div id="view-reddito"            class="view"></div>
       <div id="view-previdenza"         class="view"></div>
+      <div id="view-coperture"          class="view"></div>
       <div id="view-danaro-rosa"        class="view"></div>
       <div id="view-conto-risparmio"    class="view"></div>
       <div id="view-prodotti"           class="view"></div>
@@ -568,8 +570,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.3.25';
-const APP_BUILD   = '2026-08-31T15:30:00Z';
+const APP_VERSION = 'v1.3.26';
+const APP_BUILD   = '2026-09-01T15:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -593,6 +595,8 @@ const S = {
   // Previdenza: stessa scelta di rosaTx/income (null = mai letta). Previsione INPS e storico
   // contributivo si aggiornano di rado e non entrano in nessun calcolo del patrimonio.
   pensionForecast: null, pensionContrib: null,
+  // Coperture per esigenze future: stessa scelta di pensionForecast (null = mai lette).
+  coverage: null,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -3679,6 +3683,397 @@ async function deletePensionContribution(id) {
   render();
 }
 
+/* ══════════════ COPERTURE PER ESIGENZE FUTURE ═══════════════════
+   Due colonne che si guardano in faccia: quello che servirà (fabbisogno) e quello con cui ci
+   si arriva (dotazioni). La pagina risponde a una domanda sola — quanto manca — e per questo
+   il saldo sta in cima e non in fondo.
+
+   ⚠️ Le voci vivono qui in COVERAGE_ITEMS e non nel database, come INCOME_SECTIONS per il
+   reddito: aggiungerne una è una riga di JavaScript, non una migration. In fnz_coverage_items
+   finisce solo quello che l'utente scrive — importo, asset collegato, nota.
+
+   ⚠️ Tre fonti diverse, e la differenza è la funzionalità:
+     'manuale' — la cifra la scrive l'utente e basta;
+     'auto'    — la cifra si legge dal vivo dai dati di Finanza (mutuo, portafogli, INPS), e
+                 l'importo scritto a mano è un OVERRIDE che vince e si toglie col ↺;
+     'asset'   — come 'auto', ma la riga di fnz_other_assets da cui leggere la sceglie
+                 l'utente in tendina: i titoli degli asset non si indovinano dal codice, e una
+                 voce agganciata per nome smetterebbe di leggere il giorno che qualcuno
+                 rinomina «Casa Rosa» in «Casa di Rosa», senza dire niente.
+
+   ⚠️ Una casella vuota resta vuota e non vale zero, come in fnz_income: su una voce manuale
+   dice «non l'ho ancora scritto», su una automatica «vale il dato di Finanza». Le voci senza
+   valore si contano sotto la tabella invece di sparire dal totale in silenzio. */
+const COVERAGE_ITEMS = [
+  { side: 'fabbisogno', key: 'universita',    icon: '🎓', label: 'Mantenimento università di Ada',
+    hint: 'Sette anni fuori sede: laurea e specializzazione.', fonte: 'manuale', prompt: 'universita' },
+  { side: 'fabbisogno', key: 'mutuo',         icon: '🏠', label: 'Estinzione mutuo',
+    hint: 'Quanto servirebbe per chiudere il mutuo oggi.', fonte: 'auto', auto: coverageMutuoResiduo },
+  { side: 'fabbisogno', key: 'costo_vita',    icon: '🧺', label: 'Costo della vita',
+    hint: 'Preso a spunto lo stipendio da insegnante.', fonte: 'manuale' },
+  { side: 'fabbisogno', key: 'assicurazione', icon: '🛡️', label: 'Assicurazione caso morte e invalidità',
+    hint: 'Capitale da assicurare e premio della polizza.', fonte: 'manuale', prompt: 'assicurazione' },
+  { side: 'fabbisogno', key: 'rendita_ada',   icon: '💐', label: 'Rendita per sostentamento Ada o acquisto casa',
+    hint: '', fonte: 'manuale' },
+  { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
+    hint: 'Importo lordo dell\'ultima simulazione INPS: è un flusso annuo, non un capitale.',
+    fonte: 'auto', auto: coveragePensioneLorda },
+
+  { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',          fonte: 'asset' },
+  { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa',    fonte: 'asset' },
+  { side: 'dotazione',  key: 'casa_mia',      icon: '🏡', label: 'Casa Mia',     fonte: 'asset' },
+  { side: 'dotazione',  key: 'finanza',       icon: '📈', label: 'Finanza',
+    hint: 'Valore quota dei portafogli, liquidità compresa.', fonte: 'auto', auto: coverageFinanza },
+  { side: 'dotazione',  key: 'pensione_ada',  icon: '👛', label: 'Pensione Ada', fonte: 'asset' },
+];
+const COVERAGE_SIDES = [
+  { key: 'fabbisogno', icon: '🎯', title: 'Fabbisogno', sub: 'Quello che servirà' },
+  { key: 'dotazione',  icon: '🧰', title: 'Dotazioni',  sub: 'Quello con cui ci si arriva' },
+];
+
+/* Le tre fonti automatiche. Tornano { value, label } oppure null — null è «il dato non c'è»,
+   non zero: un dato assente si vede come voce da compilare, uno zero finto no. */
+function coverageMutuoResiduo() {
+  const mutui = (S.loans || []).filter(l => l.type === 'MUTUO');
+  if (!mutui.length) return null;
+  const value = mutui.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
+  return { value, label: mutui.length === 1
+    ? `Debito residuo di «${esc(mutui[0].name || 'Mutuo')}»`
+    : `Debito residuo di ${mutui.length} mutui` };
+}
+function coverageFinanza() {
+  const value = portfolioStats().reduce((s, x) => s + x.totalValue, 0);
+  return { value, label: 'Valore quota dei portafogli' };
+}
+function coveragePensioneLorda() {
+  const rows = (S.pensionForecast || []).filter(r => r.gross_amount != null);
+  if (!rows.length) return null;
+  // Più recente per data della simulazione: due scenari possono convivere, e quello vecchio
+  // parla di un'altra età di uscita.
+  const r  = rows.slice().sort((a, b) => (b.issued_at || '').localeCompare(a.issued_at || ''))[0];
+  const sc = PENSION_SCENARIOS.find(s => s.key === r.scenario);
+  return { value: parseFloat(r.gross_amount),
+    label: `${sc ? sc.label : r.scenario}${r.issued_at ? ` · simulazione del ${fmtDate(r.issued_at)}` : ''}` };
+}
+
+async function loadCoverage() {
+  S.coverage = await sbQ('fnz_coverage_items', 'select=*');
+}
+function coverageRow(item) {
+  return (S.coverage || []).find(r => r.side === item.side && r.item_key === item.key) || null;
+}
+function coverageAuto(item) {
+  if (item.fonte === 'auto')  return item.auto();
+  if (item.fonte === 'asset') {
+    const id = coverageRow(item)?.linked_other_asset_id;
+    const a  = id ? S.otherAssets.find(x => x.id === id) : null;
+    if (!a) return null;
+    const own = (parseFloat(a.ownership_percentage) || 100) / 100;
+    return { value: parseFloat(a.value) * own,
+      label: `Asset: ${esc(a.title || a.asset_type)}${own !== 1 ? ` · quota ${parseFloat(a.ownership_percentage)}%` : ''}` };
+  }
+  return null;
+}
+// L'importo scritto a mano vince sul dato di Finanza — ma si vede che è scritto a mano, e si
+// toglie col ↺: un override silenzioso resterebbe fermo mentre il dato vero cambia sotto.
+function coverageValue(item) {
+  const row     = coverageRow(item);
+  const manuale = row && row.amount != null ? parseFloat(row.amount) : null;
+  const auto    = coverageAuto(item);
+  if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row };
+  return { value: auto ? auto.value : null, scrittoAMano: false, auto, row };
+}
+function coverageTotal(side) {
+  const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(coverageValue);
+  return {
+    total:   voci.reduce((s, v) => s + (v.value || 0), 0),
+    mancanti: voci.filter(v => v.value == null).length,
+  };
+}
+
+function renderCoperture() {
+  // Primo ingresso: si disegna con quello che c'è e si ridisegna quando i dati arrivano, come
+  // renderPrevidenza. La previsione INPS serve alla voce «Contribuzione alla pensione», quindi
+  // si carica anche da qui: senza, quella voce resterebbe vuota finché non si apre l'altra pagina.
+  if (S.coverage === null) {
+    S.coverage = [];
+    loadCoverage().then(() => { if (S.view === 'coperture') renderCoperture(); })
+                  .catch(e => console.error('Coperture:', e));
+  }
+  if (S.pensionForecast === null) {
+    S.pensionForecast = [];
+    loadPensionForecast().then(() => { if (S.view === 'coperture') renderCoperture(); })
+                         .catch(e => console.error('Coperture (previsione INPS):', e));
+  }
+  const fab = coverageTotal('fabbisogno');
+  const dot = coverageTotal('dotazione');
+  const saldo = fab.total - dot.total;          // > 0 = manca, < 0 = avanza
+  const mancanti = fab.mancanti + dot.mancanti;
+
+  setHtml('view-coperture', `
+    <div class="view-header">
+      <div>
+        <h2 class="page-title">Coperture per esigenze future</h2>
+        <p class="page-sub">Quello che servirà, quello con cui ci si arriva, e quanto manca</p>
+      </div>
+    </div>
+    <div class="kpi-grid">
+      ${kpi('Fabbisogno', fmtEUR(fab.total), 'neg')}
+      ${kpi('Dotazioni',  fmtEUR(dot.total), 'pos')}
+      ${kpi(saldo > 0 ? 'Scopertura' : 'Eccedenza', fmtEUR(Math.abs(saldo)), saldo > 0 ? 'neg' : 'pos')}
+    </div>
+    ${mancanti ? `<p class="text-muted text-sm mb-12">⚠️ ${mancanti === 1 ? 'Una voce non compilata' : `${mancanti} voci non compilate`}: il saldo qui sopra ${mancanti === 1 ? 'la conta' : 'le conta'} come se non ${mancanti === 1 ? 'esistesse' : 'esistessero'}, non come zero.</p>` : ''}
+    ${COVERAGE_SIDES.map(renderCoverageSide).join('')}
+  `);
+}
+
+function renderCoverageSide(side) {
+  const voci = COVERAGE_ITEMS.filter(i => i.side === side.key);
+  const tot  = coverageTotal(side.key);
+  return `
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">${side.icon} ${side.title}</div>
+        <span class="text-muted text-sm">${side.sub}</span>
+      </div>
+      <div class="table-wrap"><table class="table">
+        <thead><tr>
+          <th style="width:1%"></th><th class="text-right">Importo</th>
+          <th>Voce</th><th>Da dove viene</th>
+        </tr></thead>
+        <tbody>
+          ${voci.map(renderCoverageRow).join('')}
+          <tr>
+            <td></td>
+            <td class="mono text-right fw-700">${fmtEUR(tot.total)}</td>
+            <td class="fw-600" style="white-space:normal">Totale ${side.title.toLowerCase()}</td>
+            <td class="text-muted text-sm">${tot.mancanti ? `${tot.mancanti} da compilare` : ''}</td>
+          </tr>
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+/* ⚠️ ✎ e gli altri comandi stanno in TESTA alla riga e non in coda: su un telefono la tabella
+   scorre di lato e l'ultima colonna sta oltre il bordo destro — per raggiungerla bisognerebbe
+   già sapere che c'è dell'altro da trascinare.
+   ⚠️ Per la stessa ragione l'IMPORTO viene prima della voce, che è l'unico posto in cui questa
+   tabella non segue l'ordine di lettura abituale: la voce è prosa e coi caratteri di sistema
+   grandi va a capo tre volte, spingendo oltre il bordo proprio il numero per cui la tabella
+   esiste. `.table td` è `nowrap` in tutta la pagina (colonne di numeri): qui la sola cella
+   della voce torna a andare a capo. */
+function renderCoverageRow(item) {
+  const v    = coverageValue(item);
+  const note = coverageRow(item)?.note;
+  const fonte = v.scrittoAMano
+    ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span>${v.auto ? ` <span class="text-muted text-sm">al posto di ${fmtEUR(v.auto.value)}</span>` : ''}`
+    : (v.auto ? `<span class="text-muted text-sm">${v.auto.label}</span>`
+              : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : item.fonte === 'auto' ? 'Dato non disponibile in Finanza' : 'Da scrivere a mano'}</span>`);
+  return `
+    <tr>
+      <td><div class="hstack gap-4">
+        <button class="btn-icon" data-action="edit-coverage" data-side="${item.side}" data-key="${item.key}" title="Compila / modifica">✎</button>
+        ${item.prompt ? `<button class="btn-icon" data-action="coverage-prompt" data-key="${item.key}" title="Prompt per l'analisi con l'IA">💬</button>` : ''}
+        ${v.scrittoAMano && v.auto ? `<button class="btn-icon" data-action="coverage-reset" data-side="${item.side}" data-key="${item.key}" title="Torna al dato di Finanza">↺</button>` : ''}
+      </div></td>
+      <td class="mono text-right fw-600">${fmtEUR(v.value)}</td>
+      <td style="white-space:normal;min-width:11ch">
+        <div class="fw-600">${item.icon} ${item.label}</div>
+        ${item.hint ? `<div class="text-muted text-sm">${item.hint}</div>` : ''}
+        ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
+      </td>
+      <td>${fonte}</td>
+    </tr>`;
+}
+
+function openCoverageModal(side, key) {
+  const item = COVERAGE_ITEMS.find(i => i.side === side && i.key === key);
+  if (!item) return;
+  const row  = coverageRow(item);
+  const v    = coverageValue(item);
+  const assetOptions = S.otherAssets
+    .filter(a => a.asset_type !== 'danaro_rosa')
+    .map(a => `<option value="${a.id}" ${row?.linked_other_asset_id === a.id ? 'selected' : ''}>${esc(a.title || a.asset_type)} · ${fmtEUR(parseFloat(a.value))}</option>`)
+    .join('');
+  openModal(`${item.icon} ${item.label}`, `
+    <form id="modal-form">
+      ${item.fonte === 'asset' ? `
+      <div class="form-group">
+        <label class="form-label">Asset di Finanza da cui leggere il valore</label>
+        <select name="linked_other_asset_id" class="form-input form-select">
+          <option value="">— nessuno, scrivo l'importo a mano</option>
+          ${assetOptions}
+        </select>
+      </div>` : ''}
+      <div class="form-group">
+        <label class="form-label">Importo (€)</label>
+        <input name="amount" type="number" step="any" class="form-input mono"
+               placeholder="${item.fonte === 'manuale' ? 'vuoto = dato assente' : 'vuoto = vale il dato di Finanza'}"
+               value="${row?.amount ?? ''}" />
+        ${v.auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(v.auto.value)}</strong> (${v.auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nota</label>
+        <textarea name="note" class="form-input" rows="2" placeholder="Opzionale">${esc(row?.note || '')}</textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    await saveCoverage(item, {
+      amount: data.amount === '' ? null : parseFloat(data.amount),
+      linked_other_asset_id: item.fonte === 'asset' ? (data.linked_other_asset_id || null) : null,
+      note: (data.note || '').trim() || null,
+    });
+    closeModal();
+    render();
+  });
+}
+
+async function saveCoverage(item, fields) {
+  const row = coverageRow(item);
+  await sbUpsert('fnz_coverage_items', {
+    user_id: S.session.user.id,
+    side: item.side,
+    item_key: item.key,
+    // Quello che il chiamante non nomina resta com'era: il ↺ tocca l'importo e non deve
+    // portarsi via l'asset collegato o la nota.
+    amount: 'amount' in fields ? fields.amount : (row?.amount ?? null),
+    linked_other_asset_id: 'linked_other_asset_id' in fields ? fields.linked_other_asset_id : (row?.linked_other_asset_id ?? null),
+    note: 'note' in fields ? fields.note : (row?.note ?? null),
+    updated_at: new Date().toISOString(),
+  }, 'user_id,side,item_key');
+  await loadCoverage();
+}
+
+async function resetCoverageAmount(side, key) {
+  const item = COVERAGE_ITEMS.find(i => i.side === side && i.key === key);
+  if (!item) return;
+  if (!confirm('Togliere l\'importo scritto a mano e tornare al dato di Finanza?')) return;
+  await saveCoverage(item, { amount: null });
+  render();
+}
+
+/* ⚠️ Il prompt si scrive qui e non a mano ogni volta: una domanda posta bene contiene i numeri
+   che la pagina già conosce (mutuo residuo, fabbisogno, dotazioni), e riscriverli a memoria in
+   una chat è il modo più semplice di far ragionare l'IA su cifre sbagliate. Il popup mostra il
+   testo e lo copia: l'analisi si fa dove si preferisce. */
+const COVERAGE_PROMPTS = {
+  universita: () => `Fammi un'analisi dettagliata del costo di mantenimento di una figlia fuori sede
+per studi universitari in Europa, su un orizzonte di 7 anni (laurea triennale + magistrale/specializzazione).
+
+Confronta le principali città universitarie europee (indicativamente: Milano, Bologna, Roma, Madrid,
+Barcellona, Lisbona, Vienna, Monaco, Berlino, Amsterdam, Parigi, Dublino, Londra, Copenaghen) e per
+ciascuna dammi il costo ANNUO e il costo TOTALE sui 7 anni, in euro, distinguendo queste voci:
+
+- alloggio (posto letto in condivisione e monolocale, indica entrambi);
+- vitto e spesa quotidiana;
+- trasporti locali (abbonamento studenti);
+- tasse universitarie e contributi (distingui atenei pubblici e privati);
+- libri, materiale didattico, eventuale computer;
+- assicurazione sanitaria e spese mediche;
+- spese personali, sport, tempo libero;
+- viaggi di rientro a casa (stima 6-8 rientri all'anno dall'Italia meridionale).
+
+Poi:
+1. una tabella riassuntiva delle città ordinate dalla più economica alla più cara;
+2. il totale sui 7 anni in euro di oggi e rivalutato con un'inflazione del 2% annuo;
+3. quanto bisognerebbe accantonare OGGI, in un'unica soluzione, per coprire quel totale, ipotizzando
+   un rendimento reale netto dell'1,5% e del 3% annuo (dammi entrambi gli scenari);
+4. in alternativa, quanto accantonare ogni mese da qui all'inizio degli studi;
+5. quali borse di studio, agevolazioni per reddito (ISEE), alloggi pubblici e programmi Erasmus
+   possono abbassare quel conto, e di quanto indicativamente.
+
+Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre sono stime.`,
+
+  assicurazione: () => {
+    const eur  = n => n == null ? 'da definire' : fmtEUR(n);
+    const riga = i => `- ${i.label}: ${eur(coverageValue(i).value)}`;
+    // ⚠️ La voce dell'assicurazione resta fuori dal proprio prompt: il capitale da assicurare è
+    // quello che si sta chiedendo, e metterlo fra i dati di partenza vorrebbe dire farsi
+    // ricalcolare una cifra che si è già scritta da soli.
+    const vociFab = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
+    const vociDot = COVERAGE_ITEMS.filter(i => i.side === 'dotazione');
+    const conta   = vv => ({
+      total:    vv.map(coverageValue).reduce((s, v) => s + (v.value || 0), 0),
+      mancanti: vv.map(coverageValue).filter(v => v.value == null).length,
+    });
+    const fab = conta(vociFab);
+    const dot = conta(vociDot);
+    return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano:
+una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia.
+
+Questo è il quadro che ho già messo a fuoco.
+
+FABBISOGNO — quello che servirebbe se io venissi a mancare o non potessi più lavorare
+(la copertura assicurativa non è in elenco: è quella che ti sto chiedendo di dimensionare):
+${vociFab.map(riga).join('\n')}
+Totale fabbisogno: ${fmtEUR(fab.total)}${fab.mancanti ? ` (${fab.mancanti} voci ancora da quantificare)` : ''}
+
+DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi:
+${vociDot.map(riga).join('\n')}
+Totale dotazioni: ${fmtEUR(dot.total)}${dot.mancanti ? ` (${dot.mancanti} voci ancora da quantificare)` : ''}
+
+SCOPERTURA: ${fmtEUR(fab.total - dot.total)}
+
+Dati miei da completare prima di rispondere, chiedimeli se ti servono: età, stato di salute, se fumo,
+professione e reddito annuo netto, età e situazione di coniuge e figlia, eventuali coperture già in essere
+(polizze aziendali, CCNL, assicurazione legata al mutuo).
+
+Quello che ti chiedo:
+1. quale capitale TCM ha senso assicurare, partendo dalla scopertura qui sopra: spiega quali voci del
+   fabbisogno vanno coperte per intero e quali no, e perché;
+2. per quanti anni tenere la copertura (durata della polizza) e se conviene capitale costante o decrescente,
+   viste le voci legate al mutuo e agli studi che si esauriscono nel tempo;
+3. la stessa cosa per l'invalidità permanente: quale capitale o rendita, quale soglia di invalidità
+   (franchigia), e la differenza fra copertura da infortunio e da malattia — quest'ultima è quella che
+   di solito manca;
+4. una stima del premio annuo indicativo in Italia per quei capitali, per fasce d'età (35, 40, 45, 50 anni),
+   fumatore e non fumatore;
+5. le clausole su cui stare attenti nei contratti italiani: questionario sanitario e dichiarazioni,
+   carenze, esclusioni, rivalutazione, vincolo a favore della banca sul mutuo, tassazione e detraibilità
+   fiscale dei premi, designazione dei beneficiari;
+6. se conviene una polizza sola o due contratti separati, e se ha senso affiancare una copertura
+   temporanea caso morte a capitale decrescente legata al mutuo.
+
+Dammi i numeri in euro e spiegami il ragionamento che c'è dietro ciascuno, non solo il risultato.`;
+  },
+};
+
+function openCoveragePromptModal(key) {
+  const item  = COVERAGE_ITEMS.find(i => i.prompt === key);
+  const testo = COVERAGE_PROMPTS[key]?.();
+  if (!item || !testo) return;
+  openModal(`💬 ${item.label}`, `
+    <p class="text-muted text-sm mb-12">Copia questo testo e incollalo in una chat con l'IA che preferisci.
+    I numeri che Finanza già conosce sono dentro il prompt: non riscriverli a memoria.</p>
+    <textarea id="coverage-prompt-text" class="form-input mono" rows="16" readonly style="font-size:.72rem">${esc(testo)}</textarea>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" data-action="close-modal">Chiudi</button>
+      <button type="button" class="btn btn-primary" data-action="coverage-prompt-copy">📋 Copia il prompt</button>
+    </div>
+  `, null);
+}
+
+async function copyCoveragePrompt(btn) {
+  const ta = $('coverage-prompt-text');
+  if (!ta) return;
+  try {
+    await navigator.clipboard.writeText(ta.value);
+  } catch {
+    // Fuori da https e in qualche WebView la clipboard non c'è: si seleziona il testo, così
+    // resta comunque un modo di portarselo via.
+    ta.focus(); ta.select();
+    alert('Copia non riuscita: il testo è selezionato, copialo a mano.');
+    return;
+  }
+  const orig = btn.textContent;
+  btn.textContent = '✓ Copiato';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
 /* ── Movimenti del conto di Rosa ──────────────────────────────
    Il conto si collega come tutti gli altri (Configurazione → 🏦 Banche e Conti) e si spunta
    come «🌹 Danaro di Rosa». Qui i movimenti si leggono e si archiviano in
@@ -6376,6 +6771,7 @@ function render() {
     case 'other-assets':       renderOtherAssets();        break;
     case 'reddito':            renderReddito();            break;
     case 'previdenza':         renderPrevidenza();         break;
+    case 'coperture':          renderCoperture();          break;
     case 'danaro-rosa':        renderDanaroRosa();         break;
     case 'conto-risparmio':    renderContoRisparmio();     break;
     case 'configurazione':     renderConfigurazione();     break;
@@ -6601,6 +6997,10 @@ document.addEventListener('click', async e => {
     case 'new-pension-contribution':  openPensionContributionModal(null); break;
     case 'edit-pension-contribution': openPensionContributionModal(t.dataset.id); break;
     case 'del-pension-contribution':  await deletePensionContribution(t.dataset.id); break;
+    case 'edit-coverage':         openCoverageModal(t.dataset.side, t.dataset.key); break;
+    case 'coverage-reset':        await resetCoverageAmount(t.dataset.side, t.dataset.key); break;
+    case 'coverage-prompt':       openCoveragePromptModal(t.dataset.key); break;
+    case 'coverage-prompt-copy':  await copyCoveragePrompt(t); break;
     case 'rosa-bank-read':    openRosaBankModal(); break;
     case 'rosa-bank-load':    await loadRosaBankMovements(); break;
     case 'rosa-bank-confirm': await confirmRosaBankRead(); break;
