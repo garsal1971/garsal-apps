@@ -373,6 +373,16 @@ silenzio. È la stessa scelta di `fnz_income`.
 **Pensione INPS** dell'anno più recente **che ce l'ha** — non dell'ultimo anno in tabella, o un
 anno appena aperto e ancora da compilare azzererebbe la voce in silenzio.
 
+⚠️ **È un importo ANNUO, e la dotazione è quanto se ne incasserà in tutto**: si moltiplica per gli
+anni che mancano alla fine del **corso regolare** di Ada, l'ultimo in cui quella pensione spetta a
+un figlio studente. Sono due durate diverse in `ADA_SCUOLA` e non è una svista: `anniUniversita`
+(7) è il mantenimento agli studi che decide il **fabbisogno** — laurea più specializzazione —
+mentre `anniCorsoRegolare` (3+2) è la durata legale del corso, che decide fino a quando la
+pensione si incassa (inizio 2029 + 5 = **2034**). Usarne una sola sbaglierebbe per eccesso l'una o
+per difetto l'altra. La fine si **ricava** e non si scrive: un 2034 messo a mano fra due anni
+direbbe ancora 2034. Il conto è in anni interi (`2034 − anno in corso`) così si rifà a mente, e a
+corso finito la voce vale zero — che è quello che sarà.
+
 ⚠️ **L'asset si collega per id e non si indovina dal titolo**: una voce agganciata al nome
 smetterebbe di leggere il giorno che qualcuno rinomina «Casa Rosa» in «Casa di Rosa», e lo
 farebbe **in silenzio** — il totale scenderebbe senza che niente lo dica. `linked_other_asset_id`
