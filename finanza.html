@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.10.0</title>
+  <title>GarsalFinanza v1.10.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -584,8 +584,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.10.0';
-const APP_BUILD   = '2026-09-02T10:40:00Z';
+const APP_VERSION = 'v1.10.1';
+const APP_BUILD   = '2026-09-02T11:05:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3927,6 +3927,14 @@ const COVERAGE_ITEMS = [
   { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
     hint: () => '',
     fonte: 'auto', periodicita: 'annuo', auto: coveragePensioneLorda },
+  /* Il margine per quello che non si è previsto. È l'ultima voce prima dell'assicurazione, e
+     non è una voce di riempimento: un piano che quadra al centesimo su un orizzonte di dieci
+     anni è un piano che non ha lasciato spazio a niente. Nasce `una_tantum` — un capitale
+     messo da parte — ma è manuale, quindi dal ✎ si può dire «ogni anno» e farla contare come
+     un flusso, e col ☑️/🚫 si toglie dal conto senza cancellarla. */
+  { side: 'fabbisogno', key: 'varie',         icon: '📦', label: 'Varie ed eventuali',
+    hint: () => 'Il margine per quello che non sta nelle voci qui sopra.',
+    fonte: 'manuale', periodicita: 'una_tantum' },
   // ⚠️ Va per ultima, e non è un caso: il capitale che deve assicurare è la somma delle voci
   // che la precedono. L'importo qui è il PREMIO annuo della polizza — un costo, come il costo
   // della vita — mentre il capitale è il parametro del contratto e si legge nel riepilogo: due
