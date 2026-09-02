@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.7.0</title>
+  <title>GarsalFinanza v1.8.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -477,10 +477,10 @@
         <button class="nav-item"        data-action="nav" data-view="reddito">💶 Reddito</button>
       </div>
 
-      <div class="nav-sublabel">Previdenza</div>
+      <div class="nav-sublabel">Piano pensione</div>
       <div class="nav-group">
         <button class="nav-item"        data-action="nav" data-view="previdenza">🏛️ Simulazione INPS</button>
-        <button class="nav-item"        data-action="nav" data-view="coperture">🛡️ Coperture per esigenze future</button>
+        <button class="nav-item"        data-action="nav" data-view="coperture">🛡️ Possibili soluzioni</button>
       </div>
 
       <div class="nav-label">Spese</div>
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.7.0';
-const APP_BUILD   = '2026-09-01T19:40:00Z';
+const APP_VERSION = 'v1.8.0';
+const APP_BUILD   = '2026-09-02T09:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -607,6 +607,9 @@ const S = {
   pensionForecast: null, pensionContrib: null,
   // Coperture per esigenze future: stessa scelta di pensionForecast (null = mai lette).
   coverage: null,
+  // Le durate dell'uscita concordata (accompagnamento + garden leave + aspettativa), da
+  // cm_settings. null = mai lette; {} = lette e mai compilate, e allora vale USCITA_DEFAULT.
+  uscita: null,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -3849,8 +3852,37 @@ function adaUniversita() {
            fineCorsoRegolare: inizio + ADA_SCUOLA.anniCorsoRegolare };
 }
 
-// Lo scenario più vicino: si esce cinque anni prima dell'anticipata.
-const COVERAGE_ANNI_ACCOMPAGNAMENTO = 5;
+/* ── Lo scenario più vicino: quanti anni prima dell'anticipata si esce ──────
+   Non è più un numero solo, ed è la sostanza del piano: l'azienda accompagna alla pensione,
+   ci mette in più un anno di garden leave, e a quello si aggiungono gli anni di aspettativa
+   che ci si prende da sé. Le tre durate si sommano, e ciascuna è una cosa diversa che si
+   tratta con un interlocutore diverso: schiacciarle in un numero solo (i 5 anni fissi di
+   prima) le rendeva impossibili da negoziare una per una.
+
+   ⚠️ Vivono in cm_settings — la tabella chiave/valore della suite — e non in una costante:
+   sono un'ipotesi di trattativa, cioè esattamente il numero che si vuole poter cambiare senza
+   toccare il codice. Non in localStorage, che sarebbe di quel browser e basta: la stessa
+   domanda ci si fa dal PC e dal telefono. Una chiave assente vale come «mai compilato» e si
+   ricade su USCITA_DEFAULT, non su zero — zero direbbe che non si esce affatto prima. */
+const USCITA_CHIAVE  = 'fnz_uscita_anticipata';
+const USCITA_DEFAULT = { accompagnamento: 5, garden_leave: 1, aspettativa: 2 };
+const USCITA_VOCI = [
+  { key: 'accompagnamento', label: 'Accompagnamento', hint: 'Anni che l\'azienda copre accompagnando alla pensione.' },
+  { key: 'garden_leave',    label: 'Garden leave',    hint: 'Anno (o anni) di preavviso non lavorato che l\'azienda concede in più.' },
+  { key: 'aspettativa',     label: 'Aspettativa',     hint: 'Anni di aspettativa non retribuita che ci si prende da sé.' },
+];
+function uscita() {
+  const v = S.uscita || {};
+  const n = k => { const x = parseFloat(v[k]); return Number.isFinite(x) && x >= 0 ? x : USCITA_DEFAULT[k]; };
+  const parti = Object.fromEntries(USCITA_VOCI.map(o => [o.key, n(o.key)]));
+  return { ...parti, anni: USCITA_VOCI.reduce((s, o) => s + parti[o.key], 0) };
+}
+async function loadUscita() {
+  const rows = await sbQ('cm_settings', `key=eq.${USCITA_CHIAVE}&select=value&limit=1`);
+  let v = rows[0]?.value ?? null;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+  S.uscita = (v && typeof v === 'object') ? v : {};
+}
 
 const COVERAGE_ITEMS = [
   { side: 'fabbisogno', key: 'universita',    icon: '🎓', label: 'Mantenimento università di Ada',
@@ -3876,6 +3908,15 @@ const COVERAGE_ITEMS = [
     hint: () => 'Premio annuo della polizza. Il capitale da assicurare è nel riepilogo qui sopra.',
     fonte: 'manuale', periodicita: 'annuo', prompt: 'assicurazione' },
 
+  /* ⚠️ Una dotazione MANUALE, e l'unica: è quello che l'azienda mette sul piatto per l'uscita
+     (accompagnamento e garden leave), cioè un numero che non sta da nessuna parte in Finanza
+     perché non è ancora stato né chiesto né concesso. È un capitale una tantum — vale uguale
+     su tutte e tre le date — e finché resta vuoto si conta fra le voci «da compilare» invece
+     di entrare nel totale come zero. */
+  { side: 'dotazione',  key: 'accordo_azienda', icon: '🤝', label: 'Accordo con azienda',
+    hint: () => { const u = uscita();
+      return `Quello che l'azienda metterebbe per l'uscita: ${anniTxt(u.accompagnamento)} di accompagnamento e ${anniTxt(u.garden_leave)} di garden leave.`; },
+    fonte: 'manuale', periodicita: 'una_tantum' },
   { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',       fonte: 'asset' },
   { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa', fonte: 'asset' },
   { side: 'dotazione',  key: 'casa_mia',      icon: '🏡', label: 'Casa Mia',  fonte: 'asset' },
@@ -3904,12 +3945,16 @@ const COVERAGE_SIDES = [
 ];
 
 /* ── Le tre date ──────────────────────────────────────────────
-   Vecchiaia e anticipata sono quelle della simulazione INPS (Previdenza); l'accompagnamento è
-   l'anticipata meno cinque anni. Una data che manca non si inventa: la colonna resta vuota e lo
-   dice, invece di mostrare un fabbisogno contato su un orizzonte immaginario. */
+   Vecchiaia e anticipata sono quelle della simulazione INPS (Piano pensione); l'uscita
+   concordata è l'anticipata meno la somma delle tre durate di `uscita()`. Una data che manca
+   non si inventa: la colonna resta vuota e lo dice, invece di mostrare un fabbisogno contato
+   su un orizzonte immaginario. */
+/* ⚠️ Si sposta di MESI e non di anni interi: le tre durate dell'uscita si scrivono a mano e
+   niente vieta un mezzo anno di preavviso — con setFullYear un 2,5 diventerebbe una data
+   invalida (NaN) invece di sei mesi. */
 function spostaAnni(iso, n) {
   const d = new Date(iso + 'T00:00:00');
-  d.setFullYear(d.getFullYear() + n);
+  d.setMonth(d.getMonth() + Math.round(n * 12));
   return d.toISOString().slice(0, 10);
 }
 function anniFinoA(iso) {
@@ -3917,14 +3962,24 @@ function anniFinoA(iso) {
   const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
   return Math.max(0, (new Date(iso + 'T00:00:00') - oggi) / 86400000 / 365.25);
 }
+/* Anni interi scritti a parole, che è come si leggono in una frase: «1 anno», «2 anni», e
+   «1,5 anni» dove qualcuno metta un mezzo anno di preavviso. */
+function anniTxt(n) {
+  const t = Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+  return `${t} ann${n === 1 ? 'o' : 'i'}`;
+}
 function coverageScenarios() {
   const f   = pensionForecastByScenario();
   const ant = f.anticipata?.pension_date || null;
   const vec = f.vecchiaia?.pension_date  || null;
-  const acc = ant ? spostaAnni(ant, -COVERAGE_ANNI_ACCOMPAGNAMENTO) : null;
+  const u   = uscita();
+  // ⚠️ Le tre durate si sommano e non si sovrappongono: l'azienda accompagna, il garden leave
+  // viene in più, e l'aspettativa si aggiunge ancora — quindi si esce `u.anni` prima
+  // dell'anticipata, non `max()` di qualcosa.
+  const acc = ant ? spostaAnni(ant, -u.anni) : null;
   return [
-    { key: 'accompagnamento', icon: '🧭', label: 'Accompagnamento', breve: 'Accompagn.',
-      sub: `Anticipata − ${COVERAGE_ANNI_ACCOMPAGNAMENTO} anni`, date: acc },
+    { key: 'accompagnamento', icon: '🧭', label: 'Uscita concordata', breve: 'Uscita',
+      sub: `Anticipata − ${anniTxt(u.anni)}`, date: acc },
     { key: 'anticipata',      icon: '🚪',  label: 'Pensione anticipata',   breve: 'Anticipata', sub: 'Simulazione INPS', date: ant },
     { key: 'vecchiaia',       icon: '🏛️', label: 'Pensione di vecchiaia', breve: 'Vecchiaia',  sub: 'Simulazione INPS', date: vec },
   ].map(s => ({ ...s, anni: anniFinoA(s.date), anno: s.date ? s.date.slice(0, 4) : '—' }));
@@ -4077,6 +4132,11 @@ function renderCoperture() {
     loadPensionForecast().then(() => { if (S.view === 'coperture') renderCoperture(); })
                          .catch(e => console.error('Coperture (previsione INPS):', e));
   }
+  if (S.uscita === null) {
+    S.uscita = {};
+    loadUscita().then(() => { if (S.view === 'coperture') renderCoperture(); })
+                .catch(e => console.error('Coperture (uscita concordata):', e));
+  }
   if (S.income === null) {
     S.income = [];
     loadIncome().then(() => { if (S.view === 'coperture') renderCoperture(); })
@@ -4086,7 +4146,7 @@ function renderCoperture() {
   setHtml('view-coperture', `
     <div class="view-header">
       <div>
-        <h2 class="page-title">Coperture per esigenze future</h2>
+        <h2 class="page-title">Possibili soluzioni</h2>
         <p class="page-sub">Quello che servirà fino a ciascuna delle tre date, e quello con cui ci si arriva</p>
       </div>
     </div>
@@ -4109,6 +4169,7 @@ function renderCoverageRiepilogo(scen) {
         <div class="card-title">📅 Quanto manca, e per quando</div>
         <span class="text-muted text-sm">Le dotazioni sono quelle di oggi</span>
       </div>
+      ${renderUscitaRiga(scen[0])}
       ${senzaData.length ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaData.map(s => s.label).join(' e ')}: manca la data. Compila la simulazione in 🏛️ Simulazione INPS — un fabbisogno contato su un orizzonte inventato non direbbe niente.</p>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr>
@@ -4149,6 +4210,61 @@ function renderCoverageRiepilogo(scen) {
         </tbody>
       </table></div>
     </div>`;
+}
+
+/* ⚠️ La prima colonna è l'unica delle tre che si decide, non si subisce: le altre due date le
+   dà l'INPS, questa è un'ipotesi di trattativa. Perciò l'addizione sta scritta a schermo, con
+   accanto il ✎ che la cambia — un «Anticipata − 8 anni» senza gli addendi è un numero che non
+   si può discutere con nessuno.
+   ⚠️ Il ✎ sta in TESTA alla riga come sulle voci: su un telefono quel che sta a destra finisce
+   oltre il bordo. */
+function renderUscitaRiga(sc) {
+  const u = uscita();
+  const addendi = USCITA_VOCI.map(o => `${anniTxt(u[o.key])} di ${o.label.toLowerCase()}`).join(' + ');
+  return `
+    <div class="hstack gap-4 mb-12" style="flex-wrap:wrap">
+      <button class="btn-icon" data-action="edit-uscita" title="Cambia le durate dell'uscita">✎</button>
+      <span class="fw-600">${sc.icon} ${sc.label}</span>
+      <span class="text-muted text-sm">${addendi} = ${anniTxt(u.anni)} prima dell'anticipata${
+        sc.date ? `, cioè dal ${fmtDate(sc.date)}` : ''}</span>
+    </div>`;
+}
+
+function openUscitaModal() {
+  const u = uscita();
+  openModal('🧭 Uscita concordata', `
+    <form id="modal-form">
+      <p class="text-muted text-sm mb-12">Le tre durate si sommano: si esce dall'azienda tanti anni
+      prima della pensione anticipata quanti ne mettono insieme. Cambiandole si spostano la data
+      della prima colonna e tutti i fabbisogni contati fino a lì.</p>
+      ${USCITA_VOCI.map(o => `
+      <div class="form-group">
+        <label class="form-label">${o.label} (anni)</label>
+        <input name="${o.key}" type="number" step="0.5" min="0" class="form-input mono" value="${u[o.key]}" />
+        <p class="text-muted text-sm" style="margin-top:6px">${o.hint}</p>
+      </div>`).join('')}
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    // Una casella vuota o illeggibile torna al valore di partenza e non a zero: «non l'ho
+    // scritto» non è «non ci sono anni di aspettativa», ed è la stessa scelta di amount NULL.
+    const v = {};
+    for (const o of USCITA_VOCI) {
+      const x = parseFloat(data[o.key]);
+      v[o.key] = Number.isFinite(x) && x >= 0 ? x : USCITA_DEFAULT[o.key];
+    }
+    await salvaUscita(v);
+    closeModal();
+    render();
+  });
+}
+
+async function salvaUscita(v) {
+  await sbUpsert('cm_settings', { key: USCITA_CHIAVE, value: JSON.stringify(v) }, 'key');
+  await loadUscita();
 }
 
 function renderCoverageSide(side, scen) {
@@ -4235,7 +4351,7 @@ function openCoverageModal(side, key) {
           ${assetOptions}
         </select>
       </div>` : ''}
-      ${item.fonte === 'manuale' ? `
+      ${item.fonte === 'manuale' && item.side === 'fabbisogno' ? `
       <div class="form-group">
         <label class="form-label">Come si conta</label>
         <select name="periodicity" class="form-input form-select">
@@ -6487,7 +6603,7 @@ function openOtherAssetModal(assetId = null, preType = null, preTitle = null) {
                  placeholder="vuoto = plusvalenza non calcolabile" value="${a?.cost_basis ?? ''}" />
         </div>
       </div>
-      <p class="text-muted text-sm mb-12">Il netto si usa nelle 🛡️ Coperture, fra le dotazioni. La tassa si calcola sulla plusvalenza (valore − costo), tranne il TFR che è tassato per intero: lì il costo non serve. L'aliquota del TFR è una stima — dipende dal tuo reddito di riferimento degli ultimi cinque anni.</p>
+      <p class="text-muted text-sm mb-12">Il netto si usa nelle 🛡️ Possibili soluzioni, fra le dotazioni. La tassa si calcola sulla plusvalenza (valore − costo), tranne il TFR che è tassato per intero: lì il costo non serve. L'aliquota del TFR è una stima — dipende dal tuo reddito di riferimento degli ultimi cinque anni.</p>
       <div class="form-group">
         <label class="form-label">Note</label>
         <textarea name="notes" class="form-input" rows="2" placeholder="Opzionale">${a?.notes || ''}</textarea>
@@ -7384,6 +7500,7 @@ document.addEventListener('click', async e => {
     case 'new-pension-contribution':  openPensionContributionModal(null); break;
     case 'edit-pension-contribution': openPensionContributionModal(t.dataset.id); break;
     case 'del-pension-contribution':  await deletePensionContribution(t.dataset.id); break;
+    case 'edit-uscita':           openUscitaModal(); break;
     case 'edit-coverage':         openCoverageModal(t.dataset.side, t.dataset.key); break;
     case 'coverage-reset':        await resetCoverageAmount(t.dataset.side, t.dataset.key); break;
     case 'coverage-prompt':       openCoveragePromptModal(t.dataset.key); break;
