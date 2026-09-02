@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.9.0</title>
+  <title>GarsalFinanza v1.10.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -164,6 +164,10 @@
     .cov-val { background: var(--c-bg); border-radius: 8px; padding: 6px 10px; }
     .cov-val-label { font-size: .72rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; }
     .cov-tot { border-top: 2px solid var(--c-border); padding-top: 12px; margin-top: 4px; }
+    /* Una voce esclusa dal conto resta a schermo: sbiadita e con gli importi barrati. Sparire
+       sarebbe il modo peggiore di toglierla — un totale più basso senza niente che dica perché. */
+    .cov-off { opacity: .55; }
+    .cov-off .cov-val .mono { text-decoration: line-through; }
     .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
     .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
 .table th.th-has-filter { color: var(--c-primary); }
@@ -580,8 +584,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.9.0';
-const APP_BUILD   = '2026-09-02T10:05:00Z';
+const APP_VERSION = 'v1.10.0';
+const APP_BUILD   = '2026-09-02T10:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3956,7 +3960,9 @@ const COVERAGE_ITEMS = [
 const COVERAGE_ASSICURAZIONE = { icon: '🛡️', label: 'Capitale da assicurare',
   fonte: 'calcolata', prompt: 'assicurazione' };
 function coverageCapitale(sc) {
-  const voci = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
+  // Le voci escluse non entrano nel capitale, come non entrano nel fabbisogno: il capitale è la
+  // loro somma, e contarci una voce che il totale non conta darebbe due risposte diverse.
+  const voci = coverageVociAttive('fabbisogno').filter(i => i.key !== 'assicurazione');
   return { total: voci.reduce((s, i) => s + (coverageValoreA(i, sc) || 0), 0),
            mancanti: voci.filter(i => coverageValoreA(i, sc) == null).length };
 }
@@ -4138,6 +4144,14 @@ function coverageBase(item, sc) {
   if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row };
   return { value: auto ? auto.value : null, scrittoAMano: false, auto, row };
 }
+/* ⚠️ «Esclusa» non è «assente» e non è «zero»: la voce c'è, il suo importo si vede, e si è
+   scelto di non contarla in questo piano. Per questo il flag toglie la voce dai totali ma non
+   dallo schermo, e non la conta nemmeno fra le «da compilare» — un importo che non entra nel
+   conto non è un importo che manca. */
+function coverageEsclusa(item) { return coverageRow(item)?.excluded === true; }
+function coverageVociAttive(side) {
+  return COVERAGE_ITEMS.filter(i => i.side === side && !coverageEsclusa(i));
+}
 // La riga del database vince sul registro, e NULL lì significa «vale quello che dice la voce».
 function coveragePeriodicita(item) {
   return coverageRow(item)?.periodicity || item.periodicita || 'una_tantum';
@@ -4152,8 +4166,9 @@ function coverageValoreA(item, sc) {
   return sc?.anni == null ? null : sommaFlusso(base.value, sc.anni);
 }
 function coverageTotaleA(side, sc) {
-  const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(i => coverageValoreA(i, sc));
-  return { total: voci.reduce((s, v) => s + (v || 0), 0), mancanti: voci.filter(v => v == null).length };
+  const voci = coverageVociAttive(side).map(i => coverageValoreA(i, sc));
+  return { total: voci.reduce((s, v) => s + (v || 0), 0), mancanti: voci.filter(v => v == null).length,
+           escluse: COVERAGE_ITEMS.filter(i => i.side === side && coverageEsclusa(i)).length };
 }
 /* ⚠️ Anche le dotazioni si contano per scenario, ma NON perché si proiettino in avanti: TFR,
    case e portafogli restano quello che valgono oggi, uguali in tutte e tre le colonne — una
@@ -4337,7 +4352,8 @@ function renderCoverageSide(side, scen) {
       ${voci.map(i => renderCoverageRow(i, colonne)).join('')}
       <div class="cov-item cov-tot">
         <div class="fw-700">Totale ${side.title.toLowerCase()}${tot[0].mancanti
-          ? ` <span class="text-muted text-sm fw-600">· ${tot[0].mancanti} da compilare</span>` : ''}</div>
+          ? ` <span class="text-muted text-sm fw-600">· ${tot[0].mancanti} da compilare</span>` : ''}${tot[0].escluse
+          ? ` <span class="text-muted text-sm fw-600">· ${tot[0].escluse} fuori dal calcolo</span>` : ''}</div>
         ${renderCoverageVals(colonne, tot.map(t => t.total), 'fw-700')}
       </div>
     </div>`;
@@ -4374,13 +4390,17 @@ function renderCoverageRow(item, colonne) {
         item.perScenario ? 'al posto del calcolo dai redditi, e uguale su tutte e tre le date' : `al posto di ${fmtEUR(base.auto.value)}`}</span>` : '')
     : (base.auto ? `<span class="text-muted text-sm">${base.auto.label}</span>`
                  : (item.fonte === 'manuale' ? '' : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : 'Dato non disponibile in Finanza'}</span>`));
+  const esclusa = coverageEsclusa(item);
   return `
-    <div class="cov-item">
+    <div class="cov-item${esclusa ? ' cov-off' : ''}">
       <div class="hstack gap-4" style="flex-wrap:wrap">
         <button class="btn-icon" data-action="edit-coverage" data-side="${item.side}" data-key="${item.key}" title="Compila / modifica">✎</button>
+        <button class="btn-icon" data-action="coverage-toggle" data-side="${item.side}" data-key="${item.key}"
+                title="${esclusa ? 'Fuori dal calcolo — rimettila nel conto' : 'Nel calcolo — toglila dal conto'}">${esclusa ? '🚫' : '☑️'}</button>
         ${item.prompt ? `<button class="btn-icon" data-action="coverage-prompt" data-key="${item.prompt}" title="Prompt per l'analisi con l'IA">💬</button>` : ''}
         ${base.scrittoAMano && base.auto ? `<button class="btn-icon" data-action="coverage-reset" data-side="${item.side}" data-key="${item.key}" title="Torna al dato di Finanza">↺</button>` : ''}
         <span class="fw-600">${item.icon} ${item.label}</span>
+        ${esclusa ? '<span class="badge" style="background:#fee2e2;color:#991b1b">fuori dal calcolo</span>' : ''}
       </div>
       ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno, in euro di oggi</div>` : ''}
       ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
@@ -4485,9 +4505,21 @@ async function saveCoverage(item, fields) {
     linked_other_asset_id: tieni('linked_other_asset_id'),
     periodicity: tieni('periodicity'),
     note: tieni('note'),
+    // Senza questa riga il ✎ rimetterebbe nel conto una voce che si era tolta: l'upsert
+    // riscrive la riga intera, e quello che non si nomina tornerebbe al DEFAULT.
+    excluded: tieni('excluded', false),
     updated_at: new Date().toISOString(),
   }, 'user_id,side,item_key');
   await loadCoverage();
+}
+
+/* Un interruttore e non una conferma: si spegne e si riaccende con lo stesso tocco, la voce
+   resta a schermo e il totale accanto dice subito cos'è cambiato. */
+async function toggleCoverageEsclusa(side, key) {
+  const item = COVERAGE_ITEMS.find(i => i.side === side && i.key === key);
+  if (!item) return;
+  await saveCoverage(item, { excluded: !coverageEsclusa(item) });
+  render();
 }
 
 async function resetCoverageAmount(side, key) {
@@ -4546,7 +4578,9 @@ Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre
     // ⚠️ La voce dell'assicurazione resta fuori dall'elenco del suo stesso prompt: quello che si
     // sta chiedendo è il premio, e il capitale è la somma delle ALTRE voci. Metterla fra i dati
     // di partenza vorrebbe dire farsi ricalcolare una cifra che si è già scritta da soli.
-    const vociFab = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
+    // ⚠️ Le voci fuori dal calcolo restano fuori anche di qui: il prompt deve contenere gli
+    // stessi numeri che la pagina mostra, o l'IA ragionerebbe su un fabbisogno che non è quello.
+    const vociFab = coverageVociAttive('fabbisogno').filter(i => i.key !== 'assicurazione');
     const colonna = s => `${s.label} (${s.date ? fmtDate(s.date) : 'data da definire'}${s.anni != null ? `, fra ${s.anni.toFixed(1).replace('.', ',')} anni` : ''})`;
     const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s))}`;
     const blocco = i => `- ${i.label}${coveragePeriodicita(i) === 'annuo'
@@ -4575,7 +4609,7 @@ ${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].capitale)}${conti[k].ca
 DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi, al netto delle imposte (valori di oggi,
 non proiettati in avanti). L'unica che cambia da uno scenario all'altro è l'accordo con l'azienda, che
 esiste solo se esco prima:
-${COVERAGE_ITEMS.filter(i => i.side === 'dotazione').map(blocco).join('\n')}
+${coverageVociAttive('dotazione').map(blocco).join('\n')}
 Totale dotazioni:
 ${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].dot.total)}${conti[k].dot.mancanti ? ` (${conti[k].dot.mancanti} voci ancora da quantificare)` : ''}`).join('\n')}
 
@@ -7588,6 +7622,7 @@ document.addEventListener('click', async e => {
     case 'del-pension-contribution':  await deletePensionContribution(t.dataset.id); break;
     case 'edit-uscita':           openUscitaModal(); break;
     case 'edit-coverage':         openCoverageModal(t.dataset.side, t.dataset.key); break;
+    case 'coverage-toggle':       await toggleCoverageEsclusa(t.dataset.side, t.dataset.key); break;
     case 'coverage-reset':        await resetCoverageAmount(t.dataset.side, t.dataset.key); break;
     case 'coverage-prompt':       openCoveragePromptModal(t.dataset.key); break;
     case 'coverage-prompt-copy':  await copyCoveragePrompt(t); break;

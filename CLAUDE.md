@@ -334,7 +334,7 @@ e intestato all'utente cercato per email, e salta senza fallire se quell'utente 
 ### Possibili soluzioni (`fnz_coverage_items`)
 | Table | Purpose |
 |---|---|
-| `fnz_coverage_items` | Le voci di copertura, **una riga per voce**: `side` (`fabbisogno`\|`dotazione`), `item_key`, `amount`, `periodicity`, `revaluation_pct`, `linked_other_asset_id`, `note` |
+| `fnz_coverage_items` | Le voci di copertura, **una riga per voce**: `side` (`fabbisogno`\|`dotazione`), `item_key`, `amount`, `periodicity`, `revaluation_pct`, `linked_other_asset_id`, `excluded`, `note` |
 
 Si compila da `finanza.html` → Piano pensione → 🛡️ **Possibili soluzioni**, la voce di menù
 sotto 🏛️ Simulazione INPS. Quello che servirà, quello con cui ci si arriva, e quanto manca.
@@ -496,6 +496,22 @@ dice invece di tacere.
 `coverageAuto(item, sc)`): quasi tutte le voci guardano solo `sc.anni`, ma l'accordo con
 l'azienda deve sapere **quale colonna** si sta disegnando, e sul filo dei soli anni quella
 distinzione non passerebbe.
+
+⚠️ **Una voce si può togliere dal conto senza cancellarla** (`excluded`,
+`20260902110000_...`): il ☑️/🚫 accanto al ✎ la spegne e la riaccende, su tutte le voci — sia
+fabbisogno sia dotazioni. Una voce esclusa **resta a schermo**, sbiadita e con gli importi
+barrati, e sparisce dai totali, dalla scopertura e dal capitale da assicurare; non si conta
+nemmeno fra le «da compilare», perché un importo che non entra nel conto non è un importo che
+manca. Sparire sarebbe il modo peggiore di escluderla — un totale più basso senza niente che
+dica perché — e **zero direbbe un'altra cosa**: «questa dotazione non c'è» invece di «c'è ma
+non la conto». È il terzo stato accanto ad `amount` NULL, e sono tre cose diverse.
+
+⚠️ Il flag sta **sulla riga della voce** e non in `cm_settings`: è una proprietà di quella
+voce, e lontano da lei un'esclusione sopravvivrebbe alla voce che descrive. ⚠️ `saveCoverage`
+deve nominarlo nell'upsert (`tieni('excluded', false)`), o **il ✎ rimetterebbe nel conto una
+voce appena tolta**: l'upsert riscrive la riga intera e quel che non si nomina torna al DEFAULT.
+Per la stessa ragione il prompt 💬 dell'assicurazione parte da `coverageVociAttive()`: deve
+contenere gli stessi numeri che la pagina mostra.
 
 ⚠️ **`amount` NULL non è zero**, ed è la stessa scelta di `fnz_income` e delle misure di Memo. Su
 una voce manuale dice «non l'ho ancora scritto»; su una automatica dice «vale il dato di Finanza»
