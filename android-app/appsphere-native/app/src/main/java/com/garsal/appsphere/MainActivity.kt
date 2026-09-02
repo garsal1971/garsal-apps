@@ -44,6 +44,7 @@ import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.memo.MemoScreen
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
+import com.garsal.appsphere.obiettivi.PianoScreen
 import com.garsal.appsphere.peso.PesoScreen
 import com.garsal.appsphere.spuntiamola.SpuntiamolaScreen
 import com.garsal.appsphere.tafiri.TaFiriScreen
@@ -211,7 +212,18 @@ private fun Navigazione() {
         composable(Route.SPUNTIAMOLA) {
             SpuntiamolaScreen(onIndietro = { nav.popBackStack() })
         }
+        // ⚠️ La bolla di Obiettivi apre il **📆 Piano quotidiano**, che è la
+        // pagina che `obiettivi.html` apre per prima: da lì si chiude quel che
+        // si è fatto, che è la ragione per cui questa app sta sul telefono.
+        // L'elenco degli obiettivi con le sue metriche resta un passo più in
+        // là, dal 🎯 nella barra.
         composable(Route.OBIETTIVI) {
+            PianoScreen(
+                onIndietro = { nav.popBackStack() },
+                onApriObiettivi = { nav.navigate(Route.OBIETTIVI_ELENCO) },
+            )
+        }
+        composable(Route.OBIETTIVI_ELENCO) {
             ObiettiviScreen(onIndietro = { nav.popBackStack() })
         }
         composable(Route.TASKS) {

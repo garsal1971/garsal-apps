@@ -1584,7 +1584,7 @@ e non si vedrebbe finché non lo si prova su un launcher che la usa.
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/` — più `obiettivi/`, **sospesa in home** (riga commentata in `PortedApps.kt`, schermate intatte) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/`, `obiettivi/` (la bolla apre il 📆 **Piano quotidiano**) |
 
 ### ⚠️ Righe di pulsanti e liste di scelta: due componenti condivisi, non uno per schermata
 
@@ -2178,6 +2178,64 @@ calorie è disegnato a mano su un `Canvas` scorrevole, con le misure in **dp e m
 grezzi**; il grafico del peso resta di là, perché il peso è materia di «Ti pisasti?» e qui compare
 già nei riquadri e nel giorno per giorno.
 
+### ⚠️ Obiettivi nativo: il solo 📆 Piano quotidiano
+
+`obiettivi/` porta in nativo **una pagina sola di `obiettivi.html`**, ed è quella che la pagina
+apre per prima: il 📆 **Piano quotidiano** (`PianoScreen.kt`). Tutte le azioni ancora da fare,
+giorno per giorno — le arretrate in un riquadro solo in cima con quanti giorni ha la più vecchia,
+poi oggi, poi i giorni che vengono, e in fondo quelle a libera ripetizione — e da lì si chiudono.
+È la copia di `renderPianoPage()` riquadro per riquadro, comprese le due etichette *Domani* e
+*Dopodomani* che valgono **solo per due giorni** (oltre, «fra 9 giorni» costringe a fare il conto
+e la data no).
+
+La **bolla in home apre il Piano** e non l'elenco degli obiettivi: le azioni si chiudono nel
+momento in cui si sono fatte, non la sera al computer, ed è la ragione per cui questa app sta sul
+telefono. L'elenco che c'era già (`ObiettiviScreen`, metriche e rilevazioni) resta un passo più
+in là, dal 🎯 nella barra: `Route.OBIETTIVI` porta al Piano, `Route.OBIETTIVI_ELENCO` a lui.
+Fino alla v1.0.67 Obiettivi era **sospesa in home** proprio perché il nativo le azioni non le
+leggeva affatto.
+
+⚠️ **Restano sul web** ✅ Azioni, 📊 Andamento, il Dettaglio di un obiettivo, le Esecuzioni e le
+Impostazioni: da qui un'azione non si crea, non si modifica e non si cancella. Il piano dice cosa
+resta da fare — le **concluse non ci sono**, di qua come di là: una riga che non si può più
+toccare è memoria, e si guarda in 📊 Andamento.
+
+Le regole che valgono qui sono le stesse del web e **vanno cambiate insieme**:
+
+- **il ciclo di vita passa solo dalle RPC** `ob_action_complete` / `ob_action_skip`, e poi si
+  rilegge — nessun calcolo di prossima occorrenza in Kotlin. `p_days` si chiede **solo** per le
+  `single`, perché per gli altri tipi la RPC lo ignora e chiedere un numero che il server butta
+  via sarebbe una bugia;
+- ⚠️ **un'azione non si fallisce**: o la si fa, o la si sposta. Nessun *Fallisci*, come di là
+  dalla v1.8.0. *Salta* compare solo su `PUO_SALTARE`, cioè su ciò che ha una prossima volta a
+  cui rimandare;
+- **completando con successo si aprono le rilevazioni** (`DialogoRilevazioni`), una riga per
+  metrica collegata: **dopo** che la RPC ha chiuso l'azione — il ciclo di vita non deve dipendere
+  dal fatto che uno si ricordi il numero — solo su `completed`/`completed_late`, e con la **data
+  di occorrenza letta prima della RPC**, che subito dopo la riga è già sulla volta successiva.
+  Una misura lasciata su *non adesso* **non si registra e non vale zero**, e ogni metrica passa
+  da `ob_record_measurement`, che è l'unico punto di scrittura e l'unico a dire se un voto sta
+  dentro la scala;
+- ⚠️ **il giorno di un istante si legge in ora locale** (`giornoLocale()`, la copia di
+  `localDay()`): `obiettivi.html` scrive `next_occurrence_date` con `toISOString()`, cioè in UTC,
+  quindi un'azione delle 00:30 sta in archivio come le 22:30 **del giorno prima**. Tagliare i
+  primi dieci caratteri — come fa `giornoDa()` in Tasks, dove i timestamp sono scritti già locali
+  — la metterebbe fra le arretrate. È l'unico punto in cui i due moduli leggono le date in modo
+  diverso, e non è una svista.
+
+⚠️ **Un `workflow` non ha il *Completa* e da qui non si chiude**: il pulsante *Step* mostra a che
+punto è (`n/N step`) e dice di andare sul web. Non è una dimenticanza — chiudere uno step vuol
+dire riscrivere `workflow_steps`, sbloccare chi dipendeva da lui, scrivere la riga di storico coi
+suoi punti e poi richiamare `ob_action_complete`: è la regola di `chiudiStep()`, che oggi vive in
+un posto solo. Copiarla in Kotlin sarebbe una seconda regola su punti e archivi. Il giorno che
+scendesse in una RPC come le altre, il pulsante si accende qui senza altro lavoro.
+
+⚠️ **`ob_actions` si legge come `JsonObject`**, non come `data class` serializzata: `categories`
+è un array di uuid e `workflow_steps` un jsonb, e una sola colonna di forma inattesa non darebbe
+un'azione storta ma la **schermata vuota**. È la stessa scelta di `ts_tasks`. Categorie e
+priorità invece **si leggono da `TasksRepository`**: `cm_categories` e `cm_priorities` sono
+condivise coi task, e un secondo decoder per le stesse due tabelle sarebbe una seconda verità.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -2489,12 +2547,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   di una metrica si leggono da `ob_metric_scale`, ricalcata in `scaleOf()` e in `ObMetrica.scala`:
   se cambia il modo di ricavarli, va cambiato in tutt'e tre. Le due barre non si fondono mai in una
   media.
-  ⚠️ **Le azioni esistono solo nel web**: il gemello Kotlin non legge `ob_actions` e non le mostra.
-  La sua barra dell'esecuzione le conta lo stesso — il numero arriva dalla RPC — ma le etichette
-  sotto la barra parlano ancora dei soli sotto-obiettivi e milestone. Le due chiavi nuove della
-  risposta (`actions_total`, `actions_done`) non rompono il decoder perché `ignoreUnknownKeys` è
-  attivo nel serializer di supabase-kt. È una divergenza **nota e temporanea**: portare le azioni
-  in nativo è il pezzo che manca.
+  ⚠️ **Delle azioni il nativo porta il solo 📆 Piano quotidiano** (v1.0.68): si vedono quelle
+  ancora da fare e si chiudono con *Completa* / *Salta*, che passano dalle RPC come sul web, e il
+  successo apre le stesse rilevazioni. Restano di là ✅ Azioni, 📊 Andamento, il Dettaglio e le
+  Esecuzioni, e da qui un'azione non si crea né si modifica. Le etichette sotto la barra
+  dell'esecuzione, nella schermata dell'elenco, parlano ancora dei soli sotto-obiettivi e
+  milestone. Dettagli nella sezione qui sopra.
 - **Events Log** — le tabelle `el_*` non sono in nessuna migration: le colonne dei `data class`
   sono ricavate da come `events-log.html` le scrive. Gli eventi `DA_SELECT` registrano **solo se il
   conteggio è cresciuto** rispetto all'ultimo `count:N`. Il **registro mostra solo il gruppo
@@ -2685,6 +2743,12 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   un altro modo: lì si cerca e si filtra, qui si scorre il calendario.
 - ⚠️ **Una libera ripetizione non mostra una data**: `actionDay()` ripiega su `start_date`, e
   scriverla la farebbe sembrare una scadenza. Di lei conta l'ultima volta che è stata fatta.
+- ⚠️ **Il Piano quotidiano esiste anche in nativo**
+  (`android-app/appsphere-native/app/.../obiettivi/PianoScreen.kt`): è l'**unica** pagina di
+  Obiettivi portata, e la bolla della home nativa apre lei. Sezioni, etichette dei giorni, quali
+  pulsanti compaiono e la finestra delle rilevazioni sono ricalcate riga per riga e **vanno
+  cambiate nelle due implementazioni insieme** — dettagli in *AppSphere nativa → Obiettivi
+  nativo*.
 - **✅ Azioni** è una voce di menù a sé, oltre alla sezione dentro il dettaglio di ogni obiettivo.
   L'elenco è raggruppato come la panoramica dei task — ⚠️ Scadute, 🎯 Oggi, 📅 Prossime,
   🔄 A libera ripetizione, 🏁 Concluse — con i filtri per obiettivo, tipo, priorità, categoria,
