@@ -26,6 +26,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,10 +44,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +75,25 @@ private val MARGINE_PANNELLO = 16.dp
  * monitor, dove quel bordo è il segno grafico dell'app.
  */
 private val BORDO_BOLLA = 3.dp
+
+/**
+ * Quanto del cerchio può occupare il nome, in larghezza e in altezza: è il
+ * `fill` di `fitFontSize()` in `index.html` per la vista a bolle (0,64).
+ */
+private const val RIEMPIMENTO_BOLLA = 0.64f
+
+/**
+ * Il carattere più piccolo a cui il nome di una bolla può scendere.
+ *
+ * ⚠️ **È in `dp` e non in `sp`, ed è l'unica misura di testo dell'app che lo
+ * sia.** La bolla ha una dimensione **fisica** — il pavimento di 6 cm² non
+ * cresce coi caratteri di sistema — quindi un pavimento in `sp` crescerebbe
+ * con loro: a ingrandimento doppio 8 sp sono 16 dp veri, e un nome lungo non
+ * ci starebbe **nemmeno al minimo**, cioè il taglio tornerebbe proprio nel
+ * caso per cui questo conto esiste. Convertito con `toSp()` resta 8 dp a
+ * qualunque ingrandimento: il nome si stringe, il resto dell'app no.
+ */
+private val MIN_TESTO_BOLLA = 8.dp
 
 /** Il `#111` del web, non il nero pieno. */
 private val NeroBordo = Color(0xFF111111)
@@ -345,9 +369,22 @@ private fun BollaCerchio(
     // Solo lo zero resta muto, come sul web (`app.score ? … : ''`): una bolla
     // al minimo con uno «0» sotto sembra rotta, non vuota.
     val conPunteggio = bolla.punteggio != 0 && AppSenzaPunti.contaComePunti(bolla.htmlFile)
-    val dimensioneTesto = misuraTesto(bolla.nome, raggio * 2f, densita, conPunteggio)
     // `size * 0.13` come il web, con lo stesso minimo di 9.
     val dimensionePunteggio = ((raggio * 2f * 0.13f) / densita).coerceAtLeast(9f).sp
+    // Lo stile del nome si scrive una volta sola e serve a due cose: misurare
+    // e disegnare. Misurare con uno stile diverso da quello che poi va a
+    // schermo vuol dire misurare un altro testo.
+    val stileNome = LocalTextStyle.current.copy(
+        fontWeight = FontWeight.SemiBold,
+        textAlign = TextAlign.Center,
+    )
+    val dimensioneTesto = misuraTesto(
+        nome = bolla.nome,
+        punteggio = if (conPunteggio) "${bolla.punteggio}" else null,
+        dimensionePunteggio = dimensionePunteggio,
+        diametro = raggio * 2f,
+        stile = stileNome,
+    )
 
     Box(
         modifier = Modifier
@@ -380,14 +417,17 @@ private fun BollaCerchio(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = (diametroDp.value * 0.12f).dp),
         ) {
+            // Nessun `maxLines`: il tetto tagliava i nomi lunghi — coi
+            // caratteri di sistema grandi il testo andava a capo una volta in
+            // più e la riga in eccesso spariva, senza nemmeno i puntini. Ora ci
+            // sta per costruzione, perché [misuraTesto] lo ha misurato davvero.
             Text(
                 text = bolla.nome,
                 color = coloreTesto,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                fontSize = dimensioneTesto,
-                lineHeight = dimensioneTesto * 1.2f,
-                maxLines = 3,
+                style = stileNome.copy(
+                    fontSize = dimensioneTesto,
+                    lineHeight = dimensioneTesto * 1.2f,
+                ),
             )
             // Il punteggio a zero non si scrive, come sul web: una bolla al
             // minimo con uno «0» sotto sembra rotta, non vuota.
@@ -513,27 +553,78 @@ private fun PannelloTotale(
 }
 
 /**
- * Dimensione del testo dentro la bolla.
+ * Dimensione del testo dentro la bolla, **misurata e non stimata**.
  *
- * Il web fa una ricerca binaria misurando davvero il testo (`fitFontSize`);
- * qui è una stima sulla parola più lunga, che con nomi di due o tre parole dà
- * lo stesso risultato a occhio senza dover misurare fuori schermo.
+ * È la ricerca binaria di `fitFontSize()` in `index.html`, con gli stessi due
+ * vincoli: la **parola più lunga** deve stare dentro `diametro × 0,64` senza
+ * essere spezzata, e l'**altezza del nome mandato a capo** dentro quel che
+ * resta in verticale. Si tiene il carattere più grande che soddisfa entrambi.
  *
- * Col punteggio sotto il nome il tetto si abbassa: la riga in più vuole il suo
- * posto, e un nome alto quanto prima uscirebbe dal cerchio invece di
- * stringersi.
+ * ⚠️ **La stima non poteva funzionare, e il difetto si vedeva solo sul
+ * telefono.** Prima si tirava a indovinare (larghezza utile ÷ lunghezza della
+ * parola più lunga × 0,58) e poi si tagliava con `maxLines = 3`: la stima è in
+ * `sp`, che **il sistema moltiplica ancora per `fontScale`**, quindi coi
+ * caratteri di sistema grandi il nome andava a capo una volta in più di quel
+ * che il conto prevedeva e la riga in eccesso veniva ritagliata via — dal
+ * `maxLines` o dal `clip(CircleShape)` della bolla — senza nemmeno i puntini a
+ * dire che mancava qualcosa. Misurando, l'ingrandimento è già dentro il
+ * risultato: il carattere si stringe da sé invece di essere tagliato.
+ *
+ * ⚠️ **Le parole si misurano una per una e senza andare a capo**: misurando il
+ * nome intero dentro un vincolo di larghezza, Compose restituisce comunque una
+ * larghezza pari al vincolo, e una parola più larga del cerchio risulterebbe
+ * larga quanto lui — cioè il caso che si sta cercando passerebbe inosservato.
+ * È la stessa doppia misura del web (`el` senza a capo, `elH` col vincolo).
+ *
+ * ⚠️ **Il posto del punteggio si toglie misurandolo**, non con un coefficiente:
+ * anche lui è in `sp` e cresce coi caratteri di sistema, quindi una frazione
+ * fissa dell'altezza sarebbe giusta a un solo ingrandimento.
+ *
+ * Il risultato è dentro un `remember`: le bolle si ridisegnano a ogni
+ * spostamento del dito, e una ricerca binaria per fotogramma sarebbe pagata
+ * proprio mentre si trascina.
  */
+@Composable
 private fun misuraTesto(
     nome: String,
+    punteggio: String?,
+    dimensionePunteggio: TextUnit,
     diametro: Float,
-    densita: Float,
-    conPunteggio: Boolean,
-) = run {
-    val parolaPiuLunga = max(nome.split(" ").maxOfOrNull { it.length } ?: 1, 1)
-    val larghezzaUtile = diametro * 0.64f
-    val stimaPx = larghezzaUtile / (parolaPiuLunga * 0.58f)
-    val tetto = (diametro * if (conPunteggio) 0.22f else 0.26f) / densita
-    (stimaPx / densita).coerceIn(9f, tetto).sp
+    stile: TextStyle,
+): TextUnit {
+    val misuratore = rememberTextMeasurer()
+    val densita = LocalDensity.current
+    return remember(nome, punteggio, dimensionePunteggio, diametro, stile, densita, misuratore) {
+        val parole = nome.split(Regex("\\s+")).filter { it.isNotBlank() }.ifEmpty { listOf(nome) }
+        val larghezzaUtile = (diametro * RIEMPIMENTO_BOLLA).roundToInt()
+        val altezzaPunteggio = punteggio?.let {
+            misuratore.measure(it, stile.copy(fontSize = dimensionePunteggio)).size.height +
+                with(densita) { 2.dp.toPx() }
+        } ?: 0f
+        val altezzaUtile = diametro * RIEMPIMENTO_BOLLA - altezzaPunteggio
+
+        // Il tetto è quello del web (`circleSize * 0.55`), qui riportato in sp
+        // perché `toSp()` tiene già conto dell'ingrandimento di sistema.
+        val tetto = with(densita) { (diametro * 0.55f).toSp().value }
+        val pavimento = with(densita) { MIN_TESTO_BOLLA.toSp().value }
+        var basso = pavimento
+        var alto = max(tetto, pavimento)
+        repeat(12) {
+            val mezzo = (basso + alto) / 2f
+            val provato = stile.copy(fontSize = mezzo.sp, lineHeight = (mezzo * 1.2f).sp)
+            val parolaPiuLarga = parole.maxOf {
+                misuratore.measure(it, provato, softWrap = false).size.width
+            }
+            val altezza = misuratore.measure(
+                text = nome,
+                style = provato,
+                constraints = Constraints(maxWidth = larghezzaUtile),
+            ).size.height
+            if (parolaPiuLarga <= larghezzaUtile && altezza <= altezzaUtile) basso = mezzo
+            else alto = mezzo
+        }
+        basso.sp
+    }
 }
 
 @Composable

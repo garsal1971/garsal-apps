@@ -2192,6 +2192,22 @@ Le bolle sono disegnate come sul web: **cerchio col bordo nero** (`border: 4px s
 dentro il nome col **punteggio** sotto, che a zero non si scrive — una bolla al minimo con uno «0»
 sotto sembra rotta, non vuota.
 
+⚠️ **Il nome dentro la bolla non si taglia mai: il carattere si misura, non si stima**
+(`misuraTesto` in `HomeScreen.kt`, la ricerca binaria di `fitFontSize()` in `index.html`). I due
+vincoli sono gli stessi di là — la **parola più lunga** dentro `diametro × 0,64` senza essere
+spezzata, e l'**altezza del nome mandato a capo** dentro quel che resta tolto il posto del
+punteggio, misurato pure lui. Fino alla v1.0.66 era una stima (larghezza utile ÷ lunghezza della
+parola più lunga) con un `maxLines = 3` a fare da rete: ma la stima è in `sp`, che **il sistema
+moltiplica ancora per `fontScale`**, quindi coi caratteri di sistema grandi il nome andava a capo
+una volta in più del previsto e la riga in eccesso spariva — ritagliata dal `maxLines` o dal
+`clip(CircleShape)` della bolla, e **senza nemmeno i puntini** a dire che mancava qualcosa.
+
+⚠️ **Il pavimento del carattere è in `dp`, non in `sp`**, ed è l'unica misura di testo dell'app che
+lo sia: la bolla ha una dimensione **fisica** — il pavimento di 6 cm² non cresce coi caratteri di
+sistema — quindi un minimo in `sp` crescerebbe con loro, e a ingrandimento doppio un nome lungo non
+ci starebbe **nemmeno al minimo**, cioè il taglio tornerebbe proprio nel caso per cui quel conto
+esiste.
+
 ### ⚠️ Non tutti i numeri di `score_query` sono punti
 
 `cm_apps.score_query` restituisce un numero, ma per alcune app quel numero **conta delle cose**:
