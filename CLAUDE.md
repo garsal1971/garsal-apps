@@ -517,8 +517,34 @@ la stessa ragione per cui hanno due schemi OAuth diversi. Se un domani la voce d
 nativo, si **sposta**, non si aggiunge.
 
 ⚠️ **Il titolo arriva da `EXTRA_SUBJECT`**, che YouTube riempie col titolo del video: è già pronto,
-non costa nessuna chiamata di rete e funziona anche offline. Le app che non lo mandano lasciano il
-ripiego sul nome del sito — meglio di una scheda senza titolo.
+non costa nessuna chiamata di rete e funziona anche offline.
+
+**Quando quel campo non c'è, il titolo si ricava dal link** (`riempiTitoloSeVuoto`), in tre gradini —
+e il caso che conta non è la condivisione ma il **link incollato a mano dal PC**, dove
+`EXTRA_SUBJECT` non esiste affatto e senza questi gradini ogni video si chiamerebbe «youtu.be»:
+
+| Gradino | Da dove | Quando |
+|---|---|---|
+| `EXTRA_SUBJECT` | l'app che condivide | quando c'è: è esatto e gratis |
+| `titoloYouTube()` | oEmbed di YouTube | solo sui link YouTube, nessuna chiave né API |
+| `titoloDaSlug()` | l'indirizzo stesso | tutto il resto, senza rete |
+| `hostDa()` | il nome del sito | ultima spiaggia |
+
+⚠️ **Non sovrascrive mai un titolo che c'è**, né quello scritto a mano né `EXTRA_SUBJECT`: un
+ripiego che prende il posto del dato esatto è un peggioramento silenzioso.
+
+⚠️ **In due tempi, di proposito**: prima lo slug (immediato), poi l'oEmbed che rimpiazza il
+provvisorio — e solo **se il campo porta ancora esattamente quel provvisorio**. Aspettare la rete
+per scrivere il primo carattere lascerebbe il campo vuoto a ogni link incollato, e una risposta che
+arriva dopo un cambio di url metterebbe il titolo di un altro video (`titoloToken`).
+
+⚠️ **`titoloYouTube` fallisce in silenzio.** Senza rete, o il giorno che quell'endpoint chiudesse,
+la scheda nasce lo stesso col ripiego: un titolo è una comodità, non una condizione.
+
+⚠️ **Uno slug non è un titolo**, ed è per questo che viene *dopo* gli altri due: è quel che il sito
+ha scritto nell'indirizzo per i motori di ricerca, spesso troncato. Su YouTube non si usa affatto —
+lì lo slug è l'id del video (`jNQXAC9IVRw`), che come titolo è peggio del nome del sito. La pulizia
+dell'id in coda vuole **almeno tre cifre**: senza quella soglia «Covid-19» diventerebbe «Covid».
 
 ⚠️ **La scheda non si salva da sola**: si apre l'editor già compilato e il salvataggio resta un
 gesto. Il tasto «Condividi» sta accanto a mille altri, e una condivisione per sbaglio non deve
