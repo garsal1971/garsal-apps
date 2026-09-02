@@ -49,6 +49,25 @@ enum class TipoScheda(val chiave: String, val icona: String, val etichetta: Stri
     companion object {
         fun da(valore: String?): TipoScheda =
             entries.firstOrNull { it.chiave == valore } ?: NOTA
+
+        /**
+         * Come [da], ma distingue «tipo che non conosco» da «tipo che non c'è».
+         *
+         * ⚠️ Serve a non far collassare su [NOTA] un tipo che il web ha e qui
+         * non c'è ancora — oggi `'link'`. Mostrata come nota, quella scheda
+         * perderebbe il suo indirizzo (che sta in `mm_attachments`, letta solo
+         * di là) e **risalvandola il form riscriverebbe `kind: "nota"`**: la
+         * scheda link diventerebbe una nota in silenzio, e l'allegato
+         * resterebbe agganciato a una riga che non lo mostra più.
+         *
+         * Torna `null` in quel caso, e la scheda non viene proprio caricata:
+         * non vederla è meglio che vederla sbagliata e poterla rovinare.
+         * Chiave assente o vuota resta [NOTA] — è il `DEFAULT` del database,
+         * cioè le schede nate prima della colonna.
+         */
+        fun daONull(valore: String?): TipoScheda? =
+            if (valore.isNullOrBlank()) NOTA
+            else entries.firstOrNull { it.chiave == valore }
     }
 }
 
@@ -91,7 +110,9 @@ data class MmScheda(
                 id = id,
                 titolo = testo(o, "title").orEmpty(),
                 contenuto = testo(o, "content").orEmpty(),
-                tipo = TipoScheda.da(testo(o, "kind")),
+                // un tipo che questa implementazione non conosce (oggi 'link')
+                // si salta invece di diventare una nota — vedi daONull
+                tipo = TipoScheda.daONull(testo(o, "kind")) ?: return null,
                 riservato = testo(o, "riservato")?.toBooleanStrictOrNull() ?: false,
                 fissata = testo(o, "pinned")?.toBooleanStrictOrNull() ?: false,
                 colore = testo(o, "color")?.takeIf { it.isNotBlank() } ?: BIANCO,

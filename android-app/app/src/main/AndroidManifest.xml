@@ -60,6 +60,26 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
+            <!--
+                Riceve i link condivisi (YouTube, Chrome, WhatsApp) e apre Memo
+                con una scheda 🔗 Link già compilata.
+
+                ⚠️ L'intent-filter lo dichiara SOLO questa APK. I due APK
+                (com.garsalapps e com.garsal.appsphere) convivono sullo stesso
+                telefono con lo stesso logo, distinti solo dal fondo bianco/nero:
+                dichiarandolo in tutt'e due, nel menù "Condividi" comparirebbero
+                due voci indistinguibili e toccherebbe indovinare ogni volta.
+                È la stessa ragione per cui hanno due schemi OAuth diversi.
+
+                android:label sull'intent-filter è quello che Android scrive
+                nel menù "Condividi": dice dove va a finire, mentre il nome
+                dell'app da solo non lo direbbe.
+            -->
+            <intent-filter android:label="Salva in Memo">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <!--
