@@ -414,10 +414,19 @@ undici mesi di spesa.
 (`20260901160000_...`): va tolta con una migration quando si tocca di nuovo questa parte — una
 colonna che nessuno riempie è un invito a reimplementare la rivalutazione una seconda volta.
 
-⚠️ **L'assicurazione non è una voce del fabbisogno e non entra nel totale**: è la **copertura** di
-quello che manca, quindi vive fuori dall'elenco (`COVERAGE_ASSICURAZIONE`), nel riepilogo, come
-riga calcolata scenario per scenario — `max(0, fabbisogno − dotazioni)`. Sommarla al fabbisogno
-che deve coprire lo conterebbe due volte.
+⚠️ **Dell'assicurazione ci sono DUE numeri, e sono grandezze diverse.** Il **premio** è una voce
+del fabbisogno come le altre — un costo annuo, moltiplicato per gli anni che mancano — e sta in
+fondo all'elenco, `periodicita: 'annuo'`, `fonte: 'manuale'`. Il **capitale** è il parametro del
+contratto, si calcola (`coverageCapitale`) e vive nel riepilogo, non nell'elenco: sommarlo al
+fabbisogno sarebbe come sommare l'affitto al prezzo della casa.
+
+⚠️ Il capitale copre **tutte le voci di fabbisogno che stanno sopra, premio escluso**, e **le
+dotazioni non si sottraggono**: è la scelta prudente, perché TFR, case e portafogli il giorno che
+servissero potrebbero non essere né liquidi né disponibili, mentre la polizza paga comunque.
+Quanto manca al netto di quello che c'è già lo dice la riga **Scopertura**, due righe più su: le
+due domande convivono nel riepilogo invece di essere schiacciate in un numero solo. La voce
+dell'assicurazione va **per ultima** in `COVERAGE_ITEMS` e non è un caso — il capitale è la somma
+di quelle che la precedono.
 
 ⚠️ **Le dotazioni sono quelle di OGGI, uguali nei tre scenari**, e non si proiettano in avanti:
 un TFR o un portafoglio proiettati sarebbero un rendimento inventato messo accanto a numeri veri.
@@ -441,12 +450,13 @@ scolastico in corso (3ª superiore nel 2026/27) e `adaUniversita()` ne ricava in
 2029), fine e anni che mancano. Scritto a mano, fra due anni direbbe ancora 2029 senza che niente
 lo segnali.
 
-I due 💬 (università di Ada, capitale da assicurare) aprono un popup col **prompt già scritto** da
+I due 💬 (università di Ada, assicurazione) aprono un popup col **prompt già scritto** da
 incollare in una chat con l'IA. Quello dell'assicurazione ci mette dentro i numeri che la pagina
-già conosce — le tre date, il fabbisogno voce per voce **su ciascuno dei tre orizzonti**, le
-dotazioni, le scoperture — perché riscriverli a memoria è il modo più semplice di far ragionare
-l'IA su cifre sbagliate. ⚠️ La voce dell'assicurazione **resta fuori dal proprio prompt**: il
-capitale da assicurare è quello che si sta chiedendo.
+già conosce — le tre date, il fabbisogno voce per voce **su ciascuno dei tre orizzonti**, il
+capitale da assicurare, le dotazioni, le scoperture — perché riscriverli a memoria è il modo più
+semplice di far ragionare l'IA su cifre sbagliate, e chiede come prima cosa **il premio annuo**,
+che è il numero che serve per compilare la voce. ⚠️ La voce dell'assicurazione **resta fuori dal
+proprio prompt**: il premio è quello che si sta chiedendo, e il capitale è la somma delle altre.
 
 ⚠️ **Le voci NON sono una tabella, sono schede** (`.cov-item` + `.cov-vals`): tre colonne di
 importi accanto a una voce che è prosa, coi caratteri di sistema grandi, danno righe alte mezzo
