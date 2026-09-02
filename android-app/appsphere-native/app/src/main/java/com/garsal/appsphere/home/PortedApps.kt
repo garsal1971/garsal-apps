@@ -5,6 +5,9 @@ object Route {
     const val HOME = "home"
     const val SPUNTIAMOLA = "spuntiamola"
     const val OBIETTIVI = "obiettivi"
+
+    /** L'elenco degli obiettivi: un passo dentro il piano, non la home. */
+    const val OBIETTIVI_ELENCO = "obiettivi-elenco"
     const val EVENTS_LOG = "eventslog"
     const val TASKS = "tasks"
     const val TA_FIRI = "tafiri"
@@ -88,19 +91,17 @@ object PortedApps {
             descrizioneDiRipiego = "Conto alla rovescia a spunte",
             coloreDiRipiego = "#7C3AED",
         ),
-        // ⚠️ Obiettivi è **sospesa in home, non rimossa dal progetto**: le sue
-        // schermate (`obiettivi/`) e la rotta `Route.OBIETTIVI` restano dove
-        // sono, compilate e funzionanti, e per rimetterla in home basta
-        // riattivare questa riga. Sul web e nell'APK WebView non cambia niente:
-        // `cm_apps` non è stata toccata, quindi la bolla di Obiettivi è ancora
-        // lì e apre `obiettivi.html` come sempre.
-        //
-        //  "obiettivi.html" to AppPortata(
-        //      route = Route.OBIETTIVI,
-        //      titoloDiRipiego = "Obiettivi",
-        //      descrizioneDiRipiego = "Obiettivi annuali e trimestrali",
-        //      coloreDiRipiego = "#0891B2",
-        //  ),
+        // ⚠️ La bolla porta al **📆 Piano quotidiano** e non all'elenco degli
+        // obiettivi: è la pagina che `obiettivi.html` apre per prima, e l'unica
+        // di quelle che si aprono col telefono in mano — le azioni si chiudono
+        // nel momento in cui si sono fatte, non la sera al computer. Obiettivi
+        // era **sospesa in home** finché il nativo non le aveva: ora ce l'ha.
+        "obiettivi.html" to AppPortata(
+            route = Route.OBIETTIVI,
+            titoloDiRipiego = "Obiettivi",
+            descrizioneDiRipiego = "Il piano di oggi",
+            coloreDiRipiego = "#0891B2",
+        ),
         "tasks.html" to AppPortata(
             route = Route.TASKS,
             titoloDiRipiego = "Tasks",
