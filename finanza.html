@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.8.0</title>
+  <title>GarsalFinanza v1.9.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.8.0';
-const APP_BUILD   = '2026-09-02T09:20:00Z';
+const APP_VERSION = 'v1.9.0';
+const APP_BUILD   = '2026-09-02T10:05:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -607,9 +607,10 @@ const S = {
   pensionForecast: null, pensionContrib: null,
   // Coperture per esigenze future: stessa scelta di pensionForecast (null = mai lette).
   coverage: null,
-  // Le durate dell'uscita concordata (accompagnamento + garden leave + aspettativa), da
-  // cm_settings. null = mai lette; {} = lette e mai compilate, e allora vale USCITA_DEFAULT.
-  uscita: null,
+  // Le durate dell'uscita concordata (accompagnamento + garden leave + aspettativa) e gli anni
+  // pagati dall'azienda in ciascuno scenario, da cm_settings. null = mai lette; {} = lette e
+  // mai compilate, e allora valgono USCITA_DEFAULT / ACCORDO_DEFAULT.
+  uscita: null, accordoAnni: null,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -3871,17 +3872,39 @@ const USCITA_VOCI = [
   { key: 'garden_leave',    label: 'Garden leave',    hint: 'Anno (o anni) di preavviso non lavorato che l\'azienda concede in più.' },
   { key: 'aspettativa',     label: 'Aspettativa',     hint: 'Anni di aspettativa non retribuita che ci si prende da sé.' },
 ];
+/* ⚠️ Gli anni che l'azienda pagherebbe si scrivono UNO PER SCENARIO e non si ricavano dalle
+   durate dell'uscita: l'accordo esiste in un piano e non negli altri — chi lavora fino alla
+   pensione anticipata non ha nessun accompagnamento da farsi pagare — e legarlo alla somma di
+   `uscita()` scriverebbe lo stesso importo in tutte e tre le colonne, che è l'opposto di quel
+   che la tabella deve mostrare. Stessa chiave/valore dell'uscita, stessa regola: casella vuota
+   vale il valore di partenza e non zero.
+   ⚠️ Zero è invece una risposta buona e voluta — «in questo scenario l'azienda non mette
+   niente» — ed è quello che dicono di partenza le colonne della pensione. */
+const ACCORDO_CHIAVE  = 'fnz_accordo_azienda_anni';
+const ACCORDO_DEFAULT = { accompagnamento: 3, anticipata: 0, vecchiaia: 0 };
+function accordoAnni() {
+  const v = S.accordoAnni || {};
+  const n = k => { const x = parseFloat(v[k]); return Number.isFinite(x) && x >= 0 ? x : ACCORDO_DEFAULT[k]; };
+  return Object.fromEntries(Object.keys(ACCORDO_DEFAULT).map(k => [k, n(k)]));
+}
 function uscita() {
   const v = S.uscita || {};
   const n = k => { const x = parseFloat(v[k]); return Number.isFinite(x) && x >= 0 ? x : USCITA_DEFAULT[k]; };
   const parti = Object.fromEntries(USCITA_VOCI.map(o => [o.key, n(o.key)]));
   return { ...parti, anni: USCITA_VOCI.reduce((s, o) => s + parti[o.key], 0) };
 }
-async function loadUscita() {
-  const rows = await sbQ('cm_settings', `key=eq.${USCITA_CHIAVE}&select=value&limit=1`);
-  let v = rows[0]?.value ?? null;
+function leggiJson(rows, chiave) {
+  let v = rows.find(r => r.key === chiave)?.value ?? null;
   if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
-  S.uscita = (v && typeof v === 'object') ? v : {};
+  return (v && typeof v === 'object') ? v : {};
+}
+// Le due chiavi si leggono insieme: sono due righe della stessa tabella, e due chiamate per
+// disegnare la stessa pagina sarebbero due attese invece di una.
+async function loadUscita() {
+  const rows = await sbQ('cm_settings',
+    `key=in.(${USCITA_CHIAVE},${ACCORDO_CHIAVE})&select=key,value`);
+  S.uscita      = leggiJson(rows, USCITA_CHIAVE);
+  S.accordoAnni = leggiJson(rows, ACCORDO_CHIAVE);
 }
 
 const COVERAGE_ITEMS = [
@@ -3908,15 +3931,13 @@ const COVERAGE_ITEMS = [
     hint: () => 'Premio annuo della polizza. Il capitale da assicurare è nel riepilogo qui sopra.',
     fonte: 'manuale', periodicita: 'annuo', prompt: 'assicurazione' },
 
-  /* ⚠️ Una dotazione MANUALE, e l'unica: è quello che l'azienda mette sul piatto per l'uscita
-     (accompagnamento e garden leave), cioè un numero che non sta da nessuna parte in Finanza
-     perché non è ancora stato né chiesto né concesso. È un capitale una tantum — vale uguale
-     su tutte e tre le date — e finché resta vuoto si conta fra le voci «da compilare» invece
-     di entrare nel totale come zero. */
+  /* ⚠️ L'unica voce che vale DIVERSO nelle tre colonne, ed è la ragione per cui anche le
+     dotazioni ne hanno tre: l'accordo esiste nel piano dell'uscita concordata e non negli
+     altri due, dove si lavora fino alla pensione. L'importo di un anno si legge da 💶 Reddito
+     (UniCredit lordo, al netto della tassazione separata) e gli anni si scrivono per colonna. */
   { side: 'dotazione',  key: 'accordo_azienda', icon: '🤝', label: 'Accordo con azienda',
-    hint: () => { const u = uscita();
-      return `Quello che l'azienda metterebbe per l'uscita: ${anniTxt(u.accompagnamento)} di accompagnamento e ${anniTxt(u.garden_leave)} di garden leave.`; },
-    fonte: 'manuale', periodicita: 'una_tantum' },
+    hint: () => 'Quello che l\'azienda metterebbe per l\'uscita: la retribuzione di un anno per gli anni che si riesce a farsi riconoscere.',
+    fonte: 'auto', periodicita: 'una_tantum', perScenario: true, auto: coverageAccordoAzienda },
   { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',       fonte: 'asset' },
   { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa', fonte: 'asset' },
   { side: 'dotazione',  key: 'casa_mia',      icon: '🏡', label: 'Casa Mia',  fonte: 'asset' },
@@ -3934,10 +3955,10 @@ const COVERAGE_ITEMS = [
    cosa che la polizza stessa deve coprire. */
 const COVERAGE_ASSICURAZIONE = { icon: '🛡️', label: 'Capitale da assicurare',
   fonte: 'calcolata', prompt: 'assicurazione' };
-function coverageCapitale(anni) {
+function coverageCapitale(sc) {
   const voci = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
-  return { total: voci.reduce((s, i) => s + (coverageValoreA(i, anni) || 0), 0),
-           mancanti: voci.filter(i => coverageValoreA(i, anni) == null).length };
+  return { total: voci.reduce((s, i) => s + (coverageValoreA(i, sc) || 0), 0),
+           mancanti: voci.filter(i => coverageValoreA(i, sc) == null).length };
 }
 const COVERAGE_SIDES = [
   { key: 'fabbisogno', icon: '🎯', title: 'Fabbisogno', sub: 'Quello che servirà' },
@@ -4044,6 +4065,29 @@ function coveragePensioneLorda() {
    scrive: un 2034 messo a mano fra due anni direbbe ancora 2034 senza che niente lo segnali. Il
    conto è in anni interi, `2034 − anno in corso`, così il numero si rifà a mente; finito il
    corso vale zero, che è quello che sarà. */
+/* ⚠️ Si legge da 💶 Reddito, riquadro *Redditi*, riga **UniCredit lordo** dell'anno più recente
+   che ce l'ha — la stessa regola di «Pensione Ada», e per la stessa ragione: la tabella del
+   reddito arriva fino all'anno scorso, e prendere «l'ultimo anno in tabella» azzererebbe la
+   voce in silenzio il giorno che si apre un anno ancora da compilare.
+
+   ⚠️ Il netto si stima con la **tassazione separata** (`TAX_TFR_SEPARATA`, 27 %), che è il
+   regime con cui l'incentivo all'esodo viene tassato, non l'IRPEF ordinaria della busta paga.
+   È una stima dichiarata come quella del TFR — l'aliquota vera dipende dal reddito di
+   riferimento degli ultimi cinque anni — e l'etichetta la scrive accanto al numero invece di
+   farla sembrare esatta.
+
+   ⚠️ Gli anni li dice `accordoAnni()`, uno per scenario: senza scenario (una chiamata fuori
+   dalla tabella) non si inventa un orizzonte e si torna `null`, come per un flusso senza data. */
+function coverageAccordoAzienda(sc) {
+  const righe = (S.income || []).filter(r => r.kind === 'lavoro' && r.amount != null);
+  if (!righe.length || !sc) return null;
+  const r     = righe.reduce((a, b) => (b.year > a.year ? b : a));
+  const lordo = parseFloat(r.amount);
+  const netto = lordo * (1 - TAX_TFR_SEPARATA / 100);
+  const anni  = accordoAnni()[sc.key] ?? 0;
+  return { value: netto * anni,
+    label: `Reddito ${r.year} · UniCredit lordo ${fmtEUR(lordo)} − ${TAX_TFR_SEPARATA} % di tassazione separata (stima) = ${fmtEUR(netto)}/anno × ${anniTxt(anni)}` };
+}
 function coveragePensioneAda() {
   const righe = (S.income || []).filter(r => r.kind === 'pensione' && r.amount != null);
   if (!righe.length) return null;
@@ -4061,8 +4105,12 @@ async function loadCoverage() {
 function coverageRow(item) {
   return (S.coverage || []).find(r => r.side === item.side && r.item_key === item.key) || null;
 }
-function coverageAuto(item) {
-  if (item.fonte === 'auto')  return item.auto();
+/* ⚠️ Si riceve lo SCENARIO intero e non i soli anni che mancano: quasi tutte le voci guardano
+   solo `sc.anni`, ma «Accordo con azienda» dipende da QUALE colonna si sta guardando — gli anni
+   che l'azienda pagherebbe sono scritti uno per scenario, e sul filo dei soli anni che mancano
+   quella distinzione non passerebbe. */
+function coverageAuto(item, sc) {
+  if (item.fonte === 'auto')  return item.auto(sc);
   if (item.fonte === 'asset') {
     const id = coverageRow(item)?.linked_other_asset_id;
     const a  = id ? S.otherAssets.find(x => x.id === id) : null;
@@ -4083,10 +4131,10 @@ function coverageAuto(item) {
 }
 // L'importo scritto a mano vince sul dato di Finanza — ma si vede che è scritto a mano, e si
 // toglie col ↺: un override silenzioso resterebbe fermo mentre il dato vero cambia sotto.
-function coverageBase(item) {
+function coverageBase(item, sc) {
   const row     = coverageRow(item);
   const manuale = row && row.amount != null ? parseFloat(row.amount) : null;
-  const auto    = coverageAuto(item);
+  const auto    = coverageAuto(item, sc);
   if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row };
   return { value: auto ? auto.value : null, scrittoAMano: false, auto, row };
 }
@@ -4095,25 +4143,26 @@ function coveragePeriodicita(item) {
   return coverageRow(item)?.periodicity || item.periodicita || 'una_tantum';
 }
 /* Il valore di una voce su un orizzonte: un capitale è lo stesso su tutti e tre, un flusso no.
-   `anni` null (data della simulazione mancante) porta a null e non a zero — non sapere quanto
-   dura non è saperlo pari a niente. */
-function coverageValoreA(item, anni) {
-  const base = coverageBase(item);
+   `sc.anni` null (data della simulazione mancante) porta a null e non a zero — non sapere
+   quanto dura non è saperlo pari a niente. */
+function coverageValoreA(item, sc) {
+  const base = coverageBase(item, sc);
   if (base.value == null) return null;
   if (coveragePeriodicita(item) !== 'annuo') return base.value;
-  return anni == null ? null : sommaFlusso(base.value, anni);
+  return sc?.anni == null ? null : sommaFlusso(base.value, sc.anni);
 }
-function coverageTotaleA(side, anni) {
-  const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(i => coverageValoreA(i, anni));
+function coverageTotaleA(side, sc) {
+  const voci = COVERAGE_ITEMS.filter(i => i.side === side).map(i => coverageValoreA(i, sc));
   return { total: voci.reduce((s, v) => s + (v || 0), 0), mancanti: voci.filter(v => v == null).length };
 }
-// Le dotazioni sono quello che c'è OGGI: non si proiettano in avanti, perché una proiezione del
-// TFR o dei portafogli sarebbe un rendimento inventato messo accanto a numeri veri.
-function coverageDotazioni() { return coverageTotaleA('dotazione', null); }
+/* ⚠️ Anche le dotazioni si contano per scenario, ma NON perché si proiettino in avanti: TFR,
+   case e portafogli restano quello che valgono oggi, uguali in tutte e tre le colonne — una
+   proiezione sarebbe un rendimento inventato messo accanto a numeri veri. A cambiare è la sola
+   «Accordo con azienda», che esiste in un piano e non negli altri. */
 function coverageScopertura(scenario) {
-  const fab = coverageTotaleA('fabbisogno', scenario.anni);
-  const dot = coverageDotazioni();
-  const cap = coverageCapitale(scenario.anni);
+  const fab = coverageTotaleA('fabbisogno', scenario);
+  const dot = coverageTotaleA('dotazione', scenario);
+  const cap = coverageCapitale(scenario);
   return { fab, dot, scopertura: fab.total - dot.total, capitale: cap.total, capitaleMancanti: cap.mancanti };
 }
 
@@ -4266,15 +4315,19 @@ async function salvaUscita(v) {
   await sbUpsert('cm_settings', { key: USCITA_CHIAVE, value: JSON.stringify(v) }, 'key');
   await loadUscita();
 }
+async function salvaAccordoAnni(v) {
+  await sbUpsert('cm_settings', { key: ACCORDO_CHIAVE, value: JSON.stringify(v) }, 'key');
+  await loadUscita();
+}
 
+/* ⚠️ Tre colonne anche fra le dotazioni, e non perché si proiettino: TFR, case e portafogli
+   restano quello che valgono oggi e ripetono lo stesso numero tre volte. A cambiare è la sola
+   «Accordo con azienda», che c'è in un piano e non negli altri — e una colonna sola avrebbe
+   costretto a scegliere quale dei tre piani mostrare, cioè a nascondere gli altri due. */
 function renderCoverageSide(side, scen) {
   const voci = COVERAGE_ITEMS.filter(i => i.side === side.key);
-  const fabbisogno = side.key === 'fabbisogno';
-  // Le dotazioni non dipendono dalla data: una cella sola, e tre celle identiche sarebbero solo
-  // rumore da leggere.
-  const colonne = fabbisogno ? scen
-    : [{ key: 'oggi', icon: '', anno: 'Valore', breve: 'oggi', anni: null }];
-  const tot = colonne.map(c => coverageTotaleA(side.key, c.anni));
+  const colonne = scen;
+  const tot = colonne.map(c => coverageTotaleA(side.key, c));
   return `
     <div class="card">
       <div class="card-header-row">
@@ -4304,15 +4357,21 @@ function renderCoverageVals(colonne, valori, cls = 'fw-600') {
 /* ⚠️ ✎ e gli altri comandi stanno in TESTA alla scheda e non in coda: su un telefono quel che
    sta a destra finisce oltre il bordo, e per raggiungerlo bisognerebbe già sapere che c'è. */
 function renderCoverageRow(item, colonne) {
-  const base   = coverageBase(item);
+  // L'etichetta della fonte si scrive una volta sola, quindi si legge sulla prima colonna: per
+  // ogni voce tranne l'accordo il dato è lo stesso in tutte e tre, e per l'accordo la prima è
+  // proprio la colonna di cui si sta parlando.
+  const base   = coverageBase(item, colonne[0]);
   const annuo  = coveragePeriodicita(item) === 'annuo';
   const note   = coverageRow(item)?.note;
   const hint   = item.hint ? item.hint() : '';
   // ⚠️ La fonte si scrive solo quando dice qualcosa. Su una voce manuale «scritto a mano» è
   // l'unica cosa che l'importo può essere, e ripeterlo su ogni riga smette di distinguere
   // alcunché: il badge serve dove c'è un dato di Finanza che l'importo sta coprendo.
+  // ⚠️ Su una voce che vale diverso per colonna il «al posto di X» non si scrive: X sarebbe il
+  // valore di una colonna sola, e le altre due direbbero un'altra cifra.
   const fonte  = base.scrittoAMano
-    ? (base.auto ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span> <span class="text-muted text-sm">al posto di ${fmtEUR(base.auto.value)}</span>` : '')
+    ? (base.auto ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span> <span class="text-muted text-sm">${
+        item.perScenario ? 'al posto del calcolo dai redditi, e uguale su tutte e tre le date' : `al posto di ${fmtEUR(base.auto.value)}`}</span>` : '')
     : (base.auto ? `<span class="text-muted text-sm">${base.auto.label}</span>`
                  : (item.fonte === 'manuale' ? '' : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : 'Dato non disponibile in Finanza'}</span>`));
   return `
@@ -4327,7 +4386,7 @@ function renderCoverageRow(item, colonne) {
       ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
       ${fonte ? `<div>${fonte}</div>` : ''}
       ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
-      ${renderCoverageVals(colonne, colonne.map(c => coverageValoreA(item, c.anni)))}
+      ${renderCoverageVals(colonne, colonne.map(c => coverageValoreA(item, c)))}
     </div>`;
 }
 
@@ -4335,8 +4394,10 @@ function openCoverageModal(side, key) {
   const item = COVERAGE_ITEMS.find(i => i.side === side && i.key === key);
   if (!item) return;
   const row   = coverageRow(item);
-  const base  = coverageBase(item);
+  const scen  = coverageScenarios();
+  const base  = coverageBase(item, scen[0]);
   const per   = coveragePeriodicita(item);
+  const anni  = accordoAnni();
   const assetOptions = S.otherAssets
     .filter(a => a.asset_type !== 'danaro_rosa')
     .map(a => `<option value="${a.id}" ${row?.linked_other_asset_id === a.id ? 'selected' : ''}>${esc(a.title || a.asset_type)} · ${fmtEUR(parseFloat(a.value))}</option>`)
@@ -4358,6 +4419,19 @@ function openCoverageModal(side, key) {
           <option value="una_tantum" ${per === 'una_tantum' ? 'selected' : ''}>Una volta sola — un capitale, uguale su tutte e tre le date</option>
           <option value="annuo"      ${per === 'annuo'      ? 'selected' : ''}>Ogni anno — sommato fino alla data di ciascuno scenario</option>
         </select>
+      </div>` : ''}
+      ${item.perScenario ? `
+      <div class="form-group">
+        <label class="form-label">Anni pagati dall'azienda, uno per scenario</label>
+        <div class="cov-vals">
+          ${scen.map(sc => `
+          <div class="cov-val">
+            <div class="cov-val-label">${sc.icon} ${sc.anno} · ${sc.breve}</div>
+            <input name="anni_${sc.key}" type="number" step="0.5" min="0" class="form-input mono" value="${anni[sc.key]}" />
+          </div>`).join('')}
+        </div>
+        <p class="text-muted text-sm" style="margin-top:6px">La retribuzione di un anno si legge da 💶 Reddito e si moltiplica per questi anni:
+        ${scen.map(sc => `<strong>${sc.breve}</strong> ${anniTxt(anni[sc.key])}`).join(', ')}. Zero significa che in quello scenario l'accordo non c'è.</p>
       </div>` : ''}
       <div class="form-group">
         <label class="form-label">Importo${per === 'annuo' ? ' all\'anno' : ''} (€)</label>
@@ -4382,6 +4456,16 @@ function openCoverageModal(side, key) {
     };
     if (item.fonte === 'asset')   campi.linked_other_asset_id = data.linked_other_asset_id || null;
     if ('periodicity' in data) campi.periodicity = data.periodicity;
+    // Gli anni non stanno in fnz_coverage_items: sono tre numeri e la tabella ha una riga per
+    // voce, non una per voce e scenario. Vivono in cm_settings accanto alle durate dell'uscita.
+    if (item.perScenario) {
+      const v = {};
+      for (const k of Object.keys(ACCORDO_DEFAULT)) {
+        const x = parseFloat(data[`anni_${k}`]);
+        v[k] = Number.isFinite(x) && x >= 0 ? x : ACCORDO_DEFAULT[k];
+      }
+      await salvaAccordoAnni(v);
+    }
     await saveCoverage(item, campi);
     closeModal();
     render();
@@ -4464,11 +4548,11 @@ Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre
     // di partenza vorrebbe dire farsi ricalcolare una cifra che si è già scritta da soli.
     const vociFab = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
     const colonna = s => `${s.label} (${s.date ? fmtDate(s.date) : 'data da definire'}${s.anni != null ? `, fra ${s.anni.toFixed(1).replace('.', ',')} anni` : ''})`;
-    const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s.anni))}`;
+    const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s))}`;
     const blocco = i => `- ${i.label}${coveragePeriodicita(i) === 'annuo'
-        ? ` — ${eur(coverageBase(i).value)} all'anno per gli anni che mancano:` : ' (una volta sola):'}
+        ? ` — ${eur(coverageBase(i, scen[0]).value)} all'anno per gli anni che mancano:` : ' (una volta sola):'}
 ${scen.map(s => voce(i, s)).join('\n')}`;
-    const premio = coverageBase(COVERAGE_ITEMS.find(i => i.key === 'assicurazione')).value;
+    const premio = coverageBase(COVERAGE_ITEMS.find(i => i.key === 'assicurazione'), scen[0]).value;
     return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano —
 una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia — e
 soprattutto a stimare quanto mi costerebbero all'anno.
@@ -4489,9 +4573,11 @@ prudenza: TFR, case e portafogli il giorno che servissero potrebbero non essere 
 ${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].capitale)}${conti[k].capitaleMancanti ? ` (${conti[k].capitaleMancanti} voci ancora da quantificare)` : ''}`).join('\n')}
 
 DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi, al netto delle imposte (valori di oggi,
-non proiettati in avanti):
-${COVERAGE_ITEMS.filter(i => i.side === 'dotazione').map(i => `- ${i.label}: ${eur(coverageValoreA(i, null))}`).join('\n')}
-Totale dotazioni: ${fmtEUR(conti[0].dot.total)}${conti[0].dot.mancanti ? ` (${conti[0].dot.mancanti} voci ancora da quantificare)` : ''}
+non proiettati in avanti). L'unica che cambia da uno scenario all'altro è l'accordo con l'azienda, che
+esiste solo se esco prima:
+${COVERAGE_ITEMS.filter(i => i.side === 'dotazione').map(blocco).join('\n')}
+Totale dotazioni:
+${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].dot.total)}${conti[k].dot.mancanti ? ` (${conti[k].dot.mancanti} voci ancora da quantificare)` : ''}`).join('\n')}
 
 SCOPERTURA — fabbisogno meno dotazioni, cioè quello che manca davvero tenendo conto di ciò che ho già:
 ${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].scopertura)}`).join('\n')}
