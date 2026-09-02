@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.6.1</title>
+  <title>GarsalFinanza v1.7.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -580,8 +580,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.6.1';
-const APP_BUILD   = '2026-09-01T19:00:00Z';
+const APP_VERSION = 'v1.7.0';
+const APP_BUILD   = '2026-09-01T19:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3868,6 +3868,13 @@ const COVERAGE_ITEMS = [
   { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
     hint: () => '',
     fonte: 'auto', periodicita: 'annuo', auto: coveragePensioneLorda },
+  // ⚠️ Va per ultima, e non è un caso: il capitale che deve assicurare è la somma delle voci
+  // che la precedono. L'importo qui è il PREMIO annuo della polizza — un costo, come il costo
+  // della vita — mentre il capitale è il parametro del contratto e si legge nel riepilogo: due
+  // grandezze diverse, e sommarle sarebbe come sommare l'affitto al prezzo della casa.
+  { side: 'fabbisogno', key: 'assicurazione', icon: '🛡️', label: 'Assicurazione caso morte e invalidità',
+    hint: () => 'Premio annuo della polizza. Il capitale da assicurare è nel riepilogo qui sopra.',
+    fonte: 'manuale', periodicita: 'annuo', prompt: 'assicurazione' },
 
   { side: 'dotazione',  key: 'tfr',           icon: '💼', label: 'TFR',       fonte: 'asset' },
   { side: 'dotazione',  key: 'casa_rosa',     icon: '🌹', label: 'Casa Rosa', fonte: 'asset' },
@@ -3876,11 +3883,21 @@ const COVERAGE_ITEMS = [
   { side: 'dotazione',  key: 'pensione_ada',  icon: '👛', label: 'Pensione Ada',
     fonte: 'auto', auto: coveragePensioneAda },
 ];
-// ⚠️ L'assicurazione non sta nell'elenco qui sopra ed è voluto: non è un fabbisogno in più — è
-// la copertura di quello che manca. Sommarla al fabbisogno che deve coprire lo conterebbe due
-// volte, quindi vive fuori dalla tabella, nel riepilogo, come riga calcolata.
+/* Il capitale della polizza: la riga calcolata del riepilogo.
+   ⚠️ Copre TUTTE le voci di fabbisogno che stanno sopra, e le dotazioni NON si sottraggono: è
+   la scelta prudente, e la ragione è che TFR, case e portafogli il giorno che servissero
+   potrebbero non essere né liquidi né disponibili — la polizza paga comunque. Quanto manca al
+   netto di quello che c'è già lo dice la riga «Scopertura», due righe più su: le due domande
+   convivono nel riepilogo invece di essere schiacciate in un numero solo.
+   ⚠️ Il premio dell'assicurazione resta fuori dal capitale: il costo di una polizza non è una
+   cosa che la polizza stessa deve coprire. */
 const COVERAGE_ASSICURAZIONE = { icon: '🛡️', label: 'Capitale da assicurare',
   fonte: 'calcolata', prompt: 'assicurazione' };
+function coverageCapitale(anni) {
+  const voci = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
+  return { total: voci.reduce((s, i) => s + (coverageValoreA(i, anni) || 0), 0),
+           mancanti: voci.filter(i => coverageValoreA(i, anni) == null).length };
+}
 const COVERAGE_SIDES = [
   { key: 'fabbisogno', icon: '🎯', title: 'Fabbisogno', sub: 'Quello che servirà' },
   { key: 'dotazione',  icon: '🧰', title: 'Dotazioni',  sub: 'Quello con cui ci si arriva' },
@@ -4041,7 +4058,8 @@ function coverageDotazioni() { return coverageTotaleA('dotazione', null); }
 function coverageScopertura(scenario) {
   const fab = coverageTotaleA('fabbisogno', scenario.anni);
   const dot = coverageDotazioni();
-  return { fab, dot, scopertura: fab.total - dot.total, assicurare: Math.max(0, fab.total - dot.total) };
+  const cap = coverageCapitale(scenario.anni);
+  return { fab, dot, scopertura: fab.total - dot.total, capitale: cap.total, capitaleMancanti: cap.mancanti };
 }
 
 function renderCoperture() {
@@ -4124,9 +4142,9 @@ function renderCoverageRiepilogo(scen) {
                 <button class="btn-icon" data-action="coverage-prompt" data-key="assicurazione" title="Prompt per l'analisi con l'IA">💬</button>
                 <span class="fw-600">${COVERAGE_ASSICURAZIONE.icon} ${COVERAGE_ASSICURAZIONE.label}</span>
               </div>
-              <div class="text-muted text-sm">Copre la scopertura: non è a sua volta un fabbisogno e non entra nel totale.</div>
+              <div class="text-muted text-sm">Copre le voci del fabbisogno qui sopra, premio escluso; le dotazioni non si sottraggono.</div>
             </td>
-            ${conti.map(c => cella(c.assicurare, 'fw-700')).join('')}
+            ${conti.map(c => cella(c.capitale, 'fw-700')).join('')}
           </tr>
         </tbody>
       </table></div>
@@ -4325,13 +4343,19 @@ Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre
     const eur   = n => n == null ? 'da definire' : fmtEUR(n);
     const scen  = coverageScenarios();
     const conti = scen.map(coverageScopertura);
+    // ⚠️ La voce dell'assicurazione resta fuori dall'elenco del suo stesso prompt: quello che si
+    // sta chiedendo è il premio, e il capitale è la somma delle ALTRE voci. Metterla fra i dati
+    // di partenza vorrebbe dire farsi ricalcolare una cifra che si è già scritta da soli.
+    const vociFab = COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno' && i.key !== 'assicurazione');
     const colonna = s => `${s.label} (${s.date ? fmtDate(s.date) : 'data da definire'}${s.anni != null ? `, fra ${s.anni.toFixed(1).replace('.', ',')} anni` : ''})`;
     const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s.anni))}`;
     const blocco = i => `- ${i.label}${coveragePeriodicita(i) === 'annuo'
         ? ` — ${eur(coverageBase(i).value)} all'anno per gli anni che mancano:` : ' (una volta sola):'}
 ${scen.map(s => voce(i, s)).join('\n')}`;
-    return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano:
-una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia.
+    const premio = coverageBase(COVERAGE_ITEMS.find(i => i.key === 'assicurazione')).value;
+    return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano —
+una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia — e
+soprattutto a stimare quanto mi costerebbero all'anno.
 
 Questo è il quadro che ho già messo a fuoco. Il punto è che il fabbisogno non è un numero solo: dipende
 da quando smetto di lavorare, e gli scenari sono tre. Tutti gli importi qui sotto sono in EURO DI OGGI,
@@ -4340,37 +4364,41 @@ senza rivalutazione: dimmi tu se e come tenerne conto.
 LE TRE DATE:
 ${scen.map(s => `- ${colonna(s)}`).join('\n')}
 
-FABBISOGNO — quello che servirebbe se io venissi a mancare o non potessi più lavorare, contato fino a
-ciascuna delle tre date (la copertura assicurativa non è in elenco: è quella che ti sto chiedendo di
-dimensionare):
-${COVERAGE_ITEMS.filter(i => i.side === 'fabbisogno').map(blocco).join('\n')}
+FABBISOGNO — quello che servirebbe alla mia famiglia se io venissi a mancare o non potessi più lavorare,
+contato fino a ciascuna delle tre date:
+${vociFab.map(blocco).join('\n')}
 
-Totale fabbisogno:
-${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].fab.total)}${conti[k].fab.mancanti ? ` (${conti[k].fab.mancanti} voci ancora da quantificare)` : ''}`).join('\n')}
+CAPITALE DA ASSICURARE — è la somma delle voci qui sopra, e le dotazioni NON sono state sottratte, per
+prudenza: TFR, case e portafogli il giorno che servissero potrebbero non essere liquidi né disponibili.
+${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].capitale)}${conti[k].capitaleMancanti ? ` (${conti[k].capitaleMancanti} voci ancora da quantificare)` : ''}`).join('\n')}
 
-DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi (valori di oggi, non proiettati):
+DOTAZIONI — quello con cui la famiglia ci arriverebbe già oggi, al netto delle imposte (valori di oggi,
+non proiettati in avanti):
 ${COVERAGE_ITEMS.filter(i => i.side === 'dotazione').map(i => `- ${i.label}: ${eur(coverageValoreA(i, null))}`).join('\n')}
 Totale dotazioni: ${fmtEUR(conti[0].dot.total)}${conti[0].dot.mancanti ? ` (${conti[0].dot.mancanti} voci ancora da quantificare)` : ''}
 
-SCOPERTURA, cioè quello che l'assicurazione dovrebbe coprire:
+SCOPERTURA — fabbisogno meno dotazioni, cioè quello che manca davvero tenendo conto di ciò che ho già:
 ${scen.map((s, k) => `  · ${s.label}: ${fmtEUR(conti[k].scopertura)}`).join('\n')}
+
+${premio != null ? `Il premio che ho messo a preventivo oggi è ${fmtEUR(premio)} all'anno: dimmi se è realistico per i capitali di cui sopra.` : `Nel mio piano non ho ancora messo nessun premio: il numero che mi serve da te è proprio quello.`}
 
 Dati miei da completare prima di rispondere, chiedimeli se ti servono: età, stato di salute, se fumo,
 professione e reddito annuo netto, età e situazione di coniuge e figlia, eventuali coperture già in essere
 (polizze aziendali, CCNL, assicurazione legata al mutuo).
 
 Quello che ti chiedo:
-1. quale capitale TCM ha senso assicurare in ciascuno dei tre scenari, partendo dalle scoperture qui
-   sopra: spiega quali voci del fabbisogno vanno coperte per intero e quali no, e perché;
-2. quale dei tre scenari conviene prendere come riferimento per la polizza, e perché;
-3. per quanti anni tenere la copertura e se conviene capitale costante o decrescente, viste le voci
+1. IL PREMIO ANNUO, che è la domanda principale: quanto costa in Italia assicurare i capitali qui sopra,
+   per fasce d'età (40, 45, 50, 55 anni), fumatore e non fumatore, a capitale costante e a capitale
+   decrescente. Dammi un intervallo e dimmi da cosa dipende;
+2. quale capitale TCM ha senso assicurare davvero in ciascuno dei tre scenari: quali voci del fabbisogno
+   vanno coperte per intero e quali no, e se e quanto ha senso scalare le dotazioni;
+3. quale dei tre scenari conviene prendere come riferimento per la polizza, e perché;
+4. per quanti anni tenere la copertura e se conviene capitale costante o decrescente, viste le voci
    legate al mutuo e agli studi che si esauriscono nel tempo — e come far combaciare la scadenza della
    polizza con la data che avrò scelto;
-4. la stessa cosa per l'invalidità permanente: quale capitale o rendita, quale soglia di invalidità
+5. la stessa cosa per l'invalidità permanente: quale capitale o rendita, quale soglia di invalidità
    (franchigia), e la differenza fra copertura da infortunio e da malattia — quest'ultima è quella che
-   di solito manca;
-5. una stima del premio annuo indicativo in Italia per quei capitali, per fasce d'età (35, 40, 45, 50 anni),
-   fumatore e non fumatore;
+   di solito manca. E quanto costa in più;
 6. le clausole su cui stare attenti nei contratti italiani: questionario sanitario e dichiarazioni,
    carenze, esclusioni, rivalutazione, vincolo a favore della banca sul mutuo, tassazione e detraibilità
    fiscale dei premi, designazione dei beneficiari;
