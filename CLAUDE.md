@@ -560,18 +560,35 @@ sparirebbe sotto le dita senza nessun errore.
 `https://ciao` come indirizzo validissimo, e una parola secca condivisa da un'altra app diventerebbe
 una scheda link che non porta da nessuna parte.
 
-#### ⚠️ Il nativo i link non li conosce, e per questo non li mostra
+#### I link ci sono anche in nativo
 
-`memo/` in AppSphere nativa non legge `mm_attachments` e non ha il tipo `link`. Un `kind`
-sconosciuto cadeva su `NOTA`: quella scheda si sarebbe vista come una nota **senza il suo
-indirizzo**, e risalvandola dal form `MemoRepository` avrebbe riscritto `kind: "nota"` — la scheda
-link diventata una nota in silenzio, con l'allegato agganciato a una riga che non lo mostra più.
+`memo/` legge `mm_attachments` e ha `TipoScheda.LINK`: la Tab 🔗 Link, la copertina sulla scheda in
+elenco, la vista propria col pulsante *▶️ Apri* e il campo **Indirizzo** nel form. Le regole
+duplicate da tenere allineate col web sono tre, e sono le stesse che valgono di là:
 
-`TipoScheda.daONull()` distingue ora «tipo che non conosco» da «tipo che non c'è»: torna `null` sul
-primo e la scheda **non viene proprio caricata**, mentre chiave assente o vuota resta `NOTA`, che è
-il `DEFAULT` del database e sono le schede nate prima della colonna. Non vederla è meglio che
-vederla sbagliata e poterla rovinare. **Portare i link in nativo è il pezzo che manca**, ed è quello
-che toglie la guardia.
+- **dall'url non si archivia nient'altro**: `Link.idYouTube` / `Link.copertina` / `Link.sito`
+  in `MemoData.kt` sono i gemelli di `ytIdDa` / `thumbDa` / `hostDa` in `memo.html`, e vanno
+  cambiati insieme;
+- **una scheda = un allegato, aggiornato e non ricreato**: `MemoRepository.salvaLink` ricalca
+  `syncLinkAttachment()` — il giorno che gli allegati saranno più d'uno, `position` deve
+  sopravvivere al salvataggio;
+- **un link è il suo indirizzo**: `BozzaScheda.linkValido` è l'unico campo obbligatorio di tutto
+  Memo, col **punto nel nome del sito** come controllo che conta — senza, «ciao» passerebbe per un
+  indirizzo validissimo. Stessa regola di `urlValido` nel web.
+
+⚠️ **`TipoScheda.daONull()` resta anche adesso che nessun tipo è sconosciuto**, e non è codice
+morto: distingue «tipo che non conosco» da «tipo che non c'è». Sul primo torna `null` e la scheda
+**non viene proprio caricata**; chiave assente o vuota resta `NOTA`, che è il `DEFAULT` del
+database e sono le schede nate prima della colonna. È la guardia che ha impedito alle schede
+`'link'`, prima che il nativo le conoscesse, di comparire come note senza indirizzo e di
+**diventarlo davvero** al primo salvataggio — e che farà lo stesso col prossimo tipo nuovo.
+
+⚠️ **La condivisione resta dell'APK WebView**, non di questo: l'intent-filter lo dichiara una sola
+APK (vedi sopra). Il nativo i link li **mostra**, non li riceve dal tasto «Condividi».
+
+⚠️ **Il titolo ricavato dal link non c'è di qua**: `titoloDaSlug` e l'oEmbed di YouTube vivono solo
+in `memo.html`. Scrivendo un link dal nativo il titolo lo si mette a mano — è una comodità che
+manca, non una divergenza di dati.
 
 `mm_diary_entries.measures` è `{ "<id della misura>": numero|booleano }`. Le **misure sono righe
 vere e i valori no**, ed è voluto: una misura deve sopravvivere alle registrazioni che la citano
@@ -2418,7 +2435,7 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   punti delle soglie **raggiunte** (solo col successo) ± bonus/malus finale. Il
   nativo porta pesata, tabella, grafico, Gestione Obiettivo, gratta e vinci e Salute: statistiche
   e dieta restano di là. Dettagli nella sezione qui sopra.
-- **Memo** — note, liste e diari esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
+- **Memo** — note, liste, diari e 🔗 link esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
   converte in marcatori per modificarlo e lo riconverte salvando (`MemoHtml`), quindi ogni voce
   della barra del web deve avere il suo marcatore di qua. Le altre regole da tenere allineate:
   spunte ottimistiche con rollback, misure aggiornate riga per riga e mai ricreate, opzioni di una
