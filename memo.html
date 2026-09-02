@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.1.0</title>
+    <title>Memorandum v1.1.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -994,7 +994,7 @@
                 compare da sé: arriva da YouTube, non occupa spazio.
             </div>
             <input type="url" class="form-input" id="cardLinkUrl" inputmode="url"
-                   placeholder="https://…" oninput="renderLinkPreview()">
+                   placeholder="https://…" oninput="onLinkUrlInput()">
             <div id="linkPreview" style="margin-top:0.6rem;"></div>
         </div>
 
@@ -1304,8 +1304,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.1.0';
-var BUILD_TIME  = '2026-09-02T10:00:00Z';
+var APP_VERSION = 'v1.1.1';
+var BUILD_TIME  = '2026-09-02T11:30:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1736,6 +1736,72 @@ function primoUrlIn(testo) {
     return m ? m[0] : '';
 }
 
+// ── Il titolo, quando non lo manda nessuno ────────────────────────
+//
+// Condividendo dal telefono il titolo arriva da EXTRA_SUBJECT ed è
+// esatto. Ma incollando un link a mano dal PC quel campo non esiste,
+// e senza queste due funzioni il titolo sarebbe sempre il nome del
+// sito: «youtu.be» per ogni video.
+
+// Segmenti che non dicono niente: si risale a quello prima.
+const SEGMENTI_MUTI = /^(index|home|default|amp|it|en|article|articolo|video|watch|page|p|s)$/i;
+
+// L'ultimo pezzo del percorso ripulito: da
+// «/news/manovra_governo_conti-424193/» esce «Manovra governo conti».
+//
+// ⚠️ Uno slug NON è un titolo: è quello che il sito ha scritto
+// nell'indirizzo per i motori di ricerca, spesso troncato. È meglio
+// del nome del sito e peggio del titolo vero — per questo viene dopo
+// EXTRA_SUBJECT e dopo l'oEmbed, mai prima.
+function titoloDaSlug(url) {
+    // su YouTube lo slug è l'id del video: «jNQXAC9IVRw» non è un titolo
+    if (ytIdDa(url)) return '';
+    let pezzi;
+    try { pezzi = new URL(normalizzaUrl(url)).pathname.split('/').filter(Boolean); }
+    catch (e) { return ''; }
+
+    // si risale dal fondo: l'ultimo segmento è spesso un id nudo
+    for (let i = pezzi.length - 1; i >= 0; i--) {
+        let s;
+        try { s = decodeURIComponent(pezzi[i]); } catch (e) { s = pezzi[i]; }
+        s = s.replace(/\.[a-z0-9]{2,5}$/i, '');            // .html, .shtml, .php…
+        s = s.replace(/[-_]\d{3,}$/, '');                   // …-424193
+        s = s.replace(/[-_][0-9a-f]{8,}$/i, '');            // …-3f9a2b11
+        // token misto lettere+cifre in coda (…-abc123), ma solo con almeno
+        // tre cifre: senza quella soglia «Covid-19» diventerebbe «Covid»
+        s = s.replace(/[-_](?=[a-z0-9]{6,}$)(?=[a-z]*\d[a-z0-9]*\d[a-z0-9]*\d)[a-z0-9]+$/i, '');
+        if (SEGMENTI_MUTI.test(s)) continue;
+        s = s.replace(/[-_+]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (s.length < 3) continue;                  // troppo corto per dire qualcosa
+        if (!/[a-zà-ÿ]{2,}/i.test(s)) continue;      // solo cifre: è un id
+        return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+    return '';
+}
+
+// Il titolo vero di un video, dall'oEmbed di YouTube: nessuna chiave,
+// nessuna API da abilitare. È l'unica strada per un link YouTube
+// incollato a mano, dove lo slug è l'id e non dice niente.
+//
+// ⚠️ Fallisce in silenzio e torna stringa vuota: senza rete, o se un
+// giorno quell'endpoint chiudesse, la scheda deve nascere lo stesso
+// col ripiego. Un titolo è una comodità, non una condizione.
+async function titoloYouTube(url) {
+    const id = ytIdDa(url);
+    if (!id) return '';
+    try {
+        // sempre la forma canonica: l'oEmbed non accetta /shorts/ né youtu.be
+        const q = encodeURIComponent('https://www.youtube.com/watch?v=' + id);
+        const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + q);
+        if (!r.ok) return '';
+        const j = await r.json();
+        return String(j.title || '').trim();
+    } catch (e) {
+        console.warn('titoloYouTube:', e);
+        return '';
+    }
+}
+
 // ============================================================
 // RENDER
 // ============================================================
@@ -2059,6 +2125,54 @@ function applyEditorKind() {
     if (isDiario) renderEditorMetrics();
     if (isLista)  renderEditorItems();
     if (isLink)   renderLinkPreview();
+}
+
+// Chi ha chiesto per ultimo un titolo: una risposta dell'oEmbed che
+// arriva dopo che l'url è cambiato riguarda il video di prima, e
+// scriverla sarebbe il titolo sbagliato sulla scheda giusta.
+let titoloToken = 0;
+
+/**
+ * Compila il titolo della scheda link, ma solo se è vuoto.
+ *
+ * ⚠️ Non sovrascrive MAI quello che c'è: né quel che hai scritto tu,
+ * né l'EXTRA_SUBJECT arrivato dalla condivisione, che è esatto e non
+ * va rimpiazzato da un ripiego.
+ *
+ * Due tempi, di proposito: prima lo slug (o il nome del sito), che è
+ * immediato e non chiede niente a nessuno, poi — solo per YouTube —
+ * il titolo vero dall'oEmbed, che prende il posto del provvisorio.
+ * Aspettare la rete per scrivere il primo carattere lascerebbe il
+ * campo vuoto per mezzo secondo su ogni link incollato.
+ */
+async function riempiTitoloSeVuoto(url) {
+    const campo = document.getElementById('cardTitle');
+    if (!campo || campo.value.trim() || !urlValido(url)) return;
+
+    const mio = ++titoloToken;
+    const u   = normalizzaUrl(url);
+
+    const provvisorio = (titoloDaSlug(u) || hostDa(u)).slice(0, 200);
+    campo.value = provvisorio;
+
+    if (!ytIdDa(u)) return;
+
+    const vero = await titoloYouTube(u);
+    // nel frattempo: l'url è cambiato, oppure il titolo l'hai
+    // ritoccato tu — in tutt'e due i casi qui non si tocca più niente
+    if (!vero || mio !== titoloToken || campo.value !== provvisorio) return;
+    campo.value = vero.slice(0, 200);
+}
+
+// L'url si scrive un carattere per volta, e chiedere il titolo a ogni
+// tasto premuto vorrebbe dire una richiesta per lettera. Stessa pausa
+// di digitazione della ricerca alimenti in calorie.html.
+let titoloTimer = null;
+function onLinkUrlInput() {
+    renderLinkPreview();
+    clearTimeout(titoloTimer);
+    const url = (document.getElementById('cardLinkUrl').value || '').trim();
+    titoloTimer = setTimeout(() => riempiTitoloSeVuoto(url), 500);
 }
 
 // L'anteprima si vede PRIMA di salvare: un url incollato storto (o il
@@ -3577,9 +3691,19 @@ function openMemoFromSharedLink(testo, titolo) {
     setTimeout(() => {
         document.getElementById('cardLinkUrl').value = url;
         editorLinkUrl = url;
-        document.getElementById('cardTitle').value =
-            (String(titolo || '').trim() || hostDa(url)).slice(0, 200);
         renderLinkPreview();
+
+        // EXTRA_SUBJECT quando c'è: è il titolo vero, mandato dall'app che
+        // ha condiviso, e non costa niente. Quando manca — molte app non lo
+        // mandano — lo si ricava dal link: oEmbed per YouTube, slug per il
+        // resto, nome del sito come ultima spiaggia.
+        const dato = String(titolo || '').trim();
+        if (dato) {
+            document.getElementById('cardTitle').value = dato.slice(0, 200);
+        } else {
+            riempiTitoloSeVuoto(url);
+        }
+
         // il titolo arriva già selezionato: è l'unica cosa che di solito
         // si vuole ritoccare, e così si riscrive senza doverlo cancellare
         document.getElementById('cardTitle').select();
