@@ -331,13 +331,15 @@ I dati storici 2017-2025 ricavati dai 730 e dalle CU sono in
 e intestato all'utente cercato per email, e salta senza fallire se quell'utente non esiste
 (progetto dev).
 
-### Coperture per esigenze future (`fnz_coverage_items`)
+### Possibili soluzioni (`fnz_coverage_items`)
 | Table | Purpose |
 |---|---|
 | `fnz_coverage_items` | Le voci di copertura, **una riga per voce**: `side` (`fabbisogno`\|`dotazione`), `item_key`, `amount`, `periodicity`, `revaluation_pct`, `linked_other_asset_id`, `note` |
 
-Si compila da `finanza.html` → Previdenza → 🛡️ **Coperture per esigenze future**, la voce di menù
+Si compila da `finanza.html` → Piano pensione → 🛡️ **Possibili soluzioni**, la voce di menù
 sotto 🏛️ Simulazione INPS. Quello che servirà, quello con cui ci si arriva, e quanto manca.
+(La sezione della barra si chiamava *Previdenza* e la voce *Coperture per esigenze future*: sono
+solo etichette, `data-view` resta `coperture` e la tabella `fnz_coverage_items`.)
 
 ⚠️ **Il fabbisogno non è un numero solo: si conta fino a una data, e le date sono tre.** «Costo
 della vita» e «contribuzione alla pensione» sono flussi che durano finché non si smette di
@@ -346,9 +348,30 @@ differenza che la pagina esiste per mostrare.
 
 | Scenario | Data |
 |---|---|
-| 🧭 Accompagnamento | Anticipata **− 5 anni** (`COVERAGE_ANNI_ACCOMPAGNAMENTO`) |
+| 🧭 Uscita concordata | Anticipata **− la somma di `uscita()`** (di partenza 5 + 1 + 2 = 8 anni) |
 | 🚪 Pensione anticipata | `fnz_pension_forecast.pension_date`, scenario `anticipata` |
 | 🏛️ Pensione di vecchiaia | `fnz_pension_forecast.pension_date`, scenario `vecchiaia` |
+
+⚠️ **La prima data è l'unica delle tre che si decide, e non è più un numero solo.** Fino alla
+v1.7.0 era la costante `COVERAGE_ANNI_ACCOMPAGNAMENTO = 5`; ora sono **tre durate che si
+sommano** — accompagnamento dell'azienda, garden leave che l'azienda concede **in più**, e
+aspettativa non retribuita che ci si prende da sé — perché sono tre cose diverse, si trattano
+con interlocutori diversi e schiacciarle in un numero solo le rendeva impossibili da negoziare
+una per una. L'addizione sta scritta a schermo sopra la tabella, col ✎ accanto: un
+«Anticipata − 8 anni» senza gli addendi è un numero che non si può discutere con nessuno.
+
+⚠️ **I tre numeri vivono in `cm_settings`, chiave `fnz_uscita_anticipata`** (JSON
+`{accompagnamento, garden_leave, aspettativa}`), non in una costante e **non in
+`localStorage`**: sono un'ipotesi di trattativa — cioè esattamente il dato che si vuole cambiare
+senza toccare il codice — e la stessa domanda ci si fa dal PC e dal telefono. Chiave assente o
+casella vuota valgono `USCITA_DEFAULT` (5 + 1 + 2) e **non zero**: zero direbbe che non si esce
+affatto prima, ed è la stessa scelta di `amount` NULL.
+
+⚠️ **Le tre durate si sommano e non si sovrappongono**, ed è la sostanza del piano: l'azienda
+accompagna, il garden leave viene in più, l'aspettativa si aggiunge ancora. Per la stessa
+ragione `spostaAnni()` sposta di **mesi** e non di anni interi — le durate si scrivono a mano e
+niente vieta mezzo anno di preavviso, che con `setFullYear` darebbe una data invalida (NaN)
+invece di sei mesi.
 
 ⚠️ **Una data che manca non si inventa**: la colonna resta vuota e lo dice. Un fabbisogno contato
 su un orizzonte immaginario è peggio di un fabbisogno che non c'è, perché sembra un numero.
@@ -364,7 +387,7 @@ silenzio. È la stessa scelta di `fnz_income`.
 
 | `fonte` | Da dove viene il numero |
 |---|---|
-| `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada) |
+| `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada, e fra le dotazioni l'accordo con l'azienda) |
 | `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS da 💶 Reddito |
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
 | `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
@@ -382,6 +405,14 @@ pensione si incassa (inizio 2029 + 5 = **2034**). Usarne una sola sbaglierebbe p
 per difetto l'altra. La fine si **ricava** e non si scrive: un 2034 messo a mano fra due anni
 direbbe ancora 2034. Il conto è in anni interi (`2034 − anno in corso`) così si rifà a mente, e a
 corso finito la voce vale zero — che è quello che sarà.
+
+⚠️ **«Accordo con azienda» è l'unica dotazione `manuale`**, ed è voluto: è quello che l'azienda
+metterebbe sul piatto per l'uscita (accompagnamento e garden leave), cioè un numero che in
+Finanza non sta da nessuna parte perché non è ancora stato né chiesto né concesso. È un capitale
+**una tantum** — uguale su tutte e tre le date — e finché resta vuoto si conta fra le voci «da
+compilare» invece di entrare nel totale come zero. ⚠️ Per questo il form di una dotazione **non
+chiede la periodicità**: una dotazione è quello che c'è oggi e la sua colonna non ha un
+orizzonte su cui moltiplicare, quindi `annuo` lì darebbe `null` e basta.
 
 ⚠️ **L'asset si collega per id e non si indovina dal titolo**: una voce agganciata al nome
 smetterebbe di leggere il giorno che qualcuno rinomina «Casa Rosa» in «Casa di Rosa», e lo
@@ -1262,7 +1293,7 @@ e `revolut-auto-categorize`.
 
 Due colonne (`20260901180000_...`): **`tax_regime`** dice con quale aliquota, **`cost_basis`** su
 quale base. Si compilano dal form dell'asset (💎 Patrimonio), e servono a **un posto solo**: le
-**dotazioni** delle 🛡️ Coperture, dove il valore di un asset compare al netto. Elenco asset,
+**dotazioni** delle 🛡️ Possibili soluzioni, dove il valore di un asset compare al netto. Elenco asset,
 Dashboard, snapshot e totali del patrimonio restano al lordo.
 
 | `tax_regime` | Aliquota | Base |
