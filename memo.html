@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.0.33</title>
+    <title>Memorandum v1.1.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -147,6 +147,7 @@
             display: flex; flex-direction: column;
         }
         .memo-card.kind-diario { background: #FEF9E0; } /* giallino: solo i diari */
+        .memo-card.kind-link   { background: #FDECEF; } /* rosino: solo i link */
         .memo-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); border-color: #d1d5db; }
         .memo-card.pinned { border-color: var(--warning); }
 
@@ -513,6 +514,36 @@
         .kind-badge.nota   { background: var(--accent); }
         .kind-badge.lista  { background: var(--success); }
         .kind-badge.diario { background: var(--secondary); }
+        .kind-badge.link   { background: var(--primary); }
+
+        /* ── MINIATURA DI UNA SCHEDA LINK ──
+           Per YouTube la copertina arriva da img.youtube.com e non costa
+           niente: né una chiamata ad API, né un byte nel bucket. Per tutto
+           il resto non c'è nessuna immagine da mostrare, e al suo posto va
+           il nome del sito — inventare un'anteprima che non si ha sarebbe
+           peggio che non averla. */
+        .link-thumb {
+            position: relative; width: 100%; aspect-ratio: 16 / 9;
+            background: #111; overflow: hidden; flex-shrink: 0;
+        }
+        .link-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .link-thumb .play {
+            position: absolute; inset: 0; display: flex;
+            align-items: center; justify-content: center;
+            font-size: 2.4rem; text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+        }
+        .link-host {
+            display: inline-block; max-width: 100%; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap;
+            font-family: 'Space Mono', monospace; font-size: 0.75rem;
+            color: var(--muted); margin-top: 0.35rem;
+        }
+        /* il fondo per i link che una copertina non ce l'hanno */
+        .link-thumb.generic {
+            background: var(--dark); display: flex;
+            align-items: center; justify-content: center;
+            color: white; font-size: 2rem;
+        }
 
         /* riga del tipo, sotto il titolo della scheda */
         .memo-card-kind-row { margin-bottom: 0.5rem; }
@@ -785,6 +816,8 @@
                  onclick="showKind('lista', this)">☑️</div>
             <div class="nav-item" data-text="Diari" data-section="schede" data-kind="diario"
                  onclick="showKind('diario', this)">📊</div>
+            <div class="nav-item" data-text="Link" data-section="schede" data-kind="link"
+                 onclick="showKind('link', this)">🔗</div>
             <div class="nav-item" data-text="Fissa" data-section="pinned"
                  onclick="showPage('pinned'); setNavActive(this)">📌</div>
             <div class="nav-item" data-text="Impostazioni" data-section="impostazioni"
@@ -953,6 +986,18 @@
             </div>
         </div>
 
+        <!-- URL (solo kind = link) -->
+        <div class="form-group" id="linkSection" style="display:none;">
+            <label class="form-label">Indirizzo</label>
+            <div style="font-size:0.9rem;color:var(--muted);margin-bottom:0.4rem;">
+                Il link da ricordare. Se è un video di YouTube la copertina
+                compare da sé: arriva da YouTube, non occupa spazio.
+            </div>
+            <input type="url" class="form-input" id="cardLinkUrl" inputmode="url"
+                   placeholder="https://…" oninput="renderLinkPreview()">
+            <div id="linkPreview" style="margin-top:0.6rem;"></div>
+        </div>
+
         <!-- VOCI DELLA LISTA (solo kind = lista) -->
         <div class="form-group" id="listSection" style="display:none;">
             <label class="form-label">Voci della lista</label>
@@ -1064,6 +1109,27 @@
 <!-- ========================================================= -->
 <!-- MODAL: VISTA LISTA                                        -->
 <!-- ========================================================= -->
+<div class="modal" id="linkViewModal">
+    <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+            <div class="modal-title" id="linkViewTitle">Link</div>
+            <button class="modal-close" onclick="closeLinkView()">✕</button>
+        </div>
+
+        <div id="linkViewThumb" style="margin-bottom:0.75rem;"></div>
+        <div class="link-host" id="linkViewUrl" style="margin-bottom:0.75rem;"></div>
+        <div id="linkViewNote" class="view-note" style="display:none;"></div>
+
+        <button class="btn btn-primary" style="width:100%;margin-top:0.5rem;padding:0.7rem;"
+                onclick="apriLinkDaVista()">▶️ Apri</button>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;gap:0.75rem;">
+            <button class="btn btn-ghost" onclick="editFromView()">✏️ Modifica scheda</button>
+            <button class="btn btn-secondary" onclick="closeLinkView()">Chiudi</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal" id="listViewModal">
     <div class="modal-content" style="max-width:640px;">
         <div class="modal-header">
@@ -1238,8 +1304,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.0.33';
-var BUILD_TIME  = '2026-08-31T15:30:00Z';
+var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-09-02T10:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1282,19 +1348,30 @@ let currentCatFilter = null; // id categoria filtro sidebar
 let searchQuery = '';
 
 // ── LISTE E DIARIO ──────────────────────────────────────────
-// Una scheda è una nota, una lista o un diario (mm_cards.kind).
+// Una scheda è una nota, una lista, un diario o un link (mm_cards.kind).
 // Voci, misure e registrazioni si caricano solo quando si apre
 // la scheda: nell'elenco bastano i conteggi, che arrivano già
 // con la query delle schede.
 const KINDS = {
     nota:   { icon: '📄', label: 'Nota'   },
     lista:  { icon: '☑️', label: 'Lista'  },
-    diario: { icon: '📊', label: 'Diario' }
+    diario: { icon: '📊', label: 'Diario' },
+    link:   { icon: '🔗', label: 'Link'   }
+};
+
+// il nome del tipo con l'articolo giusto: serve nei titoli del modale,
+// negli elenchi vuoti e nel tooltip del +, e scriverlo in tre posti
+// diversi è il modo migliore per farli divergere
+const KIND_NOMI = {
+    nota:   { nome: 'nota',   nuovo: 'Nuova nota',   nessuno: 'Nessuna nota'   },
+    lista:  { nome: 'lista',  nuovo: 'Nuova lista',  nessuno: 'Nessuna lista'  },
+    diario: { nome: 'diario', nuovo: 'Nuovo diario', nessuno: 'Nessun diario'  },
+    link:   { nome: 'link',   nuovo: 'Nuovo link',   nessuno: 'Nessun link'    }
 };
 
 // La Tab aperta: ogni tipo ha la sua pagina, e non esiste una vista
-// che li mescola — 📌 Fissa è l'unica che attraversa i tre tipi.
-let currentKind = 'nota';     // 'nota' | 'lista' | 'diario'
+// che li mescola — 📌 Fissa è l'unica che attraversa i quattro tipi.
+let currentKind = 'nota';     // 'nota' | 'lista' | 'diario' | 'link'
 
 let editorKind       = 'nota';
 let editorItems      = [];    // voci in modifica    { id?, tempId?, text, done, done_at }
@@ -1302,7 +1379,10 @@ let editorMetrics    = [];    // misure in modifica  { id?, tempId?, name, kind,
 let deletedItemIds   = [];
 let deletedMetricIds = [];
 
-let viewCardId    = null;     // scheda aperta in vista lista/diario
+let editorLinkUrl = '';       // url dell'allegato in modifica (kind = link)
+let viewLinkUrl   = '';       // url della scheda link aperta
+
+let viewCardId    = null;     // scheda aperta in vista lista/diario/link
 let viewItems     = [];       // voci della lista aperta
 let viewMetrics   = [];       // misure del diario aperto
 let viewEntries   = [];       // registrazioni del diario aperto
@@ -1500,7 +1580,8 @@ async function loadCards() {
             mm_card_categories(category_id),
             mm_images(id),
             mm_list_items(id, done),
-            mm_diary_entries(id, entry_date)
+            mm_diary_entries(id, entry_date),
+            mm_attachments(id, url, tipo)
         `)
         .order('pinned', { ascending: false })
         .order('updated_at', { ascending: false });
@@ -1517,9 +1598,11 @@ async function loadCards() {
     cards = (data || []).map(c => {
         const items   = c.mm_list_items    || [];
         const entries = c.mm_diary_entries || [];
+        const alleg   = c.mm_attachments   || [];
         return {
             ...c,
             kind:        c.kind || 'nota',
+            linkUrl:     (alleg.find(a => a.tipo === 'link') || {}).url || '',
             categoryIds: (c.mm_card_categories || []).map(r => r.category_id),
             imagesCount: (c.mm_images || []).length,
             itemsTotal:  items.length,
@@ -1595,6 +1678,65 @@ function closeSidebar() {
 }
 
 // ============================================================
+// LINK — riconoscere un url e ricavarne quel che si può
+//
+// ⚠️ Niente di quanto sta qui sotto viene archiviato: in
+// `mm_attachments` c'è l'url e basta. Id del video, miniatura e
+// nome del sito si ricavano ogni volta, perché un dato calcolato
+// *e* archiviato sono due verità sullo stesso numero, che divergono
+// il giorno che una delle due cambia.
+// ============================================================
+
+// Copre le forme in cui YouTube scrive i suoi link: watch?v=,
+// youtu.be/, /shorts/, /embed/, /live/. L'id è sempre 11 caratteri.
+const YT_RE = /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
+
+function ytIdDa(url) {
+    const m = YT_RE.exec(String(url || ''));
+    return m ? m[1] : null;
+}
+
+// La copertina di YouTube è un url pubblico: nessuna API, nessuna
+// chiave, nessun byte nel bucket. hqdefault c'è su ogni video —
+// maxresdefault manca sui video vecchi e darebbe un riquadro rotto.
+function thumbDa(url) {
+    const id = ytIdDa(url);
+    return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
+}
+
+function hostDa(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); }
+    catch (e) { return ''; }
+}
+
+// Un url incollato a mano può arrivare senza schema: senza,
+// `new URL` solleva e il link si aprirebbe come percorso relativo.
+function normalizzaUrl(url) {
+    const u = String(url || '').trim();
+    if (!u) return '';
+    return /^https?:\/\//i.test(u) ? u : 'https://' + u;
+}
+
+// ⚠️ Il punto nel nome del sito è il controllo che conta. Senza,
+// `new URL` accetta «https://ciao» come indirizzo validissimo con
+// hostname «ciao»: una parola secca condivisa da un'altra app
+// diventerebbe una scheda link che non porta da nessuna parte,
+// invece della nota che è.
+function urlValido(url) {
+    try {
+        const u = new URL(normalizzaUrl(url));
+        return !!u.hostname && (u.hostname.includes('.') || u.hostname === 'localhost');
+    } catch (e) { return false; }
+}
+
+// Il pezzo di testo condiviso che è un url: le app ci mettono spesso
+// una frase attorno («Guarda questo video: https://…»).
+function primoUrlIn(testo) {
+    const m = /https?:\/\/[^\s]+/i.exec(String(testo || ''));
+    return m ? m[0] : '';
+}
+
+// ============================================================
 // RENDER
 // ============================================================
 function getFilteredCards() {
@@ -1627,13 +1769,14 @@ function renderCards() {
     const list = getFilteredCards();
     if (!list.length) {
         const k = KINDS[currentKind];
-        const nome = { nota: 'nota', lista: 'lista', diario: 'diario' }[currentKind];
+        const n = KIND_NOMI[currentKind];
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
             <div class="empty-icon">${k.icon}</div>
-            <div class="empty-title">${searchQuery ? 'Nessun risultato' : 'Nessun' + (currentKind === 'diario' ? ' diario' : 'a ' + nome)}</div>
+            <div class="empty-title">${searchQuery ? 'Nessun risultato' : n.nessuno}</div>
             <div class="empty-desc">${searchQuery
                 ? 'Prova con un altro termine.'
-                : `Crea la prima ${nome} col pulsante + in basso a destra.`}</div>
+                : `Crea il primo col pulsante + in basso a destra${currentKind === 'link'
+                    ? ', o condividi un link dal telefono verso AppSfera.' : '.'}`}</div>
         </div>`;
         return;
     }
@@ -1673,22 +1816,43 @@ function renderCardTile(c) {
         extra = `<div class="list-progress" title="${c.itemsDone} di ${c.itemsTotal}"><i style="width:${pct}%"></i></div>`;
     }
 
+    // la miniatura sta SOPRA il corpo della scheda: è la cosa per cui
+    // si riconosce un video a colpo d'occhio, e sotto il testo servirebbe
+    // scorrere per vederla
+    let thumb = '';
+    if (c.kind === 'link' && c.linkUrl) {
+        const t = thumbDa(c.linkUrl);
+        thumb = t
+            ? `<div class="link-thumb"><img src="${escHtml(t)}" alt="" loading="lazy"
+                 onerror="this.parentNode.classList.add('generic');this.remove();"><span class="play">▶️</span></div>`
+            : `<div class="link-thumb generic">🔗</div>`;
+    }
+
     let meta = imgBadge;
     if (c.kind === 'lista') {
         meta = `<span class="memo-card-img-count">☑️ ${c.itemsDone}/${c.itemsTotal}</span>` + imgBadge;
     } else if (c.kind === 'diario') {
         const last = c.lastEntryDate ? ' · ultima ' + fmtDay(c.lastEntryDate) : '';
         meta = `<span class="memo-card-img-count">📊 ${c.entriesCount}${last}</span>` + imgBadge;
+    } else if (c.kind === 'link' && c.linkUrl) {
+        meta = `<span class="memo-card-img-count">${ytIdDa(c.linkUrl) ? '▶️ YouTube' : '🔗'}</span>` + imgBadge;
     }
+
+    // su una scheda link il sito si legge sotto il titolo: due video
+    // diversi hanno spesso la stessa copertina scura, e l'url dice quale
+    const hostRow = (c.kind === 'link' && c.linkUrl)
+        ? `<div class="link-host">${escHtml(hostDa(c.linkUrl))}</div>` : '';
 
     return `<div class="memo-card kind-${c.kind}${c.pinned?' pinned':''}" onclick="openCard('${c.id}')">
         <div class="memo-card-color-bar" style="background:${barColor}"></div>
+        ${thumb}
         <div class="memo-card-body">
             <div class="memo-card-header">
                 <div class="memo-card-title">${escHtml(c.title) || '<em style="opacity:0.4">Senza titolo</em>'}</div>
                 ${pin}
             </div>
             <div class="memo-card-kind-row">${badge}</div>
+            ${hostRow}
             <div class="memo-card-excerpt">${escHtml(excerpt)}</div>
             ${extra}
             ${cats ? `<div class="cat-chips">${cats}</div>` : ''}
@@ -1700,18 +1864,20 @@ function renderCardTile(c) {
     </div>`;
 }
 
-// Una nota si apre in modifica, come sempre; lista e diario hanno
-// una vista propria, perché la cosa che si fa più spesso — spuntare
-// una voce, aggiungere una registrazione — non è modificare la scheda.
+// Una nota si apre in modifica, come sempre; lista, diario e link
+// hanno una vista propria, perché la cosa che si fa più spesso —
+// spuntare una voce, aggiungere una registrazione, aprire il link —
+// non è modificare la scheda.
 function openCard(cardId) {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
     if (card.kind === 'lista')  return openListView(cardId);
     if (card.kind === 'diario') return openDiaryView(cardId);
+    if (card.kind === 'link')   return openLinkView(cardId);
     return openCardModal(cardId);
 }
 
-const KIND_TITLES = { nota: 'Note', lista: 'Liste', diario: 'Diari' };
+const KIND_TITLES = { nota: 'Note', lista: 'Liste', diario: 'Diari', link: 'Link' };
 
 function showKind(kind, navEl) {
     currentKind = kind;
@@ -1721,10 +1887,9 @@ function showKind(kind, navEl) {
     currentCatFilter = null;
 
     document.getElementById('kindTitle').textContent = KIND_TITLES[kind];
-    document.getElementById('fabNew').title = 'Nuov' +
-        (kind === 'nota' ? 'a nota' : kind === 'lista' ? 'a lista' : 'o diario');
+    document.getElementById('fabNew').title = KIND_NOMI[kind].nuovo;
     document.getElementById('searchInput').placeholder =
-        'Cerca fra le ' + KIND_TITLES[kind].toLowerCase() + '…';
+        'Cerca fra ' + (kind === 'link' ? 'i link' : 'le ' + KIND_TITLES[kind].toLowerCase()) + '…';
 
     showPage('schede');
     if (navEl) setNavActive(navEl);
@@ -1806,6 +1971,9 @@ async function openCardModal(cardId, kind) {
     document.getElementById('deletCardBtn').style.display = 'none';
     document.getElementById('imagesGrid').innerHTML = '';
     document.getElementById('newItemText').value = '';
+    editorLinkUrl = '';
+    document.getElementById('cardLinkUrl').value = '';
+    renderLinkPreview();
     renderCatMulti();
     renderCatDropdownList();
     selectColor('#FFFFFF', document.querySelector('.color-swatch[data-color="#FFFFFF"]'));
@@ -1827,9 +1995,15 @@ async function openCardModal(cardId, kind) {
         document.getElementById('cardModalTitle').textContent =
             'Modifica ' + KINDS[editorKind].label.toLowerCase();
         document.getElementById('deletCardBtn').style.display = 'block';
+        // l'url arriva già con l'elenco: nessuna query in più per aprirlo
+        if (editorKind === 'link') {
+            const c = cards.find(x => x.id === cardId);
+            editorLinkUrl = (c && c.linkUrl) || '';
+            document.getElementById('cardLinkUrl').value = editorLinkUrl;
+            renderLinkPreview();
+        }
     } else {
-        document.getElementById('cardModalTitle').textContent =
-            'Nuov' + (editorKind === 'nota' ? 'a nota' : editorKind === 'lista' ? 'a lista' : 'o diario');
+        document.getElementById('cardModalTitle').textContent = KIND_NOMI[editorKind].nuovo;
     }
 
     applyEditorKind();
@@ -1857,13 +2031,19 @@ async function openCardModal(cardId, kind) {
 function applyEditorKind() {
     const isLista  = editorKind === 'lista';
     const isDiario = editorKind === 'diario';
+    const isLink   = editorKind === 'link';
 
     document.getElementById('listSection').style.display  = isLista  ? 'block' : 'none';
     document.getElementById('diarySection').style.display = isDiario ? 'block' : 'none';
+    document.getElementById('linkSection').style.display  = isLink   ? 'block' : 'none';
 
     const label = document.getElementById('cardContentLabel');
     const hint  = document.getElementById('cardContentHint');
-    if (isDiario) {
+    if (isLink) {
+        label.textContent = 'Perché lo tieni';
+        hint.textContent  = 'Facoltativo: cosa volevi ricordarti di questo link.';
+        hint.style.display = 'block';
+    } else if (isDiario) {
         label.textContent = 'Scopo del diario';
         hint.textContent  = 'Perché stai misurando, e come vanno lette le misure. Te lo rimostro a ogni registrazione.';
         hint.style.display = 'block';
@@ -1878,6 +2058,28 @@ function applyEditorKind() {
 
     if (isDiario) renderEditorMetrics();
     if (isLista)  renderEditorItems();
+    if (isLink)   renderLinkPreview();
+}
+
+// L'anteprima si vede PRIMA di salvare: un url incollato storto (o il
+// video sbagliato) si riconosce dalla copertina, non rileggendo
+// carattere per carattere una riga di sessanta caratteri.
+function renderLinkPreview() {
+    const box = document.getElementById('linkPreview');
+    if (!box) return;
+    const raw = (document.getElementById('cardLinkUrl').value || '').trim();
+    if (!raw) { box.innerHTML = ''; return; }
+    if (!urlValido(raw)) {
+        box.innerHTML = '<div style="color:var(--danger);font-size:0.9rem;">Non sembra un indirizzo valido.</div>';
+        return;
+    }
+    const url = normalizzaUrl(raw);
+    const t   = thumbDa(url);
+    box.innerHTML = t
+        ? `<div class="link-thumb" style="max-width:320px;"><img src="${escHtml(t)}" alt=""
+             onerror="this.parentNode.classList.add('generic');this.remove();"><span class="play">▶️</span></div>
+           <div class="link-host">${escHtml(hostDa(url))}</div>`
+        : `<div class="link-host">🔗 ${escHtml(hostDa(url))}</div>`;
 }
 
 function closeCardModal() {
@@ -1888,6 +2090,7 @@ function closeCardModal() {
     existingImages = [];
     editorItems    = [];
     editorMetrics  = [];
+    editorLinkUrl  = '';
     deletedItemIds   = [];
     deletedMetricIds = [];
 }
@@ -2101,10 +2304,21 @@ async function saveCard() {
     const riservato = editorKind === 'diario'
         && document.getElementById('cardRiservato').checked;
 
+    // un link è il suo indirizzo: senza, la scheda non porta da nessuna
+    // parte — è rotta, non vuota. È l'unico tipo con un campo obbligatorio
+    if (editorKind === 'link') {
+        const raw = (document.getElementById('cardLinkUrl').value || '').trim();
+        if (!raw)             { showToast('Scrivi l\'indirizzo del link.'); return; }
+        if (!urlValido(raw))  { showToast('Quell\'indirizzo non è valido.'); return; }
+        editorLinkUrl = normalizzaUrl(raw);
+    }
+
     // una lista può nascere col solo titolo e le sue voci, un diario
-    // col titolo e le sue misure: il contenuto lì è facoltativo
+    // col titolo e le sue misure, un link col solo indirizzo:
+    // il contenuto lì è facoltativo
     const hasExtra = (editorKind === 'lista'  && editorItems.length)
-                  || (editorKind === 'diario' && editorMetrics.length);
+                  || (editorKind === 'diario' && editorMetrics.length)
+                  || (editorKind === 'link'   && editorLinkUrl);
     if (!title && !content && !hasExtra) {
         showToast('Inserisci almeno un titolo o del contenuto.'); return;
     }
@@ -2155,9 +2369,10 @@ async function saveCard() {
             if (error) console.error('Errore categorie:', error);
         }
 
-        // sync voci di lista / misure del diario
+        // sync voci di lista / misure del diario / allegato del link
         if (editorKind === 'lista')  await syncListItems(cardId);
         if (editorKind === 'diario') await syncDiaryMetrics(cardId);
+        if (editorKind === 'link')   await syncLinkAttachment(cardId);
 
         // carica immagini pendenti
         for (const pi of pendingImages) {
@@ -2180,6 +2395,29 @@ async function saveCard() {
         alert('Errore nel salvataggio: ' + msg + hint);
     } finally {
         btn.disabled = false; btn.textContent = '💾 Salva';
+    }
+}
+
+// Una scheda = un allegato, quindi la riga si aggiorna se c'è già e
+// nasce se non c'è: niente cancella-e-ricrea come per le categorie,
+// perché quando gli allegati saranno più d'uno l'ordine (`position`)
+// dovrà sopravvivere al salvataggio.
+async function syncLinkAttachment(cardId) {
+    const { data, error } = await sb.from('mm_attachments')
+        .select('id').eq('card_id', cardId).eq('tipo', 'link').limit(1);
+    if (error) { console.error('syncLinkAttachment (select):', error); return; }
+
+    const riga = (data || [])[0];
+    if (riga) {
+        const { error: e2 } = await sb.from('mm_attachments')
+            .update({ url: editorLinkUrl }).eq('id', riga.id);
+        if (e2) console.error('syncLinkAttachment (update):', e2);
+    } else {
+        const { error: e2 } = await sb.from('mm_attachments').insert({
+            card_id: cardId, user_id: currentUserId,
+            tipo: 'link', url: editorLinkUrl, position: 0
+        });
+        if (e2) console.error('syncLinkAttachment (insert):', e2);
     }
 }
 
@@ -2282,6 +2520,48 @@ async function deleteCurrentCard() {
 // subito e torna indietro se il DB rifiuta, così non resta a
 // schermo una spunta finta che sparisce al ricarico.
 // ============================================================
+// La cosa che si fa più spesso su una scheda link è aprirla, non
+// modificarla — quindi il tocco porta qui e non nell'editor. Non porta
+// direttamente al video: la nota («perché lo tieni») è metà del motivo
+// per cui la scheda esiste, e saltarla la renderebbe illeggibile.
+function openLinkView(cardId) {
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+    viewCardId  = cardId;
+    viewLinkUrl = card.linkUrl || '';
+
+    document.getElementById('linkViewTitle').textContent = card.title || 'Link senza titolo';
+
+    const t = thumbDa(viewLinkUrl);
+    document.getElementById('linkViewThumb').innerHTML = viewLinkUrl
+        ? (t ? `<div class="link-thumb" style="cursor:pointer;" onclick="apriLinkDaVista()"><img src="${escHtml(t)}" alt=""
+                 onerror="this.parentNode.classList.add('generic');this.remove();"><span class="play">▶️</span></div>`
+             : `<div class="link-thumb generic">🔗</div>`)
+        : '';
+    document.getElementById('linkViewUrl').textContent = viewLinkUrl;
+
+    const note = document.getElementById('linkViewNote');
+    if (card.content && stripHtml(card.content).trim()) {
+        note.innerHTML = card.content; note.style.display = 'block';
+    } else {
+        note.innerHTML = ''; note.style.display = 'none';
+    }
+
+    document.getElementById('linkViewModal').classList.add('active');
+}
+
+function closeLinkView() {
+    document.getElementById('linkViewModal').classList.remove('active');
+    viewCardId = null; viewLinkUrl = '';
+}
+
+// `noopener` non è formalità: senza, la pagina aperta riceve un
+// window.opener con cui può riscrivere l'indirizzo di questa.
+function apriLinkDaVista() {
+    if (!viewLinkUrl) { showToast('Questa scheda non ha un indirizzo.'); return; }
+    window.open(viewLinkUrl, '_blank', 'noopener,noreferrer');
+}
+
 async function openListView(cardId) {
     viewCardId = cardId;
     viewItems  = [];
@@ -2399,7 +2679,7 @@ async function deleteViewItem(itemId) {
 // dalla vista si passa alla modifica della scheda
 function editFromView() {
     const cardId = viewCardId;
-    closeListView(); closeDiaryView();
+    closeListView(); closeDiaryView(); closeLinkView();
     openCardModal(cardId);
 }
 
@@ -3264,6 +3544,49 @@ function copySql() {
 }
 
 // ============================================================
+// LINK CONDIVISO DA ANDROID — chiamato da MainActivity dopo una
+// condivisione `text/plain` (YouTube, Chrome, WhatsApp…)
+//
+// ⚠️ Il titolo arriva da EXTRA_SUBJECT, che YouTube riempie col titolo
+// del video: è già pronto, non costa nessuna chiamata di rete e
+// funziona anche senza. Senza di lui resta il nome del sito, che è
+// sempre meglio di una scheda senza titolo.
+//
+// ⚠️ La scheda NON si salva da sola: si apre l'editor già compilato e
+// il salvataggio resta un gesto. Una condivisione fatta per sbaglio —
+// il tasto è accanto a mille altri — non deve lasciare una riga in
+// archivio che poi qualcuno deve andare a cercare per cancellarla.
+// ============================================================
+function openMemoFromSharedLink(testo, titolo) {
+    const url = normalizzaUrl(primoUrlIn(testo) || testo);
+    log('Link condiviso da Android: ' + url);
+
+    if (!urlValido(url)) {
+        // testo senza url: è comunque qualcosa che si voleva tenere,
+        // e buttarlo via senza dire niente sarebbe la cosa peggiore
+        showToast('Nessun link nel testo condiviso: lo salvo come nota.');
+        openCardModal(null, 'nota');
+        setTimeout(() => {
+            document.getElementById('editorArea').innerText = String(testo || '');
+            document.getElementById('cardTitle').focus();
+        }, 150);
+        return;
+    }
+
+    openCardModal(null, 'link');
+    setTimeout(() => {
+        document.getElementById('cardLinkUrl').value = url;
+        editorLinkUrl = url;
+        document.getElementById('cardTitle').value =
+            (String(titolo || '').trim() || hostDa(url)).slice(0, 200);
+        renderLinkPreview();
+        // il titolo arriva già selezionato: è l'unica cosa che di solito
+        // si vuole ritoccare, e così si riscrive senza doverlo cancellare
+        document.getElementById('cardTitle').select();
+    }, 150);
+}
+
+// ============================================================
 // OCR DA ANDROID — chiamato da MainActivity dopo condivisione screenshot/immagine
 // ============================================================
 function openMemoFromOcr(text) {
@@ -3357,17 +3680,14 @@ DROP POLICY IF EXISTS "mm_images: utente vede solo le sue" ON mm_images;
 CREATE POLICY "mm_images: utente vede solo le sue" ON mm_images
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
--- 4. Tipo di scheda: nota, lista o diario
+-- 4. Tipo di scheda: nota, lista, diario o link
 --    'nota' è il default, quindi le schede che esistono già
 --    restano quello che sono senza toccarle una per una.
 ALTER TABLE mm_cards ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'nota';
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mm_cards_kind_check') THEN
-    ALTER TABLE mm_cards ADD CONSTRAINT mm_cards_kind_check
-      CHECK (kind IN ('nota', 'lista', 'diario'));
-  END IF;
-END $$;
+-- il CHECK si riscrive per intero: un vincolo non si allarga sul posto
+ALTER TABLE mm_cards DROP CONSTRAINT IF EXISTS mm_cards_kind_check;
+ALTER TABLE mm_cards ADD CONSTRAINT mm_cards_kind_check
+  CHECK (kind IN ('nota', 'lista', 'diario', 'link'));
 
 -- 5. Voci di una lista
 CREATE TABLE IF NOT EXISTS mm_list_items (
@@ -3466,6 +3786,28 @@ CREATE INDEX IF NOT EXISTS mm_diary_entries_card
 --   USING (bucket_id = 'mm-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 -- CREATE POLICY "mm-images delete" ON storage.objects FOR DELETE
 --   USING (bucket_id = 'mm-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- 8b. Allegati di una scheda (oggi: i link)
+--     Si archivia l'URL e basta: id del video, miniatura e nome del
+--     sito si ricavano da lui ogni volta, e archiviarli sarebbe una
+--     seconda verità sullo stesso dato.
+--     La colonna tipo ammette già 'file' perché il giorno che i file
+--     arrivano non si debba toccare anche il vincolo.
+CREATE TABLE IF NOT EXISTS mm_attachments (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id    uuid NOT NULL REFERENCES mm_cards(id) ON DELETE CASCADE,
+  user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  tipo       text NOT NULL DEFAULT 'link',
+  url        text NOT NULL DEFAULT '',
+  position   integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT mm_attachments_tipo_check CHECK (tipo IN ('link', 'file'))
+);
+CREATE INDEX IF NOT EXISTS mm_attachments_card ON mm_attachments(card_id);
+ALTER TABLE mm_attachments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "mm_attachments: utente vede solo i suoi" ON mm_attachments;
+CREATE POLICY "mm_attachments: utente vede solo i suoi" ON mm_attachments
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- 9. Registro app in AppSphere
 INSERT INTO cm_apps (title, description, html_file, score_query, active)

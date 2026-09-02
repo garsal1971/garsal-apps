@@ -469,16 +469,83 @@ ed etichette corte — con l'anno in intestazione e il nome breve sotto.
 ### Memorandum (`mm_`)
 | Table | Purpose |
 |---|---|
-| `mm_cards` | Le schede. `kind` vale `'nota'`, `'lista'` o `'diario'`; `riservato` le tiene fuori dagli elenchi |
+| `mm_cards` | Le schede. `kind` vale `'nota'`, `'lista'`, `'diario'` o `'link'`; `riservato` le tiene fuori dagli elenchi |
+| `mm_attachments` | Quel che una scheda porta con sé: oggi il solo indirizzo di un 🔗 Link (`tipo` `'link'`\|`'file'`, `url`, `position`) |
 | `mm_card_categories` | Associazione scheda ↔ `cm_categories` |
 | `mm_images` | Metadati delle foto (i file stanno nel bucket `mm-images`) |
 | `mm_list_items` | Voci di una lista: `text`, `done`, `position`, `done_at` |
 | `mm_diary_metrics` | Le misure di un diario: `kind` `'scala'` (con `min_value`/`max_value`) \| `'numero'` (con `unit`) \| `'bool'` \| `'scelta'` (con `options`); `hint` spiega cosa vuol dire il punteggio |
 | `mm_diary_entries` | Le registrazioni: `title` (obbligatorio lato app), `entry_date`, `note`, e `measures` jsonb |
 
-**Una scheda è una riga sola in tutt'e tre i casi**: il tipo è una colonna, non una tabella a
-parte, quindi ricerca, categorie, colore, 📌 e foto valgono uguale per note, liste e diari.
+**Una scheda è una riga sola in tutt'e quattro i casi**: il tipo è una colonna, non una tabella a
+parte, quindi ricerca, categorie, colore, 📌 e foto valgono uguale per note, liste, diari e link.
 `kind` ha `DEFAULT 'nota'`: le schede nate prima della colonna restano quello che erano.
+
+### 🔗 Link — la scheda che nasce dal tasto «Condividi»
+
+Una scheda `link` è **UNA cosa condivisa** (un video, un articolo), non una raccolta: raccogliere
+lo fanno già categorie, ricerca e 📌, che valgono per tutti i kind, e una scheda contenitore
+reimplementerebbe la lista. È l'unico tipo con un **campo obbligatorio** — senza indirizzo non
+porta da nessuna parte, cioè è rotta, non vuota.
+
+⚠️ **In `mm_attachments` c'è l'URL e basta.** Id del video, miniatura e nome del sito si
+**ricavano** da lui ogni volta (`ytIdDa`, `thumbDa`, `hostDa` in `memo.html`): archiviarli sarebbe
+una seconda verità sullo stesso dato, che diverge il giorno che una delle due cambia. È la stessa
+scelta delle colonne calcolate della liquidazione in `fnz_income`.
+
+⚠️ **La copertina di YouTube non costa niente**: è un url pubblico di `img.youtube.com`, quindi
+nessuna API, nessuna chiave e **nessun byte nel bucket** — mille link condivisi stanno in qualche
+decina di KB di tabella. Si usa `hqdefault`, che c'è su ogni video: `maxresdefault` manca sui video
+vecchi e darebbe un riquadro rotto. Un link che una copertina non ce l'ha mostra il nome del sito,
+non un'anteprima inventata.
+
+⚠️ **Nessuna colonna per Drive** (`storage_path`, `mime`, `size_bytes`): oggi non le riempirebbe
+nessuno, e una colonna che nessuno riempie è un invito a reimplementare due volte la stessa cosa —
+le aggiunge la migration dei file, quando ci saranno i file. `tipo` ammette già `'file'` proprio
+perché quel giorno non si debba toccare anche il vincolo.
+
+#### La condivisione arriva dall'APK WebView, e da lì soltanto
+
+`com.garsalapps` dichiara `ACTION_SEND` + `text/plain` accanto all'`image/*` che aveva già:
+`handleSharedText` mette da parte testo e oggetto e apre `memo.html`, che con
+`openMemoFromSharedLink()` compila una scheda 🔗 Link.
+
+⚠️ **L'intent-filter lo dichiara UNA sola APK.** I due APK convivono sullo stesso telefono con lo
+stesso logo, distinti solo dal fondo bianco/nero: dichiarandolo anche in `com.garsal.appsphere`, nel
+menù «Condividi» comparirebbero **due voci indistinguibili** e toccherebbe indovinare ogni volta. È
+la stessa ragione per cui hanno due schemi OAuth diversi. Se un domani la voce dovesse passare al
+nativo, si **sposta**, non si aggiunge.
+
+⚠️ **Il titolo arriva da `EXTRA_SUBJECT`**, che YouTube riempie col titolo del video: è già pronto,
+non costa nessuna chiamata di rete e funziona anche offline. Le app che non lo mandano lasciano il
+ripiego sul nome del sito — meglio di una scheda senza titolo.
+
+⚠️ **La scheda non si salva da sola**: si apre l'editor già compilato e il salvataggio resta un
+gesto. Il tasto «Condividi» sta accanto a mille altri, e una condivisione per sbaglio non deve
+lasciare una riga che poi qualcuno deve andare a cercare per cancellarla. Un testo condiviso **senza
+url** non si butta via: diventa una nota, e la pagina lo dice.
+
+⚠️ **In `showApp()` un link condiviso NON va ricaricato.** `handleSharedText` ha già chiamato
+`loadUrl(MEMO_URL)` e `onPageFinished` consuma `pendingSharedText` la prima volta: un secondo
+`loadUrl` ricaricherebbe la pagina trovando il campo ormai vuoto, e la scheda già compilata
+sparirebbe sotto le dita senza nessun errore.
+
+⚠️ **Il punto nel nome del sito è il controllo che conta** (`urlValido`): senza, `new URL` accetta
+`https://ciao` come indirizzo validissimo, e una parola secca condivisa da un'altra app diventerebbe
+una scheda link che non porta da nessuna parte.
+
+#### ⚠️ Il nativo i link non li conosce, e per questo non li mostra
+
+`memo/` in AppSphere nativa non legge `mm_attachments` e non ha il tipo `link`. Un `kind`
+sconosciuto cadeva su `NOTA`: quella scheda si sarebbe vista come una nota **senza il suo
+indirizzo**, e risalvandola dal form `MemoRepository` avrebbe riscritto `kind: "nota"` — la scheda
+link diventata una nota in silenzio, con l'allegato agganciato a una riga che non lo mostra più.
+
+`TipoScheda.daONull()` distingue ora «tipo che non conosco» da «tipo che non c'è»: torna `null` sul
+primo e la scheda **non viene proprio caricata**, mentre chiave assente o vuota resta `NOTA`, che è
+il `DEFAULT` del database e sono le schede nate prima della colonna. Non vederla è meglio che
+vederla sbagliata e poterla rovinare. **Portare i link in nativo è il pezzo che manca**, ed è quello
+che toglie la guardia.
 
 `mm_diary_entries.measures` è `{ "<id della misura>": numero|booleano }`. Le **misure sono righe
 vere e i valori no**, ed è voluto: una misura deve sopravvivere alle registrazioni che la citano
