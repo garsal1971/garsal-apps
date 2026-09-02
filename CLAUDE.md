@@ -387,7 +387,7 @@ silenzio. È la stessa scelta di `fnz_income`.
 
 | `fonte` | Da dove viene il numero |
 |---|---|
-| `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada) |
+| `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada, varie ed eventuali) |
 | `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS e UniCredit lordo da 💶 Reddito |
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
 | `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
