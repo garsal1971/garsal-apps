@@ -42,7 +42,7 @@ data class MemoState(
     val ricerca: String = "",
     val filtroCategoria: String? = null,
     val ordinamento: Ordinamento = Ordinamento.AGGIORNATE,
-    /** La Tab aperta. `null` = 📌 Fissa, l'unica che attraversa i tre tipi. */
+    /** La Tab aperta. `null` = 📌 Fissa, l'unica che attraversa i quattro tipi. */
     val tipo: TipoScheda? = TipoScheda.NOTA,
     /** Le foto già caricate, per scheda: si leggono solo quando serve. */
     val immagini: Map<String, List<MmImmagine>> = emptyMap(),
@@ -68,8 +68,9 @@ data class MemoState(
      */
     val visibili: List<MmScheda>
         get() {
-            // 📌 Fissa attraversa i tre tipi, ed è la ragione per cui il segno
-            // del tipo resta sulla scheda anche ora che ogni Tab ne mostra uno.
+            // 📌 Fissa attraversa i quattro tipi, ed è la ragione per cui il
+            // segno del tipo resta sulla scheda anche ora che ogni Tab ne
+            // mostra uno solo.
             var elenco = if (tipo == null) schede.filter { it.fissata }
             else schede.filter { it.tipo == tipo }
 
@@ -203,9 +204,9 @@ class MemoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ── Vista lista / diario ────────────────────────────────────────────────
+    // ── Vista lista / diario / link ─────────────────────────────────────────
 
-    /** Apre una lista o un diario e ne carica le righe figlie. */
+    /** Apre una lista, un diario o un link e ne carica le righe figlie. */
     fun apriVista(scheda: MmScheda) {
         _state.value = _state.value.copy(vista = VistaScheda(schedaId = scheda.id))
         viewModelScope.launch {
@@ -222,6 +223,9 @@ class MemoViewModel(app: Application) : AndroidViewModel(app) {
                         registrazioni = MemoRepository.registrazioni(scheda.id),
                         caricamento = false,
                     )
+                    // Un link non ha righe figlie da leggere: l'url arriva già
+                    // con l'elenco, dentro la query delle schede.
+                    TipoScheda.LINK -> VistaScheda(scheda.id, caricamento = false)
                     TipoScheda.NOTA -> VistaScheda(scheda.id, caricamento = false)
                 }
                 // Nel frattempo la vista potrebbe essere stata chiusa: scrivere
@@ -401,6 +405,8 @@ class MemoViewModel(app: Application) : AndroidViewModel(app) {
                         MemoRepository.salvaVoci(schedaId, bozza.voci, bozza.vociTolte)
                     TipoScheda.DIARIO ->
                         MemoRepository.salvaMisure(schedaId, bozza.misure, bozza.misureTolte)
+                    TipoScheda.LINK ->
+                        MemoRepository.salvaLink(schedaId, bozza.linkUrl.trim())
                     TipoScheda.NOTA -> Unit
                 }
 

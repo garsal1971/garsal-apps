@@ -63,7 +63,8 @@ object MemoRepository {
             .select(
                 Columns.raw(
                     "*,mm_card_categories(category_id),mm_images(id)," +
-                        "mm_list_items(id,done),mm_diary_entries(id,entry_date)"
+                        "mm_list_items(id,done),mm_diary_entries(id,entry_date)," +
+                        "mm_attachments(id,url,tipo)"
                 )
             ) {
                 filter {
@@ -369,6 +370,44 @@ object MemoRepository {
         }
 
         schedaId
+    }
+
+    /**
+     * L'indirizzo di un 🔗 Link: una scheda, un allegato.
+     *
+     * ⚠️ Gemella di `syncLinkAttachment()` in `memo.html`. Aggiorna la riga se
+     * c'è e la crea se non c'è — **non cancella e ricrea**, perché il giorno
+     * che gli allegati saranno più d'uno l'ordine (`position`) dovrà
+     * sopravvivere al salvataggio.
+     */
+    suspend fun salvaLink(schedaId: String, url: String) = withContext(Dispatchers.IO) {
+        val utente = AuthRepo.userId() ?: error("Sessione scaduta: rientra e riprova.")
+        val esistente = db.from("mm_attachments")
+            .select(Columns.raw("id")) {
+                filter {
+                    eq("card_id", schedaId)
+                    eq("tipo", "link")
+                }
+                limit(1)
+            }
+            .decodeList<JsonObject>()
+            .firstOrNull()
+            ?.let { testo(it, "id") }
+
+        if (esistente != null) {
+            db.from("mm_attachments").update(buildJsonObject { put("url", url) }) {
+                filter { eq("id", esistente) }
+            }
+        } else {
+            db.from("mm_attachments").insert(buildJsonObject {
+                put("card_id", schedaId)
+                put("user_id", utente)
+                put("tipo", "link")
+                put("url", url)
+                put("position", 0)
+            })
+        }
+        Unit
     }
 
     /** Cancella la scheda: prima i file nel bucket, poi la riga. */

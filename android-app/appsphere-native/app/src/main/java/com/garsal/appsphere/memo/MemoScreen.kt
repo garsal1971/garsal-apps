@@ -62,9 +62,12 @@ internal val AzzurroSchedaMemo = Color(0xFFE6F4FE)
 /** Sfondo delle sole schede diario, stessa eccezione del colore scelto a mano. */
 internal val GialloSchedaMemo = Color(0xFFFEF9E0)
 
+/** Sfondo delle sole schede link, come il rosino del web. */
+internal val RosaSchedaMemo = Color(0xFFFDECEF)
+
 /**
- * Memo in nativo: le schede di `memo.html` — note, liste e diari — con ricerca,
- * filtro per categoria, ordinamento, dettaglio e modifica.
+ * Memo in nativo: le schede di `memo.html` — note, liste, diari e link — con
+ * ricerca, filtro per categoria, ordinamento, dettaglio e modifica.
  *
  * ⚠️ Gemella di `memo.html`, sulle stesse tabelle `mm_*` e sulle stesse
  * categorie condivise `cm_categories`. I due punti dove le implementazioni
@@ -147,6 +150,12 @@ fun MemoScreen(
                     vm.salvaRegistrazione(id, titolo, data, nota, misure, onFatto)
                 },
                 onEliminaRegistrazione = vm::eliminaRegistrazione,
+            )
+            TipoScheda.LINK -> MemoLinkView(
+                scheda = inVista,
+                onIndietro = { vm.chiudiVista() },
+                onModifica = apriEditor,
+                onFissa = { vm.cambiaFissata(inVista) },
             )
             // Esclusa dal `takeIf` qui sopra: resta per far chiudere il `when`.
             TipoScheda.NOTA -> Unit
@@ -274,8 +283,8 @@ fun MemoScreen(
                                 categorie = stato.categorie,
                                 onApri = {
                                     // `openCard()` del web: una nota si apre in
-                                    // lettura, una lista e un diario nella loro
-                                    // vista.
+                                    // lettura, una lista, un diario e un link
+                                    // nella loro vista.
                                     if (scheda.tipo == TipoScheda.NOTA) apertaId = scheda.id
                                     else vm.apriVista(scheda)
                                 },
@@ -289,7 +298,7 @@ fun MemoScreen(
 }
 
 /**
- * Le quattro Tab: 📌 Fissa per prima, poi una per tipo.
+ * Le cinque Tab: 📌 Fissa per prima, poi una per tipo.
  *
  * Non esiste una vista che mescola i tipi — ogni Tab ha la sua ricerca, il suo
  * ordinamento e il suo filtro categoria — e **📌 Fissa è l'unica che li
@@ -406,12 +415,21 @@ private fun SchedaCard(
     // colore scelto a mano (il bianco di default) lo sfondo è azzurino,
     // giallino per i soli diari — la stessa eccezione del web.
     val coloreScheda = coloreDaHex(scheda.colore.takeIf { it != MmScheda.BIANCO })
-        ?: if (scheda.tipo == TipoScheda.DIARIO) GialloSchedaMemo else AzzurroSchedaMemo
+        ?: when (scheda.tipo) {
+            TipoScheda.DIARIO -> GialloSchedaMemo
+            TipoScheda.LINK -> RosaSchedaMemo
+            else -> AzzurroSchedaMemo
+        }
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onApri),
         colors = CardDefaults.cardColors(containerColor = coloreScheda),
     ) {
         Column(Modifier.fillMaxWidth()) {
+            // La copertina sta **sopra** il corpo della scheda: è la cosa per
+            // cui un video si riconosce a colpo d'occhio, e sotto il testo
+            // servirebbe scorrere per vederla.
+            if (scheda.tipo == TipoScheda.LINK) Copertina(scheda.linkUrl, grande = false)
+
             Column(
                 Modifier.fillMaxWidth().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -429,6 +447,18 @@ private fun SchedaCard(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Segno("${scheda.tipo.icona} ${scheda.tipo.etichetta}", BluMemo)
                     if (scheda.riservato) Segno("🙈 Riservato", ViolaMemo)
+                }
+
+                // Il sito sotto il titolo: due video diversi hanno spesso la
+                // stessa copertina scura, e l'indirizzo dice quale.
+                if (scheda.tipo == TipoScheda.LINK && scheda.linkUrl.isNotBlank()) {
+                    Text(
+                        text = Link.sito(scheda.linkUrl),
+                        color = Palette.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
 
                 if (scheda.anteprima.isNotBlank()) {
@@ -497,6 +527,11 @@ private fun SchedaCard(
                                     append(" · ultima ${giorno(it)}")
                                 }
                             }
+                            TipoScheda.LINK ->
+                                if (scheda.linkUrl.isNotBlank()) append(
+                                    if (Link.idYouTube(scheda.linkUrl) != null) "  ·  ▶️ YouTube"
+                                    else "  ·  🔗"
+                                )
                             TipoScheda.NOTA -> Unit
                         }
                         if (scheda.fissata) append("  ·  📌")

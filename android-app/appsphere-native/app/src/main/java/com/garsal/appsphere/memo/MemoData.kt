@@ -28,7 +28,8 @@ import java.time.format.DateTimeFormatter
 enum class TipoScheda(val chiave: String, val icona: String, val etichetta: String) {
     NOTA("nota", "📄", "Nota"),
     LISTA("lista", "☑️", "Lista"),
-    DIARIO("diario", "📊", "Diario");
+    DIARIO("diario", "📊", "Diario"),
+    LINK("link", "🔗", "Link");
 
     /** Come `KIND_TITLES` nel web: il nome della Tab. */
     val plurale: String
@@ -36,6 +37,7 @@ enum class TipoScheda(val chiave: String, val icona: String, val etichetta: Stri
             NOTA -> "Note"
             LISTA -> "Liste"
             DIARIO -> "Diari"
+            LINK -> "Link"
         }
 
     /** «Nuova nota», «Nuova lista», «Nuovo diario». */
@@ -44,6 +46,7 @@ enum class TipoScheda(val chiave: String, val icona: String, val etichetta: Stri
             NOTA -> "Nuova nota"
             LISTA -> "Nuova lista"
             DIARIO -> "Nuovo diario"
+            LINK -> "Nuovo link"
         }
 
     companion object {
@@ -54,11 +57,13 @@ enum class TipoScheda(val chiave: String, val icona: String, val etichetta: Stri
          * Come [da], ma distingue «tipo che non conosco» da «tipo che non c'è».
          *
          * ⚠️ Serve a non far collassare su [NOTA] un tipo che il web ha e qui
-         * non c'è ancora — oggi `'link'`. Mostrata come nota, quella scheda
-         * perderebbe il suo indirizzo (che sta in `mm_attachments`, letta solo
-         * di là) e **risalvandola il form riscriverebbe `kind: "nota"`**: la
-         * scheda link diventerebbe una nota in silenzio, e l'allegato
-         * resterebbe agganciato a una riga che non lo mostra più.
+         * non c'è ancora. Mostrata come nota, quella scheda perderebbe quel che
+         * la rende sé stessa, e **risalvandola il form riscriverebbe il `kind`
+         * sbagliato**: diventerebbe una nota in silenzio, con i suoi dati
+         * agganciati a una riga che non li mostra più. È quello che sarebbe
+         * successo alle schede `'link'` prima che questa implementazione le
+         * conoscesse — oggi nessun tipo è in quello stato, e la guardia resta
+         * per il prossimo.
          *
          * Torna `null` in quel caso, e la scheda non viene proprio caricata:
          * non vederla è meglio che vederla sbagliata e poterla rovinare.
@@ -69,6 +74,40 @@ enum class TipoScheda(val chiave: String, val icona: String, val etichetta: Stri
             if (valore.isNullOrBlank()) NOTA
             else entries.firstOrNull { it.chiave == valore }
     }
+}
+
+/**
+ * Quel che si ricava dall'indirizzo di un 🔗 Link.
+ *
+ * ⚠️ Gemello degli helper `ytIdDa` / `thumbDa` / `hostDa` di `memo.html`, e va
+ * cambiato insieme a loro. In `mm_attachments` c'è **l'url e basta**: id del
+ * video, copertina e nome del sito si ricavano da lui ogni volta, perché un
+ * dato calcolato *e* archiviato sono due verità sullo stesso dato, che
+ * divergono il giorno che una delle due cambia.
+ */
+object Link {
+    /** Le forme in cui YouTube scrive i suoi link. L'id è sempre 11 caratteri. */
+    private val YT =
+        Regex("(?:youtube\\.com/(?:watch\\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\\.be/)([A-Za-z0-9_-]{11})")
+
+    fun idYouTube(url: String): String? = YT.find(url)?.groupValues?.get(1)
+
+    /**
+     * La copertina del video: un url pubblico di `img.youtube.com`, quindi
+     * nessuna API, nessuna chiave e **nessun byte nel bucket**.
+     *
+     * Si usa `hqdefault`, che c'è su ogni video: `maxresdefault` manca sui
+     * video vecchi e darebbe un riquadro rotto. `null` per tutto il resto —
+     * un link che una copertina non ce l'ha mostra il nome del sito, non
+     * un'anteprima inventata.
+     */
+    fun copertina(url: String): String? =
+        idYouTube(url)?.let { id -> "https://img.youtube.com/vi/$id/hqdefault.jpg" }
+
+    /** Il nome del sito, senza `www.`: quel che si legge sotto il titolo. */
+    fun sito(url: String): String = runCatching {
+        java.net.URI(url).host.orEmpty().removePrefix("www.")
+    }.getOrDefault("")
 }
 
 /** Una scheda di Memo. `contenuto` è **HTML**, come lo scrive il web. */
@@ -90,6 +129,8 @@ data class MmScheda(
     /** Registrazioni di un diario, e la data dell'ultima. */
     val registrazioni: Int = 0,
     val ultimaRegistrazione: String? = null,
+    /** L'indirizzo di un 🔗 Link: una scheda, un allegato. Vuoto sugli altri tipi. */
+    val linkUrl: String = "",
 ) {
     /** Il testo senza tag, per l'anteprima nella scheda e per la ricerca. */
     val anteprima: String get() = MemoHtml.aTestoSemplice(contenuto)
@@ -106,6 +147,7 @@ data class MmScheda(
             val id = testo(o, "id") ?: return null
             val voci = (o["mm_list_items"] as? JsonArray).orEmpty()
             val registrazioni = (o["mm_diary_entries"] as? JsonArray).orEmpty()
+            val allegati = (o["mm_attachments"] as? JsonArray).orEmpty()
             return MmScheda(
                 id = id,
                 titolo = testo(o, "title").orEmpty(),
@@ -126,6 +168,11 @@ data class MmScheda(
                 vociFatte = voci.count {
                     (it as? JsonObject)?.let { r -> testo(r, "done")?.toBooleanStrictOrNull() } == true
                 },
+                linkUrl = allegati
+                    .mapNotNull { it as? JsonObject }
+                    .firstOrNull { testo(it, "tipo") == "link" }
+                    ?.let { testo(it, "url") }
+                    .orEmpty(),
                 registrazioni = registrazioni.size,
                 ultimaRegistrazione = registrazioni
                     .mapNotNull { (it as? JsonObject)?.let { r -> testo(r, "entry_date") } }

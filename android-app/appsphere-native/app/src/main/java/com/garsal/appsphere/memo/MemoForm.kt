@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -119,6 +121,8 @@ data class BozzaScheda(
     val vociTolte: List<String> = emptyList(),
     val misure: List<MisuraInModifica> = emptyList(),
     val misureTolte: List<String> = emptyList(),
+    /** L'indirizzo di un 🔗 Link. Ignorato dagli altri tipi. */
+    val linkUrl: String = "",
 ) {
     /**
      * Come `saveCard()`: basta il titolo **oppure** il contenuto — e per una
@@ -126,9 +130,28 @@ data class BozzaScheda(
      * il contenuto è facoltativo.
      */
     val valida: Boolean
-        get() = titolo.isNotBlank() || testo.isNotBlank() ||
+        get() = if (tipo == TipoScheda.LINK) linkValido
+        else titolo.isNotBlank() || testo.isNotBlank() ||
             (tipo == TipoScheda.LISTA && voci.isNotEmpty()) ||
             (tipo == TipoScheda.DIARIO && misure.isNotEmpty())
+
+    /**
+     * ⚠️ Un link è il suo indirizzo: senza, la scheda non porta da nessuna
+     * parte — è rotta, non vuota. È l'unico tipo con un campo obbligatorio,
+     * come sul web.
+     *
+     * Il punto nel nome del sito è il controllo che conta: senza, «ciao»
+     * passerebbe per un indirizzo validissimo con host «ciao».
+     */
+    val linkValido: Boolean
+        get() = runCatching {
+            val u = linkUrl.trim()
+            if (u.isBlank()) return@runCatching false
+            val completo = if (u.startsWith("http://") || u.startsWith("https://")) u
+            else "https://$u"
+            val host = java.net.URI(completo).host.orEmpty()
+            host.contains('.') || host == "localhost"
+        }.getOrDefault(false)
 
     /**
      * Che cosa impedisce di salvare un diario, o `null` se va bene: gli stessi
@@ -136,6 +159,10 @@ data class BozzaScheda(
      */
     val problema: String?
         get() = when {
+            tipo == TipoScheda.LINK && linkUrl.isBlank() ->
+                "Scrivi l'indirizzo del link."
+            tipo == TipoScheda.LINK && !linkValido ->
+                "Quell'indirizzo non è valido."
             tipo != TipoScheda.DIARIO -> null
             misure.any { it.nome.isBlank() } -> "Dai un nome a ogni misura."
             misure.any {
@@ -172,6 +199,7 @@ data class BozzaScheda(
             categorie = scheda.categorie,
             voci = voci.map { VoceInModifica(it.id, it.testo, it.fatta, it.fattaIl) },
             misure = misure.map { MisuraInModifica.da(it) },
+            linkUrl = scheda.linkUrl,
         )
     }
 }
@@ -317,6 +345,42 @@ fun MemoForm(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // ── Indirizzo del link ──────────────────────────────────────
+            // Sta subito sotto il titolo, prima del testo: è la cosa che
+            // rende link questa scheda, e senza non porta da nessuna parte.
+            if (b.tipo == TipoScheda.LINK) {
+                OutlinedTextField(
+                    value = b.linkUrl,
+                    onValueChange = { b = b.copy(linkUrl = it) },
+                    label = { Text("Indirizzo") },
+                    placeholder = { Text("https://…") },
+                    singleLine = true,
+                    isError = b.linkUrl.isNotBlank() && !b.linkValido,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // L'anteprima si vede PRIMA di salvare: un url incollato storto
+                // (o il video sbagliato) si riconosce dalla copertina, non
+                // rileggendo carattere per carattere una riga lunga.
+                if (b.linkValido) {
+                    Copertina(b.linkUrl.trim(), grande = true)
+                    Text(
+                        text = Link.sito(
+                            if (b.linkUrl.trim().startsWith("http")) b.linkUrl.trim()
+                            else "https://" + b.linkUrl.trim()
+                        ),
+                        color = Palette.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (b.linkUrl.isNotBlank()) {
+                    Text(
+                        text = "Non sembra un indirizzo valido.",
+                        color = Palette.danger,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
             // ── Barra di formattazione ──────────────────────────────────
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Tasto("B", "Grassetto") { testo = avvolgi(testo, "**") }
@@ -365,6 +429,7 @@ fun MemoForm(
                             when (b.tipo) {
                                 TipoScheda.DIARIO -> "Scopo del diario"
                                 TipoScheda.LISTA -> "Nota della lista"
+                                TipoScheda.LINK -> "Perché lo tieni"
                                 TipoScheda.NOTA -> "Contenuto"
                             }
                         )
@@ -382,6 +447,11 @@ fun MemoForm(
                     )
                     TipoScheda.LISTA -> Text(
                         text = "Facoltativa: a cosa serve questa lista.",
+                        color = Palette.muted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TipoScheda.LINK -> Text(
+                        text = "Facoltativo: cosa volevi ricordarti di questo link.",
                         color = Palette.muted,
                         style = MaterialTheme.typography.bodySmall,
                     )
