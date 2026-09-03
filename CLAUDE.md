@@ -578,42 +578,67 @@ nessuno, e una colonna che nessuno riempie è un invito a reimplementare due vol
 le aggiunge la migration dei file, quando ci saranno i file. `tipo` ammette già `'file'` proprio
 perché quel giorno non si debba toccare anche il vincolo.
 
-#### La condivisione arriva dall'APK WebView, e da lì soltanto
+#### La condivisione arriva dall'APK NATIVA, e da lì soltanto
 
-`com.garsalapps` dichiara `ACTION_SEND` + `text/plain` accanto all'`image/*` che aveva già:
-`handleSharedText` mette da parte testo e oggetto e apre `memo.html`, che con
-`openMemoFromSharedLink()` compila una scheda 🔗 Link.
+`com.garsal.appsphere` dichiara `ACTION_SEND` + `text/plain`: `gestisciCondivisione()` in
+`MainActivity.kt` mette testo e oggetto in `core/Condivisione.kt`, la navigazione porta a Memo, e
+`MemoScreen` apre l'editor con una scheda 🔗 Link **già compilata**
+(`BozzaScheda.daCondivisione`).
 
 ⚠️ **L'intent-filter lo dichiara UNA sola APK.** I due APK convivono sullo stesso telefono con lo
-stesso logo, distinti solo dal fondo bianco/nero: dichiarandolo anche in `com.garsal.appsphere`, nel
+stesso logo, distinti solo dal fondo bianco/nero: dichiarandolo anche in `com.garsalapps`, nel
 menù «Condividi» comparirebbero **due voci indistinguibili** e toccherebbe indovinare ogni volta. È
-la stessa ragione per cui hanno due schemi OAuth diversi. Se un domani la voce dovesse passare al
-nativo, si **sposta**, non si aggiunge.
+la stessa ragione per cui hanno due schemi OAuth diversi.
+
+⚠️ **La voce si è SPOSTATA, non aggiunta** (nativa v1.0.69, WebView v1.1.1). Fino alla v1.1.0 la
+riceveva l'APK WebView — `handleSharedText` apriva `memo.html`, che con `openMemoFromSharedLink()`
+compilava la scheda — e la ragione dello spostamento è **l'interfaccia**: quella scheda si
+compilava dentro un WebView, in una pagina pensata per il PC. Nel WebView non ci sono più né
+l'intent-filter né `handleSharedText` né l'iniezione in `onPageFinished`, e in `memo.html` al
+posto di `openMemoFromSharedLink()` (e di `primoUrlIn`) c'è il commento che dice dov'è finita.
+⚠️ Non sono due strade che convivono: aggiungerne indietro una qualsiasi rimette le due voci
+indistinguibili nel menù «Condividi».
+
+⚠️ **Fra il tocco su «Salva in Memo» e la scheda ci stanno la biometrica e, la prima volta, il
+login nel browser.** Per questo la condivisione vive in un oggetto in memoria e non nell'intent:
+`getIntent()` lo restituirebbe a ogni ricreazione dell'Activity, riaprendo la stessa scheda giorni
+dopo senza che nessuno abbia condiviso niente — è la stessa ragione per cui il deep link dell'OAuth
+si azzera appena letto. E per la stessa ragione **non sta nelle preferenze**: sopravviverebbe al
+riavvio dell'app, che è l'opposto di quel che serve.
 
 ⚠️ **Il titolo arriva da `EXTRA_SUBJECT`**, che YouTube riempie col titolo del video: è già pronto,
 non costa nessuna chiamata di rete e funziona anche offline.
 
-**Quando quel campo non c'è, il titolo si ricava dal link** (`riempiTitoloSeVuoto`), in tre gradini —
-e il caso che conta non è la condivisione ma il **link incollato a mano dal PC**, dove
-`EXTRA_SUBJECT` non esiste affatto e senza questi gradini ogni video si chiamerebbe «youtu.be»:
+**Quando quel campo non c'è, il titolo si ricava dal link**, in quattro gradini:
 
 | Gradino | Da dove | Quando |
 |---|---|---|
 | `EXTRA_SUBJECT` | l'app che condivide | quando c'è: è esatto e gratis |
 | `titoloYouTube()` | oEmbed di YouTube | solo sui link YouTube, nessuna chiave né API |
 | `titoloDaSlug()` | l'indirizzo stesso | tutto il resto, senza rete |
-| `hostDa()` | il nome del sito | ultima spiaggia |
+| `hostDa()` / `Link.sito()` | il nome del sito | ultima spiaggia |
+
+⚠️ **La scaletta esiste in due posti e va cambiata in tutt'e due**: `Link.titolo()` in
+`memo/MemoData.kt`, per la condivisione, e `riempiTitoloSeVuoto()` in `memo.html`, dove il caso che
+conta non è la condivisione ma il **link incollato a mano dal PC** — lì `EXTRA_SUBJECT` non esiste
+affatto, e senza questi gradini ogni video si chiamerebbe «youtu.be».
 
 ⚠️ **Non sovrascrive mai un titolo che c'è**, né quello scritto a mano né `EXTRA_SUBJECT`: un
 ripiego che prende il posto del dato esatto è un peggioramento silenzioso.
 
-⚠️ **In due tempi, di proposito**: prima lo slug (immediato), poi l'oEmbed che rimpiazza il
-provvisorio — e solo **se il campo porta ancora esattamente quel provvisorio**. Aspettare la rete
-per scrivere il primo carattere lascerebbe il campo vuoto a ogni link incollato, e una risposta che
-arriva dopo un cambio di url metterebbe il titolo di un altro video (`titoloToken`).
+⚠️ **Nel web è in due tempi, in nativo no, e non è una divergenza**: là il campo è già a schermo
+mentre si scrive l'url, quindi prima lo slug (immediato) e poi l'oEmbed che rimpiazza il
+provvisorio — e solo **se il campo porta ancora esattamente quel provvisorio**, perché una risposta
+che arriva dopo un cambio di url metterebbe il titolo di un altro video (`titoloToken`). Qui la
+scheda si apre **già compilata**, quindi si aspetta la risposta *prima* di aprirla — e solo nel
+caso raro in cui l'oggetto manchi *e* il link sia di YouTube. Il risultato è lo stesso, l'ordine
+dei gradini pure.
 
 ⚠️ **`titoloYouTube` fallisce in silenzio.** Senza rete, o il giorno che quell'endpoint chiudesse,
-la scheda nasce lo stesso col ripiego: un titolo è una comodità, non una condizione.
+la scheda nasce lo stesso col ripiego: un titolo è una comodità, non una condizione. In nativo i
+tetti di attesa stanno **sulla connessione** e non solo su `withTimeoutOrNull`: una lettura
+bloccante non si annulla, e senza di loro l'attesa la deciderebbe il socket — con la scheda che non
+si apre intanto.
 
 ⚠️ **Uno slug non è un titolo**, ed è per questo che viene *dopo* gli altri due: è quel che il sito
 ha scritto nell'indirizzo per i motori di ricerca, spesso troncato. Su YouTube non si usa affatto —
@@ -623,16 +648,16 @@ dell'id in coda vuole **almeno tre cifre**: senza quella soglia «Covid-19» div
 ⚠️ **La scheda non si salva da sola**: si apre l'editor già compilato e il salvataggio resta un
 gesto. Il tasto «Condividi» sta accanto a mille altri, e una condivisione per sbaglio non deve
 lasciare una riga che poi qualcuno deve andare a cercare per cancellarla. Un testo condiviso **senza
-url** non si butta via: diventa una nota, e la pagina lo dice.
+url** non si butta via: diventa una nota, e il form lo dice (`avvisoIniziale`) invece di lasciarlo
+scoprire.
 
-⚠️ **In `showApp()` un link condiviso NON va ricaricato.** `handleSharedText` ha già chiamato
-`loadUrl(MEMO_URL)` e `onPageFinished` consuma `pendingSharedText` la prima volta: un secondo
-`loadUrl` ricaricherebbe la pagina trovando il campo ormai vuoto, e la scheda già compilata
-sparirebbe sotto le dita senza nessun errore.
+⚠️ **Il punto nel nome del sito è il controllo che conta** (`Link.valido`, `urlValido` nel web):
+senza, `URI` accetta `https://ciao` come indirizzo validissimo, e una parola secca condivisa da
+un'altra app diventerebbe una scheda link che non porta da nessuna parte, invece della nota che è.
 
-⚠️ **Il punto nel nome del sito è il controllo che conta** (`urlValido`): senza, `new URL` accetta
-`https://ciao` come indirizzo validissimo, e una parola secca condivisa da un'altra app diventerebbe
-una scheda link che non porta da nessuna parte.
+⚠️ **Una condivisione arrivata a form aperto ha bisogno della `key`** in `MemoScreen`: `MemoForm`
+tiene la bozza in un `remember` senza chiave, quindi senza di lei resterebbe a schermo quel che si
+stava scrivendo e la scheda condivisa non si vedrebbe affatto.
 
 #### I link ci sono anche in nativo
 
@@ -648,7 +673,9 @@ duplicate da tenere allineate col web sono tre, e sono le stesse che valgono di 
   sopravvivere al salvataggio;
 - **un link è il suo indirizzo**: `BozzaScheda.linkValido` è l'unico campo obbligatorio di tutto
   Memo, col **punto nel nome del sito** come controllo che conta — senza, «ciao» passerebbe per un
-  indirizzo validissimo. Stessa regola di `urlValido` nel web.
+  indirizzo validissimo. Il controllo però sta in `Link.valido` e `linkValido` ci si appoggia: la
+  regola è una sola, e la usa anche la condivisione per decidere se quel che è arrivato è un link
+  o una nota. Stessa regola di `urlValido` nel web.
 
 ⚠️ **`TipoScheda.daONull()` resta anche adesso che nessun tipo è sconosciuto**, e non è codice
 morto: distingue «tipo che non conosco» da «tipo che non c'è». Sul primo torna `null` e la scheda
@@ -657,12 +684,15 @@ database e sono le schede nate prima della colonna. È la guardia che ha impedit
 `'link'`, prima che il nativo le conoscesse, di comparire come note senza indirizzo e di
 **diventarlo davvero** al primo salvataggio — e che farà lo stesso col prossimo tipo nuovo.
 
-⚠️ **La condivisione resta dell'APK WebView**, non di questo: l'intent-filter lo dichiara una sola
-APK (vedi sopra). Il nativo i link li **mostra**, non li riceve dal tasto «Condividi».
+⚠️ **La condivisione è di questa APK** (vedi sopra): l'intent-filter `ACTION_SEND` + `text/plain`
+lo dichiara solo `com.garsal.appsphere`, e da lì nasce una scheda 🔗 Link già compilata. Il WebView
+i link li mostra e basta.
 
-⚠️ **Il titolo ricavato dal link non c'è di qua**: `titoloDaSlug` e l'oEmbed di YouTube vivono solo
-in `memo.html`. Scrivendo un link dal nativo il titolo lo si mette a mano — è una comodità che
-manca, non una divergenza di dati.
+⚠️ **Il titolo ricavato dal link c'è anche di qua, ma solo per la condivisione**: `Link.titoloDaSlug`
+e `Link.titoloYouTube` sono i gemelli di `titoloDaSlug()` e `titoloYouTube()` di `memo.html` e vanno
+cambiati insieme. **Scrivendo un link a mano nel form il titolo non si compila da sé**: là lo fa
+`onLinkUrlInput` con la sua pausa di digitazione, qui il campo resta come lo si scrive — è una
+comodità che manca, non una divergenza di dati.
 
 `mm_diary_entries.measures` è `{ "<id della misura>": numero|booleano }`. Le **misure sono righe
 vere e i valori no**, ed è voluto: una misura deve sopravvivere alle registrazioni che la citano
@@ -2585,7 +2615,9 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   e dieta restano di là. Dettagli nella sezione qui sopra.
 - **Memo** — note, liste, diari e 🔗 link esistono in tutt'e due. Il contenuto è **HTML**: il nativo lo
   converte in marcatori per modificarlo e lo riconverte salvando (`MemoHtml`), quindi ogni voce
-  della barra del web deve avere il suo marcatore di qua. Le altre regole da tenere allineate:
+  della barra del web deve avere il suo marcatore di qua. ⚠️ **La condivisione (`ACTION_SEND` +
+  `text/plain`) è del solo nativo** dal settembre 2026: la scaletta del titolo vive quindi in
+  `Link.titolo()` di qua e in `riempiTitoloSeVuoto()` di là, e va cambiata insieme. Le altre regole da tenere allineate:
   spunte ottimistiche con rollback, misure aggiornate riga per riga e mai ricreate, opzioni di una
   combo archiviate per **id**, misura non toccata che **non** finisce in `measures`, categorie
   riscritte da capo a ogni salvataggio, file del bucket cancellati prima della riga. Il filtro

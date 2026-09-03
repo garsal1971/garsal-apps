@@ -102,12 +102,6 @@ class MainActivity : AppCompatActivity() {
     private var pendingOcrText: String? = null
     private var pendingOcrImageBase64: String = ""
     private var pendingOcrImageMime: String = "image/jpeg"
-    // Link condiviso (text/plain) da YouTube, Chrome, WhatsApp…
-    // Coppia testo + oggetto: YouTube mette il titolo del video in
-    // EXTRA_SUBJECT, quindi il titolo della scheda arriva gratis, senza
-    // nessuna chiamata di rete e anche offline.
-    private var pendingSharedText: String? = null
-    private var pendingSharedSubject: String = ""
     private var openMemoAfterAuth: Boolean = false  // apri memo.html invece del launcher dopo biometrica
     private val MEMO_URL = "https://garsal.netlify.app/memo.html"
 
@@ -140,12 +134,6 @@ class MainActivity : AppCompatActivity() {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
             openMemoAfterAuth = true
             handleSharedImage(intent)
-        }
-
-        // Condivisione link → scheda 🔗 Link in memo
-        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            openMemoAfterAuth = true
-            handleSharedText(intent)
         }
 
         showBiometricPrompt()
@@ -182,41 +170,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Condivisione link con app già aperta
-        if (intent.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            openMemoAfterAuth = true
-            handleSharedText(intent)
-            return
-        }
-
         val fragment = intent.data?.oauthFragment() ?: return
         saveTokensToPending(fragment)
         webView.loadUrl(APP_URL)
-    }
-
-    /**
-     * Riceve un link condiviso (YouTube, Chrome, WhatsApp) e apre Memorandum,
-     * che ne fa una scheda 🔗 Link già compilata.
-     *
-     * EXTRA_TEXT porta l'url — spesso dentro una frase, per esempio
-     * "Guarda questo video: https://…" — ed è memo.html a estrarlo
-     * (`primoUrlIn`): la stessa regola serve anche a un url incollato a
-     * mano nel campo, quindi sta in un posto solo e non in due.
-     *
-     * EXTRA_SUBJECT è il titolo del video su YouTube: arriva già pronto.
-     * Non lo mandano tutte le app, e allora memo.html ripiega sul nome
-     * del sito invece di lasciare la scheda senza titolo.
-     */
-    private fun handleSharedText(intent: Intent) {
-        val testo = intent.getStringExtra(Intent.EXTRA_TEXT)
-        if (testo.isNullOrBlank()) {
-            Log.w("MainActivity", "handleSharedText: nessun testo nell'intent")
-            return
-        }
-        pendingSharedText    = testo
-        pendingSharedSubject = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
-        Log.d("MainActivity", "Link condiviso ricevuto: ${testo.take(120)}")
-        runOnUiThread { webView.loadUrl(MEMO_URL) }
     }
 
     /**
@@ -437,19 +393,6 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
 
-                    // Inietta il link condiviso in memo.html se disponibile
-                    val sharedText = pendingSharedText
-                    if (sharedText != null && url?.contains("memo.html") == true) {
-                        pendingSharedText = null
-                        val txtJson = JSONObject.quote(sharedText)
-                        val subJson = JSONObject.quote(pendingSharedSubject)
-                        pendingSharedSubject = ""
-                        view?.evaluateJavascript(
-                            "setTimeout(function(){ if(typeof openMemoFromSharedLink==='function') openMemoFromSharedLink($txtJson, $subJson); }, 800);",
-                            null
-                        )
-                    }
-
                     val prefs = getSharedPreferences(PREFS_OAUTH, MODE_PRIVATE)
                     val at = prefs.getString("access_token", "") ?: ""
                     if (at.isEmpty()) return
@@ -647,14 +590,7 @@ class MainActivity : AppCompatActivity() {
                 openMemoAfterAuth = false
                 webView.loadUrl(MEMO_URL)
             }
-            // altrimenti il loadUrl(MEMO_URL) arriva dal callback OCR, oppure
-            // — per un link condiviso — l'ha già fatto handleSharedText.
-            //
-            // ⚠️ Un link condiviso NON va caricato di nuovo qui. Il caricamento
-            // è già partito, e onPageFinished consuma pendingSharedText la prima
-            // volta: un secondo loadUrl ricaricherebbe la pagina trovando il
-            // campo ormai vuoto, e la scheda già compilata sparirebbe sotto le
-            // dita senza nessun errore.
+            // altrimenti il loadUrl(MEMO_URL) arriva dal callback OCR.
         } else {
             webView.loadUrl(APP_URL)
         }

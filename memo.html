@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Memorandum v1.1.1</title>
+    <title>Memorandum v1.1.2</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
@@ -1304,8 +1304,8 @@ window.addEventListener('error', e => _debugWrite('EXC', [e.message + ' @ ' + e.
 window.addEventListener('unhandledrejection', e => _debugWrite('ERR', ['Unhandled:', e.reason]));
 // ────────────────────────────────────────────────────────────
 
-var APP_VERSION = 'v1.1.1';
-var BUILD_TIME  = '2026-09-02T11:30:00Z';
+var APP_VERSION = 'v1.1.2';
+var BUILD_TIME  = '2026-09-03T10:00:00Z';
 console.log('%c Memorandum ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
     'background:#2563EB;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
     'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1727,13 +1727,6 @@ function urlValido(url) {
         const u = new URL(normalizzaUrl(url));
         return !!u.hostname && (u.hostname.includes('.') || u.hostname === 'localhost');
     } catch (e) { return false; }
-}
-
-// Il pezzo di testo condiviso che è un url: le app ci mettono spesso
-// una frase attorno («Guarda questo video: https://…»).
-function primoUrlIn(testo) {
-    const m = /https?:\/\/[^\s]+/i.exec(String(testo || ''));
-    return m ? m[0] : '';
 }
 
 // ── Il titolo, quando non lo manda nessuno ────────────────────────
@@ -3658,57 +3651,21 @@ function copySql() {
 }
 
 // ============================================================
-// LINK CONDIVISO DA ANDROID — chiamato da MainActivity dopo una
-// condivisione `text/plain` (YouTube, Chrome, WhatsApp…)
+// ⚠️ LA CONDIVISIONE È DELL'APK NATIVA, NON DI QUESTA PAGINA
 //
-// ⚠️ Il titolo arriva da EXTRA_SUBJECT, che YouTube riempie col titolo
-// del video: è già pronto, non costa nessuna chiamata di rete e
-// funziona anche senza. Senza di lui resta il nome del sito, che è
-// sempre meglio di una scheda senza titolo.
+// Fino alla v1.1.1 l'APK WebView riceveva i link condivisi (ACTION_SEND +
+// text/plain) e li iniettava qui con `openMemoFromSharedLink(testo, titolo)`,
+// che apriva l'editor già compilato. La voce «Salva in Memo» del menù
+// «Condividi» è passata all'APK nativa (`com.garsal.appsphere`), dove la scheda
+// si compila con l'interfaccia dell'app invece che con una pagina dentro un
+// WebView: l'intent-filter lo dichiara **una sola APK**, o nel menù
+// «Condividi» comparirebbero due voci indistinguibili.
 //
-// ⚠️ La scheda NON si salva da sola: si apre l'editor già compilato e
-// il salvataggio resta un gesto. Una condivisione fatta per sbaglio —
-// il tasto è accanto a mille altri — non deve lasciare una riga in
-// archivio che poi qualcuno deve andare a cercare per cancellarla.
+// Quel che era qui e resta qui, perché serve anche a un link **incollato a
+// mano dal PC**: `normalizzaUrl`, `urlValido`, `titoloDaSlug`, `titoloYouTube`
+// e `riempiTitoloSeVuoto`. I loro gemelli nativi stanno in `Link` dentro
+// `memo/MemoData.kt` e vanno cambiati insieme a questi.
 // ============================================================
-function openMemoFromSharedLink(testo, titolo) {
-    const url = normalizzaUrl(primoUrlIn(testo) || testo);
-    log('Link condiviso da Android: ' + url);
-
-    if (!urlValido(url)) {
-        // testo senza url: è comunque qualcosa che si voleva tenere,
-        // e buttarlo via senza dire niente sarebbe la cosa peggiore
-        showToast('Nessun link nel testo condiviso: lo salvo come nota.');
-        openCardModal(null, 'nota');
-        setTimeout(() => {
-            document.getElementById('editorArea').innerText = String(testo || '');
-            document.getElementById('cardTitle').focus();
-        }, 150);
-        return;
-    }
-
-    openCardModal(null, 'link');
-    setTimeout(() => {
-        document.getElementById('cardLinkUrl').value = url;
-        editorLinkUrl = url;
-        renderLinkPreview();
-
-        // EXTRA_SUBJECT quando c'è: è il titolo vero, mandato dall'app che
-        // ha condiviso, e non costa niente. Quando manca — molte app non lo
-        // mandano — lo si ricava dal link: oEmbed per YouTube, slug per il
-        // resto, nome del sito come ultima spiaggia.
-        const dato = String(titolo || '').trim();
-        if (dato) {
-            document.getElementById('cardTitle').value = dato.slice(0, 200);
-        } else {
-            riempiTitoloSeVuoto(url);
-        }
-
-        // il titolo arriva già selezionato: è l'unica cosa che di solito
-        // si vuole ritoccare, e così si riscrive senza doverlo cancellare
-        document.getElementById('cardTitle').select();
-    }, 150);
-}
 
 // ============================================================
 // OCR DA ANDROID — chiamato da MainActivity dopo condivisione screenshot/immagine

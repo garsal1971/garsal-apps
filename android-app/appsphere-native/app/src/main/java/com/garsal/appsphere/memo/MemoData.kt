@@ -1,5 +1,9 @@
 package com.garsal.appsphere.memo
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -108,6 +112,157 @@ object Link {
     fun sito(url: String): String = runCatching {
         java.net.URI(url).host.orEmpty().removePrefix("www.")
     }.getOrDefault("")
+
+    // ── L'indirizzo prima che sia un indirizzo ───────────────────────────
+    //
+    // Un link condiviso arriva dentro una frase e senza schema: prima di
+    // ricavarne qualunque cosa va tirato fuori e normalizzato.
+
+    /** `normalizzaUrl()` del web: senza schema si intende `https://`. */
+    fun normalizza(url: String): String {
+        val u = url.trim()
+        if (u.isEmpty()) return ""
+        return if (u.startsWith("http://", true) || u.startsWith("https://", true)) u
+        else "https://$u"
+    }
+
+    /**
+     * ⚠️ **Il punto nel nome del sito è il controllo che conta.** Senza, `URI`
+     * accetta «https://ciao» come indirizzo validissimo con host «ciao»: una
+     * parola secca condivisa da un'altra app diventerebbe una scheda link che
+     * non porta da nessuna parte, invece della nota che è. Stessa regola di
+     * `urlValido` nel web.
+     */
+    fun valido(url: String): Boolean = runCatching {
+        val host = java.net.URI(normalizza(url)).host.orEmpty()
+        host.contains('.') || host == "localhost"
+    }.getOrDefault(false)
+
+    /**
+     * Il pezzo di testo condiviso che è un url: le app ci mettono spesso una
+     * frase attorno («Guarda questo video: https://…»). È `primoUrlIn` del web.
+     */
+    fun primoUrl(testo: String): String =
+        Regex("https?://[^\\s]+", RegexOption.IGNORE_CASE).find(testo)?.value.orEmpty()
+
+    // ── Il titolo, quando non lo manda nessuno ───────────────────────────
+    //
+    // Condividendo da YouTube il titolo arriva in `EXTRA_SUBJECT` ed è esatto.
+    // Ma non tutte le app lo mandano, e senza queste due funzioni ogni video
+    // condiviso da lì si chiamerebbe «youtu.be».
+
+    /** Segmenti che non dicono niente: si risale a quello prima. */
+    private val SEGMENTI_MUTI =
+        Regex("^(index|home|default|amp|it|en|article|articolo|video|watch|page|p|s)$", RegexOption.IGNORE_CASE)
+
+    private val ESTENSIONE = Regex("\\.[a-z0-9]{2,5}$", RegexOption.IGNORE_CASE)
+    private val CODA_NUMERICA = Regex("[-_]\\d{3,}$")
+    private val CODA_ESADECIMALE = Regex("[-_][0-9a-f]{8,}$", RegexOption.IGNORE_CASE)
+
+    // Token misto lettere+cifre in coda (…-abc123), ma solo con **almeno tre
+    // cifre**: senza quella soglia «Covid-19» diventerebbe «Covid».
+    private val CODA_MISTA =
+        Regex("[-_](?=[a-z0-9]{6,}$)(?=[a-z]*\\d[a-z0-9]*\\d[a-z0-9]*\\d)[a-z0-9]+$", RegexOption.IGNORE_CASE)
+
+    private val PAROLA = Regex("[a-zà-ÿ]{2,}", RegexOption.IGNORE_CASE)
+
+    /**
+     * L'ultimo pezzo del percorso ripulito: da
+     * «/news/manovra_governo_conti-424193/» esce «Manovra governo conti».
+     *
+     * ⚠️ **Uno slug non è un titolo**: è quel che il sito ha scritto
+     * nell'indirizzo per i motori di ricerca, spesso troncato. È meglio del
+     * nome del sito e peggio del titolo vero — per questo viene dopo
+     * `EXTRA_SUBJECT` e dopo l'oEmbed, mai prima. Su YouTube non si usa
+     * affatto: lì lo slug è l'id del video, che come titolo è peggio del nome
+     * del sito.
+     *
+     * Gemella di `titoloDaSlug()` in `memo.html`, riga per riga.
+     */
+    fun titoloDaSlug(url: String): String {
+        if (idYouTube(url) != null) return ""
+        val pezzi = runCatching {
+            java.net.URI(normalizza(url)).path.orEmpty().split('/').filter { it.isNotBlank() }
+        }.getOrDefault(emptyList())
+
+        // si risale dal fondo: l'ultimo segmento è spesso un id nudo
+        for (pezzo in pezzi.asReversed()) {
+            var s = runCatching { java.net.URLDecoder.decode(pezzo, "UTF-8") }.getOrDefault(pezzo)
+            s = s.replace(ESTENSIONE, "")        // .html, .shtml, .php…
+            s = s.replace(CODA_NUMERICA, "")     // …-424193
+            s = s.replace(CODA_ESADECIMALE, "")  // …-3f9a2b11
+            s = s.replace(CODA_MISTA, "")
+            if (SEGMENTI_MUTI.matches(s)) continue
+            s = s.replace(Regex("[-_+]+"), " ").replace(Regex("\\s+"), " ").trim()
+            if (s.length < 3) continue           // troppo corto per dire qualcosa
+            if (!PAROLA.containsMatchIn(s)) continue  // solo cifre: è un id
+            return s.replaceFirstChar { it.uppercase() }
+        }
+        return ""
+    }
+
+    /**
+     * Il titolo vero di un video, dall'oEmbed di YouTube: nessuna chiave,
+     * nessuna API da abilitare.
+     *
+     * ⚠️ **Fallisce in silenzio e torna stringa vuota**: senza rete, o il
+     * giorno che quell'endpoint chiudesse, la scheda nasce lo stesso col
+     * ripiego. Un titolo è una comodità, non una condizione — e per la stessa
+     * ragione c'è un tetto di attesa: la finestra della scheda non deve restare
+     * appesa a un server che non risponde.
+     */
+    suspend fun titoloYouTube(url: String): String {
+        val id = idYouTube(url) ?: return ""
+        return withContext(Dispatchers.IO) {
+            withTimeoutOrNull(ATTESA_OEMBED_MS) {
+                runCatching {
+                    // sempre la forma canonica: l'oEmbed non accetta /shorts/ né youtu.be
+                    val q = java.net.URLEncoder.encode("https://www.youtube.com/watch?v=$id", "UTF-8")
+                    // ⚠️ I tetti stanno sulla connessione e non solo su
+                    // `withTimeoutOrNull`: una lettura bloccante non si annulla,
+                    // e senza di loro l'attesa la deciderebbe il socket.
+                    val conn = java.net.URL("https://www.youtube.com/oembed?format=json&url=$q")
+                        .openConnection()
+                        .apply {
+                            connectTimeout = ATTESA_OEMBED_MS.toInt()
+                            readTimeout = ATTESA_OEMBED_MS.toInt()
+                        }
+                    val risposta = conn.getInputStream().bufferedReader().use { it.readText() }
+                    (Json.parseToJsonElement(risposta) as? JsonObject)
+                        ?.get("title")?.let { (it as? JsonPrimitive)?.content }
+                        .orEmpty().trim()
+                }.getOrDefault("")
+            }.orEmpty()
+        }
+    }
+
+    private const val ATTESA_OEMBED_MS = 4_000L
+
+    /** Nessun titolo è più lungo di così: è il limite del campo, come nel web. */
+    private const val MAX_TITOLO = 200
+
+    /**
+     * Il titolo di una scheda 🔗 Link nata da una condivisione, nei quattro
+     * gradini del web: `EXTRA_SUBJECT` → oEmbed di YouTube → slug → nome del
+     * sito.
+     *
+     * ⚠️ **Non sovrascrive mai un titolo che c'è**: `oggetto` è quel che ha
+     * mandato l'app che condivide, ed è esatto — un ripiego che ne prendesse il
+     * posto sarebbe un peggioramento silenzioso.
+     *
+     * Differenza di forma dal web, non di risultato: là i gradini sono in due
+     * tempi (prima lo slug, poi l'oEmbed che rimpiazza il provvisorio) perché
+     * il campo è già a schermo mentre si scrive l'url. Qui la scheda si apre
+     * **già compilata**, quindi si aspetta la risposta prima di aprirla — e
+     * solo nel caso raro in cui l'oggetto manchi *e* il link sia di YouTube.
+     */
+    suspend fun titolo(url: String, oggetto: String): String {
+        val dato = oggetto.trim()
+        if (dato.isNotEmpty()) return dato.take(MAX_TITOLO)
+        val vero = titoloYouTube(url)
+        if (vero.isNotEmpty()) return vero.take(MAX_TITOLO)
+        return titoloDaSlug(url).ifBlank { sito(normalizza(url)) }.take(MAX_TITOLO)
+    }
 }
 
 /** Una scheda di Memo. `contenuto` è **HTML**, come lo scrive il web. */
