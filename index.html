@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.5.135</title>
+<title>AppSphere v1.6.0</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1822,6 +1822,12 @@
             <input type="time" class="nqv-input" id="nqv-orario">
           </div>
         </div>
+        <div class="nqv-field">
+          <label class="nqv-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400;">
+            <input type="checkbox" id="nqv-android" checked style="width:16px;height:16px;">
+            <span>📲 Anche come notifica sul telefono (AppSphere)</span>
+          </label>
+        </div>
       </div>
       <div class="nqv-form-footer">
         <button class="nqv-btn-cancel" onclick="nqvShowView('list')">Annulla</button>
@@ -1967,8 +1973,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.5.135';
-const BUILD_TIME  = '2026-08-31T15:30:00Z';
+const APP_VERSION = 'v1.6.0';
+const BUILD_TIME  = '2026-09-03T12:00:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3839,20 +3845,34 @@ async function nqvLoadList() {
       el.innerHTML = '<div class="nqv-empty">Nessuna notifica al volo.<br>Premi ➕ Inserisci per aggiungerne una.</div>';
       return;
     }
-    el.innerHTML = rows.map(r => {
+    // ⚠️ Un promemoria = una riga per CANALE, quindi le righe si raggruppano per
+    // entity_id: senza, lo stesso promemoria comparirebbe due volte in elenco e
+    // sembrerebbe inserito due volte.
+    const perPromemoria = new Map();
+    for (const r of rows) {
+      const chiave = r.entity_id || r.id;
+      if (!perPromemoria.has(chiave)) perPromemoria.set(chiave, { prima: r, canali: [] });
+      perPromemoria.get(chiave).canali.push(r.channel);
+    }
+
+    el.innerHTML = Array.from(perPromemoria.values()).map(({ prima: r, canali }) => {
       const p  = r.reminder_presets || {};
       const fa = p.fire_at ? new Date(p.fire_at) : null;
       const dateStr = fa
         ? fa.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'})
           + ' ' + fa.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})
         : '—';
+      const dove = [
+        canali.includes('telegram') ? '✈ Telegram' : null,
+        canali.includes('android')  ? '📲 Telefono' : null,
+      ].filter(Boolean).join(' · ') || '—';
       return `
-        <div class="nqv-item" id="nqv-item-${r.id}">
+        <div class="nqv-item" id="nqv-item-${r.entity_id || r.id}">
           <div class="nqv-item-body">
             <div class="nqv-item-title">${r.entity_title || '—'}</div>
-            <div class="nqv-item-meta">📅 ${dateStr} &nbsp;·&nbsp; ✈ Telegram</div>
+            <div class="nqv-item-meta">📅 ${dateStr} &nbsp;·&nbsp; ${dove}</div>
           </div>
-          <button class="nqv-del-btn" title="Elimina" onclick="deleteNqv('${r.id}', '${r.entity_id}', event)">🗑</button>
+          <button class="nqv-del-btn" title="Elimina" onclick="deleteNqv('${r.entity_id}', event)">🗑</button>
         </div>`;
     }).join('');
   } catch(e) {
@@ -3876,7 +3896,9 @@ async function triggerFillQueue() {
   }
 }
 
-async function deleteNqv(id, entityId, event) {
+// ⚠️ Si cancella per ENTITÀ e non per id della regola: un promemoria ne ha una per
+// canale, e togliendone una sola l'altra resterebbe a suonare da sola.
+async function deleteNqv(entityId, event) {
   event && event.stopPropagation();
   if (!confirm('Eliminare questa notifica?')) return;
   const token = sessionStorage.getItem('sb_token') || localStorage.getItem('sb_token');
@@ -3886,11 +3908,11 @@ async function deleteNqv(id, entityId, event) {
       { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
     );
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/cm_notification_rules?id=eq.${id}`,
+      `${SUPABASE_URL}/rest/v1/cm_notification_rules?entity_id=eq.${entityId}&app=eq.quick`,
       { method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + token } }
     );
     if (res.ok) {
-      const itemEl = document.getElementById('nqv-item-' + id);
+      const itemEl = document.getElementById('nqv-item-' + entityId);
       if (itemEl) itemEl.remove();
       const listEl = document.getElementById('nqv-list-scroll');
       if (listEl && !listEl.querySelector('.nqv-item')) {
@@ -3922,20 +3944,30 @@ async function saveNqv() {
   const currentUser = await getUserInfo(token);
   const userId = currentUser?.id || null;
 
-  const rulePayload = {
+  // ⚠️ Un promemoria rapido nasce già in coda, quindi qui non si scrive una regola
+  // sola: se ne scrive una per CANALE, e per ciascuna la sua riga di coda. Il
+  // canale 'android' è la stessa notifica sull'APK nativo, accanto a Telegram —
+  // non al suo posto.
+  const androidOn = document.getElementById('nqv-android')?.checked ?? true;
+  const canali    = androidOn ? ['telegram', 'android'] : ['telegram'];
+
+  const presetsRapidi = {
+    fire_at:                fireAt,
+    telegram_snooze_button: true,
+    telegram_cancel_button: false,
+    android:                androidOn
+  };
+
+  const rulePayload = canali.map(canale => ({
     app:          'quick',
     entity_id:    entityId,
     entity_title: testo,
     entity_type:  'quick',
-    channel:      'telegram',
+    channel:      canale,
     enabled:      true,
     user_id:      userId,
-    reminder_presets: {
-      fire_at:                fireAt,
-      telegram_snooze_button: true,
-      telegram_cancel_button: false
-    }
-  };
+    reminder_presets: presetsRapidi
+  }));
 
   const saveBtn = document.querySelector('.nqv-btn-save');
   saveBtn.disabled = true;
@@ -3958,11 +3990,25 @@ async function saveNqv() {
     }
 
     const ruleData = await ruleRes.json();
-    const ruleId   = Array.isArray(ruleData) ? ruleData[0]?.id : ruleData?.id;
-    // occurrence_id: formato uniforme con fill-notification-queue → ruleId:YYYY-MM-DD:HH:MM
-    const occurrenceId = `${ruleId}:${data}:${orario}`;
+    const regole   = Array.isArray(ruleData) ? ruleData : [ruleData];
 
-    // Inserisci anche in coda per pianificare l'invio
+    // Una riga di coda per regola. ⚠️ L'occurrence_id porta dentro il rule_id, quindi
+    // le due righe ne hanno due diversi: a riconoscerle come lo stesso promemoria è la
+    // coda «:data:ora», che notification-action confronta quando si preme un pulsante.
+    const righeCoda = regole.filter(r => r?.id).map(r => ({
+      rule_id:       r.id,
+      user_id:       userId,
+      app:           'quick',
+      entity_id:     entityId,
+      title:         '⚡ ' + testo,
+      body:          testo,
+      channel:       r.channel,
+      fire_at:       fireAt,
+      status:        'pending',
+      occurrence_id: `${r.id}:${data}:${orario}`,
+      metadata:      { telegram_snooze_button: true, telegram_cancel_button: false }
+    }));
+
     await fetch(`${SUPABASE_URL}/rest/v1/cm_notification_queue`, {
       method:  'POST',
       headers: {
@@ -3970,19 +4016,7 @@ async function saveNqv() {
         'Authorization': 'Bearer ' + token,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        rule_id:       ruleId,
-        user_id:       userId,
-        app:           'quick',
-        entity_id:     entityId,
-        title:         '⚡ ' + testo,
-        body:          testo,
-        channel:       'telegram',
-        fire_at:       fireAt,
-        status:        'pending',
-        occurrence_id: occurrenceId,
-        metadata:      { telegram_snooze_button: true, telegram_cancel_button: false }
-      })
+      body: JSON.stringify(righeCoda)
     });
 
     triggerFillQueue();

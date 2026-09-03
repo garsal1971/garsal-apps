@@ -143,6 +143,7 @@ Tables are namespaced by app prefix:
 | `cm_institutions` | Censimento di banche e broker. `connectable = false` per chi non è nel catalogo Enable Banking (broker senza PSD2): sta in anagrafica ma non si collega |
 | `cm_bank_connections` | Un conto per riga, nato da un consenso. `uses text[]` dice a cosa serve |
 | `cm_sync_log` | Storico delle sincronizzazioni bancarie |
+| `cm_push_devices` | I telefoni a cui mandare le notifiche push. Una riga per **installazione**: `token` è la chiave, e l'app lo riscrive a ogni avvio |
 
 Le due tabelle bancarie nascono come `ca_bank_connections` / `ca_sync_log` (Analisi Costi) e
 sono state rinominate quando i conti sono diventati condivisi con i Fondi
@@ -1242,6 +1243,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-sync` | manuale (da `cost-analysis.html`) | Importa le transazioni di un conto in `ca_transactions` (Spese Famiglia) |
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html`, `casarosa.html` e da `finanza.html` → 🌹 Danaro di Rosa) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
+| `notification-action` | manuale (da `telegram-webhook` e dall'APK nativo) | Che cosa fa un pulsante di un promemoria: ✅ Fatto, ⏸ rinvia, ❌ annulla. **L'unica implementazione**, chiamata sia dal bot sia dal telefono |
 | `al-food-search` | manuale (da `calorie.html`) | **Legge e basta**: cerca un alimento per nome o per codice a barre nelle banche dati pubbliche e lo restituisce **già normalizzato**. Fonti in ordine: Open Food Facts Search-a-licious, la vecchia `/cgi/search.pl` come ripiego, e USDA FoodData Central se c'è il secret `USDA_API_KEY`. Ogni fonte torna col suo esito (HTTP, tempo, errore) |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
@@ -1468,6 +1470,154 @@ valore senza sommarla al costo la farebbe comparire come utile il giorno che ent
 
 ---
 
+## Notifiche — tre canali, e i pulsanti in un posto solo
+
+Il giro è sempre lo stesso e sta tutto attorno a **una riga per canale**:
+
+```
+cm_notification_rules  (una riga per user + app + entità + CANALE)
+  → fill-notification-queue (cron, ogni 6 h) riempie cm_notification_queue con un fire_at
+      → send-notifications (ogni 5 min) consegna le righe 'telegram' e 'android'
+      → l'APK Smart Blocker si prende in polling le righe 'smart_block'
+```
+
+| `channel` | Dove arriva | Chi la consegna |
+|---|---|---|
+| `telegram` | Il bot, coi bottoni inline | `send-notifications` |
+| `android` | L'APK **nativo** (`com.garsal.appsphere`), come push FCM | `send-notifications` |
+| `smart_block` | L'APK Smart Blocker, che blocca lo schermo | l'APK, in polling |
+
+⚠️ **`telegram` e `android` sono la stessa notifica su due strade e arrivano tutt'e due**: due
+righe di coda, nate da due regole, consegnate indipendentemente. Il telefono spento non deve far
+sparire il promemoria da Telegram, ed è il motivo per cui non c'è nessuna logica del tipo «se il
+telefono ha risposto non mandare al bot».
+
+### ⚠️ I pulsanti hanno UNA implementazione, e non sta nel client
+
+✅ Fatto, ⏸ rinvia e ❌ annulla vivevano dentro `telegram-webhook`. Ora stanno in
+`notification-action`, che chiamano **sia il bot sia il telefono**: al webhook resta solo quel che
+è di Telegram (rispondere al bottone, togliere i messaggi dalla chat). Riscrivere quelle regole in
+Kotlin per la notifica Android avrebbe voluto dire due implementazioni di completamento, punti e
+archivi — cioè due esiti diversi per lo stesso promemoria il giorno che una delle due cambia. È la
+stessa scelta delle RPC del ciclo di vita dei task.
+
+Dentro `notification-action`:
+
+- **complete** — esegue gli insert di `metadata.completion_update` risolvendo i segnaposto
+  (`{{fire_date_local}}`, `{{slot_time}}`, `{{monday_of_week}}`, `{{day_of_week_n}}`), poi chiama
+  `task_complete` o `habit_post_completion`. ⚠️ I segnaposto si ricavano dal **`fire_at` in ora di
+  Roma** e non dall'istante del clic: un promemoria delle 23:30 chiuso dopo mezzanotte verrebbe
+  segnato sul giorno dopo;
+- **snooze** — chiude l'occorrenza e ne inserisce una copia più avanti. ⚠️ Una riga **nuova** e non
+  un update del `fire_at`: la vecchia resta a dire che quel promemoria è suonato davvero. E la
+  copia si fa **per ogni canale** su cui era arrivato, o rimandarlo dal telefono spegnerebbe di
+  nascosto Telegram;
+- **cancel** — chiude l'occorrenza e basta;
+- chi chiama: il **service role** (il webhook) passa senza controlli, un **utente col suo JWT**
+  (l'APK) solo sulle proprie righe. Dentro si scrive col service role, dove la RLS non vale:
+  senza quel controllo basterebbe l'id di una riga altrui per completarla.
+
+### ⚠️ La stessa occorrenza su due canali ha due `occurrence_id`
+
+`occurrence_id` è `"{rule_id}:{YYYY-MM-DD}:{HH:MM}"` e porta dentro il **rule_id** — ma ogni canale
+ha la **sua** regola, quindi la riga Telegram e quella Android dello stesso promemoria hanno due
+occurrence_id diversi.
+
+Cercando i fratelli per occurrence_id uguale — com'era finché il canale era uno solo — premere
+✅ Fatto sul telefono avrebbe chiuso il task lasciando la riga Telegram in `pending`: il bot avrebbe
+suonato per una cosa già fatta, e premendo Fatto anche lì `task_complete` avrebbe chiuso
+**l'occorrenza successiva**, cioè la volta dopo, senza che niente lo dicesse. `notification-action`
+riconosce quindi la stessa occorrenza da **utente + app + entità + la coda `:giorno:ora`**, che è
+la parte che non dipende dalla regola.
+
+### ⚠️ Due canali vogliono dire due righe: chi legge con `maybeSingle()` si rompe
+
+Le pagine che scrivono le regole ne scrivono ora **due**, e ogni lettura che si aspettava una riga
+sola va filtrata per canale — `maybeSingle()` su due righe non torna la prima: risponde con un
+**errore**, cioè un promemoria che smette di salvarsi senza dire perché. Sistemato in:
+
+| Dove | Cosa |
+|---|---|
+| `tasks.html` | `scriviRegola(canale)` / `togliRegola(canale)`: Telegram e Android dalla **stessa** `rulePresets` |
+| `habit-tracker.html` | `syncHabitNotificationRule` scrive i due canali; le tre letture che salvano la regola prima di ricreare uno stack leggono ora **tutte** le righe, e `migrateHabitNotificationRule` le migra tutte |
+| `index.html` | Il promemoria al volo nasce già in coda: una regola **e** una riga di coda per canale. L'elenco raggruppa per `entity_id` (o comparirebbe due volte) e il 🗑 cancella per entità |
+
+⚠️ **Lo spegnimento si ricorda nei preset della regola Telegram** (`reminder_presets.android`), non
+nell'assenza della regola android: quell'assenza vale anche per un task nato prima del canale, e
+prenderla per uno spegnimento lascerebbe la spunta abbassata per sempre — prenderla per un «mai
+deciso» riaccenderebbe da sé, a ogni salvataggio, quel che era stato spento. La spunta è
+**accesa di suo** ed è la stessa in tutt'e tre le pagine: *📲 Anche come notifica sul telefono*.
+
+⚠️ **Il canale android non ha promemoria propri**: usa i preset di Telegram, perché è lo stesso
+promemoria su un'altra strada. Spento Telegram si spegne anche il telefono — senza quei preset non
+saprebbe quando suonare.
+
+### Le push: FCM HTTP v1, e i due file che nascono fuori dalla repo
+
+`send-notifications` manda alle righe `android` una push per ogni telefono in `cm_push_devices`.
+
+⚠️ **API HTTP v1, non la vecchia server key**: quella (`key=AAAA…`) è spenta dal 2024. Serve un
+access token OAuth2 firmato con l'account di servizio — JWT RS256 con Web Crypto, poi scambiato su
+`oauth2.googleapis.com` — e il token si tiene in memoria per un'ora: rifarlo a ogni notifica
+sarebbe una firma RSA per ogni riga della coda.
+
+⚠️ **Messaggio di soli `data`, mai una `notification`**: una notification payload di FCM **non può
+portare pulsanti**, e senza ✅ Fatto e ⏸ Rinvia il telefono direbbe meno di Telegram. La notifica la
+disegna l'app (`notifiche/Notifiche.kt`), che è anche il motivo per cui il servizio viene svegliato
+pure ad app chiusa. `priority: high`, perché un promemoria in ritardo di venti minuti non serve più.
+
+⚠️ **Basta un telefono raggiunto perché la notifica sia consegnata**: il tablet spento non deve far
+risultare fallito un promemoria arrivato sul telefono in tasca. Un token che FCM dichiara
+`UNREGISTERED` spegne la sua riga (`enabled = false`): una riga morta lasciata accesa fa fallire
+ogni invio successivo e non lo dice a nessuno.
+
+**Due cose nascono sulla console Firebase e non possono stare qui:**
+
+| Cosa | Dove va | Senza |
+|---|---|---|
+| `google-services.json` (app Android, package `com.garsal.appsphere`) | `android-app/appsphere-native/app/` | L'APK **si compila lo stesso** e le push restano spente |
+| Chiave dell'account di servizio (JSON intero) | secret Supabase `FCM_SERVICE_ACCOUNT` | Le righe `android` finiscono `failed`; Telegram continua a funzionare |
+
+⚠️ **Il plugin `com.google.gms.google-services` si applica SOLO se il file c'è**
+(`if (schedaFirebase.exists())` in `app/build.gradle`): applicandolo comunque, la build fallirebbe
+con «File google-services.json is missing» — cioè un APK che non si compila più per una
+funzionalità che non è ancora accesa. `Push.disponibile()` risponde `false` finché
+`FirebaseApp` non è inizializzata, e ogni chiamata a Firebase sta in un `runCatching`.
+
+### La notifica sul telefono (`appsphere-native/…/notifiche/`)
+
+| File | Cosa fa |
+|---|---|
+| `Push.kt` | Il token di questa installazione e la chiamata a `notification-action` |
+| `PushService.kt` | Riceve la push (soli dati) e il token rigenerato |
+| `Notifiche.kt` | Canale, disegno e pulsanti |
+| `AzioniNotifica.kt` | Il pulsante premuto: chiude la notifica e chiama la Edge Function |
+| `RinvioActivity.kt` | Le altre scelte: 30 min / 1 h / 3 ore / domani / annulla |
+
+⚠️ **Android mostra tre pulsanti e basta.** Sulla notifica ci sono ✅ Fatto, ⏸ 1 ora e ⋯ Altro:
+mettendo lì tutte e quattro le durate si perderebbe il Fatto, che è quello che si preme davvero.
+Le altre stanno nel dialogo di `RinvioActivity` — le stesse quattro del bot, più l'annullamento.
+
+⚠️ **La notifica si chiude PRIMA della risposta del server**: il tocco deve avere un effetto
+immediato, o si preme una seconda volta credendo che non sia passato — e due «Fatto» sullo stesso
+promemoria sono due chiusure. Se il server rifiuta, il messaggio lo dice.
+
+⚠️ **Ogni pulsante ha un `action` diverso nel suo Intent** (`"$azione:$queueId:$minuti"`): due
+`PendingIntent` con lo stesso requestCode e intent che differiscono per i soli **extra** sono lo
+stesso PendingIntent, e con `FLAG_UPDATE_CURRENT` il primo si prenderebbe gli extra del secondo —
+cioè «Fatto» che rimanda di un'ora.
+
+⚠️ **Il token si riscrive a ogni avvio, in upsert sul token, anche col permesso negato**: FCM lo
+rigenera da sé (reinstallazione, ripristino da backup, dati svuotati), e una riga vecchia in
+tabella è una notifica che parte e non arriva. Il permesso `POST_NOTIFICATIONS` si chiede **dopo lo
+sblocco biometrico**: due finestre di sistema insieme se ne annullano una, e quale dipende dal
+telefono.
+
+⚠️ **L'icona piccola dev'essere monocromatica** (`ic_notifica.xml`): Android ne tiene solo il canale
+alfa, e il marchio a cinque cerchi diventerebbe una macchia bianca senza forma.
+
+---
+
 ## Smart Blocker — due profili, un solo codice
 
 `android-app/smartblocker/` produce **due APK** tramite product flavor Gradle (dimensione `profilo`):
@@ -1614,6 +1764,7 @@ e non si vedrebbe finché non lo si prova su un launcher che la usa.
 |---|---|
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
+| Notifiche push dei promemoria (canale `android`) | `notifiche/` — vedi *Notifiche, tre canali* |
 | App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/`, `obiettivi/` (la bolla apre il 📆 **Piano quotidiano**) |
 
 ### ⚠️ Righe di pulsanti e liste di scelta: due componenti condivisi, non uno per schermata

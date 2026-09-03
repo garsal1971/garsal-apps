@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Le notifiche push. Su Android 13+ il permesso si chiede a runtime: senza,
+         `notify` non fa niente e non lo dice, cioè un promemoria che sparisce. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Health Connect — lettura peso, per la sincronizzazione con la bilancia. -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <!-- Senza questo, HC lascia leggere solo i dati scritti nei 30 giorni prima
@@ -91,6 +95,48 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!--
+            Le notifiche push dei promemoria (canale 'android' di
+            cm_notification_rules), accanto a quelle di Telegram.
+
+            ⚠️ Tutto questo blocco funziona solo con google-services.json in
+            `app/`: senza, FirebaseApp non si inizializza, il servizio non viene
+            mai svegliato e le push restano spente — l'app, per il resto, gira
+            uguale. Vedi `Push.disponibile()`.
+        -->
+        <service
+            android:name=".notifiche.PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- L'icona e il colore che Firebase usa quando una notifica la disegna
+             lui: qui non succede (i messaggi sono di soli dati), ma se un
+             giorno arrivasse una `notification` payload senza queste due righe
+             comparirebbe il quadrato grigio di sistema. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notifica" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="promemoria" />
+
+        <!-- I pulsanti della notifica: ✅ Fatto, ⏸ 1 ora, e le altre scelte. -->
+        <receiver
+            android:name=".notifiche.AzioniNotifica"
+            android:exported="false" />
+
+        <!-- Il dialogo con gli altri rinvii. Trasparente e fuori dai recenti:
+             non è una schermata dell'app, è un pulsante che chiede «quanto?». -->
+        <activity
+            android:name=".notifiche.RinvioActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!--
             activity-alias richiesto da Android 14+ per apparire in Health Connect.

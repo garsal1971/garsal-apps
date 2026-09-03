@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.3.84</title>
+    <title>Habit Stack Tracker v9.4.0</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1337,6 +1337,10 @@
                         <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
                     </label>
                     <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
+                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;margin-top:0.4rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
+                        <input type="checkbox" id="addHabitAndroid" checked>
+                        <span style="font-size:0.88rem;">📲 Anche come notifica sul telefono (AppSphere)</span>
+                    </label>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Data Inizio Stack</label>
@@ -1465,6 +1469,10 @@
                         <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
                     </label>
                     <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
+                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;margin-top:0.4rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
+                        <input type="checkbox" id="editHabitAndroid" checked>
+                        <span style="font-size:0.88rem;">📲 Anche come notifica sul telefono (AppSphere)</span>
+                    </label>
                 </div>
 
                 <div class="form-group">
@@ -1705,8 +1713,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.3.84';
-        const BUILD_TIME  = '2026-08-31T15:30:00Z';
+        const APP_VERSION = 'v9.4.0';
+        const BUILD_TIME  = '2026-09-03T12:00:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -2173,7 +2181,8 @@
                 // Salva regola promemoria
                 const reminderTime = document.getElementById('habitReminderTime').value;
                 const addHabitCompleteButtonChecked = document.getElementById('addHabitCompleteButton')?.checked || false;
-                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds, weekdays, startedAt, goal, addHabitCompleteButtonChecked);
+                const addHabitAndroidChecked = document.getElementById('addHabitAndroid')?.checked ?? true;
+                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds, weekdays, startedAt, goal, addHabitCompleteButtonChecked, addHabitAndroidChecked);
 
                 closeModal('addHabitModal');
                 showToast('Abitudine creata con successo! 🎉');
@@ -3005,7 +3014,11 @@
                     if (sbAccessToken) {
                         const _ruleUserId = decodeJWT(sbAccessToken)?.sub;
                         if (_ruleUserId) {
-                            const { data: _rd } = await supabaseClient.from('cm_notification_rules').select('*').eq('app', 'habits').eq('entity_id', habit.id).eq('user_id', _ruleUserId).maybeSingle();
+                            // ⚠️ TUTTE le regole, non una: da quando c'è anche il canale
+                            // 'android' un'abitudine ne ha due, e `maybeSingle()` su due
+                            // righe risponde con un errore — il promemoria si perderebbe
+                            // nella ricreazione dello stack senza dire niente.
+                            const { data: _rd } = await supabaseClient.from('cm_notification_rules').select('*').eq('app', 'habits').eq('entity_id', habit.id).eq('user_id', _ruleUserId);
                             _savedNotiRule = _rd || null;
                         }
                     }
@@ -3200,7 +3213,11 @@
                     if (sbAccessToken) {
                         const _ruleUserId = decodeJWT(sbAccessToken)?.sub;
                         if (_ruleUserId) {
-                            const { data: _rd } = await supabaseClient.from('cm_notification_rules').select('*').eq('app', 'habits').eq('entity_id', habit.id).eq('user_id', _ruleUserId).maybeSingle();
+                            // ⚠️ TUTTE le regole, non una: da quando c'è anche il canale
+                            // 'android' un'abitudine ne ha due, e `maybeSingle()` su due
+                            // righe risponde con un errore — il promemoria si perderebbe
+                            // nella ricreazione dello stack senza dire niente.
+                            const { data: _rd } = await supabaseClient.from('cm_notification_rules').select('*').eq('app', 'habits').eq('entity_id', habit.id).eq('user_id', _ruleUserId);
                             _savedNotiRule = _rd || null;
                         }
                     }
@@ -4485,7 +4502,8 @@
                 if (sbAccessToken) {
                     const _ruleUserId = decodeJWT(sbAccessToken)?.sub;
                     if (_ruleUserId) {
-                        const { data: _rd } = await supabaseClient.from('cm_notification_rules').select('*').eq('app', 'habits').eq('entity_id', habitId).eq('user_id', _ruleUserId).maybeSingle();
+                        // ⚠️ TUTTE le regole, non una: vedi il commento gemello qui sopra.
+                        const { data: _rd } = await supabaseClient.from('cm_notification_rules').select('*').eq('app', 'habits').eq('entity_id', habitId).eq('user_id', _ruleUserId);
                         _savedNotiRule = _rd || null;
                     }
                 }
@@ -5504,6 +5522,12 @@
             if (editGrp) editGrp.style.display = editHabitReminderIds.length > 0 ? '' : 'none';
             const editCb = document.getElementById('editHabitCompleteButton');
             if (editCb) editCb.checked = editHabitCompleteButton;
+            // ⚠️ Lo spegnimento si legge dai preset della regola Telegram e non
+            // dall'assenza della regola android: quell'assenza vale anche per
+            // un'abitudine nata prima del canale, e prendendola per uno
+            // spegnimento la casella resterebbe abbassata per sempre.
+            const editAnd = document.getElementById('editHabitAndroid');
+            if (editAnd) editAnd.checked = existingRule?.android !== false;
 
             // Aggiorna select categorie
             updateEditCategorySelect();
@@ -5632,7 +5656,8 @@
                 // Aggiorna regola promemoria
                 const editReminderTime = document.getElementById('editHabitReminderTime').value;
                 const editHabitCompleteButtonChecked = document.getElementById('editHabitCompleteButton')?.checked || false;
-                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds, weekdays, startedAt, goal, editHabitCompleteButtonChecked);
+                const editHabitAndroidChecked = document.getElementById('editHabitAndroid')?.checked ?? true;
+                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds, weekdays, startedAt, goal, editHabitCompleteButtonChecked, editHabitAndroidChecked);
 
                 closeModal('editHabitModal');
                 showToast('Abitudine aggiornata! 🎉');
@@ -6344,7 +6369,7 @@
             }
         }
 
-        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds, weekdays, startedAt, goal, completeButton) {
+        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds, weekdays, startedAt, goal, completeButton, androidOn = true) {
             if (!supabaseClient || !sbAccessToken) return;
             const payload = decodeJWT(sbAccessToken);
             const userId = payload?.sub;
@@ -6422,30 +6447,54 @@
                 };
             }
 
-            const { data: existing } = await supabaseClient
-                .from('cm_notification_rules')
-                .select('id')
-                .eq('user_id', userId)
-                .eq('app', 'habits')
-                .eq('entity_id', habitId)
-                .maybeSingle();
+            // La scelta di spegnere il telefono si ricorda nei preset, che sono l'unico
+            // posto che sopravvive alla regola android quando la si cancella.
+            reminderPresetsJson.android = !!androidOn;
 
-            const rule = {
-                user_id: userId,
-                app: 'habits',
-                entity_id: habitId,
-                entity_type: frequency,
-                entity_title: habitName,
-                reminder_presets: reminderPresetsJson,
-                channel: 'telegram',
-                enabled: true
+            // ⚠️ Telegram e Android sono la stessa notifica su due strade e nascono dagli
+            // STESSI preset: il canale è l'unica differenza fra le due righe. La lettura
+            // di quella esistente DEVE filtrare per canale — senza, da quando i canali
+            // sono due `maybeSingle()` trova due righe e risponde con un errore, cioè un
+            // promemoria che smette di salvarsi senza dire perché.
+            const scriviRegola = async (canale) => {
+                const { data: esistente } = await supabaseClient
+                    .from('cm_notification_rules')
+                    .select('id')
+                    .eq('user_id', userId)
+                    .eq('app', 'habits')
+                    .eq('entity_id', habitId)
+                    .eq('channel', canale)
+                    .maybeSingle();
+
+                const rule = {
+                    user_id: userId,
+                    app: 'habits',
+                    entity_id: habitId,
+                    entity_type: frequency,
+                    entity_title: habitName,
+                    reminder_presets: reminderPresetsJson,
+                    channel: canale,
+                    enabled: true
+                };
+
+                const { error } = esistente?.id
+                    ? await supabaseClient.from('cm_notification_rules').update(rule).eq('id', esistente.id)
+                    : await supabaseClient.from('cm_notification_rules').insert(rule);
+                return error;
             };
 
-            let error;
-            if (existing?.id) {
-                ({ error } = await supabaseClient.from('cm_notification_rules').update(rule).eq('id', existing.id));
+            const error = await scriviRegola('telegram');
+
+            if (androidOn) {
+                const errAndroid = await scriviRegola('android');
+                if (errAndroid) console.error('❌ syncHabitNotificationRule (android):', errAndroid);
             } else {
-                ({ error } = await supabaseClient.from('cm_notification_rules').insert(rule));
+                await supabaseClient.from('cm_notification_rules')
+                    .delete()
+                    .eq('user_id', userId)
+                    .eq('app', 'habits')
+                    .eq('entity_id', habitId)
+                    .eq('channel', 'android');
             }
 
             if (error) {
@@ -6481,24 +6530,27 @@
         }
 
         // Migra la cm_notification_rules dal vecchio habit ID al nuovo (usata dopo ricreazione serie)
-        async function migrateHabitNotificationRule(oldHabitId, newHabitId, newStartedAt, newGoal, savedRule) {
+        // ⚠️ `savedRules` è un ELENCO: un'abitudine ha una regola per canale (telegram e
+        // android), e migrandone una sola il promemoria tornerebbe su una strada e
+        // sparirebbe dall'altra — senza che niente lo dica.
+        async function migrateHabitNotificationRule(oldHabitId, newHabitId, newStartedAt, newGoal, savedRules) {
             if (!supabaseClient || !sbAccessToken) return;
             const payload = decodeJWT(sbAccessToken);
             const userId = payload?.sub;
             if (!userId) return;
             try {
-                let ruleRecord = savedRule || null;
-                if (!ruleRecord) {
+                let regole = savedRules || null;
+                if (regole && !Array.isArray(regole)) regole = [regole];  // chiamate vecchie
+                if (!regole) {
                     const { data } = await supabaseClient
                         .from('cm_notification_rules')
                         .select('*')
                         .eq('app', 'habits')
                         .eq('entity_id', oldHabitId)
-                        .eq('user_id', userId)
-                        .maybeSingle();
-                    ruleRecord = data || null;
+                        .eq('user_id', userId);
+                    regole = data || null;
                 }
-                if (!ruleRecord) return; // nessuna regola da migrare
+                if (!regole || regole.length === 0) return; // nessuna regola da migrare
 
                 // Calcola nuova end_date = newStartedAt + newGoal - 1 giorni
                 let endDate = null;
@@ -6508,34 +6560,43 @@
                     endDate = localDateStr(d);
                 }
 
-                // Aggiorna from-to e habit_id nel completion_update
-                const presets = { ...(ruleRecord.reminder_presets || {}) };
-                presets['from-to'] = [newStartedAt || null, endDate];
-                if (presets.completion_update?.operations?.[0]?.fields) {
-                    presets.completion_update.operations[0].fields.habit_id = newHabitId;
-                }
-
-                // Cancella vecchia regola + notifiche pending
+                // Cancella le vecchie regole + le notifiche pending (tutti i canali)
                 await deleteHabitNotificationRule(oldHabitId);
 
-                // Inserisce nuova regola per il nuovo habit
-                const { error } = await supabaseClient.from('cm_notification_rules').insert({
-                    user_id: userId,
-                    app: 'habits',
-                    entity_id: newHabitId,
-                    entity_type: ruleRecord.entity_type,
-                    entity_title: ruleRecord.entity_title,
-                    reminder_presets: presets,
-                    channel: ruleRecord.channel || 'telegram',
-                    enabled: true
-                });
+                let error = null;
+                let presetsTelegram = null;
+
+                for (const ruleRecord of regole) {
+                    // Aggiorna from-to e habit_id nel completion_update
+                    const presets = JSON.parse(JSON.stringify(ruleRecord.reminder_presets || {}));
+                    presets['from-to'] = [newStartedAt || null, endDate];
+                    if (presets.completion_update?.operations?.[0]?.fields) {
+                        presets.completion_update.operations[0].fields.habit_id = newHabitId;
+                    }
+                    const canale = ruleRecord.channel || 'telegram';
+                    if (canale === 'telegram') presetsTelegram = presets;
+
+                    const { error: err } = await supabaseClient.from('cm_notification_rules').insert({
+                        user_id: userId,
+                        app: 'habits',
+                        entity_id: newHabitId,
+                        entity_type: ruleRecord.entity_type,
+                        entity_title: ruleRecord.entity_title,
+                        reminder_presets: presets,
+                        channel: canale,
+                        enabled: true
+                    });
+                    if (err) error = err;
+                }
 
                 if (error) {
                     console.error('❌ migrateHabitNotificationRule:', error);
                 } else {
-                    habitNotificationRules[newHabitId] = presets;
+                    // La cache in pagina segue i preset di Telegram: sono gli stessi, e
+                    // sono quelli che il form riapre.
+                    habitNotificationRules[newHabitId] = presetsTelegram || regole[0].reminder_presets;
                     delete habitNotificationRules[oldHabitId];
-                    console.log(`✅ cm_notification_rules migrata: ${oldHabitId} → ${newHabitId}`);
+                    console.log(`✅ cm_notification_rules migrate (${regole.length}): ${oldHabitId} → ${newHabitId}`);
                     triggerFillQueue();
                 }
             } catch (e) {
