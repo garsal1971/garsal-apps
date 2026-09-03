@@ -1542,9 +1542,40 @@ sola va filtrata per canale — `maybeSingle()` su due righe non torna la prima:
 | `habit-tracker.html` | `syncHabitNotificationRule` scrive i due canali; le tre letture che salvano la regola prima di ricreare uno stack leggono ora **tutte** le righe, e `migrateHabitNotificationRule` le migra tutte |
 | `index.html` | Il promemoria al volo nasce già in coda: una regola **e** una riga di coda per canale. L'elenco raggruppa per `entity_id` (o comparirebbe due volte) e il 🗑 cancella per entità |
 
-### ⚠️ In Tasks il telefono è una Tab a sé, e ha i suoi orari
+### ⚠️ Il telefono è un canale che si sceglie da sé, non un'aggiunta a Telegram
 
-In `tasks.html` (v19.25.0) i canali sono **tre Tab**: 📱 Telegram, 📲 Telefono, 🔐 Smart Block.
+I due canali sono **indipendenti in tutt'e tre le pagine**: si accendono uno per uno, e spegnere
+il bot non zittisce il telefono. Dove ciascun canale ha **anticipi propri da scegliere** la
+separazione è una **Tab** (Tasks, Abituati); dove il promemoria è un istante solo sono **due
+caselle** (il promemoria al volo di AppSphere) — una Tab che contenesse una spunta e basta
+sarebbe un clic in più per vedere una spunta.
+
+| Pagina | Come | Cosa ha di suo il telefono |
+|---|---|---|
+| `tasks.html` v19.25.0 | tre Tab: 📱 Telegram · 📲 Telefono · 🔐 Smart Block | il suo elenco di anticipi (`androidReminders`) |
+| `habit-tracker.html` v9.5.0 | due Tab dentro *Promemoria*: 📱 Telegram · 📲 Telefono | il suo elenco di anticipi (`addHabitAndroidIds` / `editHabitAndroidIds`) |
+| `index.html` v1.6.1 | due caselle: 📱 Su Telegram · 📲 Sul telefono | niente: un promemoria al volo ha un `fire_at` e basta |
+
+⚠️ **In tutt'e tre la riga BASTA a dire che il canale è acceso**: `reminder_presets.android`
+non si scrive più da nessuna parte. Era nato perché l'assenza della regola android valeva anche
+per una riga nata prima del canale; ma da quando il telefono si accende da sé quella riga la si
+è scelta, e un campo che ripete quel che la riga già dice sono due verità sullo stesso dato. Le
+righe salvate prima ce l'hanno già, il telefono acceso: si rileggono così, ed è quello che erano.
+
+⚠️ **In Abituati la regola `android` porta SEMPRE `completion_update`**, anche col bottone Fatto
+di Telegram spento: sul telefono i pulsanti li disegna l'app e ci sono comunque, e senza quel
+blocco un ✅ Fatto chiamerebbe `habit_post_completion` **senza scrivere la riga in
+`hb_completions`** — cioè un'abitudine segnata che non risulta fatta. `telegram_complete_button`
+resta invece solo sulla riga Telegram, che è l'unica a cui quel bottone appartenga.
+
+⚠️ **In Abituati l'orario è dell'abitudine e non del canale**: `times`, `days` e `from-to` sono
+gli stessi nelle due righe, a cambiare sono i soli anticipi. Per questo la cache in pagina è
+`{ telegram, android }` per abitudine (`regolaCanale` / `regolaQualsiasi`): piatta terrebbe
+quelli dell'ultima riga letta, e il form riaprirebbe a caso gli anticipi dell'uno o dell'altro.
+
+#### In Tasks: tre Tab
+
+In `tasks.html` i canali sono **tre Tab**: 📱 Telegram, 📲 Telefono, 🔐 Smart Block.
 Il telefono ha una spunta sua e un **proprio elenco di orari** (`androidReminders`), che si
 riempie dalle stesse pillole ma è un elenco diverso: la regola `android` porta i **suoi**
 `reminder_presets.reminders`, non quelli di Telegram.
@@ -1569,11 +1600,10 @@ a cui quel pulsante appartenga.
 su 360 px non ci stanno, e schiacciarle le renderebbe non toccabili. È la stessa regola delle righe
 di pulsanti in nativo.
 
-⚠️ **`habit-tracker.html` e `index.html` sono rimaste alla spunta** *📲 Anche come notifica sul
-telefono*, accesa di suo, dentro il blocco Telegram: lì il telefono **non ha orari propri** e si
-spegne con Telegram, e lo spegnimento si ricorda in `reminder_presets.android` sulla regola
-Telegram — non nell'assenza della regola android, che vale anche per una riga nata prima del
-canale. Chi le tocca valuti se portarci anche le Tab.
+⚠️ **Nel promemoria al volo di AppSphere almeno un canale ci vuole**: spente tutt'e due, il
+salvataggio si ferma e lo dice — una notifica che non arriva da nessuna parte non è un
+promemoria. E le due caselle **ripartono accese a ogni apertura del form**: una lasciata spenta
+dalla volta prima spegnerebbe il promemoria dopo senza che nessuno l'abbia deciso.
 
 ### Le push: FCM HTTP v1, e i due file che nascono fuori dalla repo
 

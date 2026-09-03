@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.6.0</title>
+<title>AppSphere v1.6.1</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1822,10 +1822,19 @@
             <input type="time" class="nqv-input" id="nqv-orario">
           </div>
         </div>
+        <!-- ⚠️ Due canali indipendenti, due caselle: si scelgono uno per uno, e spegnere
+             il bot non deve zittire il telefono. Qui NON sono due Tab come in Tasks e in
+             Abituati: là ogni canale ha i suoi anticipi da scegliere, e la Tab serve a
+             tenerli separati — un promemoria al volo ha un istante solo, quindi una Tab
+             conterrebbe una casella e basta, cioè un clic in più per vedere una spunta. -->
         <div class="nqv-field">
           <label class="nqv-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400;">
+            <input type="checkbox" id="nqv-telegram" checked style="width:16px;height:16px;">
+            <span>📱 Su Telegram</span>
+          </label>
+          <label class="nqv-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400;">
             <input type="checkbox" id="nqv-android" checked style="width:16px;height:16px;">
-            <span>📲 Anche come notifica sul telefono (AppSphere)</span>
+            <span>📲 Sul telefono (AppSphere)</span>
           </label>
         </div>
       </div>
@@ -1973,8 +1982,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.6.0';
-const BUILD_TIME  = '2026-09-03T12:00:00Z';
+const APP_VERSION = 'v1.6.1';
+const BUILD_TIME  = '2026-09-03T17:05:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -3826,6 +3835,10 @@ function nqvShowView(view) {
     document.getElementById('nqv-data').value   = `${yyyy}-${mm}-${dd}`;
     document.getElementById('nqv-orario').value = `${hh}:${mi}`;
     document.getElementById('nqv-testo').value  = '';
+    // I canali ripartono accesi tutt'e due: è il caso normale, e una casella lasciata
+    // spenta dalla volta prima spegnerebbe un promemoria senza che nessuno l'abbia deciso.
+    const cbTg = document.getElementById('nqv-telegram'); if (cbTg) cbTg.checked = true;
+    const cbAn = document.getElementById('nqv-android');  if (cbAn) cbAn.checked = true;
     document.getElementById('nqv-testo').focus();
   }
 }
@@ -3948,14 +3961,18 @@ async function saveNqv() {
   // sola: se ne scrive una per CANALE, e per ciascuna la sua riga di coda. Il
   // canale 'android' è la stessa notifica sull'APK nativo, accanto a Telegram —
   // non al suo posto.
-  const androidOn = document.getElementById('nqv-android')?.checked ?? true;
-  const canali    = androidOn ? ['telegram', 'android'] : ['telegram'];
+  const telegramOn = document.getElementById('nqv-telegram')?.checked ?? true;
+  const androidOn  = document.getElementById('nqv-android')?.checked  ?? true;
+  const canali     = [telegramOn && 'telegram', androidOn && 'android'].filter(Boolean);
+  if (canali.length === 0) { alert('Scegli almeno un canale: Telegram o il telefono.'); return; }
 
+  // ⚠️ Niente `android` nei preset: adesso è la RIGA a dire che il canale è acceso, e
+  // una riga che c'è non ha bisogno di un campo che lo ripeta — due verità sullo stesso
+  // dato, che divergono il giorno che una delle due si scrive male.
   const presetsRapidi = {
     fire_at:                fireAt,
     telegram_snooze_button: true,
-    telegram_cancel_button: false,
-    android:                androidOn
+    telegram_cancel_button: false
   };
 
   const rulePayload = canali.map(canale => ({
