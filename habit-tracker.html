@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Habit Stack Tracker v9.4.0</title>
+    <title>Habit Stack Tracker v9.5.0</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -1327,20 +1327,47 @@
                 </div>
                 <div class="form-group" id="reminderPresetsGroup">
                     <label class="form-label" style="font-weight:700;text-transform:uppercase;font-size:0.82rem;letter-spacing:0.05em;">Promemoria</label>
-                    <div id="addHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
-                        <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                    <!-- ⚠️ Due canali, due Tab: Telegram e il telefono si scelgono UNO PER UNO
+                         e ciascuno ha i suoi anticipi. La barra scorre di lato e non va a capo. -->
+                    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:10px;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+                        <button type="button" id="addChanTabTelegram" onclick="switchHabitChan('add','telegram')" style="display:flex;align-items:center;gap:4px;flex-shrink:0;white-space:nowrap;padding:6px 16px;border:none;background:none;cursor:pointer;font-size:0.88rem;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--muted);">📱 Telegram<span class="chan-dot" style="width:7px;height:7px;border-radius:50%;display:none;flex-shrink:0;"></span></button>
+                        <button type="button" id="addChanTabAndroid"  onclick="switchHabitChan('add','android')"  style="display:flex;align-items:center;gap:4px;flex-shrink:0;white-space:nowrap;padding:6px 16px;border:none;background:none;cursor:pointer;font-size:0.88rem;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--muted);">📲 Telefono<span class="chan-dot" style="width:7px;height:7px;border-radius:50%;display:none;flex-shrink:0;"></span></button>
                     </div>
-                </div>
-                <div class="form-group" id="addCompleteButtonGroup" style="display:none;">
-                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
-                        <input type="checkbox" id="addHabitCompleteButton" onchange="addHabitCompleteButton=this.checked">
-                        <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
-                    </label>
-                    <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
-                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;margin-top:0.4rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
-                        <input type="checkbox" id="addHabitAndroid" checked>
-                        <span style="font-size:0.88rem;">📲 Anche come notifica sul telefono (AppSphere)</span>
-                    </label>
+
+                    <div id="addChanPanelTelegram">
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">
+                            <input type="checkbox" id="addHabitTelegram" checked onchange="toggleHabitChanOn('add','telegram',this.checked)">
+                            <span style="font-size:0.88rem;font-weight:600;">Attiva notifiche Telegram</span>
+                        </label>
+                        <div id="addTelegramBody">
+                            <div id="addHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
+                                <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                            </div>
+                            <div id="addCompleteButtonGroup" style="display:none;margin-top:0.4rem;">
+                                <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
+                                    <input type="checkbox" id="addHabitCompleteButton" onchange="addHabitCompleteButton=this.checked">
+                                    <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
+                                </label>
+                                <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="addChanPanelAndroid" style="display:none;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">
+                            <input type="checkbox" id="addHabitAndroid" checked onchange="toggleHabitChanOn('add','android',this.checked)">
+                            <span style="font-size:0.88rem;font-weight:600;">Attiva notifiche sul telefono</span>
+                        </label>
+                        <div id="addAndroidBody">
+                            <div id="addHabitAndroidChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
+                                <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                            </div>
+                            <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">
+                                Push sull'app <strong>AppSphere</strong>, coi pulsanti ✅ Fatto e ⏸ Rinvia.
+                                Indipendente da Telegram: puoi tenere acceso solo questo.
+                            </small>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Data Inizio Stack</label>
@@ -1459,20 +1486,47 @@
                 </div>
                 <div class="form-group" id="editReminderPresetsGroup">
                     <label class="form-label" style="font-weight:700;text-transform:uppercase;font-size:0.82rem;letter-spacing:0.05em;">Promemoria</label>
-                    <div id="editHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
-                        <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                    <!-- ⚠️ Due canali, due Tab: Telegram e il telefono si scelgono UNO PER UNO
+                         e ciascuno ha i suoi anticipi. La barra scorre di lato e non va a capo. -->
+                    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:10px;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+                        <button type="button" id="editChanTabTelegram" onclick="switchHabitChan('edit','telegram')" style="display:flex;align-items:center;gap:4px;flex-shrink:0;white-space:nowrap;padding:6px 16px;border:none;background:none;cursor:pointer;font-size:0.88rem;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--muted);">📱 Telegram<span class="chan-dot" style="width:7px;height:7px;border-radius:50%;display:none;flex-shrink:0;"></span></button>
+                        <button type="button" id="editChanTabAndroid"  onclick="switchHabitChan('edit','android')"  style="display:flex;align-items:center;gap:4px;flex-shrink:0;white-space:nowrap;padding:6px 16px;border:none;background:none;cursor:pointer;font-size:0.88rem;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--muted);">📲 Telefono<span class="chan-dot" style="width:7px;height:7px;border-radius:50%;display:none;flex-shrink:0;"></span></button>
                     </div>
-                </div>
-                <div class="form-group" id="editCompleteButtonGroup" style="display:none;">
-                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
-                        <input type="checkbox" id="editHabitCompleteButton" onchange="editHabitCompleteButton=this.checked">
-                        <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
-                    </label>
-                    <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
-                    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;margin-top:0.4rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
-                        <input type="checkbox" id="editHabitAndroid" checked>
-                        <span style="font-size:0.88rem;">📲 Anche come notifica sul telefono (AppSphere)</span>
-                    </label>
+
+                    <div id="editChanPanelTelegram">
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">
+                            <input type="checkbox" id="editHabitTelegram" checked onchange="toggleHabitChanOn('edit','telegram',this.checked)">
+                            <span style="font-size:0.88rem;font-weight:600;">Attiva notifiche Telegram</span>
+                        </label>
+                        <div id="editTelegramBody">
+                            <div id="editHabitReminderChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
+                                <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                            </div>
+                            <div id="editCompleteButtonGroup" style="display:none;margin-top:0.4rem;">
+                                <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;">
+                                    <input type="checkbox" id="editHabitCompleteButton" onchange="editHabitCompleteButton=this.checked">
+                                    <span style="font-size:0.88rem;">🤖 Aggiungi pulsante <strong>Fatto ✅</strong> nel messaggio Telegram</span>
+                                </label>
+                                <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">Il bot Telegram aggiungerà un bottone per segnare l'abitudine come completata direttamente dal messaggio</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="editChanPanelAndroid" style="display:none;">
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">
+                            <input type="checkbox" id="editHabitAndroid" checked onchange="toggleHabitChanOn('edit','android',this.checked)">
+                            <span style="font-size:0.88rem;font-weight:600;">Attiva notifiche sul telefono</span>
+                        </label>
+                        <div id="editAndroidBody">
+                            <div id="editHabitAndroidChips" style="display:flex;flex-wrap:wrap;gap:0.4rem;padding:0.5rem;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;min-height:38px;">
+                                <span style="opacity:0.5;font-size:0.85rem;align-self:center;">Caricamento preset...</span>
+                            </div>
+                            <small style="opacity:0.7;font-size:0.82rem;display:block;margin-top:0.3rem;">
+                                Push sull'app <strong>AppSphere</strong>, coi pulsanti ✅ Fatto e ⏸ Rinvia.
+                                Indipendente da Telegram: puoi tenere acceso solo questo.
+                            </small>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -1713,8 +1767,8 @@
         // ==========================================
         // VERSION
         // ==========================================
-        const APP_VERSION = 'v9.4.0';
-        const BUILD_TIME  = '2026-09-03T12:00:00Z';
+        const APP_VERSION = 'v9.5.0';
+        const BUILD_TIME  = '2026-09-03T16:55:00Z';
         console.log('%c Habit Stack ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
             'background:#FF3366;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
             'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1803,12 +1857,26 @@
         let settings = {
             notificationsEnabled: false
         };
-        let habitNotificationRules = {}; // { habitId: { reminders:[], time?, use_habit_times? } }
+        // ⚠️ Una voce per abitudine, ma DUE preset dentro: { telegram, android }. I due
+        // canali hanno anticipi propri, e una cache piatta terrebbe quelli dell'ultima riga
+        // letta — cioè il form riaprirebbe a caso gli anticipi dell'uno o dell'altro.
+        let habitNotificationRules = {}; // { habitId: { telegram: presets|null, android: presets|null } }
         let habitReminderPresets   = []; // preset da cm_reminder_presets
         let addHabitReminderIds    = []; // int_id selezionati nel modal Add
         let editHabitReminderIds   = []; // int_id selezionati nel modal Edit
         let addHabitCompleteButton = false; // flag pulsante Fatto Telegram (modal Add)
         let editHabitCompleteButton = false; // flag pulsante Fatto Telegram (modal Edit)
+        // ⚠️ Telegram e telefono sono due canali indipendenti, ciascuno coi PROPRI anticipi:
+        // si scelgono uno per uno, e spegnere il bot non deve zittire il telefono. Fino alla
+        // v9.4.0 il telefono era una spunta dentro il blocco Telegram e ne usava i preset.
+        let addHabitAndroidIds     = []; // int_id selezionati per il telefono (modal Add)
+        let editHabitAndroidIds    = []; // int_id selezionati per il telefono (modal Edit)
+        let addHabitTelegramOn     = true;
+        let addHabitAndroidOn      = true;
+        let editHabitTelegramOn    = true;
+        let editHabitAndroidOn     = true;
+        let addHabitChanTab        = 'telegram';
+        let editHabitChanTab       = 'telegram';
         let debugLogs = [];
         let debugEnabled = false;
         let dailyTimes = []; // Array per orari multipli giornalieri
@@ -2181,8 +2249,8 @@
                 // Salva regola promemoria
                 const reminderTime = document.getElementById('habitReminderTime').value;
                 const addHabitCompleteButtonChecked = document.getElementById('addHabitCompleteButton')?.checked || false;
-                const addHabitAndroidChecked = document.getElementById('addHabitAndroid')?.checked ?? true;
-                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds, weekdays, startedAt, goal, addHabitCompleteButtonChecked, addHabitAndroidChecked);
+                await syncHabitNotificationRule(data[0].id, frequency, daily_times || [], reminderTime, name, addHabitReminderIds, weekdays, startedAt, goal, addHabitCompleteButtonChecked,
+                    { telegram: addHabitTelegramOn, android: addHabitAndroidOn, androidIds: addHabitAndroidIds });
 
                 closeModal('addHabitModal');
                 showToast('Abitudine creata con successo! 🎉');
@@ -5512,22 +5580,30 @@
             handleEditFrequencyChange();
 
             // Carica orario promemoria e chip selezionati
-            const existingRule = habitNotificationRules[habit.id];
-            document.getElementById('editHabitReminderTime').value = existingRule?.times?.[0] || existingRule?.time || '';
-            editHabitReminderIds = existingRule?.reminders ? [...existingRule.reminders] : [];
+            const regolaTg = regolaCanale(habit.id, 'telegram');
+            const regolaAn = regolaCanale(habit.id, 'android');
+            const regolaOra = regolaTg || regolaAn; // l'orario è lo stesso nei due canali
+            document.getElementById('editHabitReminderTime').value = regolaOra?.times?.[0] || regolaOra?.time || '';
+            editHabitReminderIds = regolaTg?.reminders ? [...regolaTg.reminders] : [];
             renderHabitReminderChips('editHabitReminderChips', editHabitReminderIds, 'toggleEditHabitChip');
             // Ripristina flag pulsante completamento Telegram
-            editHabitCompleteButton = existingRule?.telegram_complete_button || false;
+            editHabitCompleteButton = regolaTg?.telegram_complete_button || false;
             const editGrp = document.getElementById('editCompleteButtonGroup');
             if (editGrp) editGrp.style.display = editHabitReminderIds.length > 0 ? '' : 'none';
             const editCb = document.getElementById('editHabitCompleteButton');
             if (editCb) editCb.checked = editHabitCompleteButton;
-            // ⚠️ Lo spegnimento si legge dai preset della regola Telegram e non
-            // dall'assenza della regola android: quell'assenza vale anche per
-            // un'abitudine nata prima del canale, e prendendola per uno
-            // spegnimento la casella resterebbe abbassata per sempre.
-            const editAnd = document.getElementById('editHabitAndroid');
-            if (editAnd) editAnd.checked = existingRule?.android !== false;
+            // ⚠️ Adesso la riga BASTA a dire che il canale è acceso: niente più
+            // `reminder_presets.android`, che una riga non la sapeva raccontare da sola.
+            // Un'abitudine con promemoria salvata prima ha già tutt'e due le righe (il
+            // telefono nasceva acceso), quindi si riapre com'era; una senza nessuna regola
+            // è nuova per questo pannello e parte con tutt'e due accesi, come il modal Add.
+            const senzaRegole = !regolaTg && !regolaAn;
+            editHabitTelegramOn = senzaRegole ? true : !!regolaTg;
+            editHabitAndroidOn  = senzaRegole ? true : !!regolaAn;
+            editHabitAndroidIds = regolaAn?.reminders ? [...regolaAn.reminders] : [];
+            renderHabitReminderChips('editHabitAndroidChips', editHabitAndroidIds, 'toggleEditHabitAndroidChip');
+            editHabitChanTab = 'telegram';
+            renderHabitChanTabs('edit');
 
             // Aggiorna select categorie
             updateEditCategorySelect();
@@ -5656,8 +5732,8 @@
                 // Aggiorna regola promemoria
                 const editReminderTime = document.getElementById('editHabitReminderTime').value;
                 const editHabitCompleteButtonChecked = document.getElementById('editHabitCompleteButton')?.checked || false;
-                const editHabitAndroidChecked = document.getElementById('editHabitAndroid')?.checked ?? true;
-                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds, weekdays, startedAt, goal, editHabitCompleteButtonChecked, editHabitAndroidChecked);
+                await syncHabitNotificationRule(habitId, frequency, daily_times || [], editReminderTime, name, editHabitReminderIds, weekdays, startedAt, goal, editHabitCompleteButtonChecked,
+                    { telegram: editHabitTelegramOn, android: editHabitAndroidOn, androidIds: editHabitAndroidIds });
 
                 closeModal('editHabitModal');
                 showToast('Abitudine aggiornata! 🎉');
@@ -5681,6 +5757,12 @@
             // Reset e render chip
             addHabitReminderIds = [];
             renderHabitReminderChips('addHabitReminderChips', addHabitReminderIds, 'toggleAddHabitChip');
+            addHabitAndroidIds = [];
+            renderHabitReminderChips('addHabitAndroidChips', addHabitAndroidIds, 'toggleAddHabitAndroidChip');
+            addHabitTelegramOn = true;
+            addHabitAndroidOn  = true;
+            addHabitChanTab    = 'telegram';
+            renderHabitChanTabs('add');
             document.getElementById('addRiservatoGroup').style.display = hiddenMode ? 'block' : 'none';
             document.getElementById('addHabitModal').classList.add('active');
         }
@@ -6302,6 +6384,17 @@
             } catch (e) { console.warn('⚠️ loadHabitReminderPresets:', e.message); }
         }
 
+        // I preset di un canale, e quelli «qualunque» per ciò che guarda solo l'orario
+        // (l'avviso in pagina, il form quando il canale è spento): l'orario è dell'abitudine
+        // e nei due canali è lo stesso — a cambiare sono i soli anticipi.
+        function regolaCanale(habitId, canale) {
+            return habitNotificationRules[habitId]?.[canale] || null;
+        }
+        function regolaQualsiasi(habitId) {
+            const v = habitNotificationRules[habitId];
+            return v ? (v.telegram || v.android || null) : null;
+        }
+
         function renderHabitReminderChips(containerId, selectedIds, toggleFn) {
             const container = document.getElementById(containerId);
             if (!container) return;
@@ -6338,6 +6431,68 @@
             }
         }
 
+        // ── Le due Tab dei canali ────────────────────────────────────────────────
+        const CHAN_COLORE = { telegram: 'var(--accent, #2563EB)', android: 'var(--success, #00B894)' };
+
+        function chanStato(pre) {
+            return pre === 'add'
+                ? { tab: addHabitChanTab,  telegram: addHabitTelegramOn,  android: addHabitAndroidOn }
+                : { tab: editHabitChanTab, telegram: editHabitTelegramOn, android: editHabitAndroidOn };
+        }
+
+        function renderHabitChanTabs(pre) {
+            const st = chanStato(pre);
+            ['telegram', 'android'].forEach(c => {
+                const suffisso = c === 'telegram' ? 'Telegram' : 'Android';
+                const attiva = st.tab === c;
+                const b = document.getElementById(`${pre}ChanTab${suffisso}`);
+                if (b) {
+                    b.style.borderBottom = `2px solid ${attiva ? CHAN_COLORE[c] : 'transparent'}`;
+                    b.style.color        = attiva ? CHAN_COLORE[c] : 'var(--muted)';
+                    b.style.fontWeight   = attiva ? '600' : '400';
+                    // Il pallino dice quali canali sono accesi senza aprire la Tab.
+                    const dot = b.querySelector('.chan-dot');
+                    if (dot) { dot.style.background = CHAN_COLORE[c]; dot.style.display = st[c] ? 'inline-block' : 'none'; }
+                }
+                const pan = document.getElementById(`${pre}ChanPanel${suffisso}`);
+                if (pan) pan.style.display = attiva ? '' : 'none';
+                const body = document.getElementById(`${pre}${suffisso}Body`);
+                if (body) body.style.display = st[c] ? '' : 'none';
+            });
+            const cbTg = document.getElementById(`${pre}HabitTelegram`); if (cbTg) cbTg.checked = st.telegram;
+            const cbAn = document.getElementById(`${pre}HabitAndroid`);  if (cbAn) cbAn.checked = st.android;
+        }
+
+        function switchHabitChan(pre, canale) {
+            if (pre === 'add') addHabitChanTab = canale; else editHabitChanTab = canale;
+            renderHabitChanTabs(pre);
+        }
+
+        function toggleHabitChanOn(pre, canale, acceso) {
+            if (pre === 'add') {
+                if (canale === 'telegram') addHabitTelegramOn = acceso; else addHabitAndroidOn = acceso;
+            } else {
+                if (canale === 'telegram') editHabitTelegramOn = acceso; else editHabitAndroidOn = acceso;
+            }
+            renderHabitChanTabs(pre);
+        }
+
+        // Gemelle di toggleAdd/EditHabitChip, su un elenco a sé: i due canali si scelgono
+        // uno per uno, quindi hanno due liste di anticipi diverse.
+        function toggleAddHabitAndroidChip(intId) {
+            const idx = addHabitAndroidIds.indexOf(intId);
+            if (idx > -1) addHabitAndroidIds.splice(idx, 1);
+            else addHabitAndroidIds.push(intId);
+            renderHabitReminderChips('addHabitAndroidChips', addHabitAndroidIds, 'toggleAddHabitAndroidChip');
+        }
+
+        function toggleEditHabitAndroidChip(intId) {
+            const idx = editHabitAndroidIds.indexOf(intId);
+            if (idx > -1) editHabitAndroidIds.splice(idx, 1);
+            else editHabitAndroidIds.push(intId);
+            renderHabitReminderChips('editHabitAndroidChips', editHabitAndroidIds, 'toggleEditHabitAndroidChip');
+        }
+
         function toggleEditHabitChip(intId) {
             const idx = editHabitReminderIds.indexOf(intId);
             if (idx > -1) editHabitReminderIds.splice(idx, 1);
@@ -6357,27 +6512,38 @@
             try {
                 const { data, error } = await supabaseClient
                     .from('cm_notification_rules')
-                    .select('entity_id, reminder_presets')
+                    .select('entity_id, channel, reminder_presets')
                     .eq('app', 'habits')
                     .eq('enabled', true);
                 if (error) { console.warn('⚠️ loadHabitNotificationRules:', error.message); return; }
                 habitNotificationRules = {};
-                (data || []).forEach(r => { habitNotificationRules[r.entity_id] = r.reminder_presets; });
+                (data || []).forEach(r => {
+                    const canale = r.channel === 'android' ? 'android' : 'telegram';
+                    const voce = habitNotificationRules[r.entity_id]
+                        || (habitNotificationRules[r.entity_id] = { telegram: null, android: null });
+                    voce[canale] = r.reminder_presets;
+                });
                 console.log('🔔 Regole promemoria caricate:', Object.keys(habitNotificationRules).length);
             } catch (e) {
                 console.warn('⚠️ loadHabitNotificationRules eccezione:', e.message);
             }
         }
 
-        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds, weekdays, startedAt, goal, completeButton, androidOn = true) {
+        async function syncHabitNotificationRule(habitId, frequency, dailyTimesArr, reminderTime, habitName, reminderIds, weekdays, startedAt, goal, completeButton, canali) {
             if (!supabaseClient || !sbAccessToken) return;
             const payload = decodeJWT(sbAccessToken);
             const userId = payload?.sub;
             if (!userId) { console.warn('⚠️ syncHabitNotificationRule: userId non trovato'); return; }
 
-            const ids = reminderIds || [];
-            const hasReminder = (frequency === 'daily_multiple') || !!reminderTime || ids.length > 0;
-            if (!hasReminder) {
+            const idsTg = reminderIds || [];
+            const idsAn = canali?.androidIds || [];
+            const tgOn  = canali?.telegram !== false;
+            const anOn  = canali?.android  !== false;
+
+            // C'è qualcosa da far suonare? L'orario è dell'abitudine, non del canale.
+            const haOrario = (frequency === 'daily_multiple') || !!reminderTime
+                           || idsTg.length > 0 || idsAn.length > 0;
+            if (!haOrario || (!tgOn && !anOn)) {
                 await supabaseClient.from('cm_notification_rules')
                     .delete()
                     .eq('app', 'habits')
@@ -6396,15 +6562,18 @@
                 endDate = localDateStr(d);
             }
 
-            // Blocco aggiuntivo per pulsante Fatto Telegram
             const periodKeyTpl = frequency === 'daily_multiple'
                 ? '{{fire_date_local}}-{{slot_time}}'
                 : frequency === 'weekly'
                     ? '{{monday_of_week}}-{{day_of_week_n}}'
                     : '{{fire_date_local}}';
 
-            const completeButtonExtra = completeButton ? {
-                telegram_complete_button: true,
+            // ⚠️ `completion_update` è quel che rende vero il ✅ Fatto: senza, chiudere da
+            // una notifica chiamerebbe `habit_post_completion` senza scrivere la riga in
+            // `hb_completions`. Sul telefono i pulsanti li disegna l'app e ci sono SEMPRE,
+            // quindi il blocco ci va sempre; su Telegram il bottone è una scelta, e lì
+            // `telegram_complete_button` dice se mostrarlo.
+            const azioneCompletamento = {
                 completion_update: {
                     app: 'habits',
                     operations: [
@@ -6420,43 +6589,24 @@
                         }
                     ]
                 }
-            } : {};
+            };
 
-            let reminderPresetsJson;
-            if (frequency === 'daily_multiple') {
-                reminderPresetsJson = {
-                    reminders: ids,
-                    times: dailyTimesArr,
-                    'from-to': [startedAt || null, endDate],
-                    ...completeButtonExtra
-                };
-            } else if (frequency === 'weekly') {
-                reminderPresetsJson = {
-                    reminders: ids,
-                    days: weekdays || [],
-                    times: reminderTime ? [reminderTime] : [],
-                    'from-to': [startedAt || null, endDate],
-                    ...completeButtonExtra
-                };
-            } else {
-                reminderPresetsJson = {
-                    reminders: ids,
-                    times: reminderTime ? [reminderTime] : [],
-                    'from-to': [startedAt || null, endDate],
-                    ...completeButtonExtra
-                };
-            }
+            const presetsPer = (ids, extra) => {
+                if (frequency === 'daily_multiple') {
+                    return { reminders: ids, times: dailyTimesArr, 'from-to': [startedAt || null, endDate], ...extra };
+                }
+                if (frequency === 'weekly') {
+                    return { reminders: ids, days: weekdays || [], times: reminderTime ? [reminderTime] : [],
+                             'from-to': [startedAt || null, endDate], ...extra };
+                }
+                return { reminders: ids, times: reminderTime ? [reminderTime] : [],
+                         'from-to': [startedAt || null, endDate], ...extra };
+            };
 
-            // La scelta di spegnere il telefono si ricorda nei preset, che sono l'unico
-            // posto che sopravvive alla regola android quando la si cancella.
-            reminderPresetsJson.android = !!androidOn;
-
-            // ⚠️ Telegram e Android sono la stessa notifica su due strade e nascono dagli
-            // STESSI preset: il canale è l'unica differenza fra le due righe. La lettura
-            // di quella esistente DEVE filtrare per canale — senza, da quando i canali
-            // sono due `maybeSingle()` trova due righe e risponde con un errore, cioè un
-            // promemoria che smette di salvarsi senza dire perché.
-            const scriviRegola = async (canale) => {
+            // ⚠️ La lettura della riga esistente DEVE filtrare per canale: i canali sono due,
+            // e `maybeSingle()` su due righe non torna la prima — risponde con un errore, cioè
+            // un promemoria che smette di salvarsi senza dire perché.
+            const scriviRegola = async (canale, presets) => {
                 const { data: esistente } = await supabaseClient
                     .from('cm_notification_rules')
                     .select('id')
@@ -6472,7 +6622,7 @@
                     entity_id: habitId,
                     entity_type: frequency,
                     entity_title: habitName,
-                    reminder_presets: reminderPresetsJson,
+                    reminder_presets: presets,
                     channel: canale,
                     enabled: true
                 };
@@ -6483,26 +6633,43 @@
                 return error;
             };
 
-            const error = await scriviRegola('telegram');
-
-            if (androidOn) {
-                const errAndroid = await scriviRegola('android');
-                if (errAndroid) console.error('❌ syncHabitNotificationRule (android):', errAndroid);
-            } else {
+            const togliRegola = async (canale) => {
                 await supabaseClient.from('cm_notification_rules')
                     .delete()
                     .eq('user_id', userId)
                     .eq('app', 'habits')
                     .eq('entity_id', habitId)
-                    .eq('channel', 'android');
+                    .eq('channel', canale);
+            };
+
+            let error = null;
+            const cache = { telegram: null, android: null };
+
+            if (tgOn) {
+                const presetsTg = presetsPer(idsTg, completeButton
+                    ? { telegram_complete_button: true, ...azioneCompletamento }
+                    : {});
+                error = await scriviRegola('telegram', presetsTg);
+                if (!error) cache.telegram = presetsTg;
+            } else {
+                await togliRegola('telegram');
+            }
+
+            if (anOn) {
+                const presetsAn = presetsPer(idsAn, azioneCompletamento);
+                const errAndroid = await scriviRegola('android', presetsAn);
+                if (errAndroid) console.error('❌ syncHabitNotificationRule (android):', errAndroid);
+                else cache.android = presetsAn;
+            } else {
+                await togliRegola('android');
             }
 
             if (error) {
                 console.error('❌ syncHabitNotificationRule:', error);
                 showToast('Errore salvataggio promemoria: ' + (error.message || ''));
             } else {
-                habitNotificationRules[habitId] = reminderPresetsJson;
-                console.log('✅ syncHabitNotificationRule:', habitId, reminderPresetsJson);
+                habitNotificationRules[habitId] = cache;
+                console.log('✅ syncHabitNotificationRule:', habitId, cache);
                 triggerFillQueue();
             }
         }
@@ -6565,6 +6732,7 @@
 
                 let error = null;
                 let presetsTelegram = null;
+                let presetsAndroid  = null;
 
                 for (const ruleRecord of regole) {
                     // Aggiorna from-to e habit_id nel completion_update
@@ -6575,6 +6743,7 @@
                     }
                     const canale = ruleRecord.channel || 'telegram';
                     if (canale === 'telegram') presetsTelegram = presets;
+                    if (canale === 'android')  presetsAndroid  = presets;
 
                     const { error: err } = await supabaseClient.from('cm_notification_rules').insert({
                         user_id: userId,
@@ -6592,9 +6761,7 @@
                 if (error) {
                     console.error('❌ migrateHabitNotificationRule:', error);
                 } else {
-                    // La cache in pagina segue i preset di Telegram: sono gli stessi, e
-                    // sono quelli che il form riapre.
-                    habitNotificationRules[newHabitId] = presetsTelegram || regole[0].reminder_presets;
+                    habitNotificationRules[newHabitId] = { telegram: presetsTelegram, android: presetsAndroid };
                     delete habitNotificationRules[oldHabitId];
                     console.log(`✅ cm_notification_rules migrate (${regole.length}): ${oldHabitId} → ${newHabitId}`);
                     triggerFillQueue();
@@ -6624,7 +6791,7 @@
             const todayStr = localDateStr(now);
 
             habits.filter(h => h.status === 'active').forEach(habit => {
-                const rule = habitNotificationRules[habit.id];
+                const rule = regolaQualsiasi(habit.id);
                 if (!rule) return;
 
                 const presetIds = rule.reminders || [];
