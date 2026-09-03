@@ -5,6 +5,24 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
+// ⚠️ Il plugin di Firebase si applica SOLO se la scheda del progetto c'è.
+//
+// `google-services.json` si scarica dalla console Firebase e non è un segreto —
+// sta dentro ogni APK pubblicato — ma finché non lo si mette qui il plugin
+// fermerebbe la build con «File google-services.json is missing», cioè un APK
+// che non si compila più per una funzionalità che non è ancora accesa.
+//
+// Senza quel file l'app compila, si installa e funziona: solo, FirebaseApp non
+// si inizializza e le push restano spente (vedi `Push.disponibile()`). Messo il
+// file, si accendono senza toccare una riga di codice.
+def schedaFirebase = file('google-services.json')
+if (schedaFirebase.exists()) {
+    apply plugin: 'com.google.gms.google-services'
+    println "google-services.json trovato: notifiche push abilitate"
+} else {
+    println "google-services.json assente: l'APK si compila, le push restano spente"
+}
+
 android {
     namespace 'com.garsal.appsphere'
     compileSdk 36
@@ -16,8 +34,8 @@ android {
         applicationId "com.garsal.appsphere"
         minSdk 28
         targetSdk 36
-        versionCode 70
-        versionName "1.0.69"
+        versionCode 71
+        versionName "1.0.70"
     }
 
     // Le pagine HTML scelgono fra dev e produzione dall'hostname (_IS_DEV).
@@ -122,6 +140,13 @@ dependencies {
     // Health Connect — lettura del peso per la sincronizzazione con la
     // bilancia Renpho. Stessa versione dell'APK WebView (`HealthConnectBridge.kt`).
     implementation 'androidx.health.connect:connect-client:1.1.0-rc01'
+
+    // Notifiche push. ⚠️ La dipendenza c'è sempre, il plugin no (vedi sopra): il
+    // codice si compila comunque, e a runtime `Push.disponibile()` dice se
+    // FirebaseApp è stato inizializzato davvero.
+    // Solo -messaging: il BoM tira dentro il resto solo se lo si chiede.
+    implementation platform('com.google.firebase:firebase-bom:33.13.0')
+    implementation 'com.google.firebase:firebase-messaging'
 
     // Anteprime dell'IDE: servono solo mentre si sviluppa, non nell'APK
     // pubblicato. Erano `implementation`, quindi finivano anche nel release.

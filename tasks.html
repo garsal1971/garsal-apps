@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Language" content="it-IT">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tasks v19.23.3</title>
+    <title>Tasks v19.24.0</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -2348,8 +2348,8 @@
     </div>
 
     <script>
-        const APP_VERSION = 'v19.23.3';
-        const BUILD_TIME  = '2026-08-31T15:30:00Z';
+        const APP_VERSION = 'v19.24.0';
+        const BUILD_TIME  = '2026-09-03T12:00:00Z';
 
         // ── Icone SVG per tipo task e azioni (usate nei renderTaskCard) ──────
         const TASK_TYPE_SVG = {
@@ -2512,6 +2512,10 @@
         let telegramCompleteButton = true; // Toggle bottone "Fatto" Telegram per il task corrente
         let telegramEnabled        = false; // Canale Telegram attivo per il task corrente
         let smartBlockEnabled      = false; // Canale Smart Block attivo per il task corrente
+        // Canale 'android': la stessa notifica di Telegram, come push sull'APK nativo.
+        // ⚠️ Non ha promemoria propri — usa gli stessi preset di Telegram, perché è lo
+        // stesso promemoria su un'altra strada. Nasce ACCESO: si spegne, non si accende.
+        let androidEnabled         = true;
         let currentReminderTab     = 'telegram'; // Tab attivo nel pannello promemoria
         let sbDeviceToken = null; // Token dispositivo Android (caricato da cm_user_notification_settings)
         let notificationRulesMap = {}; // entity_id → { presetIds: number[], telegramCompleteButton: bool }
@@ -2758,49 +2762,77 @@
                         toasts.push(`⚠️ Preset non trovati: ${unmatched.join(', ')}`);
                     }
 
-                    if (presetIds.length === 0) {
+                    // ⚠️ Telegram e Android nascono dalla STESSA rulePresets: sono lo stesso
+                    // promemoria su due strade, e due oggetti diversi vorrebbero dire due orari
+                    // diversi il giorno che uno dei due cambia. Il canale è l'unica differenza.
+                    const togliRegola = async (canale) => {
                         await authSb.from('cm_notification_rules')
                             .delete()
                             .eq('app', 'tasks').eq('entity_id', String(taskId))
-                            .eq('user_id', userId).eq('channel', 'telegram');
-                    } else {
-                        const { data: existingTG } = await authSb
+                            .eq('user_id', userId).eq('channel', canale);
+                    };
+                    const scriviRegola = async (canale, rulePresets) => {
+                        const { data: esistente } = await authSb
                             .from('cm_notification_rules')
                             .select('id')
                             .eq('user_id', userId).eq('app', 'tasks')
-                            .eq('entity_id', String(taskId)).eq('channel', 'telegram')
+                            .eq('entity_id', String(taskId)).eq('channel', canale)
                             .maybeSingle();
-
-                        const rulePresets = { reminders: presetIds, due_at: dueDate || null };
-                        if (taskType !== 'workflow' && telegramCompleteButton)
-                            rulePresets.telegram_complete_button = true;
 
                         const rule = {
                             user_id: userId, app: 'tasks', entity_id: String(taskId),
                             entity_type: 'task', entity_title: entityTitle || null,
                             reminder_presets: rulePresets, notification_spec: {},
-                            channel: 'telegram', enabled: true
+                            channel: canale, enabled: true
                         };
 
-                        let error;
-                        if (existingTG?.id) {
-                            ({ error } = await authSb.from('cm_notification_rules').update(rule).eq('id', existingTG.id));
-                        } else {
-                            ({ error } = await authSb.from('cm_notification_rules').insert(rule));
-                        }
+                        const { error } = esistente?.id
+                            ? await authSb.from('cm_notification_rules').update(rule).eq('id', esistente.id)
+                            : await authSb.from('cm_notification_rules').insert(rule);
+                        return error;
+                    };
 
-                        if (error) {
-                            console.error('❌ telegram error:', error);
-                            toasts.push(`❌ Telegram: ${error.message}`);
+                    if (presetIds.length === 0) {
+                        await togliRegola('telegram');
+                        await togliRegola('android');
+                    } else {
+                        const rulePresets = { reminders: presetIds, due_at: dueDate || null };
+                        if (taskType !== 'workflow' && telegramCompleteButton)
+                            rulePresets.telegram_complete_button = true;
+                        // Lo spegnimento del telefono si ricorda QUI e non nell'assenza della
+                        // regola android, che vale anche per i task nati prima del canale.
+                        rulePresets.android = !!androidEnabled;
+
+                        const errTG = await scriviRegola('telegram', rulePresets);
+                        if (errTG) {
+                            console.error('❌ telegram error:', errTG);
+                            toasts.push(`❌ Telegram: ${errTG.message}`);
                         } else {
                             toasts.push(`🔔 Telegram: ${presetIds.length} promemori`);
                         }
+
+                        if (androidEnabled) {
+                            const errAN = await scriviRegola('android', rulePresets);
+                            if (errAN) {
+                                console.error('❌ android error:', errAN);
+                                toasts.push(`❌ Telefono: ${errAN.message}`);
+                            } else {
+                                toasts.push('📲 Anche sul telefono');
+                            }
+                        } else {
+                            await togliRegola('android');
+                        }
                     }
                 } else {
-                    await authSb.from('cm_notification_rules')
-                        .delete()
-                        .eq('app', 'tasks').eq('entity_id', String(taskId))
-                        .eq('user_id', userId).eq('channel', 'telegram');
+                    // Spento Telegram si spegne anche il telefono: il canale android non ha
+                    // promemoria propri, vive sui preset di Telegram e senza quelli non
+                    // saprebbe quando suonare.
+                    for (const canale of ['telegram', 'android']) {
+                        await authSb.from('cm_notification_rules')
+                            .delete()
+                            .eq('app', 'tasks').eq('entity_id', String(taskId))
+                            .eq('user_id', userId).eq('channel', canale);
+                    }
                 }
 
                 if (toasts.length > 0) showToast(toasts.join(' · '));
@@ -5279,6 +5311,7 @@
             telegramCompleteButton = true;
             telegramEnabled        = false;
             smartBlockEnabled      = false;
+            androidEnabled         = true;
             currentReminderTab     = 'telegram';
             console.log('🟢 reminders reset to:', reminders);
             yearlyDates = []; // Reset date annuali
@@ -5404,6 +5437,7 @@
             telegramCompleteButton = true;
             telegramEnabled        = false;
             smartBlockEnabled      = false;
+            androidEnabled         = true;
             currentReminderTab     = 'telegram';
             try {
                 if (reminderPresets.length === 0) await loadReminderPresets();
@@ -5419,6 +5453,12 @@
                     const sbRule = rules.find(r => r.channel === 'smart_block' && (!editUserId || r.user_id === editUserId));
                     telegramEnabled   = !!tgRule;
                     smartBlockEnabled = !!sbRule;
+                    // ⚠️ Lo spegnimento si legge dalla regola Telegram (`android: false`) e
+                    // NON dall'assenza della regola android: quell'assenza vale anche per un
+                    // task nato prima del canale, e prendendola per uno spegnimento la spunta
+                    // resterebbe alzata per sempre — mentre prendendola per un «mai deciso»
+                    // riaccenderebbe da sé, a ogni salvataggio, quel che era stato spento.
+                    androidEnabled = tgRule ? (tgRule.reminder_presets?.android !== false) : true;
 
                     // Ripristina label preset Telegram dalla regola (fonte autorevole: int_id → label)
                     if (tgRule) {
@@ -6329,7 +6369,15 @@
                            style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0;
                                   cursor:${reminders.length > 0 ? 'pointer' : 'not-allowed'};">
                     <span style="font-size:0.82rem;color:var(--muted);user-select:none;">Bottone "Fatto" su Telegram</span>
-                </label>` : ''}` : ''}
+                </label>` : ''}
+                <label style="display:flex;align-items:center;gap:0.5rem;padding:0.15rem 0.1rem;cursor:pointer;">
+                    <input type="checkbox" ${androidEnabled ? 'checked' : ''}
+                           onchange="androidEnabled=this.checked;renderReminders()"
+                           style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0;">
+                    <span style="font-size:0.82rem;color:var(--muted);user-select:none;">
+                        📲 Anche come notifica sul telefono (AppSphere)
+                    </span>
+                </label>` : ''}
                 ` : `
                 <!-- Contenuto tab Smart Block -->
                 <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:8px;cursor:pointer;">

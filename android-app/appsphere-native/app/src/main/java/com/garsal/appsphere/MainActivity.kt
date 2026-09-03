@@ -1,9 +1,14 @@
 package com.garsal.appsphere
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -44,6 +50,8 @@ import com.garsal.appsphere.eventslog.EventsLogScreen
 import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.memo.MemoScreen
+import com.garsal.appsphere.notifiche.Notifiche
+import com.garsal.appsphere.notifiche.Push
 import com.garsal.appsphere.obiettivi.ObiettiviScreen
 import com.garsal.appsphere.obiettivi.PianoScreen
 import com.garsal.appsphere.peso.PesoScreen
@@ -236,6 +244,34 @@ private fun AppRoot(activity: FragmentActivity) {
             delay(500)
             chiediSblocco()
         }
+    }
+
+    // ── Le notifiche push ────────────────────────────────────────────────
+    //
+    // ⚠️ Dopo lo sblocco e non prima: la richiesta del permesso è una finestra
+    // di sistema, e chiederla mentre è a schermo quella della biometrica ne
+    // annullerebbe una delle due — quale, dipende dal telefono.
+    val context = LocalContext.current
+    val chiediNotifiche = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { concesso ->
+        Log.i("AppSphere", "permesso notifiche: $concesso")
+    }
+    LaunchedEffect(stato, sbloccato) {
+        if (stato != AuthRepo.State.DENTRO || !sbloccato) return@LaunchedEffect
+        Notifiche.creaCanale(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            chiediNotifiche.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // ⚠️ Il token si riscrive a OGNI avvio, anche col permesso negato: FCM
+        // lo rigenera da sé, e una riga vecchia in `cm_push_devices` è un
+        // indirizzo che non risponde più. Col permesso negato la push arriva e
+        // non si vede — ma il giorno che lo si concede dalle impostazioni di
+        // sistema funziona senza dover riaprire nulla.
+        Push.registra(context)
     }
 
     when {

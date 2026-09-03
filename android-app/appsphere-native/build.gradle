@@ -7,4 +7,10 @@ plugins {
     id 'org.jetbrains.kotlin.android'               version '2.1.20' apply false
     id 'org.jetbrains.kotlin.plugin.compose'        version '2.1.20' apply false
     id 'org.jetbrains.kotlin.plugin.serialization'  version '2.1.20' apply false
+    // Le notifiche push. ⚠️ `apply false` e, nel modulo, applicato SOLO se
+    // google-services.json c'è davvero: quel file nasce sulla console Firebase e
+    // non è in repo finché non lo si mette. Applicandolo comunque, il plugin
+    // fallirebbe la build con «File google-services.json is missing» — cioè
+    // l'APK non si compilerebbe più, notifiche o no.
+    id 'com.google.gms.google-services'             version '4.4.2'  apply false
 }
