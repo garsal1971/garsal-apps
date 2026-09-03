@@ -34,6 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import com.garsal.appsphere.core.AppSphereTheme
 import com.garsal.appsphere.core.AuthRepo
 import com.garsal.appsphere.core.BiometricGate
+import com.garsal.appsphere.core.Condivisione
 import com.garsal.appsphere.core.LogoAppSphere
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.abituati.AbituatiScreen
@@ -71,6 +72,10 @@ class MainActivity : FragmentActivity() {
         // gestiti tutti e due, o il login riesce solo in uno dei due casi.
         gestisciDeepLink(intent)
 
+        // Il tasto «Condividi» di un'altra app: come il deep link, può arrivare
+        // sia come intent iniziale (app chiusa) sia in onNewIntent.
+        gestisciCondivisione(intent)
+
         setContent {
             AppSphereTheme {
                 AppRoot(activity = this)
@@ -82,6 +87,48 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         gestisciDeepLink(intent)
+        gestisciCondivisione(intent)
+    }
+
+    /**
+     * Accoglie un testo condiviso da un'altra app (`ACTION_SEND` +
+     * `text/plain`) e lo mette in [Condivisione], da dove Memo lo prende per
+     * aprire una scheda 🔗 Link già compilata.
+     *
+     * ⚠️ **L'intent-filter lo dichiara solo questa APK** — vedi [Condivisione]:
+     * dichiarandolo anche nell'APK WebView, nel menù «Condividi» comparirebbero
+     * due voci indistinguibili.
+     *
+     * ⚠️ **Qui non si apre niente**: fra il tocco su «Salva in Memo» e la
+     * schermata di Memo ci stanno lo sblocco con l'impronta e, la prima volta,
+     * il login nel browser. Chi la mostra è la navigazione, quando c'è qualcosa
+     * da mostrare.
+     *
+     * ⚠️ **Una condivisione si consuma una volta sola**, per la stessa ragione
+     * del deep link: `getIntent()` continua a restituire quello di partenza per
+     * tutta la vita dell'Activity, e a ogni ricreazione — cambio di tema, di
+     * lingua, ritorno dopo che il sistema ha ucciso il processo — si
+     * riaprirebbe la stessa scheda, giorni dopo, senza che nessuno abbia
+     * condiviso niente.
+     */
+    private fun gestisciCondivisione(intent: Intent?) {
+        if (intent == null) return
+        if (intent.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+
+        val testo = intent.getStringExtra(Intent.EXTRA_TEXT)
+        val oggetto = intent.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty()
+
+        // Consumato: né questa chiamata né una futura ricreazione lo rivedranno.
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        intent.removeExtra(Intent.EXTRA_SUBJECT)
+        setIntent(intent)
+
+        if (testo.isNullOrBlank()) {
+            Log.w("AppSphere", "condivisione senza testo: niente da aprire")
+            return
+        }
+        Log.d("AppSphere", "condiviso: ${testo.take(120)}")
+        Condivisione.ricevi(testo = testo, oggetto = oggetto)
     }
 
     /**
@@ -205,6 +252,18 @@ private fun AppRoot(activity: FragmentActivity) {
 @Composable
 private fun Navigazione() {
     val nav = rememberNavController()
+
+    // Una condivisione in attesa porta a Memo, che è l'unica schermata che sa
+    // cosa farsene. ⚠️ Se Memo è già a schermo non si naviga affatto: una
+    // seconda copia sulla pila vorrebbe dire due indietro per uscirne, e la
+    // scheda la apre comunque MemoScreen, che il flusso lo guarda per conto suo.
+    val condiviso by Condivisione.inArrivo.collectAsStateWithLifecycle()
+    LaunchedEffect(condiviso) {
+        if (condiviso != null && nav.currentDestination?.route != Route.MEMO) {
+            nav.navigate(Route.MEMO)
+        }
+    }
+
     NavHost(navController = nav, startDestination = Route.HOME) {
         composable(Route.HOME) {
             HomeScreen(onApriApp = { rotta -> nav.navigate(rotta) })

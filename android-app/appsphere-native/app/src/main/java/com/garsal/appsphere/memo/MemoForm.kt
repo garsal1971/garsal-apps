@@ -57,6 +57,7 @@ import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.RigaScorrevole
 import com.garsal.appsphere.core.Tendina
+import com.garsal.appsphere.core.TestoCondiviso
 import com.garsal.appsphere.core.coloreDaHex
 import com.garsal.appsphere.core.larghezzaPulsanti
 import kotlinx.coroutines.launch
@@ -144,14 +145,7 @@ data class BozzaScheda(
      * passerebbe per un indirizzo validissimo con host «ciao».
      */
     val linkValido: Boolean
-        get() = runCatching {
-            val u = linkUrl.trim()
-            if (u.isBlank()) return@runCatching false
-            val completo = if (u.startsWith("http://") || u.startsWith("https://")) u
-            else "https://$u"
-            val host = java.net.URI(completo).host.orEmpty()
-            host.contains('.') || host == "localhost"
-        }.getOrDefault(false)
+        get() = linkUrl.isNotBlank() && Link.valido(linkUrl)
 
     /**
      * Che cosa impedisce di salvare un diario, o `null` se va bene: gli stessi
@@ -201,6 +195,38 @@ data class BozzaScheda(
             misure = misure.map { MisuraInModifica.da(it) },
             linkUrl = scheda.linkUrl,
         )
+
+        /**
+         * La scheda che nasce dal tasto «Condividi» di un'altra app.
+         *
+         * ⚠️ **La scheda non si salva da sola**: qui si prepara e basta, poi si
+         * apre l'editor già compilato e il salvataggio resta un gesto. Il tasto
+         * «Condividi» sta accanto a mille altri, e una condivisione per sbaglio
+         * non deve lasciare una riga che poi qualcuno deve andare a cercare per
+         * cancellarla. Stessa scelta di `openMemoFromSharedLink()` nel web,
+         * che questa funzione sostituisce.
+         *
+         * ⚠️ **Un testo senza url non si butta via**: diventa una nota, e il
+         * form lo dice invece di lasciarlo scoprire.
+         *
+         * È `suspend` per un caso solo: un link di YouTube condiviso da un'app
+         * che non manda `EXTRA_SUBJECT`, dove il titolo lo sa solo l'oEmbed.
+         * Vedi [Link.titolo].
+         */
+        suspend fun daCondivisione(condiviso: TestoCondiviso): BozzaScheda {
+            val testo = condiviso.testo.trim()
+            val url = Link.normalizza(Link.primoUrl(testo).ifBlank { testo })
+            if (!Link.valido(url)) return BozzaScheda(
+                tipo = TipoScheda.NOTA,
+                titolo = condiviso.oggetto.trim().take(200),
+                testo = testo,
+            )
+            return BozzaScheda(
+                tipo = TipoScheda.LINK,
+                linkUrl = url,
+                titolo = Link.titolo(url, condiviso.oggetto),
+            )
+        }
     }
 }
 
@@ -223,6 +249,12 @@ fun MemoForm(
     categorie: List<CmCategoria>,
     onAnnulla: () -> Unit,
     onSalva: (BozzaScheda, List<FotoInAttesa>, List<MmImmagine>) -> Unit,
+    /**
+     * Una riga da mostrare appena il form si apre — oggi la usa la
+     * condivisione, quando un testo senza indirizzo diventa una nota invece
+     * di un link: buttarlo via senza dire niente sarebbe la cosa peggiore.
+     */
+    avvisoIniziale: String? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -237,7 +269,7 @@ fun MemoForm(
     var nuove by remember { mutableStateOf(listOf<FotoInAttesa>()) }
     var daTogliere by remember { mutableStateOf(listOf<MmImmagine>()) }
     var conOcr by remember { mutableStateOf(false) }
-    var avviso by remember { mutableStateOf<String?>(null) }
+    var avviso by remember { mutableStateOf(avvisoIniziale) }
     var uriScatto by remember { mutableStateOf<Uri?>(null) }
 
     fun accodaTesto(estratto: String) {

@@ -26,9 +26,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.garsal.appsphere.core.Condivisione
 import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.RigaScorrevole
@@ -49,6 +53,7 @@ import com.garsal.appsphere.core.Tendina
 import com.garsal.appsphere.core.TendinaFacoltativa
 import com.garsal.appsphere.core.coloreDaHex
 import com.garsal.appsphere.core.larghezzaPulsanti
+import kotlinx.coroutines.launch
 
 /** Blu di Memo, il `--primary` della pagina. */
 internal val BluMemo = Color(0xFF2563EB)
@@ -90,6 +95,33 @@ fun MemoScreen(
     var apertaId by remember { mutableStateOf<String?>(null) }
     var inCompilazione by remember { mutableStateOf<Pair<BozzaScheda, String?>?>(null) }
 
+    // ── Il tasto «Condividi» di un'altra app ─────────────────────────────
+    //
+    // Un link condiviso da YouTube, Chrome o WhatsApp arriva in [Condivisione]
+    // e apre qui una scheda 🔗 Link **già compilata**, che resta da salvare.
+    // Si guarda il flusso e non l'intent una volta sola all'apertura: Memo può
+    // essere già a schermo — e allora questa schermata non si ricrea affatto.
+    val condiviso by Condivisione.inArrivo.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var avvisoCondivisione by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(condiviso) {
+        val arrivata = condiviso ?: return@LaunchedEffect
+        Condivisione.consuma()
+        // ⚠️ Il lavoro va in `scope` e non qui dentro: consumarla cambia la
+        // chiave di questo effetto, che viene cancellato — e con lui la
+        // richiesta del titolo, lasciando la scheda senza aprirsi mai.
+        scope.launch {
+            val bozza = BozzaScheda.daCondivisione(arrivata)
+            avvisoCondivisione = if (bozza.tipo == TipoScheda.NOTA)
+                "⚠️ Nessun link nel testo condiviso: lo salvo come nota" else null
+            // Quel che era aperto si chiude: la condivisione prende lo schermo,
+            // e sotto al form non deve restare una scheda che riappare uscendo.
+            apertaId = null
+            vm.chiudiVista()
+            inCompilazione = bozza to null
+        }
+    }
+
     val aperta = apertaId?.let { id -> stato.schede.firstOrNull { it.id == id } }
     // Una nota non ha una vista propria: se la scheda aperta è (o è tornata) una
     // nota si ricade nell'elenco, invece di restare su una schermata vuota.
@@ -108,16 +140,27 @@ fun MemoScreen(
     }
 
     inCompilazione?.let { (bozza, id) ->
-        MemoForm(
-            bozzaIniziale = bozza,
-            id = id,
-            immaginiEsistenti = id?.let { stato.immagini[it] }.orEmpty(),
-            categorie = stato.categorie,
-            onAnnulla = { inCompilazione = null },
-            onSalva = { compilata, nuove, daTogliere ->
-                vm.salva(id, compilata, nuove, daTogliere) { inCompilazione = null }
-            },
-        )
+        // ⚠️ La `key` non è ornamentale: il form tiene la bozza in un `remember`
+        // senza chiave, quindi sostituendo quel che si sta scrivendo con una
+        // scheda nuova — è quel che fa una condivisione arrivata a form aperto —
+        // lo stato di prima resterebbe a schermo e la scheda condivisa non si
+        // vedrebbe affatto.
+        key(bozza, id) {
+            MemoForm(
+                bozzaIniziale = bozza,
+                id = id,
+                immaginiEsistenti = id?.let { stato.immagini[it] }.orEmpty(),
+                categorie = stato.categorie,
+                avvisoIniziale = avvisoCondivisione,
+                onAnnulla = { inCompilazione = null; avvisoCondivisione = null },
+                onSalva = { compilata, nuove, daTogliere ->
+                    vm.salva(id, compilata, nuove, daTogliere) {
+                        inCompilazione = null
+                        avvisoCondivisione = null
+                    }
+                },
+            )
+        }
         return
     }
 
