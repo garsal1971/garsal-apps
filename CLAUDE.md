@@ -1538,19 +1538,42 @@ sola va filtrata per canale — `maybeSingle()` su due righe non torna la prima:
 
 | Dove | Cosa |
 |---|---|
-| `tasks.html` | `scriviRegola(canale)` / `togliRegola(canale)`: Telegram e Android dalla **stessa** `rulePresets` |
+| `tasks.html` | `scriviRegola(canale)` / `togliRegola(canale)`, un blocco per canale coi propri preset |
 | `habit-tracker.html` | `syncHabitNotificationRule` scrive i due canali; le tre letture che salvano la regola prima di ricreare uno stack leggono ora **tutte** le righe, e `migrateHabitNotificationRule` le migra tutte |
 | `index.html` | Il promemoria al volo nasce già in coda: una regola **e** una riga di coda per canale. L'elenco raggruppa per `entity_id` (o comparirebbe due volte) e il 🗑 cancella per entità |
 
-⚠️ **Lo spegnimento si ricorda nei preset della regola Telegram** (`reminder_presets.android`), non
-nell'assenza della regola android: quell'assenza vale anche per un task nato prima del canale, e
-prenderla per uno spegnimento lascerebbe la spunta abbassata per sempre — prenderla per un «mai
-deciso» riaccenderebbe da sé, a ogni salvataggio, quel che era stato spento. La spunta è
-**accesa di suo** ed è la stessa in tutt'e tre le pagine: *📲 Anche come notifica sul telefono*.
+### ⚠️ In Tasks il telefono è una Tab a sé, e ha i suoi orari
 
-⚠️ **Il canale android non ha promemoria propri**: usa i preset di Telegram, perché è lo stesso
-promemoria su un'altra strada. Spento Telegram si spegne anche il telefono — senza quei preset non
-saprebbe quando suonare.
+In `tasks.html` (v19.25.0) i canali sono **tre Tab**: 📱 Telegram, 📲 Telefono, 🔐 Smart Block.
+Il telefono ha una spunta sua e un **proprio elenco di orari** (`androidReminders`), che si
+riempie dalle stesse pillole ma è un elenco diverso: la regola `android` porta i **suoi**
+`reminder_presets.reminders`, non quelli di Telegram.
+
+⚠️ **La ragione è che i due canali si scelgono uno per uno.** Fino alla v19.24.0 il telefono era
+una spunta *dentro* la Tab Telegram e ne usava i preset: chi non voleva il bot non poteva avere la
+push, e spegnere Telegram zittiva anche il telefono senza che niente lo dicesse. Erano due strade
+per la stessa notifica trattate come una sola.
+
+⚠️ **Adesso la riga basta a dire che il canale è acceso**: `androidEnabled = !!anRule`, e
+`reminder_presets.android` sulla regola Telegram **non si scrive più**. I task salvati prima ce
+l'hanno già, quella riga, coi preset di Telegram — si rileggono come suoi, ed è quello che erano
+davvero, quindi nessuna migrazione.
+
+⚠️ **`loadNotificationRulesMap` legge l'UNIONE dei due canali** (`.in('channel', […])`): il badge
+🔔 sulla scheda dice «questo task un promemoria ce l'ha», e da quando il telefono si accende da sé
+un task può averlo **solo lì** — guardando il solo Telegram sparirebbe, insieme alla sua riga nella
+pagina Reminder. `telegram_complete_button` si legge invece dalla sola riga Telegram, che è l'unica
+a cui quel pulsante appartenga.
+
+⚠️ **La barra delle Tab scorre di lato e non va a capo**: coi caratteri di sistema grandi tre voci
+su 360 px non ci stanno, e schiacciarle le renderebbe non toccabili. È la stessa regola delle righe
+di pulsanti in nativo.
+
+⚠️ **`habit-tracker.html` e `index.html` sono rimaste alla spunta** *📲 Anche come notifica sul
+telefono*, accesa di suo, dentro il blocco Telegram: lì il telefono **non ha orari propri** e si
+spegne con Telegram, e lo spegnimento si ricorda in `reminder_presets.android` sulla regola
+Telegram — non nell'assenza della regola android, che vale anche per una riga nata prima del
+canale. Chi le tocca valuti se portarci anche le Tab.
 
 ### Le push: FCM HTTP v1, e i due file che nascono fuori dalla repo
 
