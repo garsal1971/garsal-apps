@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.15.1</title>
+  <title>GarsalFinanza v1.16.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -182,6 +182,16 @@
     .cov-rif { background: #e0f2fe; }
     .table td.cov-rif, .table th.cov-rif,
     .table tbody tr:hover td.cov-rif { background: #e0f2fe; }
+    /* ⏳ La macchina del tempo. Va a capo da sé: coi caratteri di sistema grandi i due pulsanti,
+       il mese, il cursore e la percentuale su una riga sola non ci stanno, e il cursore è la
+       cosa che deve restare larga — schiacciato sotto il polpastrello non si trascina. */
+    .cov-time { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .cov-time-lab { font-weight: 700; min-width: 9rem; }
+    .cov-time input[type=range] { flex: 1 1 12rem; min-width: 10rem; }
+    /* Una colonna la cui data è già passata resta a schermo, sbiadita: sparire sarebbe il modo
+       peggiore di dirlo — un piano in meno senza niente che spieghi perché. */
+    .cov-past { opacity: .5; }
+    .table td.cov-past, .table th.cov-past { opacity: .5; }
     .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
     .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
 .table th.th-has-filter { color: var(--c-primary); }
@@ -598,8 +608,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.15.1';
-const APP_BUILD   = '2026-09-04T14:45:00Z';
+const APP_VERSION = 'v1.16.0';
+const APP_BUILD   = '2026-09-04T15:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -629,6 +639,10 @@ const S = {
   // pagati dall'azienda in ciascuno scenario, da cm_settings. null = mai lette; {} = lette e
   // mai compilate, e allora valgono USCITA_DEFAULT / ACCORDO_DEFAULT.
   uscita: null, accordoAnni: null,
+  // La percentuale di rivalutazione della ⏳ macchina del tempo, da cm_settings come le altre
+  // tre chiavi del piano. I mesi di spostamento invece stanno qui e basta: vedi `coverageOggi`.
+  rivalutazione: null,
+  covMesi: 0,
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -1186,8 +1200,13 @@ async function syncFundOwnership() {
   }
 }
 /* ── Business logic — loans ──────────────────────────────────── */
-function computeLoanValue(loan) {
-  const today = new Date();
+/* ⚠️ `aData` (ISO) sposta il giorno a cui si calcola il residuo, e serve alla ⏳ macchina del
+   tempo di 🛡️ Possibili soluzioni: senza data si resta a oggi, quindi ogni altro chiamante — la
+   Dashboard, lo snapshot, l'elenco dei debiti — legge esattamente il numero di prima. È il
+   motivo per cui la gemella nella Edge Function `save-snapshot` non va toccata: lei calcola
+   sempre e solo oggi. */
+function computeLoanValue(loan, aData) {
+  const today = aData ? new Date(aData + 'T00:00:00') : new Date();
   const own = (parseFloat(loan.ownership_percentage) || 100) / 100;
 
   if (loan.type === 'MUTUO') {
@@ -3924,10 +3943,11 @@ function leggiJson(rows, chiave) {
 // disegnare la stessa pagina sarebbero due attese invece di una.
 async function loadUscita() {
   const rows = await sbQ('cm_settings',
-    `key=in.(${USCITA_CHIAVE},${ACCORDO_CHIAVE},${SCENARI_NOTE_CHIAVE})&select=key,value`);
-  S.uscita       = leggiJson(rows, USCITA_CHIAVE);
-  S.accordoAnni  = leggiJson(rows, ACCORDO_CHIAVE);
-  S.scenariNote  = leggiJson(rows, SCENARI_NOTE_CHIAVE);
+    `key=in.(${USCITA_CHIAVE},${ACCORDO_CHIAVE},${SCENARI_NOTE_CHIAVE},${RIVALUTA_CHIAVE})&select=key,value`);
+  S.uscita        = leggiJson(rows, USCITA_CHIAVE);
+  S.accordoAnni   = leggiJson(rows, ACCORDO_CHIAVE);
+  S.scenariNote   = leggiJson(rows, SCENARI_NOTE_CHIAVE);
+  S.rivalutazione = leggiJson(rows, RIVALUTA_CHIAVE);
 }
 
 const COVERAGE_ITEMS = [
@@ -3936,8 +3956,9 @@ const COVERAGE_ITEMS = [
       return `${u.anni} anni fuori sede, da settembre ${u.inizio} a ${u.fine}: laurea e specializzazione.`; },
     fonte: 'manuale', periodicita: 'una_tantum', prompt: 'universita' },
   { side: 'fabbisogno', key: 'mutuo',         icon: '🏠', label: 'Estinzione mutuo',
-    hint: () => 'Quanto servirebbe per chiudere il mutuo oggi.',
-    fonte: 'auto', periodicita: 'una_tantum', auto: coverageMutuoResiduo },
+    hint: () => coverageMesi() ? 'Quanto servirebbe per chiudere il mutuo alla data della barra.'
+                               : 'Quanto servirebbe per chiudere il mutuo oggi.',
+    fonte: 'auto', periodicita: 'una_tantum', allaData: true, auto: coverageMutuoResiduo },
   { side: 'fabbisogno', key: 'costo_vita',    icon: '🧺', label: 'Costo della vita',
     hint: () => 'Importo all\'anno, preso a spunto lo stipendio da insegnante.',
     fonte: 'manuale', periodicita: 'annuo' },
@@ -4012,9 +4033,91 @@ function spostaAnni(iso, n) {
   d.setMonth(d.getMonth() + Math.round(n * 12));
   return d.toISOString().slice(0, 10);
 }
+/* ── ⏳ La macchina del tempo ────────────────────────────────────────────────
+   Una barra in cima a 🛡️ Possibili soluzioni sposta il punto di osservazione di mese in mese, e
+   tutta la pagina risponde alla domanda «e se me lo chiedessi allora?».
+
+   ⚠️ **Le quattro date NON si spostano**: sono la pensione che dice l'INPS e le durate della
+   trattativa, e non dipendono da quando ci si fa la domanda. A spostarsi è **da dove si contano
+   gli anni** — quindi i flussi si accorciano — e con lui il debito residuo del mutuo e la
+   rivalutazione di tutto il resto.
+
+   ⚠️ **A «oggi» la pagina mostra esattamente i numeri di adesso**: `coverageMesi()` vale 0, la
+   data di osservazione è oggi e il fattore di rivalutazione è 1 esatto. È la garanzia che la
+   barra non sposti nessun conto finché non la si muove — senza, ogni apertura della pagina
+   direbbe qualcosa di diverso dal giorno prima senza che nessuno l'abbia deciso.
+
+   ⚠️ **Il mese scelto vive in memoria e non in `cm_settings`**: è una lente, non un pezzo del
+   piano. Ritrovarla spostata di tre anni riaprendo la pagina vorrebbe dire leggere numeri
+   proiettati credendoli quelli di oggi, che è il modo peggiore di sbagliarsi. La **percentuale**
+   invece è un'ipotesi come le durate dell'uscita, e sta in `cm_settings`: la stessa domanda ci
+   si fa dal PC e dal telefono. */
+const RIVALUTA_CHIAVE  = 'fnz_rivalutazione';
+const RIVALUTA_DEFAULT = 2;
+function rivalutaPct() {
+  const x = parseFloat((S.rivalutazione || {}).pct);
+  return Number.isFinite(x) && x >= 0 ? x : RIVALUTA_DEFAULT;
+}
+/* Le quattro date in un posto solo: le legge sia `coverageScenarios` per disegnare le colonne
+   sia `coverageMesiMax` per sapere fin dove può arrivare il cursore. Due copie sarebbero due
+   elenchi di date che divergono il giorno che se ne aggiunge una. */
+function coverageDateScenari() {
+  const f   = pensionForecastByScenario();
+  const ant = f.anticipata?.pension_date || null;
+  return { naturale:        ant ? spostaAnni(ant, -USCITA_NATURALE_ANNI) : null,
+           accompagnamento: ant ? spostaAnni(ant, -uscita().anni) : null,
+           anticipata:      ant,
+           vecchiaia:       f.vecchiaia?.pension_date || null };
+}
+/* Il cursore arriva fino alla PIÙ LONTANA delle quattro date, non oltre: dopo la vecchiaia non
+   c'è più nessun piano da guardare. Senza nessuna data (simulazione INPS non compilata) restano
+   vent'anni, così la barra si può comunque muovere invece di essere bloccata su un solo mese. */
+function coverageMesiMax() {
+  const date = Object.values(coverageDateScenari()).filter(Boolean).sort();
+  if (!date.length) return 240;
+  const d = new Date(date.at(-1) + 'T00:00:00'), o = new Date();
+  return Math.max(12, (d.getFullYear() - o.getFullYear()) * 12 + (d.getMonth() - o.getMonth()));
+}
+function coverageMesi() { return Math.max(0, Math.min(S.covMesi || 0, coverageMesiMax())); }
+// ⚠️ La data si scrive con i campi locali e non con `toISOString()`: quella converte in UTC, e
+// una mezzanotte italiana lì dentro è il giorno prima.
+function isoLocale(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/* La data di osservazione: oggi più i mesi della barra, **stesso giorno del mese**.
+   ⚠️ Il giorno si limita all'ultimo del mese di arrivo: `setMonth` da solo porta il 31 gennaio
+   + 1 mese al 3 marzo, cioè sposta di un mese e due giorni. */
+function coverageDataA(mesi) {
+  const o = new Date(); o.setHours(0, 0, 0, 0);
+  if (!mesi) return isoLocale(o);
+  const m = o.getMonth() + mesi;
+  const ultimo = new Date(o.getFullYear(), m + 1, 0).getDate();
+  return isoLocale(new Date(o.getFullYear(), m, Math.min(o.getDate(), ultimo)));
+}
+function coverageOggi() { return coverageDataA(coverageMesi()); }
+function coverageAnno() { return parseInt(coverageOggi().slice(0, 4), 10); }
+const MESI_IT = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+                 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+function coverageMeseTesto(mesi) {
+  const d = new Date(coverageDataA(mesi) + 'T00:00:00');
+  return `${MESI_IT[d.getMonth()]} ${d.getFullYear()}`;
+}
+/* Il fattore di rivalutazione alla data di osservazione, `(1+r)^anni`. ⚠️ A «oggi» è 1 **esatto**
+   e non `Math.pow(x, 0)`: il ramo corto è quello che garantisce che nessun numero si muova. */
+function coverageAnniAvanti() { return coverageMesi() / 12; }
+function coverageFattore() {
+  const a = coverageAnniAvanti();
+  return a ? Math.pow(1 + rivalutaPct() / 100, a) : 1;
+}
+function rivaluta(v) { return v == null ? null : v * coverageFattore(); }
+
+/* ⚠️ Gli anni che mancano si contano dalla DATA DI OSSERVAZIONE e non da oggi: è il perno della
+   macchina del tempo, e da qui si accorciano da soli tutti i flussi del fabbisogno. Il
+   `Math.max(0, …)` fa il resto: una data già passata dà zero anni, quindi i flussi valgono zero
+   e i capitali restano quello che sono. */
 function anniFinoA(iso) {
   if (!iso) return null;
-  const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+  const oggi = new Date(coverageOggi() + 'T00:00:00');
   return Math.max(0, (new Date(iso + 'T00:00:00') - oggi) / 86400000 / 365.25);
 }
 /* Anni interi scritti a parole, che è come si leggono in una frase: «1 anno», «2 anni», e
@@ -4039,15 +4142,13 @@ const USCITA_NATURALE_ANNI = 5;
    numero quattro volte più grande e altrettanto plausibile. */
 const SCIVOLO_PERSO_PCT = 20;
 function coverageScenarios() {
-  const f   = pensionForecastByScenario();
-  const ant = f.anticipata?.pension_date || null;
-  const vec = f.vecchiaia?.pension_date  || null;
-  const u   = uscita();
   // ⚠️ Le tre durate si sommano e non si sovrappongono: l'azienda accompagna, il garden leave
   // viene in più, e l'aspettativa si aggiunge ancora — quindi si esce `u.anni` prima
-  // dell'anticipata, non `max()` di qualcosa.
-  const acc = ant ? spostaAnni(ant, -u.anni) : null;
-  const nat = ant ? spostaAnni(ant, -USCITA_NATURALE_ANNI) : null;
+  // dell'anticipata, non `max()` di qualcosa. Il conto sta in `coverageDateScenari`, che è anche
+  // quello che guarda il cursore della macchina del tempo per sapere fin dove arrivare.
+  const u   = uscita();
+  const d   = coverageDateScenari();
+  const acc = d.accompagnamento, nat = d.naturale, ant = d.anticipata, vec = d.vecchiaia;
   return [
     { key: 'naturale',        icon: '🌿', label: 'Uscita naturale', breve: 'Naturale',
       sub: `Anticipata − ${anniTxt(USCITA_NATURALE_ANNI)}`, date: nat, cls: 'cov-rif',
@@ -4056,7 +4157,11 @@ function coverageScenarios() {
       sub: `Anticipata − ${anniTxt(u.anni)}`, date: acc, scivolo: USCITA_NATURALE_ANNI },
     { key: 'anticipata',      icon: '🚪',  label: 'Pensione anticipata',   breve: 'Anticipata', sub: 'Simulazione INPS', date: ant, scivolo: 0 },
     { key: 'vecchiaia',       icon: '🏛️', label: 'Pensione di vecchiaia', breve: 'Vecchiaia',  sub: 'Simulazione INPS', date: vec, scivolo: 0 },
-  ].map(s => ({ ...s, anni: anniFinoA(s.date), anno: s.date ? s.date.slice(0, 4) : '—' }));
+  // ⚠️ Una colonna la cui data è già passata resta nell'elenco, marcata: i suoi flussi valgono
+  // zero (zero anni davanti) e i capitali restano scritti, così si vede cosa si è lasciato
+  // indietro invece di veder sparire una colonna senza spiegazione.
+  ].map(s => ({ ...s, anni: anniFinoA(s.date), anno: s.date ? s.date.slice(0, 4) : '—',
+                passato: !!(s.date && s.date < coverageOggi()) }));
 }
 
 /* Un flusso annuo che dura `anni` (anche frazionari), sommato AL VALORE ATTUALE: importo per
@@ -4076,13 +4181,19 @@ function sommaFlusso(annuo, anni) {
 
 /* Le fonti automatiche. Tornano { value, label } oppure null — null è «il dato non c'è», non
    zero: un dato assente si vede come voce da compilare, uno zero finto no. */
+/* ⚠️ È l'unica voce che si RICALCOLA alla data della barra invece di rivalutarsi: il piano di
+   ammortamento sa già quanto sarà il residuo quel mese, e moltiplicarlo anche per l'inflazione
+   sarebbe contarlo due volte in senso opposto — un debito che scende non è un costo che sale.
+   Da qui l'`allaData: true` sulla voce in COVERAGE_ITEMS. */
 function coverageMutuoResiduo() {
   const mutui = (S.loans || []).filter(l => l.type === 'MUTUO');
   if (!mutui.length) return null;
-  const value = mutui.reduce((s, l) => s + (computeLoanValue(l).value || 0), 0);
+  const data  = coverageOggi();
+  const value = mutui.reduce((s, l) => s + (computeLoanValue(l, data).value || 0), 0);
+  const quando = coverageMesi() ? ` al ${fmtDate(data)}` : '';
   return { value, label: mutui.length === 1
-    ? `Debito residuo di «${esc(mutui[0].name || 'Mutuo')}»`
-    : `Debito residuo di ${mutui.length} mutui` };
+    ? `Debito residuo di «${esc(mutui[0].name || 'Mutuo')}»${quando}`
+    : `Debito residuo di ${mutui.length} mutui${quando}` };
 }
 // ⚠️ Qui il portafoglio vale il NETTO e non il lordo: una dotazione è quello con cui ci si
 // arriva davvero, e le imposte sulle plusvalenze si pagano vendendo — cioè proprio nel momento
@@ -4147,7 +4258,9 @@ function coveragePensioneAda() {
   const r     = righe.reduce((a, b) => (b.year > a.year ? b : a));
   const annuo = parseFloat(r.amount);
   const fine  = adaUniversita().fineCorsoRegolare;
-  const anni  = Math.max(0, fine - new Date().getFullYear());
+  // ⚠️ Gli anni che restano si contano dall'anno di OSSERVAZIONE: spostandosi al 2032 la
+  // pensione di Ada si incassa per due anni ancora, non per otto.
+  const anni  = Math.max(0, fine - coverageAnno());
   return { value: annuo * anni,
     label: `Reddito ${r.year} · Pensione INPS ${fmtEUR(annuo)}/anno × ${anni} ann${anni === 1 ? 'o' : 'i'}, fino al ${fine} (ultimo anno di corso regolare)` };
 }
@@ -4184,12 +4297,19 @@ function coverageAuto(item, sc) {
 }
 // L'importo scritto a mano vince sul dato di Finanza — ma si vede che è scritto a mano, e si
 // toglie col ↺: un override silenzioso resterebbe fermo mentre il dato vero cambia sotto.
+/* ⚠️ **Qui passa la rivalutazione, e da nessun'altra parte.** Ogni importo scritto in euro di
+   oggi — a mano o letto da Finanza — si moltiplica per il fattore della ⏳ macchina del tempo;
+   le voci `allaData` no, perché il loro numero è già calcolato alla data giusta (il mutuo).
+   Un varco solo è la ragione per cui il totale, la scopertura, il capitale da assicurare e il
+   badge «al posto di X» dicono tutti la stessa cifra: sono lo stesso `value`. */
 function coverageBase(item, sc) {
   const row     = coverageRow(item);
-  const manuale = row && row.amount != null ? parseFloat(row.amount) : null;
-  const auto    = coverageAuto(item, sc);
-  if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row };
-  return { value: auto ? auto.value : null, scrittoAMano: false, auto, row };
+  const f       = item.allaData ? 1 : coverageFattore();
+  const manuale = row && row.amount != null ? parseFloat(row.amount) * f : null;
+  const grezzo  = coverageAuto(item, sc);
+  const auto    = grezzo ? { ...grezzo, value: grezzo.value * f } : null;
+  if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row, fattore: f };
+  return { value: auto ? auto.value : null, scrittoAMano: false, auto, row, fattore: f };
 }
 /* ⚠️ «Esclusa» non è «assente» e non è «zero»: la voce c'è, il suo importo si vede, e si è
    scelto di non contarla in questo piano. Per questo il flag toglie la voce dai totali ma non
@@ -4311,11 +4431,66 @@ function renderCoperture() {
         <p class="page-sub">Quello che servirà fino a ciascuna delle quattro date, e quello con cui ci si arriva</p>
       </div>
     </div>
+    ${renderCoverageBarra()}
     ${renderCoverageRiepilogo(scen)}
     ${renderCoverageSide(COVERAGE_SIDES[0], scen)}
     ${renderCoverageSide(COVERAGE_SIDES[1], scen)}
     ${renderCoverageRedditoLavoro(scen)}
   `);
+  /* ⚠️ Il cursore aggiorna il SOLO mese scritto mentre lo si trascina, e ridisegna la pagina
+     quando lo si lascia (`change`): ridisegnando a ogni `input` l'elemento verrebbe sostituito
+     sotto le dita e il trascinamento si fermerebbe al primo mese. */
+  const range = $('cov-time-range');
+  if (range) {
+    range.addEventListener('input', e => {
+      const lab = document.querySelector('.cov-time-lab');
+      if (lab) lab.textContent = coverageMeseTesto(parseInt(e.target.value, 10) || 0);
+    });
+    range.addEventListener('change', e => { S.covMesi = parseInt(e.target.value, 10) || 0; renderCoperture(); });
+  }
+  $('cov-riv')?.addEventListener('change', async e => {
+    const x = parseFloat(String(e.target.value).replace(',', '.'));
+    S.rivalutazione = { pct: Number.isFinite(x) && x >= 0 ? x : RIVALUTA_DEFAULT };
+    await sbUpsert('cm_settings', { key: RIVALUTA_CHIAVE, value: JSON.stringify(S.rivalutazione) }, 'key');
+    renderCoperture();
+  });
+}
+
+/* ── ⏳ La barra: dove si sceglie il mese ─────────────────────────────────
+   Sta in cima perché decide tutti i numeri che vengono dopo, e a «oggi» è la riga che dice che
+   non sta decidendo niente. Il cursore copre da oggi alla più lontana delle quattro date; le
+   frecce spostano di un mese, che è la precisione che il cursore su un telefono non dà. */
+function renderCoverageBarra() {
+  const m = coverageMesi(), max = coverageMesiMax(), oggi = m === 0;
+  const anni = coverageAnniAvanti();
+  const fattore = coverageFattore();
+  return `
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">⏳ Macchina del tempo</div>
+        <span class="text-muted text-sm">${oggi
+          ? 'Oggi: i numeri di adesso'
+          : `Fra ${anniTxt(Math.round(anni * 10) / 10)} · ogni importo × ${fattore.toFixed(3).replace('.', ',')}`}</span>
+      </div>
+      <div class="cov-time">
+        <button class="btn btn-sm btn-outline" data-action="cov-time" data-mesi="0" ${oggi ? 'disabled' : ''}>⏮ Oggi</button>
+        <button class="btn btn-sm btn-outline" data-action="cov-time" data-delta="-1" ${oggi ? 'disabled' : ''} title="Un mese indietro">‹</button>
+        <span class="cov-time-lab mono">${coverageMeseTesto(m)}</span>
+        <button class="btn btn-sm btn-outline" data-action="cov-time" data-delta="1" ${m >= max ? 'disabled' : ''} title="Un mese avanti">›</button>
+        <input type="range" id="cov-time-range" min="0" max="${max}" step="1" value="${m}"
+               aria-label="Mese di osservazione">
+        <label class="text-muted text-sm" style="white-space:nowrap">Rivalutazione
+          <input type="number" id="cov-riv" class="form-input mono" step="0.1" min="0"
+                 style="width:5.5rem;display:inline-block" value="${rivalutaPct()}"> %
+        </label>
+      </div>
+      <p class="text-muted text-sm" style="margin-top:10px">Le quattro date <strong>non si
+      spostano</strong> — sono la pensione dell'INPS e le durate della trattativa. A spostarsi è
+      da quando si contano gli anni: i flussi si accorciano, il <strong>mutuo</strong> si
+      ricalcola col suo piano di ammortamento a quella data, e ogni altro importo si rivaluta del
+      ${rivalutaPct().toFixed(1).replace('.', ',')} % all'anno. Una colonna la cui data è già
+      passata resta a schermo, sbiadita.</p>
+    </div>`;
 }
 
 /* Il riepilogo: una colonna per data, e sotto le righe che portano dal fabbisogno al capitale
@@ -4325,30 +4500,35 @@ function renderCoverageRiepilogo(scen) {
   const senzaData = scen.filter(s => !s.date);
   // Le celle si scrivono per colonna e non per valore, così ciascuna si porta dietro la classe
   // del suo scenario: la colonna di riferimento è azzurra su tutte le righe, non solo in testa.
+  // Una colonna già passata si sbiadisce su tutte le righe, non solo in testa: la classe viaggia
+  // con lo scenario, come il fondo azzurro della colonna di riferimento.
+  const colCls = s => `${s.cls || ''}${s.passato ? ' cov-past' : ''}`;
   const celle = (valori, cls = '') => scen.map((s, k) =>
-    `<td class="mono text-right ${cls} ${s.cls || ''}">${fmtEUR(valori[k])}</td>`).join('');
+    `<td class="mono text-right ${cls} ${colCls(s)}">${fmtEUR(valori[k])}</td>`).join('');
   const etichetta = (t, cls = 'fw-600') => `<td class="${cls}" style="white-space:normal;max-width:14ch">${t}</td>`;
   return `
     <div class="card">
       <div class="card-header-row">
         <div class="card-title">📅 Quanto manca, e per quando</div>
-        <span class="text-muted text-sm">Le dotazioni sono quelle di oggi</span>
+        <span class="text-muted text-sm">${coverageMesi()
+          ? `Tutto al ${coverageMeseTesto(coverageMesi())}` : 'Le dotazioni sono quelle di oggi'}</span>
       </div>
       ${senzaData.length ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaData.map(s => s.label).join(' e ')}: manca la data. Compila la simulazione in 🏛️ Simulazione INPS — un fabbisogno contato su un orizzonte inventato non direbbe niente.</p>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th></th>
-          ${scen.map(s => `<th class="text-right ${s.cls || ''}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
+          ${scen.map(s => `<th class="text-right ${colCls(s)}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
+            ${s.passato ? '<div class="cov-desc text-sm">già passata</div>' : ''}
             ${renderUscitaNota(s)}${renderScenarioNota(s)}</th>`).join('')}
         </tr></thead>
         <tbody>
           <tr>
             ${etichetta('Data')}
-            ${scen.map(s => `<td class="mono text-right ${s.cls || ''}">${s.date ? fmtDate(s.date) : '—'}</td>`).join('')}
+            ${scen.map(s => `<td class="mono text-right ${colCls(s)}">${s.date ? fmtDate(s.date) : '—'}</td>`).join('')}
           </tr>
           <tr>
             ${etichetta('Anni che mancano')}
-            ${scen.map(s => `<td class="mono text-right ${s.cls || ''}">${s.anni == null ? '—' : s.anni.toFixed(1).replace('.', ',')}</td>`).join('')}
+            ${scen.map(s => `<td class="mono text-right ${colCls(s)}">${s.anni == null ? '—' : s.anni.toFixed(1).replace('.', ',')}</td>`).join('')}
           </tr>
           <tr>
             ${etichetta('Fabbisogno')}
@@ -4360,7 +4540,7 @@ function renderCoverageRiepilogo(scen) {
           </tr>
           <tr>
             ${etichetta('Scopertura', 'fw-700')}
-            ${scen.map((s, k) => `<td class="mono text-right ${conti[k].scopertura > 0 ? 'neg' : 'pos'} fw-700 ${s.cls || ''}">${fmtEUR(conti[k].scopertura)}</td>`).join('')}
+            ${scen.map((s, k) => `<td class="mono text-right ${conti[k].scopertura > 0 ? 'neg' : 'pos'} fw-700 ${colCls(s)}">${fmtEUR(conti[k].scopertura)}</td>`).join('')}
           </tr>
           <tr>
             <td style="white-space:normal;max-width:24ch">
@@ -4518,9 +4698,13 @@ function notaRedditoLavoro(sc, c, num) {
   return `${num(c.pieni)} anni al 100 %`;
 }
 function renderCoverageRedditoLavoro(scen) {
-  const netto = coverageNettoLavoro();
-  const conti = scen.map(s => coverageRedditoLavoro(s, netto));
-  const num   = n => n.toFixed(1).replace('.', ',');
+  // ⚠️ Anche qui il netto si rivaluta alla data della barra, come ogni altro importo in euro di
+  // oggi: è la stessa retribuzione, letta da più avanti. La sola voce che non si rivaluta è il
+  // mutuo, che si ricalcola.
+  const grezzo = coverageNettoLavoro();
+  const netto  = grezzo ? { ...grezzo, value: rivaluta(grezzo.value) } : null;
+  const conti  = scen.map(s => coverageRedditoLavoro(s, netto));
+  const num    = n => n.toFixed(1).replace('.', ',');
   return `
     <div class="card">
       <div class="card-header-row">
@@ -4534,7 +4718,8 @@ function renderCoverageRedditoLavoro(scen) {
         intero. Sulle due colonne della pensione è invece il netto per gli anni che mancano alla
         data. Il garden leave resta fuori: quello l'azienda lo paga.</div>
         ${netto
-          ? `<div class="text-muted text-sm">Reddito ${netto.year} · reddito netto ${fmtEUR(netto.value)} all'anno (imponibile − imposta netta, addizionali escluse)</div>`
+          ? `<div class="text-muted text-sm">Reddito ${netto.year} · reddito netto ${fmtEUR(netto.value)} all'anno (imponibile − imposta netta, addizionali escluse)${
+              coverageMesi() ? ` · ⏳ rivalutato a ${coverageMeseTesto(coverageMesi())}` : ''}</div>`
           : `<div class="text-muted text-sm">Manca il reddito netto: compila imponibile e imposta netta in 💶 Reddito → 🧾 Liquidazione dichiarazione.</div>`}
         ${renderCoverageVals(scen, conti.map(c => c && c.value), 'fw-700',
           scen.map((s, k) => conti[k] ? notaRedditoLavoro(s, conti[k], num) : ''))}
@@ -4547,11 +4732,22 @@ function renderCoverageRedditoLavoro(scen) {
 // numero che sta oltre il bordo è un numero che non si legge.
 function renderCoverageVals(colonne, valori, cls = 'fw-600', note = null) {
   return `<div class="cov-vals">${colonne.map((c, k) => `
-    <div class="cov-val ${c.cls || ''}">
+    <div class="cov-val ${c.cls || ''}${c.passato ? ' cov-past' : ''}">
       <div class="cov-val-label">${c.icon ? c.icon + ' ' : ''}${c.anno} · ${c.breve}</div>
       <div class="mono ${cls}">${fmtEUR(valori[k])}</div>
       ${note && note[k] ? `<div class="cov-val-note">${note[k]}</div>` : ''}
     </div>`).join('')}</div>`;
+}
+
+/* La riga che dice cosa ha fatto la ⏳ macchina del tempo a questa voce. ⚠️ Compare **solo
+   quando la barra è mossa**: a «oggi» il fattore è 1 e una riga «rivalutato del 2 % per 0 anni»
+   su ogni voce sarebbe rumore che dice che non è successo niente. Le due frasi sono diverse
+   perché le due cose sono diverse: il mutuo si **ricalcola**, tutto il resto si **rivaluta**. */
+function notaTempo(item, base) {
+  if (!coverageMesi()) return '';
+  const quando = coverageMeseTesto(coverageMesi());
+  if (item.allaData) return `<div class="text-muted text-sm">⏳ ricalcolato al ${quando}, col piano di ammortamento</div>`;
+  return `<div class="text-muted text-sm">⏳ rivalutato del ${rivalutaPct().toFixed(1).replace('.', ',')} % all'anno fino a ${quando} (× ${base.fattore.toFixed(3).replace('.', ',')})</div>`;
 }
 
 /* ⚠️ ✎ e gli altri comandi stanno in TESTA alla scheda e non in coda: su un telefono quel che
@@ -4590,8 +4786,10 @@ function renderCoverageRow(item, colonne) {
         <span class="fw-600">${item.icon} ${item.label}</span>
         ${esclusa ? '<span class="badge" style="background:#fee2e2;color:#991b1b">fuori dal calcolo</span>' : ''}
       </div>
-      ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno, in euro di oggi</div>` : ''}
+      ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno, in euro di ${
+        coverageMesi() ? coverageMeseTesto(coverageMesi()) : 'oggi'}</div>` : ''}
       ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
+      ${notaTempo(item, base)}
       ${fonte ? `<div>${fonte}</div>` : ''}
       ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
       ${renderCoverageVals(colonne, colonne.map(c => coverageValoreA(item, c)))}
@@ -4603,7 +4801,12 @@ function openCoverageModal(side, key) {
   if (!item) return;
   const row   = coverageRow(item);
   const scen  = coverageScenarios();
-  const base  = coverageBase(item, scenarioEtichetta(scen));
+  /* ⚠️ Qui si legge `coverageAuto` e NON `coverageBase`: il form scrive nel database, e il
+     database parla in **euro di oggi**. `coverageBase` restituirebbe il valore già rivalutato
+     dalla ⏳ macchina del tempo, e il «Finanza dice X» inviterebbe a ricopiare a mano un importo
+     proiettato — che poi si rivaluterebbe una seconda volta. La casella dell'importo, per la
+     stessa ragione, mostra `row.amount` grezzo. */
+  const auto  = coverageAuto(item, scenarioEtichetta(scen));
   const per   = coveragePeriodicita(item);
   const anni  = accordoAnni();
   const assetOptions = S.otherAssets
@@ -4646,7 +4849,7 @@ function openCoverageModal(side, key) {
         <input name="amount" type="number" step="any" class="form-input mono"
                placeholder="${item.fonte === 'manuale' ? 'vuoto = dato assente' : 'vuoto = vale il dato di Finanza'}"
                value="${row?.amount ?? ''}" />
-        ${base.auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(base.auto.value)}</strong> (${base.auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
+        ${auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(auto.value)}</strong> (${auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
       </div>
       <div class="form-group">
         <label class="form-label">Nota</label>
@@ -4780,8 +4983,11 @@ una temporanea caso morte (TCM) e una copertura per invalidità permanente da in
 soprattutto a stimare quanto mi costerebbero all'anno.
 
 Questo è il quadro che ho già messo a fuoco. Il punto è che il fabbisogno non è un numero solo: dipende
-da quando smetto di lavorare, e gli scenari sono ${scen.length}. Tutti gli importi qui sotto sono in EURO DI OGGI,
-senza rivalutazione: dimmi tu se e come tenerne conto.
+da quando smetto di lavorare, e gli scenari sono ${scen.length}. ${coverageMesi()
+  ? `Tutti gli importi qui sotto sono in EURO DI ${coverageMeseTesto(coverageMesi()).toUpperCase()}, cioè rivalutati del
+${rivalutaPct().toFixed(1).replace('.', ',')} % all'anno a partire da oggi, e gli anni che mancano sono contati da quella data.`
+  : `Tutti gli importi qui sotto sono in EURO DI OGGI,
+senza rivalutazione: dimmi tu se e come tenerne conto.`}
 
 LE DATE (la prima è un riferimento fisso: la pensione anticipata meno cinque anni):
 ${scen.map(s => `- ${colonna(s)}`).join('\n')}
@@ -7808,6 +8014,14 @@ document.addEventListener('click', async e => {
     case 'new-pension-contribution':  openPensionContributionModal(null); break;
     case 'edit-pension-contribution': openPensionContributionModal(t.dataset.id); break;
     case 'del-pension-contribution':  await deletePensionContribution(t.dataset.id); break;
+    // ⏳ Macchina del tempo: `data-mesi` porta a un mese preciso (⏮ Oggi = 0), `data-delta` si
+    // muove di uno. Il valore si legge con `!= null` e non con la verità, o «0» non passerebbe.
+    case 'cov-time':
+      S.covMesi = t.dataset.mesi != null
+        ? parseInt(t.dataset.mesi, 10)
+        : coverageMesi() + parseInt(t.dataset.delta, 10);
+      renderCoperture();
+      break;
     case 'edit-uscita':           openUscitaModal(); break;
     case 'edit-scenario-nota':    openScenarioNotaModal(t.dataset.key); break;
     case 'edit-coverage':         openCoverageModal(t.dataset.side, t.dataset.key); break;
