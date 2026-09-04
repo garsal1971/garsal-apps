@@ -4183,6 +4183,15 @@ una stringa rotta e un megabyte di JSON per niente. I dump si scaricano da Drive
 mette il collegamento. La relazione si apre in un `iframe` con `srcdoc` e `sandbox`: porta il suo
 CSS e non si mescola con quello della pagina.
 
+⚠️ **Dentro `srcdoc` ci vuole `<base href="about:srcdoc">`, o l'indice non scorre: naviga.** Un
+documento in `srcdoc` non ha un indirizzo proprio e **eredita quello della pagina che lo
+contiene**, quindi un `#tasks` dell'indice si risolve in `…/relazione.html#tasks` e l'iframe va
+lì — cioè ricarica `relazione.html` dentro sé stessa, dove la sandbox non concede JavaScript:
+resta su «Carico…» per sempre, e si legge come una sezione che non finisce di caricare. La base
+la scrive `backup-report.mjs` dalla v1.0.2, e `conBase()` in `relazione.html` la aggiunge alle
+relazioni **già su Drive**, che non ce l'hanno: senza, una fotografia vecchia resterebbe non
+sfogliabile per sempre.
+
 ### ⚠️ La relazione NON contiene i riservati
 
 Le schede di Memo, i gruppi di Events Log e i task marcati `riservato` si **contano e non si
