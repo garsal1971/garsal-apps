@@ -384,6 +384,16 @@ ragione `spostaAnni()` sposta di **mesi** e non di anni interi — le durate si 
 niente vieta mezzo anno di preavviso, che con `setFullYear` darebbe una data invalida (NaN)
 invece di sei mesi.
 
+⚠️ **Ogni colonna porta un sottotitolo che si scrive a mano** (`renderScenarioNota`, il ✎
+nell'intestazione del riepilogo): una riga per ricordarsi *cos'è* quel piano, sotto il nome breve.
+Vive in `cm_settings`, chiave **`fnz_scenari_note`** (JSON `{naturale, accompagnamento,
+anticipata, vecchiaia}`), letta insieme alle altre due da `loadUscita()` — non in `localStorage`,
+perché è un pezzo del piano e la stessa frase si rilegge dal telefono. Compare **solo nel
+riepilogo**: negli elenchi di Fabbisogno e Dotazioni la stessa scritta si ripeterebbe su ogni
+voce. ⚠️ Vuoto **non sparisce**, resta un «+ descrizione» sbiadito: il ✎ da solo sarebbe un
+pulsante senza niente accanto. E svuotarla **toglie la chiave** invece di salvare la stringa
+vuota, come la casella vuota di `fnz_income`.
+
 ⚠️ **Una data che manca non si inventa**: la colonna resta vuota e lo dice. Un fabbisogno contato
 su un orizzonte immaginario è peggio di un fabbisogno che non c'è, perché sembra un numero.
 Per la stessa ragione `coverageValoreA` torna `null` — non zero — su un flusso senza orizzonte.
