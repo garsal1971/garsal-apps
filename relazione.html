@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Relazione dei backup v1.0.0 — garsal-apps</title>
+<title>Relazione dei backup v1.0.1 — garsal-apps</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* Le regole di sempre per i caratteri di sistema grandi: niente altezze fisse,
@@ -92,8 +92,8 @@ h1{font-size:1.35rem;margin:0 0 .2rem}
 </div>
 
 <script>
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-09-04T19:30:00Z';
+var APP_VERSION = 'v1.0.1';
+var BUILD_TIME  = '2026-09-04T23:20:00Z';
 console.log('%c 🗄️ RELAZIONE BACKUP ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#0081C8;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -192,6 +192,18 @@ function disegna() {
   }).join('');
 }
 
+// ⚠️ Un documento dentro `srcdoc` eredita l'indirizzo della pagina che lo
+// contiene, quindi un «#tasks» dell'indice si risolve in
+// «…/relazione.html#tasks» e l'iframe **naviga** lì invece di scorrere: si
+// ricarica relazione.html dentro sé stessa, senza JavaScript (la sandbox non
+// lo concede), e resta per sempre su «Carico…». La base la scrive già la
+// relazione dalla v1.0.2 in poi; qui si aggiunge a quelle **già su Drive**,
+// che una base non ce l'hanno e senza questo non si potrebbero più sfogliare.
+function conBase(html) {
+  if (/<base\b/i.test(html)) return html;
+  return html.replace(/<head([^>]*)>/i, '<head$1><base href="about:srcdoc">');
+}
+
 async function apri(i, j) {
   const f = BACKUP[i].file[j];
   const titolo = giornoIt(BACKUP[i].giorno) + ' · ' + f.nome;
@@ -205,7 +217,7 @@ async function apri(i, j) {
     document.getElementById('lettore-titolo').textContent = titolo;
     // `srcdoc` con la sandbox: la relazione porta il suo CSS e resta chiusa lì
     // dentro, senza toccare questa pagina.
-    document.getElementById('lettore-frame').srcdoc = dati.html;
+    document.getElementById('lettore-frame').srcdoc = conBase(dati.html);
   } catch (e) {
     document.getElementById('lettore-titolo').textContent = 'Errore';
     document.getElementById('lettore-frame').srcdoc =

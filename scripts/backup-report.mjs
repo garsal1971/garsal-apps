@@ -30,7 +30,7 @@
 // La relazione porta la sua versione come le app: due relazioni della stessa
 // settimana generate da due versioni diverse dello script non si distinguono
 // altrimenti, ed è la prima cosa che si vuole sapere quando una sezione manca.
-const VERSIONE = 'v1.0.1';
+const VERSIONE = 'v1.0.2';
 
 const BASE  = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const KEY   = process.env.SUPABASE_SERVICE_KEY || '';
@@ -1220,6 +1220,15 @@ function pagina(utente) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ⚠️ Questa pagina si legge dentro un <iframe srcdoc> in relazione.html, e
+     un documento srcdoc SENZA base eredita l'indirizzo della pagina che lo
+     contiene: un «#tasks» dell'indice si risolverebbe allora in
+     «…/relazione.html#tasks» e l'iframe **navigherebbe** lì invece di
+     scorrere — cioè caricherebbe relazione.html dentro sé stessa, senza
+     JavaScript (la sandbox non lo concede), restando per sempre su «Carico…».
+     Con questa base i collegamenti dell'indice tornano a essere quello che
+     sono: salti dentro lo stesso documento. -->
+<base href="about:srcdoc">
 <title>Relazione AppSphere ${VERSIONE} — ${giorno(oggiISO)}</title>
 <style>
   /* I caratteri di sistema sul telefono sono grandi: niente altezze fisse,
