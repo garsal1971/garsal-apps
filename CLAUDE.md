@@ -368,15 +368,15 @@ v1.7.0 era la costante `COVERAGE_ANNI_ACCOMPAGNAMENTO = 5`; ora sono **tre durat
 sommano** — accompagnamento dell'azienda, garden leave che l'azienda concede **in più**, e
 aspettativa non retribuita che ci si prende da sé — perché sono tre cose diverse, si trattano
 con interlocutori diversi e schiacciarle in un numero solo le rendeva impossibili da negoziare
-una per una. L'addizione sta scritta **sotto il titolo della sua colonna** nel riepilogo
-(`renderUscitaNota`), col ✎ accanto: un «Anticipata − 8 anni» senza gli addendi è un numero che
-non si può discutere con nessuno. ⚠️ Sta lì e non sopra la tabella (dov'era fino alla v1.14.0):
-è una proprietà di quella colonna, e in cima parlava di una colonna che il lettore doveva ancora
-trovare. Nella cella ci sono quindi **due ✎**, uno per cosa: prima l'addizione delle durate, poi
-la descrizione scritta a mano (`renderScenarioNota`). L'addizione **non ripete né il nome né la
-data** — l'intestazione porta già il primo e la riga *Data* la seconda — e passa dallo stesso
-`.cov-desc` della descrizione: va a capo invece di allargare la colonna, che con l'intestazione
-`nowrap` la spingerebbe oltre il bordo.
+una per una. Le tre durate si cambiano dal ✎ **sotto il titolo della sua colonna** nel
+riepilogo (`renderUscitaNota`), etichettato *setta parametri*. ⚠️ Sta lì e non sopra la tabella
+(dov'era fino alla v1.14.0): è una proprietà di quella colonna, e in cima parlava di una colonna
+che il lettore doveva ancora trovare. Nella cella ci sono quindi **due ✎**, uno per cosa: prima
+le durate, poi la descrizione scritta a mano (`renderScenarioNota`). ⚠️ L'etichetta è due parole
+e **non l'addizione per esteso** (v1.15.1): «5 anni di accompagnamento + 1 di garden leave + 2 di
+aspettativa = 8 anni prima dell'anticipata» nell'intestazione di una colonna stretta andava a capo
+tre volte e spingeva giù i nomi delle altre colonne. Gli addendi restano **dentro la finestra**,
+che è il posto dove si cambiano; la data risultante si legge nella riga *Data*, un rigo sotto.
 
 ⚠️ **I tre numeri vivono in `cm_settings`, chiave `fnz_uscita_anticipata`** (JSON
 `{accompagnamento, garden_leave, aspettativa}`), non in una costante e **non in
