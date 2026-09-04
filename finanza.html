@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.13.0</title>
+  <title>GarsalFinanza v1.14.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -164,6 +164,13 @@
     .cov-val { background: var(--c-bg); border-radius: 8px; padding: 6px 10px; }
     .cov-val-label { font-size: .72rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; }
     .cov-val-note { font-size: .72rem; color: var(--c-muted); margin-top: 2px; }
+    /* La descrizione di una colonna: l'intestazione della tabella è nowrap e maiuscola, e una
+       frase lì dentro allargherebbe la colonna fino a mandare tutto fuori schermo. Qui va a capo
+       da sé, con un tetto in `ch` che cresce col testo. */
+    .cov-desc { white-space: normal; max-width: 18ch; margin-left: auto; margin-top: 4px;
+                font-weight: 400; text-transform: none; letter-spacing: 0; line-height: 1.35;
+                color: var(--c-muted); }
+    .cov-desc-vuota { font-style: italic; opacity: .7; }
     .cov-tot { border-top: 2px solid var(--c-border); padding-top: 12px; margin-top: 4px; }
     /* Una voce esclusa dal conto resta a schermo: sbiadita e con gli importi barrati. Sparire
        sarebbe il modo peggiore di toglierla — un totale più basso senza niente che dica perché. */
@@ -591,8 +598,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.13.0';
-const APP_BUILD   = '2026-09-04T12:30:00Z';
+const APP_VERSION = 'v1.14.0';
+const APP_BUILD   = '2026-09-04T13:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3892,6 +3899,10 @@ const USCITA_VOCI = [
    ⚠️ Zero è invece una risposta buona e voluta — «in questo scenario l'azienda non mette
    niente» — ed è quello che dicono di partenza le colonne della pensione. */
 const ACCORDO_CHIAVE  = 'fnz_accordo_azienda_anni';
+/* La descrizione che si scrive sotto il nome di ogni colonna del riepilogo: una riga di
+   `cm_settings` come le altre due, e non `localStorage` — è un pezzo del piano, non una
+   preferenza di questo browser, e la stessa frase si vuole rileggere dal telefono. */
+const SCENARI_NOTE_CHIAVE = 'fnz_scenari_note';
 const ACCORDO_DEFAULT = { naturale: 0, accompagnamento: 3, anticipata: 0, vecchiaia: 0 };
 function accordoAnni() {
   const v = S.accordoAnni || {};
@@ -3913,9 +3924,10 @@ function leggiJson(rows, chiave) {
 // disegnare la stessa pagina sarebbero due attese invece di una.
 async function loadUscita() {
   const rows = await sbQ('cm_settings',
-    `key=in.(${USCITA_CHIAVE},${ACCORDO_CHIAVE})&select=key,value`);
-  S.uscita      = leggiJson(rows, USCITA_CHIAVE);
-  S.accordoAnni = leggiJson(rows, ACCORDO_CHIAVE);
+    `key=in.(${USCITA_CHIAVE},${ACCORDO_CHIAVE},${SCENARI_NOTE_CHIAVE})&select=key,value`);
+  S.uscita       = leggiJson(rows, USCITA_CHIAVE);
+  S.accordoAnni  = leggiJson(rows, ACCORDO_CHIAVE);
+  S.scenariNote  = leggiJson(rows, SCENARI_NOTE_CHIAVE);
 }
 
 const COVERAGE_ITEMS = [
@@ -4327,7 +4339,8 @@ function renderCoverageRiepilogo(scen) {
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th></th>
-          ${scen.map(s => `<th class="text-right ${s.cls || ''}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span></th>`).join('')}
+          ${scen.map(s => `<th class="text-right ${s.cls || ''}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
+            ${renderScenarioNota(s)}</th>`).join('')}
         </tr></thead>
         <tbody>
           <tr>
@@ -4363,6 +4376,52 @@ function renderCoverageRiepilogo(scen) {
         </tbody>
       </table></div>
     </div>`;
+}
+
+/* Il sottotitolo di una colonna: quello che l'utente scrive per ricordarsi cos'è quel piano.
+   ⚠️ Vuoto **non sparisce**: resta un «+ descrizione» sbiadito, o il ✎ sarebbe un pulsante senza
+   niente accanto e non si capirebbe cosa apre. È la stessa scelta delle voci senza importo, che
+   si contano accanto al totale invece di sparirci dentro. */
+function scenarioNota(key) {
+  const v = (S.scenariNote || {})[key];
+  return (typeof v === 'string' && v.trim()) ? v.trim() : '';
+}
+function renderScenarioNota(sc) {
+  const testo = scenarioNota(sc.key);
+  return `<div class="cov-desc text-sm">
+      <button class="btn-icon" data-action="edit-scenario-nota" data-key="${sc.key}"
+              title="Scrivi cos'è questo piano">✎</button>
+      <span class="${testo ? '' : 'cov-desc-vuota'}">${testo ? esc(testo) : '+ descrizione'}</span>
+    </div>`;
+}
+function openScenarioNotaModal(key) {
+  const sc = coverageScenarios().find(s => s.key === key);
+  if (!sc) return;
+  openModal(`${sc.icon} ${sc.label}`, `
+    <form id="modal-form">
+      <div class="form-group">
+        <label class="form-label">Descrizione</label>
+        <textarea name="nota" class="form-input" rows="3"
+                  placeholder="Cos'è questo piano, in una riga">${esc(scenarioNota(key))}</textarea>
+        <p class="text-muted text-sm" style="margin-top:6px">Compare sotto il nome della colonna,
+        nel riepilogo qui sopra. Svuotandola torna il «+ descrizione».</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" data-action="close-modal">Annulla</button>
+        <button type="submit" class="btn btn-primary">Salva</button>
+      </div>
+    </form>
+  `, async data => {
+    // Una descrizione svuotata TOGLIE la sua chiave invece di salvare la stringa vuota: è la
+    // stessa scelta della casella vuota di 💶 Reddito — «non l'ho scritta» non è «è vuota».
+    const note = { ...(S.scenariNote || {}) };
+    const testo = (data.nota || '').trim();
+    if (testo) note[key] = testo; else delete note[key];
+    await sbUpsert('cm_settings', { key: SCENARI_NOTE_CHIAVE, value: JSON.stringify(note) }, 'key');
+    await loadUscita();
+    closeModal();
+    render();
+  });
 }
 
 /* ⚠️ 🧭 Uscita concordata è l'unica delle quattro date che si decide, non si subisce: due le dà
@@ -7754,6 +7813,7 @@ document.addEventListener('click', async e => {
     case 'edit-pension-contribution': openPensionContributionModal(t.dataset.id); break;
     case 'del-pension-contribution':  await deletePensionContribution(t.dataset.id); break;
     case 'edit-uscita':           openUscitaModal(); break;
+    case 'edit-scenario-nota':    openScenarioNotaModal(t.dataset.key); break;
     case 'edit-coverage':         openCoverageModal(t.dataset.side, t.dataset.key); break;
     case 'coverage-toggle':       await toggleCoverageEsclusa(t.dataset.side, t.dataset.key); break;
     case 'coverage-reset':        await resetCoverageAmount(t.dataset.side, t.dataset.key); break;
