@@ -552,23 +552,40 @@ assicurare — sommarlo alle dotazioni conterebbe due volte l'accordo con l'azie
 stesso periodo lo copre già dalla sua parte. È un metro accanto agli altri, non una voce di
 `fnz_coverage_items`: non si compila, non si esclude e non si scrive a mano.
 
-| Ingrediente | Da dove |
-|---|---|
-| Netto di un anno | 💶 Reddito → 🧾 Liquidazione, colonna **calcolata** *Reddito netto* (`INCOME_CALC.reddito_netto`, imponibile − imposta netta) dell'anno più recente **che ce l'ha** — stessa regola di «Pensione Ada» e dell'accordo |
-| Anni | `sc.anni`, gli anni che mancano da oggi alla data della colonna — gli stessi che moltiplicano i flussi del fabbisogno |
-| Scivolo | `sc.scivolo` = `USCITA_NATURALE_ANNI` (5) su 🌿 Naturale e 🧭 Concordata, **0** sulle due colonne della pensione |
+Il netto di un anno è 💶 Reddito → 🧾 Liquidazione, colonna **calcolata** *Reddito netto*
+(`INCOME_CALC.reddito_netto`, imponibile − imposta netta) dell'anno più recente **che ce l'ha** —
+stessa regola di «Pensione Ada» e dell'accordo.
 
-Il conto è `netto × [ min(anni, scivolo) × 0,80 + max(0, anni − scivolo) ]`.
+⚠️ **Le quattro colonne non rispondono tutte alla stessa domanda**, ed è voluto: sulle due uscite
+si conta quello che **manca** rispetto a lavorare fino alla pensione, sulle due pensioni il netto
+per gli anni che restano da lavorare.
 
-⚠️ **Gli anni di scivolo si contano DENTRO gli anni che mancano, non in più**: sono gli ultimi
-prima della data, quindi con un traguardo a meno di cinque anni ci finiscono tutti e il periodo
-vale interamente l'80 %. Con l'anticipata fra 9 anni e un netto di 50.000: 🌿 4 anni → 160.000,
-🧭 1 anno → 40.000, 🚪 9 anni → 450.000.
+| Colonna | Conto | Con netto 50.000 e aspettativa 1 anno |
+|---|---|---|
+| 🌿 Uscita naturale | `20 % × 5 anni di scivolo` | 50.000 |
+| 🧭 Uscita concordata | lo stesso, **più** `uscita().aspettativa` a reddito intero | 100.000 |
+| 🚪 Anticipata · 🏛️ Vecchiaia | `netto × sc.anni` | 9,4 anni → 470.000 |
+
+⚠️ **La percentuale è quella che si PERDE, non quella che si prende**: durante lo scivolo
+l'azienda paga l'80 %, quindi ne manca il 20 — `SCIVOLO_PERSO_PCT = 20`. Scritta al contrario
+darebbe un numero quattro volte più grande e altrettanto plausibile.
+
+⚠️ **Il garden leave NON entra**: quello l'azienda lo paga per intero, quindi non è reddito
+perso. L'aspettativa sì, è non retribuita, e vale il netto pieno — sono due cose diverse proprio
+come le tiene distinte `uscita()`, e schiacciarle in «tutti gli anni oltre i cinque» conterebbe
+come persa una retribuzione che invece si prende.
+
+⚠️ **Le due uscite non dipendono dalla data ma dalle durate**, quindi il conto si fa anche senza
+la simulazione INPS; le due colonne della pensione sì, e senza `sc.anni` tornano `null` — non
+zero — come i flussi del fabbisogno.
 
 ⚠️ **I 5 anni sono gli STESSI di `USCITA_NATURALE_ANNI`** e non una seconda costante uguale per
 caso: l'uscita naturale *è* l'anticipata meno lo scivolo, e la concordata quello scivolo se lo
 porta dentro. Uno `SCIVOLO_ANNI = 5` scritto accanto sarebbero due verità sullo stesso dato.
-`SCIVOLO_PCT` (80) sta invece per conto suo, ed è scritto anche a schermo accanto al numero.
+
+⚠️ **Sotto ogni importo la cella scrive da quali anni viene** (`notaRedditoLavoro`): «5 anni di
+scivolo al 20 % + 1 di aspettativa al 100 %». Un numero che non si può rifare a mente è un numero
+di cui non ci si fida.
 
 ⚠️ **Il netto si legge da `INCOME_CALC` e non si riscrive qui**: una seconda formula per lo
 stesso numero sono due redditi diversi il giorno che una delle due cambia. Ne eredita anche il

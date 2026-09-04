@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.12.0</title>
+  <title>GarsalFinanza v1.13.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -591,8 +591,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.12.0';
-const APP_BUILD   = '2026-09-04T11:30:00Z';
+const APP_VERSION = 'v1.13.0';
+const APP_BUILD   = '2026-09-04T12:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -4021,8 +4021,11 @@ const USCITA_NATURALE_ANNI = 5;
    l'uscita naturale È l'anticipata meno lo scivolo, e la concordata quello scivolo se lo porta
    dentro. Un `SCIVOLO_ANNI = 5` scritto accanto sarebbe due verità sullo stesso dato, che
    divergono il giorno che una delle due cambia. Le due colonne della pensione non ce l'hanno:
-   lì si lavora fino in fondo. */
-const SCIVOLO_PCT = 80;
+   lì si lavora fino in fondo.
+   ⚠️ La percentuale è quella che si PERDE, non quella che si prende: durante lo scivolo
+   l'azienda paga l'80 %, quindi di reddito ne manca il 20. Scriverla al contrario darebbe un
+   numero quattro volte più grande e altrettanto plausibile. */
+const SCIVOLO_PERSO_PCT = 20;
 function coverageScenarios() {
   const f   = pensionForecastByScenario();
   const ant = f.anticipata?.pension_date || null;
@@ -4235,16 +4238,32 @@ function coverageNettoLavoro() {
   const year = Math.max(...anni);
   return { value: INCOME_CALC.reddito_netto(byYear[year]), year };
 }
-/* ⚠️ Gli anni di scivolo si contano DENTRO gli anni che mancano, non in più: sono gli ultimi
-   prima della data, quindi con un traguardo a meno di cinque anni ci finiscono tutti. Il resto
-   del periodo — se ce n'è — vale il netto pieno.
-   ⚠️ `sc.anni` null (data della simulazione mancante) porta a null e non a zero, come per i
-   flussi del fabbisogno: non sapere fino a quando non è saperlo pari a niente. */
+/* ⚠️ Le quattro colonne NON rispondono tutte alla stessa domanda, ed è voluto.
+   Sulle due uscite si conta quello che **manca** rispetto a lavorare fino alla pensione:
+
+   | Colonna | Conto |
+   |---|---|
+   | 🌿 Naturale | 20 % del netto × i 5 anni di scivolo — l'azienda paga l'80 %, il resto non arriva |
+   | 🧭 Concordata | lo stesso, **più** gli anni di aspettativa a reddito intero |
+   | 🚪 Anticipata · 🏛️ Vecchiaia | il netto per gli anni che mancano alla data |
+
+   ⚠️ **Il garden leave non entra**: quello l'azienda lo paga per intero, quindi non è reddito
+   perso. L'aspettativa sì, è non retribuita, e vale il netto pieno — sono due cose diverse
+   proprio come le tiene distinte `uscita()`, e schiacciarle in «tutti gli anni oltre i cinque»
+   conterebbe come persa una retribuzione che invece si prende.
+   ⚠️ Le due uscite **non dipendono dalla data** ma dalle durate: il conto si può fare anche
+   senza la simulazione INPS. Le due colonne della pensione sì, e senza `sc.anni` tornano `null`
+   — non zero — come i flussi del fabbisogno. */
 function coverageRedditoLavoro(sc, netto) {
-  if (!netto || sc.anni == null) return null;
-  const scivolo = Math.min(sc.anni, sc.scivolo || 0);
-  const pieni   = Math.max(0, sc.anni - scivolo);
-  return { value: netto.value * (scivolo * SCIVOLO_PCT / 100 + pieni), scivolo, pieni };
+  if (!netto) return null;
+  const perso = SCIVOLO_PERSO_PCT / 100;
+  if (sc.key === 'naturale' || sc.key === 'accompagnamento') {
+    const scivolo = sc.scivolo || 0;
+    const pieni   = sc.key === 'accompagnamento' ? uscita().aspettativa : 0;
+    return { value: netto.value * (scivolo * perso + pieni), scivolo, pieni };
+  }
+  if (sc.anni == null) return null;
+  return { value: netto.value * sc.anni, scivolo: 0, pieni: sc.anni };
 }
 
 function renderCoperture() {
@@ -4433,6 +4452,16 @@ function renderCoverageSide(side, scen) {
 /* Il riquadro dei redditi da lavoro: una riga sola, le stesse quattro colonne degli altri due,
    e sotto ogni importo gli anni da cui viene — un numero che non si può rifare a mente è un
    numero di cui non ci si fida. */
+/* La riga piccola sotto l'importo: dice da quali anni viene, perché un numero che non si può
+   rifare a mente è un numero di cui non ci si fida. */
+function notaRedditoLavoro(sc, c, num) {
+  if (sc.key === 'naturale' || sc.key === 'accompagnamento') {
+    const parti = [`${num(c.scivolo)} anni di scivolo al ${SCIVOLO_PERSO_PCT} %`];
+    if (c.pieni > 0) parti.push(`${num(c.pieni)} di aspettativa al 100 %`);
+    return parti.join(' + ');
+  }
+  return `${num(c.pieni)} anni al 100 %`;
+}
 function renderCoverageRedditoLavoro(scen) {
   const netto = coverageNettoLavoro();
   const conti = scen.map(s => coverageRedditoLavoro(s, netto));
@@ -4444,15 +4473,16 @@ function renderCoverageRedditoLavoro(scen) {
         <span class="text-muted text-sm">Fuori dai totali: è un riferimento</span>
       </div>
       <div class="cov-item">
-        <div class="text-muted text-sm">Quello che si continuerebbe a guadagnare lavorando fino a
-        ciascuna data: il netto di un anno per gli anni che mancano, con gli anni di scivolo
-        contati al ${SCIVOLO_PCT} %.</div>
+        <div class="text-muted text-sm">Sulle due uscite è quello che <strong>non</strong> si
+        prende più: durante lo scivolo l'azienda paga l'${100 - SCIVOLO_PERSO_PCT} %, quindi ne
+        manca il ${SCIVOLO_PERSO_PCT} %, e gli anni di aspettativa non retribuita valgono il netto
+        intero. Sulle due colonne della pensione è invece il netto per gli anni che mancano alla
+        data. Il garden leave resta fuori: quello l'azienda lo paga.</div>
         ${netto
           ? `<div class="text-muted text-sm">Reddito ${netto.year} · reddito netto ${fmtEUR(netto.value)} all'anno (imponibile − imposta netta, addizionali escluse)</div>`
           : `<div class="text-muted text-sm">Manca il reddito netto: compila imponibile e imposta netta in 💶 Reddito → 🧾 Liquidazione dichiarazione.</div>`}
-        ${renderCoverageVals(scen, conti.map(c => c && c.value), 'fw-700', scen.map((s, k) => conti[k]
-          ? `${num(s.anni)} anni${conti[k].scivolo > 0 ? ` · ${num(conti[k].scivolo)} di scivolo al ${SCIVOLO_PCT} %` : ''}`
-          : ''))}
+        ${renderCoverageVals(scen, conti.map(c => c && c.value), 'fw-700',
+          scen.map((s, k) => conti[k] ? notaRedditoLavoro(s, conti[k], num) : ''))}
       </div>
     </div>`;
 }
