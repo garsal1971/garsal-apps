@@ -4245,10 +4245,23 @@ quello che la home mostra. Vale la stessa regola — non tutti i numeri di `scor
 legge. Se divergono, i backup si scrivono in una cartella e la pagina ne guarda un'altra — e non
 lo dice nessuno, perché l'elenco torna semplicemente vuoto.
 
-Il refresh token si ottiene una volta sola, a mano: OAuth client di tipo *Desktop* su Google
-Cloud, scope `https://www.googleapis.com/auth/drive.file`, consenso una volta, e si conserva il
-`refresh_token`. `drive.file` basta e avanza — dà accesso ai soli file creati da quel client,
-cioè i backup, e non a tutto il Drive.
+Il refresh token si ottiene **una volta sola** con `scripts/drive-refresh-token.py`, da
+eseguire sul proprio PC: chiede id e segreto del client *Applicazione desktop*, apre il browser
+per il consenso e stampa il token, dopo averlo **provato**. Non scrive niente da nessuna parte.
+
+⚠️ **L'app va portata in Produzione** (Google Auth Platform → Pubblico → *Pubblica app*): in
+stato «Test» Google fa scadere i refresh token dopo **7 giorni**, e il backup fallirebbe la
+seconda domenica con `invalid_grant` senza che il codice c'entri niente.
+
+⚠️ `drive.file` basta e avanza — dà accesso ai **soli file creati da quel client**, cioè i backup,
+e non a tutto il Drive; ed è non sensibile, quindi pubblicare non chiama in causa la verifica di
+Google, che `drive.readonly` invece richiederebbe.
+
+⚠️ Nello script `access_type=offline` **e** `prompt=consent` ci sono tutt'e due: senza il primo
+Google non manda nessun refresh token, senza il secondo non lo manda **dalla seconda volta in
+poi** — e si guarda una risposta che sembra riuscita e non ha il campo che serve. Il redirect è
+un **loopback su porta a caso**, che per un client desktop non va registrato: il vecchio
+`urn:ietf:wg:oauth:2.0:oob` è dismesso e risponde 400.
 
 Nessuna password del database: come in `deploy.yml`, la CLI si crea da sola un ruolo di login
 temporaneo, e **non si usa `supabase link`** — chiama `/v1/projects/{ref}/api-keys`, che dal
