@@ -30,7 +30,7 @@
 // La relazione porta la sua versione come le app: due relazioni della stessa
 // settimana generate da due versioni diverse dello script non si distinguono
 // altrimenti, ed è la prima cosa che si vuole sapere quando una sezione manca.
-const VERSIONE = 'v1.0.0';
+const VERSIONE = 'v1.0.1';
 
 const BASE  = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const KEY   = process.env.SUPABASE_SERVICE_KEY || '';
@@ -400,7 +400,8 @@ async function sezTasks() {
     n(campo(x, 'success_points')),
   ];
 
-  const storia = await righe('ts_history', { limit: 4000, order: (primaCol('ts_history', 'timestamp', 'created_at') || '') + '.desc' });
+  const colStoria = primaCol('ts_history', 'timestamp', 'created_at');
+  const storia = await righe('ts_history', { limit: 4000, ...(colStoria ? { order: `${colStoria}.desc` } : {}) });
   const recenti = (storia || []).filter((h) => {
     const q = String(campo(h, 'timestamp', 'created_at') || '').slice(0, 10);
     return q >= new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
@@ -759,9 +760,10 @@ async function sezMemo() {
 
 // ── 💰 Finanza ─────────────────────────────────────────────────────────────
 async function sezFinanza() {
+  const colSnap = primaCol('fnz_dashboard_snapshots', 'snapshot_date', 'created_at');
   const snap = await righe('fnz_dashboard_snapshots', {
     limit: 1,
-    order: (primaCol('fnz_dashboard_snapshots', 'snapshot_date', 'created_at') || 'created_at') + '.desc',
+    ...(colSnap ? { order: `${colSnap}.desc` } : {}),
   });
   const s = (snap || [])[0];
   const d = (s && s.details) || {};
@@ -1093,7 +1095,12 @@ async function sezSos() {
 // ── 🏦 Conti bancari e profilo ─────────────────────────────────────────────
 async function sezConti() {
   const conti = await righe('cm_bank_connections', { limit: 200 });
-  const sync  = (await righe('cm_sync_log', { limit: 500, order: (primaCol('cm_sync_log', 'created_at') || 'created_at') + '.desc' })) || [];
+  // ⚠️ cm_sync_log NON ha created_at: porta started_at/finished_at (nasce come
+  // ca_sync_log in 20260718110000). Il nome si cerca fra quelli possibili e, se
+  // non c'è, si legge senza ordinare — una colonna indovinata fa fallire la
+  // lettura intera con un 400, cioè perde la sezione per un ordinamento.
+  const colSync = primaCol('cm_sync_log', 'started_at', 'finished_at', 'created_at', 'synced_at');
+  const sync  = (await righe('cm_sync_log', { limit: 500, ...(colSync ? { order: `${colSync}.desc` } : {}) })) || [];
   const prof  = ((await righe('cm_profile', { limit: 5 })) || [])[0];
   const disp  = (await righe('cm_push_devices', { limit: 50 })) || [];
 
@@ -1113,7 +1120,7 @@ async function sezConti() {
               esc(campo(c, 'display_name') || '<span class="muto">da battezzare</span>'),
               esc(campo(c, 'aspsp_name', 'institution_name') || '—'),
               esc((campo(c, 'uses') || []).join(', ') || '<span class="muto">nessun uso</span>'),
-              s ? istante(campo(s, 'created_at')) : '<span class="muto">mai</span>',
+              s ? istante(campo(s, 'finished_at', 'started_at', 'created_at')) : '<span class="muto">mai</span>',
             ];
           }))
       : null,
