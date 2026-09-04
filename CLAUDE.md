@@ -342,18 +342,28 @@ sotto 🏛️ Simulazione INPS. Quello che servirà, quello con cui ci si arriva
 (La sezione della barra si chiamava *Previdenza* e la voce *Coperture per esigenze future*: sono
 solo etichette, `data-view` resta `coperture` e la tabella `fnz_coverage_items`.)
 
-⚠️ **Il fabbisogno non è un numero solo: si conta fino a una data, e le date sono tre.** «Costo
-della vita» e «contribuzione alla pensione» sono flussi che durano finché non si smette di
-lavorare, quindi valgono di più uscendo a vecchiaia che cinque anni prima — ed è esattamente la
-differenza che la pagina esiste per mostrare.
+⚠️ **Il fabbisogno non è un numero solo: si conta fino a una data, e le date sono quattro.**
+«Costo della vita» e «contribuzione alla pensione» sono flussi che durano finché non si smette
+di lavorare, quindi valgono di più uscendo a vecchiaia che cinque anni prima — ed è esattamente
+la differenza che la pagina esiste per mostrare.
 
 | Scenario | Data |
 |---|---|
+| 🌿 Uscita naturale | Anticipata **− `USCITA_NATURALE_ANNI`, costante fissa = 5 anni** |
 | 🧭 Uscita concordata | Anticipata **− la somma di `uscita()`** (di partenza 5 + 1 + 2 = 8 anni) |
 | 🚪 Pensione anticipata | `fnz_pension_forecast.pension_date`, scenario `anticipata` |
 | 🏛️ Pensione di vecchiaia | `fnz_pension_forecast.pension_date`, scenario `vecchiaia` |
 
-⚠️ **La prima data è l'unica delle tre che si decide, e non è più un numero solo.** Fino alla
+⚠️ **La prima colonna è il METRO e non un piano**, ed è l'unica col fondo azzurro (`.cov-rif`,
+sulle celle `.cov-val` e sulla colonna del riepilogo): risponde a «uscendo cinque anni prima
+dell'anticipata, senza aver trattato niente con nessuno, quanto servirebbe?». I suoi 5 anni sono
+una **costante** e non la somma di `uscita()` — legarla alle durate della trattativa la farebbe
+muovere insieme a quello che dovrebbe misurare, e cambiando 5+1+2 dal ✎ si sposterebbero tutt'e
+due le colonne invece della sola concordata. ⚠️ Sta **per prima** anche se la sua data cade
+**dopo** quella dell'uscita concordata (−5 contro −8): l'ordine delle colonne è quello di
+lettura — prima il riferimento, poi i piani — non quello del calendario.
+
+⚠️ **🧭 Uscita concordata è l'unica delle quattro che si decide, e non è un numero solo.** Fino alla
 v1.7.0 era la costante `COVERAGE_ANNI_ACCOMPAGNAMENTO = 5`; ora sono **tre durate che si
 sommano** — accompagnamento dell'azienda, garden leave che l'azienda concede **in più**, e
 aspettativa non retribuita che ci si prende da sé — perché sono tre cose diverse, si trattano
@@ -407,22 +417,24 @@ per difetto l'altra. La fine si **ricava** e non si scrive: un 2034 messo a mano
 direbbe ancora 2034. Il conto è in anni interi (`2034 − anno in corso`) così si rifà a mente, e a
 corso finito la voce vale zero — che è quello che sarà.
 
-⚠️ **«Accordo con azienda» è l'unica voce che vale DIVERSO nelle tre colonne**, ed è la ragione
-per cui anche le dotazioni ne hanno tre (prima ne avevano una sola, *Valore oggi*): l'accordo
-esiste nel piano dell'uscita concordata e non negli altri due, dove si lavora fino alla
-pensione. Il conto è `coverageAccordoAzienda(sc)`:
+⚠️ **«Accordo con azienda» è l'unica voce che vale DIVERSO da una colonna all'altra**, ed è la
+ragione per cui anche le dotazioni ne hanno quattro (prima ne avevano una sola, *Valore oggi*):
+l'accordo esiste nel piano dell'uscita concordata e non negli altri, dove si lavora fino alla
+pensione oppure si esce senza aver trattato niente. Il conto è `coverageAccordoAzienda(sc)`:
 
 | Ingrediente | Da dove |
 |---|---|
 | Retribuzione di un anno | 💶 Reddito, riquadro *Redditi*, riga **UniCredit lordo** dell'anno più recente **che ce l'ha** — stessa regola di «Pensione Ada» |
 | Netto | − `TAX_TFR_SEPARATA` (27 %): l'incentivo all'esodo è tassato a tassazione **separata**, non con l'IRPEF della busta |
-| Anni | `accordoAnni()`, **uno per scenario** (di partenza 3 · 0 · 0), in `cm_settings` chiave `fnz_accordo_azienda_anni` |
+| Anni | `accordoAnni()`, **uno per scenario** (di partenza 0 · 3 · 0 · 0), in `cm_settings` chiave `fnz_accordo_azienda_anni` |
 
 ⚠️ **Gli anni si scrivono per colonna e non si ricavano dalle durate di `uscita()`**: legarli
-alla loro somma scriverebbe lo stesso importo in tutte e tre le colonne, che è l'opposto di quel
-che la tabella mostra. **Zero è una risposta buona**, non un dato mancante: nelle due colonne
-della pensione dice «qui l'azienda non mette niente». Non stanno in `fnz_coverage_items` perché
-lì c'è **una riga per voce**, non una per voce e scenario.
+alla loro somma scriverebbe lo stesso importo in tutte le colonne, che è l'opposto di quel che
+la tabella mostra. **Zero è una risposta buona**, non un dato mancante: nelle due colonne della
+pensione — e nella 🌿 uscita naturale, dove non si è trattato niente — dice «qui l'azienda non
+mette niente». Resta però **modificabile dal ✎** anche lì: la chiave `naturale` sta in
+`ACCORDO_DEFAULT` come le altre tre, e il form ne disegna una casella per colonna. Non stanno in
+`fnz_coverage_items` perché lì c'è **una riga per voce**, non una per voce e scenario.
 
 ⚠️ Il 27 % è la **stessa stima dichiarata** del TFR (vedi il regime fiscale degli asset), con lo
 stesso caveat: l'aliquota vera dipende dal reddito di riferimento degli ultimi cinque anni.
@@ -431,7 +443,7 @@ L'etichetta della riga la scrive accanto al numero, insieme all'anno del reddito
 ⚠️ Il form di una dotazione **non chiede la periodicità**: una dotazione è quello che c'è oggi e
 la sua colonna non ha un orizzonte su cui moltiplicare, quindi `annuo` lì darebbe `null` e basta.
 Un importo **scritto a mano** su questa voce resta un override come su tutte le altre, ma vale
-**uguale su tutte e tre le date** — e il badge lo dice invece di mostrare «al posto di X», che
+**uguale su tutte le date** — e il badge lo dice invece di mostrare «al posto di X», che
 sarebbe la cifra di una colonna sola.
 
 ⚠️ **L'asset si collega per id e non si indovina dal titolo**: una voce agganciata al nome
@@ -449,7 +461,7 @@ io».
 
 | `periodicity` | Come si conta |
 |---|---|
-| `una_tantum` | Un capitale: **stesso importo** su tutti e tre gli orizzonti |
+| `una_tantum` | Un capitale: **stesso importo** su tutti gli orizzonti |
 | `annuo` | Un flusso: **importo × anni** che mancano alla data (`sommaFlusso`) |
 
 ⚠️ **Tutto è al VALORE ATTUALE, cioè in euro di oggi**: un flusso è importo per anni, senza
@@ -480,9 +492,9 @@ dell'assicurazione va **per ultima** in `COVERAGE_ITEMS` e non è un caso — il
 di quelle che la precedono.
 
 ⚠️ **Le dotazioni sono quelle di OGGI e non si proiettano in avanti**: un TFR o un portafoglio
-proiettati sarebbero un rendimento inventato messo accanto a numeri veri. Le tre colonne
-ripetono quindi lo stesso numero tre volte per ogni voce **tranne l'accordo con l'azienda**, che
-è l'unica a dipendere dal piano che si sta guardando.
+proiettati sarebbero un rendimento inventato messo accanto a numeri veri. Le quattro colonne
+ripetono quindi lo stesso numero quattro volte per ogni voce **tranne l'accordo con l'azienda**,
+che è l'unica a dipendere dal piano che si sta guardando.
 
 ⚠️ **Le dotazioni sono al NETTO delle imposte**, ed è l'unico posto in Finanza dove il netto
 prende il posto del lordo invece di affiancarlo: una dotazione è quello con cui ci si arriva
@@ -527,7 +539,7 @@ lo segnali.
 
 I due 💬 (università di Ada, assicurazione) aprono un popup col **prompt già scritto** da
 incollare in una chat con l'IA. Quello dell'assicurazione ci mette dentro i numeri che la pagina
-già conosce — le tre date, il fabbisogno voce per voce **su ciascuno dei tre orizzonti**, il
+già conosce — le quattro date, il fabbisogno voce per voce **su ciascun orizzonte**, il
 capitale da assicurare, le dotazioni, le scoperture — perché riscriverli a memoria è il modo più
 semplice di far ragionare l'IA su cifre sbagliate, e chiede come prima cosa **il premio annuo**,
 che è il numero che serve per compilare la voce. ⚠️ La voce dell'assicurazione **resta fuori dal

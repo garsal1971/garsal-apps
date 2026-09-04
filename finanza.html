@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.10.1</title>
+  <title>GarsalFinanza v1.11.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -168,6 +168,12 @@
        sarebbe il modo peggiore di toglierla — un totale più basso senza niente che dica perché. */
     .cov-off { opacity: .55; }
     .cov-off .cov-val .mono { text-decoration: line-through; }
+    /* La colonna di riferimento (uscita naturale) si distingue per il fondo azzurro: è l'unica
+       delle quattro date che non è né una scelta né una simulazione INPS, ma il metro con cui
+       si leggono le altre tre. Sta dopo .cov-val perché ne vince il fondo. */
+    .cov-rif { background: #e0f2fe; }
+    .table td.cov-rif, .table th.cov-rif,
+    .table tbody tr:hover td.cov-rif { background: #e0f2fe; }
     .table { width: 100%; border-collapse: collapse; font-size: .86rem; }
     .table th { text-align: left; font-size: .72rem; font-weight: 600; color: var(--c-muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px; white-space: nowrap; }
 .table th.th-has-filter { color: var(--c-primary); }
@@ -584,8 +590,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.10.1';
-const APP_BUILD   = '2026-09-02T11:05:00Z';
+const APP_VERSION = 'v1.11.0';
+const APP_BUILD   = '2026-09-04T10:00:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3879,13 +3885,13 @@ const USCITA_VOCI = [
 /* ⚠️ Gli anni che l'azienda pagherebbe si scrivono UNO PER SCENARIO e non si ricavano dalle
    durate dell'uscita: l'accordo esiste in un piano e non negli altri — chi lavora fino alla
    pensione anticipata non ha nessun accompagnamento da farsi pagare — e legarlo alla somma di
-   `uscita()` scriverebbe lo stesso importo in tutte e tre le colonne, che è l'opposto di quel
+   `uscita()` scriverebbe lo stesso importo in tutte le colonne, che è l'opposto di quel
    che la tabella deve mostrare. Stessa chiave/valore dell'uscita, stessa regola: casella vuota
    vale il valore di partenza e non zero.
    ⚠️ Zero è invece una risposta buona e voluta — «in questo scenario l'azienda non mette
    niente» — ed è quello che dicono di partenza le colonne della pensione. */
 const ACCORDO_CHIAVE  = 'fnz_accordo_azienda_anni';
-const ACCORDO_DEFAULT = { accompagnamento: 3, anticipata: 0, vecchiaia: 0 };
+const ACCORDO_DEFAULT = { naturale: 0, accompagnamento: 3, anticipata: 0, vecchiaia: 0 };
 function accordoAnni() {
   const v = S.accordoAnni || {};
   const n = k => { const x = parseFloat(v[k]); return Number.isFinite(x) && x >= 0 ? x : ACCORDO_DEFAULT[k]; };
@@ -3943,9 +3949,9 @@ const COVERAGE_ITEMS = [
     hint: () => 'Premio annuo della polizza. Il capitale da assicurare è nel riepilogo qui sopra.',
     fonte: 'manuale', periodicita: 'annuo', prompt: 'assicurazione' },
 
-  /* ⚠️ L'unica voce che vale DIVERSO nelle tre colonne, ed è la ragione per cui anche le
-     dotazioni ne hanno tre: l'accordo esiste nel piano dell'uscita concordata e non negli
-     altri due, dove si lavora fino alla pensione. L'importo di un anno si legge da 💶 Reddito
+  /* ⚠️ L'unica voce che vale DIVERSO da una colonna all'altra, ed è la ragione per cui anche le
+     dotazioni ne hanno quattro: l'accordo esiste nel piano dell'uscita concordata e non negli
+     altri, dove si lavora fino alla pensione o si esce senza aver trattato niente. L'importo di un anno si legge da 💶 Reddito
      (UniCredit lordo, al netto della tassazione separata) e gli anni si scrivono per colonna. */
   { side: 'dotazione',  key: 'accordo_azienda', icon: '🤝', label: 'Accordo con azienda',
     hint: () => 'Quello che l\'azienda metterebbe per l\'uscita: la retribuzione di un anno per gli anni che si riesce a farsi riconoscere.',
@@ -3979,9 +3985,10 @@ const COVERAGE_SIDES = [
   { key: 'dotazione',  icon: '🧰', title: 'Dotazioni',  sub: 'Quello con cui ci si arriva' },
 ];
 
-/* ── Le tre date ──────────────────────────────────────────────
+/* ── Le quattro date ──────────────────────────────────────────
    Vecchiaia e anticipata sono quelle della simulazione INPS (Piano pensione); l'uscita
-   concordata è l'anticipata meno la somma delle tre durate di `uscita()`. Una data che manca
+   concordata è l'anticipata meno la somma delle tre durate di `uscita()`, e l'uscita naturale
+   l'anticipata meno i 5 anni fissi di USCITA_NATURALE_ANNI. Una data che manca
    non si inventa: la colonna resta vuota e lo dice, invece di mostrare un fabbisogno contato
    su un orizzonte immaginario. */
 /* ⚠️ Si sposta di MESI e non di anni interi: le tre durate dell'uscita si scrivono a mano e
@@ -4003,6 +4010,12 @@ function anniTxt(n) {
   const t = Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
   return `${t} ann${n === 1 ? 'o' : 'i'}`;
 }
+/* ⚠️ La colonna di riferimento, e i suoi 5 anni sono una COSTANTE e non la somma di `uscita()`:
+   è il metro fisso con cui si leggono le altre — «se uscissi cinque anni prima dell'anticipata,
+   senza trattare niente con nessuno, quanto servirebbe?» — e legarla alle durate della trattativa
+   la farebbe muovere insieme a quel che dovrebbe misurare. Cambiando 5+1+2 dal ✎ si sposta la
+   sola 🧭 Uscita concordata; questa resta dov'è. */
+const USCITA_NATURALE_ANNI = 5;
 function coverageScenarios() {
   const f   = pensionForecastByScenario();
   const ant = f.anticipata?.pension_date || null;
@@ -4012,7 +4025,10 @@ function coverageScenarios() {
   // viene in più, e l'aspettativa si aggiunge ancora — quindi si esce `u.anni` prima
   // dell'anticipata, non `max()` di qualcosa.
   const acc = ant ? spostaAnni(ant, -u.anni) : null;
+  const nat = ant ? spostaAnni(ant, -USCITA_NATURALE_ANNI) : null;
   return [
+    { key: 'naturale',        icon: '🌿', label: 'Uscita naturale', breve: 'Naturale',
+      sub: `Anticipata − ${anniTxt(USCITA_NATURALE_ANNI)}`, date: nat, cls: 'cov-rif' },
     { key: 'accompagnamento', icon: '🧭', label: 'Uscita concordata', breve: 'Uscita',
       sub: `Anticipata − ${anniTxt(u.anni)}`, date: acc },
     { key: 'anticipata',      icon: '🚪',  label: 'Pensione anticipata',   breve: 'Anticipata', sub: 'Simulazione INPS', date: ant },
@@ -4164,7 +4180,7 @@ function coverageVociAttive(side) {
 function coveragePeriodicita(item) {
   return coverageRow(item)?.periodicity || item.periodicita || 'una_tantum';
 }
-/* Il valore di una voce su un orizzonte: un capitale è lo stesso su tutti e tre, un flusso no.
+/* Il valore di una voce su un orizzonte: un capitale è lo stesso su tutti, un flusso no.
    `sc.anni` null (data della simulazione mancante) porta a null e non a zero — non sapere
    quanto dura non è saperlo pari a niente. */
 function coverageValoreA(item, sc) {
@@ -4179,7 +4195,7 @@ function coverageTotaleA(side, sc) {
            escluse: COVERAGE_ITEMS.filter(i => i.side === side && coverageEsclusa(i)).length };
 }
 /* ⚠️ Anche le dotazioni si contano per scenario, ma NON perché si proiettino in avanti: TFR,
-   case e portafogli restano quello che valgono oggi, uguali in tutte e tre le colonne — una
+   case e portafogli restano quello che valgono oggi, uguali in tutte le colonne — una
    proiezione sarebbe un rendimento inventato messo accanto a numeri veri. A cambiare è la sola
    «Accordo con azienda», che esiste in un piano e non negli altri. */
 function coverageScopertura(scenario) {
@@ -4219,7 +4235,7 @@ function renderCoperture() {
     <div class="view-header">
       <div>
         <h2 class="page-title">Possibili soluzioni</h2>
-        <p class="page-sub">Quello che servirà fino a ciascuna delle tre date, e quello con cui ci si arriva</p>
+        <p class="page-sub">Quello che servirà fino a ciascuna delle quattro date, e quello con cui ci si arriva</p>
       </div>
     </div>
     ${renderCoverageRiepilogo(scen)}
@@ -4233,7 +4249,10 @@ function renderCoperture() {
 function renderCoverageRiepilogo(scen) {
   const conti = scen.map(coverageScopertura);
   const senzaData = scen.filter(s => !s.date);
-  const cella = (v, cls = '') => `<td class="mono text-right ${cls}">${fmtEUR(v)}</td>`;
+  // Le celle si scrivono per colonna e non per valore, così ciascuna si porta dietro la classe
+  // del suo scenario: la colonna di riferimento è azzurra su tutte le righe, non solo in testa.
+  const celle = (valori, cls = '') => scen.map((s, k) =>
+    `<td class="mono text-right ${cls} ${s.cls || ''}">${fmtEUR(valori[k])}</td>`).join('');
   const etichetta = (t, cls = 'fw-600') => `<td class="${cls}" style="white-space:normal;max-width:14ch">${t}</td>`;
   return `
     <div class="card">
@@ -4241,33 +4260,33 @@ function renderCoverageRiepilogo(scen) {
         <div class="card-title">📅 Quanto manca, e per quando</div>
         <span class="text-muted text-sm">Le dotazioni sono quelle di oggi</span>
       </div>
-      ${renderUscitaRiga(scen[0])}
+      ${renderUscitaRiga(scenarioEtichetta(scen))}
       ${senzaData.length ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaData.map(s => s.label).join(' e ')}: manca la data. Compila la simulazione in 🏛️ Simulazione INPS — un fabbisogno contato su un orizzonte inventato non direbbe niente.</p>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th></th>
-          ${scen.map(s => `<th class="text-right">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span></th>`).join('')}
+          ${scen.map(s => `<th class="text-right ${s.cls || ''}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span></th>`).join('')}
         </tr></thead>
         <tbody>
           <tr>
             ${etichetta('Data')}
-            ${scen.map(s => `<td class="mono text-right">${s.date ? fmtDate(s.date) : '—'}</td>`).join('')}
+            ${scen.map(s => `<td class="mono text-right ${s.cls || ''}">${s.date ? fmtDate(s.date) : '—'}</td>`).join('')}
           </tr>
           <tr>
             ${etichetta('Anni che mancano')}
-            ${scen.map(s => `<td class="mono text-right">${s.anni == null ? '—' : s.anni.toFixed(1).replace('.', ',')}</td>`).join('')}
+            ${scen.map(s => `<td class="mono text-right ${s.cls || ''}">${s.anni == null ? '—' : s.anni.toFixed(1).replace('.', ',')}</td>`).join('')}
           </tr>
           <tr>
             ${etichetta('Fabbisogno')}
-            ${conti.map(c => cella(c.fab.total)).join('')}
+            ${celle(conti.map(c => c.fab.total))}
           </tr>
           <tr>
             ${etichetta('Dotazioni')}
-            ${conti.map(c => cella(c.dot.total)).join('')}
+            ${celle(conti.map(c => c.dot.total))}
           </tr>
           <tr>
             ${etichetta('Scopertura', 'fw-700')}
-            ${conti.map(c => cella(c.scopertura, c.scopertura > 0 ? 'neg fw-700' : 'pos fw-700')).join('')}
+            ${scen.map((s, k) => `<td class="mono text-right ${conti[k].scopertura > 0 ? 'neg' : 'pos'} fw-700 ${s.cls || ''}">${fmtEUR(conti[k].scopertura)}</td>`).join('')}
           </tr>
           <tr>
             <td style="white-space:normal;max-width:24ch">
@@ -4277,15 +4296,16 @@ function renderCoverageRiepilogo(scen) {
               </div>
               <div class="text-muted text-sm">Copre le voci del fabbisogno qui sopra, premio escluso; le dotazioni non si sottraggono.</div>
             </td>
-            ${conti.map(c => cella(c.capitale, 'fw-700')).join('')}
+            ${celle(conti.map(c => c.capitale), 'fw-700')}
           </tr>
         </tbody>
       </table></div>
     </div>`;
 }
 
-/* ⚠️ La prima colonna è l'unica delle tre che si decide, non si subisce: le altre due date le
-   dà l'INPS, questa è un'ipotesi di trattativa. Perciò l'addizione sta scritta a schermo, con
+/* ⚠️ 🧭 Uscita concordata è l'unica delle quattro date che si decide, non si subisce: due le dà
+   l'INPS, la 🌿 naturale è un riferimento fisso, questa è un'ipotesi di trattativa. Perciò
+   l'addizione sta scritta a schermo, con
    accanto il ✎ che la cambia — un «Anticipata − 8 anni» senza gli addendi è un numero che non
    si può discutere con nessuno.
    ⚠️ Il ✎ sta in TESTA alla riga come sulle voci: su un telefono quel che sta a destra finisce
@@ -4343,10 +4363,10 @@ async function salvaAccordoAnni(v) {
   await loadUscita();
 }
 
-/* ⚠️ Tre colonne anche fra le dotazioni, e non perché si proiettino: TFR, case e portafogli
-   restano quello che valgono oggi e ripetono lo stesso numero tre volte. A cambiare è la sola
-   «Accordo con azienda», che c'è in un piano e non negli altri — e una colonna sola avrebbe
-   costretto a scegliere quale dei tre piani mostrare, cioè a nascondere gli altri due. */
+/* ⚠️ Una colonna per data anche fra le dotazioni, e non perché si proiettino: TFR, case e
+   portafogli restano quello che valgono oggi e ripetono lo stesso numero in ogni colonna. A
+   cambiare è la sola «Accordo con azienda», che c'è in un piano e non negli altri — e una
+   colonna sola avrebbe costretto a scegliere quale piano mostrare, cioè a nascondere gli altri. */
 function renderCoverageSide(side, scen) {
   const voci = COVERAGE_ITEMS.filter(i => i.side === side.key);
   const colonne = scen;
@@ -4372,7 +4392,7 @@ function renderCoverageSide(side, scen) {
 // numero che sta oltre il bordo è un numero che non si legge.
 function renderCoverageVals(colonne, valori, cls = 'fw-600') {
   return `<div class="cov-vals">${colonne.map((c, k) => `
-    <div class="cov-val">
+    <div class="cov-val ${c.cls || ''}">
       <div class="cov-val-label">${c.icon ? c.icon + ' ' : ''}${c.anno} · ${c.breve}</div>
       <div class="mono ${cls}">${fmtEUR(valori[k])}</div>
     </div>`).join('')}</div>`;
@@ -4380,11 +4400,15 @@ function renderCoverageVals(colonne, valori, cls = 'fw-600') {
 
 /* ⚠️ ✎ e gli altri comandi stanno in TESTA alla scheda e non in coda: su un telefono quel che
    sta a destra finisce oltre il bordo, e per raggiungerlo bisognerebbe già sapere che c'è. */
+/* ⚠️ L'etichetta della fonte si scrive una volta sola, e la colonna da cui si legge è 🧭 Uscita
+   concordata, non la prima: per ogni voce tranne l'accordo il dato è lo stesso in tutte le
+   colonne, e l'accordo è la voce che quella colonna esiste per mostrare — la 🌿 Uscita naturale
+   è un riferimento, e di partenza lì l'azienda non mette niente. */
+function scenarioEtichetta(scen) {
+  return scen.find(s => s.key === 'accompagnamento') || scen[0];
+}
 function renderCoverageRow(item, colonne) {
-  // L'etichetta della fonte si scrive una volta sola, quindi si legge sulla prima colonna: per
-  // ogni voce tranne l'accordo il dato è lo stesso in tutte e tre, e per l'accordo la prima è
-  // proprio la colonna di cui si sta parlando.
-  const base   = coverageBase(item, colonne[0]);
+  const base   = coverageBase(item, scenarioEtichetta(colonne));
   const annuo  = coveragePeriodicita(item) === 'annuo';
   const note   = coverageRow(item)?.note;
   const hint   = item.hint ? item.hint() : '';
@@ -4395,7 +4419,7 @@ function renderCoverageRow(item, colonne) {
   // valore di una colonna sola, e le altre due direbbero un'altra cifra.
   const fonte  = base.scrittoAMano
     ? (base.auto ? `<span class="badge" style="background:#fef3c7;color:#92400e">scritto a mano</span> <span class="text-muted text-sm">${
-        item.perScenario ? 'al posto del calcolo dai redditi, e uguale su tutte e tre le date' : `al posto di ${fmtEUR(base.auto.value)}`}</span>` : '')
+        item.perScenario ? 'al posto del calcolo dai redditi, e uguale su tutte le date' : `al posto di ${fmtEUR(base.auto.value)}`}</span>` : '')
     : (base.auto ? `<span class="text-muted text-sm">${base.auto.label}</span>`
                  : (item.fonte === 'manuale' ? '' : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : 'Dato non disponibile in Finanza'}</span>`));
   const esclusa = coverageEsclusa(item);
@@ -4423,7 +4447,7 @@ function openCoverageModal(side, key) {
   if (!item) return;
   const row   = coverageRow(item);
   const scen  = coverageScenarios();
-  const base  = coverageBase(item, scen[0]);
+  const base  = coverageBase(item, scenarioEtichetta(scen));
   const per   = coveragePeriodicita(item);
   const anni  = accordoAnni();
   const assetOptions = S.otherAssets
@@ -4444,7 +4468,7 @@ function openCoverageModal(side, key) {
       <div class="form-group">
         <label class="form-label">Come si conta</label>
         <select name="periodicity" class="form-input form-select">
-          <option value="una_tantum" ${per === 'una_tantum' ? 'selected' : ''}>Una volta sola — un capitale, uguale su tutte e tre le date</option>
+          <option value="una_tantum" ${per === 'una_tantum' ? 'selected' : ''}>Una volta sola — un capitale, uguale su tutte le date</option>
           <option value="annuo"      ${per === 'annuo'      ? 'selected' : ''}>Ogni anno — sommato fino alla data di ciascuno scenario</option>
         </select>
       </div>` : ''}
@@ -4539,7 +4563,7 @@ async function resetCoverageAmount(side, key) {
 }
 
 /* ⚠️ Il prompt si scrive qui e non a mano ogni volta: una domanda posta bene contiene i numeri
-   che la pagina già conosce (le tre date, il fabbisogno voce per voce, le dotazioni), e
+   che la pagina già conosce (le quattro date, il fabbisogno voce per voce, le dotazioni), e
    riscriverli a memoria in una chat è il modo più semplice di far ragionare l'IA su cifre
    sbagliate. Il popup mostra il testo e lo copia: l'analisi si fa dove si preferisce. */
 const COVERAGE_PROMPTS = {
@@ -4592,22 +4616,22 @@ Indica sempre l'anno a cui si riferiscono i prezzi che usi e segnala quali cifre
     const colonna = s => `${s.label} (${s.date ? fmtDate(s.date) : 'data da definire'}${s.anni != null ? `, fra ${s.anni.toFixed(1).replace('.', ',')} anni` : ''})`;
     const voce = (i, s) => `  · ${s.label}: ${eur(coverageValoreA(i, s))}`;
     const blocco = i => `- ${i.label}${coveragePeriodicita(i) === 'annuo'
-        ? ` — ${eur(coverageBase(i, scen[0]).value)} all'anno per gli anni che mancano:` : ' (una volta sola):'}
+        ? ` — ${eur(coverageBase(i, scenarioEtichetta(scen)).value)} all'anno per gli anni che mancano:` : ' (una volta sola):'}
 ${scen.map(s => voce(i, s)).join('\n')}`;
-    const premio = coverageBase(COVERAGE_ITEMS.find(i => i.key === 'assicurazione'), scen[0]).value;
+    const premio = coverageBase(COVERAGE_ITEMS.find(i => i.key === 'assicurazione'), scenarioEtichetta(scen)).value;
     return `Aiutami a dimensionare due coperture assicurative sulla mia famiglia, per il mercato italiano —
 una temporanea caso morte (TCM) e una copertura per invalidità permanente da infortunio e da malattia — e
 soprattutto a stimare quanto mi costerebbero all'anno.
 
 Questo è il quadro che ho già messo a fuoco. Il punto è che il fabbisogno non è un numero solo: dipende
-da quando smetto di lavorare, e gli scenari sono tre. Tutti gli importi qui sotto sono in EURO DI OGGI,
+da quando smetto di lavorare, e gli scenari sono ${scen.length}. Tutti gli importi qui sotto sono in EURO DI OGGI,
 senza rivalutazione: dimmi tu se e come tenerne conto.
 
-LE TRE DATE:
+LE DATE (la prima è un riferimento fisso: la pensione anticipata meno cinque anni):
 ${scen.map(s => `- ${colonna(s)}`).join('\n')}
 
 FABBISOGNO — quello che servirebbe alla mia famiglia se io venissi a mancare o non potessi più lavorare,
-contato fino a ciascuna delle tre date:
+contato fino a ciascuna di quelle date:
 ${vociFab.map(blocco).join('\n')}
 
 CAPITALE DA ASSICURARE — è la somma delle voci qui sopra, e le dotazioni NON sono state sottratte, per
@@ -4634,9 +4658,9 @@ Quello che ti chiedo:
 1. IL PREMIO ANNUO, che è la domanda principale: quanto costa in Italia assicurare i capitali qui sopra,
    per fasce d'età (40, 45, 50, 55 anni), fumatore e non fumatore, a capitale costante e a capitale
    decrescente. Dammi un intervallo e dimmi da cosa dipende;
-2. quale capitale TCM ha senso assicurare davvero in ciascuno dei tre scenari: quali voci del fabbisogno
+2. quale capitale TCM ha senso assicurare davvero in ciascuno scenario: quali voci del fabbisogno
    vanno coperte per intero e quali no, e se e quanto ha senso scalare le dotazioni;
-3. quale dei tre scenari conviene prendere come riferimento per la polizza, e perché;
+3. quale degli scenari conviene prendere come riferimento per la polizza, e perché;
 4. per quanti anni tenere la copertura e se conviene capitale costante o decrescente, viste le voci
    legate al mutuo e agli studi che si esauriscono nel tempo — e come far combaciare la scadenza della
    polizza con la data che avrò scelto;
