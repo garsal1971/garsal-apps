@@ -401,6 +401,70 @@ voce. ⚠️ Vuoto **non sparisce**, resta un «+ descrizione» sbiadito: il ✎
 pulsante senza niente accanto. E svuotarla **toglie la chiave** invece di salvare la stringa
 vuota, come la casella vuota di `fnz_income`.
 
+### ⏳ La macchina del tempo
+
+In cima alla pagina una barra sposta il **punto di osservazione** di mese in mese, da oggi fino
+alla più lontana delle quattro date: `⏮ Oggi · ‹ · settembre 2026 · ›`, un cursore, e la
+**percentuale di rivalutazione**. Tutta la pagina risponde allora alla domanda «e se me lo
+chiedessi da lì?».
+
+⚠️ **Le quattro date NON si spostano.** Sono la pensione che dice l'INPS e le durate della
+trattativa, e non dipendono da quando ci si fa la domanda. A spostarsi è **da dove si contano
+gli anni** (`anniFinoA` parte da `coverageOggi()`), e da lì si accorciano da soli tutti i flussi
+del fabbisogno.
+
+⚠️ **A «oggi» la pagina mostra ESATTAMENTE i numeri di prima**: `coverageMesi()` vale 0, la data
+di osservazione è oggi e `coverageFattore()` torna `1` dal ramo corto — non `Math.pow(x, 0)`. È
+la garanzia che la barra non sposti nessun conto finché non la si muove; senza, ogni apertura
+della pagina direbbe qualcosa di diverso dal giorno prima senza che nessuno l'abbia deciso.
+
+| Cosa | Alla data scelta |
+|---|---|
+| 🏠 Estinzione mutuo | **si ricalcola** col piano di ammortamento (`computeLoanValue(l, data)`) |
+| Tutto il resto — fabbisogno **e** dotazioni | si **rivaluta** di `(1+r)^anni` |
+
+⚠️ **Il mutuo si ricalcola e non si rivaluta**, ed è l'unica eccezione: il piano di ammortamento
+sa già quanto sarà il residuo quel mese, e moltiplicarlo anche per l'inflazione lo conterebbe due
+volte in senso opposto — un debito che scende non è un costo che sale. Lo dice `allaData: true`
+sulla voce in `COVERAGE_ITEMS`, ed è l'unica che ce l'ha.
+
+⚠️ **La rivalutazione passa da UN varco solo, `coverageBase()`**, e da nessun'altra parte: è la
+ragione per cui totale, scopertura, capitale da assicurare e il badge «al posto di X» dicono
+tutti la stessa cifra — sono lo stesso `value`. L'unica voce fuori è 💼 Redditi da lavoro perso,
+che non passa di lì e si rivaluta in `renderCoverageRedditoLavoro`.
+
+⚠️ **Il form dell'importo legge `coverageAuto`, non `coverageBase`**: il database parla in euro
+di **oggi**, e un «Finanza dice X» col numero già proiettato inviterebbe a ricopiarlo a mano —
+per poi rivalutarlo una seconda volta. Per la stessa ragione la casella mostra `row.amount`
+grezzo.
+
+⚠️ **Il mese scelto vive in memoria (`S.covMesi`) e non in `cm_settings`**: è una lente, non un
+pezzo del piano. Ritrovarla spostata di tre anni riaprendo la pagina vorrebbe dire leggere numeri
+proiettati credendoli quelli di oggi, che è il modo peggiore di sbagliarsi. La **percentuale**
+invece è un'ipotesi come le durate dell'uscita, e sta in `cm_settings` chiave
+**`fnz_rivalutazione`** (JSON `{pct}`, di partenza 2), letta da `loadUscita()` con le altre tre.
+⚠️ **Non è la colonna `revaluation_pct`** di `fnz_coverage_items`, che resta inutilizzata: quella
+era una percentuale per voce, questa è una sola per tutta la pagina.
+
+⚠️ **Una colonna la cui data è già passata resta a schermo, sbiadita** (`.cov-past`, badge *già
+passata*): i suoi flussi valgono zero — zero anni davanti, per il `Math.max(0, …)` di
+`anniFinoA` — e i capitali restano scritti. Sparire sarebbe il modo peggiore di dirlo: un piano
+in meno senza niente che spieghi perché.
+
+⚠️ **Il cursore ridisegna la pagina su `change` e non su `input`**: ridisegnando a ogni `input`
+l'elemento verrebbe sostituito sotto le dita e il trascinamento si fermerebbe al primo mese.
+Trascinando si aggiorna il **solo mese scritto**; le frecce ‹ › danno la precisione del mese, che
+un cursore su un telefono non dà.
+
+⚠️ **La data di osservazione si scrive coi campi locali** (`isoLocale`) e non con `toISOString()`,
+che converte in UTC — una mezzanotte italiana lì dentro è il giorno prima. E il giorno si limita
+all'ultimo del mese di arrivo: `setMonth` da solo porta il 31 gennaio + 1 mese al **3 marzo**,
+cioè sposta di un mese e due giorni.
+
+⚠️ **Le quattro date si leggono da `coverageDateScenari()`, un posto solo**: le usa
+`coverageScenarios` per disegnare le colonne e `coverageMesiMax` per sapere fin dove arriva il
+cursore. Due copie sarebbero due elenchi che divergono il giorno che se ne aggiunge una.
+
 ⚠️ **Una data che manca non si inventa**: la colonna resta vuota e lo dice. Un fabbisogno contato
 su un orizzonte immaginario è peggio di un fabbisogno che non c'è, perché sembra un numero.
 Per la stessa ragione `coverageValoreA` torna `null` — non zero — su un flusso senza orizzonte.
@@ -481,8 +545,9 @@ io».
 | `una_tantum` | Un capitale: **stesso importo** su tutti gli orizzonti |
 | `annuo` | Un flusso: **importo × anni** che mancano alla data (`sommaFlusso`) |
 
-⚠️ **Tutto è al VALORE ATTUALE, cioè in euro di oggi**: un flusso è importo per anni, senza
-rivalutazione. Le dotazioni sono in euro di oggi per costruzione — sono quello che c'è — e
+⚠️ **Tutto è al valore della DATA DI OSSERVAZIONE** — cioè in euro di oggi finché la ⏳ macchina
+del tempo sta ferma su «oggi», che è il caso normale: un flusso è importo per anni, senza
+rivalutazione composta lungo la sua durata. Le dotazioni sono in euro di oggi per costruzione — sono quello che c'è — e
 rivalutare il solo fabbisogno metterebbe a confronto due grandezze che non si possono sottrarre.
 Un domani più caro si tiene in conto scrivendo un importo annuo più alto: una scelta visibile nel
 form, non un moltiplicatore nascosto nel codice. Fino alla v1.4.0 il flusso si rivalutava di una
@@ -493,6 +558,8 @@ undici mesi di spesa.
 ⚠️ La colonna **`revaluation_pct` esiste ancora in tabella e non la legge più nessuno**
 (`20260901160000_...`): va tolta con una migration quando si tocca di nuovo questa parte — una
 colonna che nessuno riempie è un invito a reimplementare la rivalutazione una seconda volta.
+⚠️ La rivalutazione della ⏳ macchina del tempo **non è lei**: è una percentuale sola per tutta la
+pagina, in `cm_settings` chiave `fnz_rivalutazione`.
 
 ⚠️ **Dell'assicurazione ci sono DUE numeri, e sono grandezze diverse.** Il **premio** è una voce
 del fabbisogno come le altre — un costo annuo, moltiplicato per gli anni che mancano — e sta in
@@ -508,10 +575,12 @@ due domande convivono nel riepilogo invece di essere schiacciate in un numero so
 dell'assicurazione va **per ultima** in `COVERAGE_ITEMS` e non è un caso — il capitale è la somma
 di quelle che la precedono.
 
-⚠️ **Le dotazioni sono quelle di OGGI e non si proiettano in avanti**: un TFR o un portafoglio
-proiettati sarebbero un rendimento inventato messo accanto a numeri veri. Le quattro colonne
-ripetono quindi lo stesso numero quattro volte per ogni voce **tranne l'accordo con l'azienda**,
-che è l'unica a dipendere dal piano che si sta guardando.
+⚠️ **Le dotazioni non si proiettano da sé**: un TFR o un portafoglio proiettati sarebbero un
+rendimento inventato messo accanto a numeri veri. Le quattro colonne ripetono quindi lo stesso
+numero quattro volte per ogni voce **tranne l'accordo con l'azienda**, che è l'unica a dipendere
+dal piano che si sta guardando. Spostando la ⏳ macchina del tempo si rivalutano anche loro —
+ma è una scelta **visibile**, fatta muovendo una barra e con la percentuale scritta accanto, non
+un moltiplicatore che gira di nascosto.
 
 ⚠️ **Le dotazioni sono al NETTO delle imposte**, ed è l'unico posto in Finanza dove il netto
 prende il posto del lordo invece di affiancarlo: una dotazione è quello con cui ci si arriva
@@ -1524,7 +1593,14 @@ Il calcolo del patrimonio esiste in **due copie che devono restare allineate**:
 | `supabase/functions/save-snapshot/index.ts` — stesse funzioni riscritte in TypeScript | Il job delle 23:00 deve salvare lo snapshot anche se nessuno apre l'app |
 
 **Se cambi una di quelle funzioni in `finanza.html`, cambiala anche nella Edge Function**, altrimenti
-lo snapshot notturno diverge da quello che l'app mostra a schermo. La duplicazione è voluta — il
+lo snapshot notturno diverge da quello che l'app mostra a schermo.
+
+⚠️ **Un'eccezione dichiarata**: `computeLoanValue(loan, aData)` ha un secondo parametro
+**facoltativo** — la data a cui calcolare il residuo, che serve alla ⏳ macchina del tempo di
+🛡️ Possibili soluzioni. Senza data si resta a oggi, quindi ogni altro chiamante legge
+esattamente il numero di prima e la gemella nella Edge Function — che calcola sempre e solo
+oggi — **non va toccata**. Le due restano allineate perché il parametro non cambia nessun
+risultato di chi non lo passa. La duplicazione è voluta — il
 client non può delegare tutto al server perché gli servono comunque i valori live per la dashboard —
 ma non è gratis. Il modo per accorgersene: far girare le due implementazioni sugli stessi dati e
 confrontare i quattro totali e il JSON `details`, devono coincidere esattamente.
