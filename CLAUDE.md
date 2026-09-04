@@ -4129,30 +4129,65 @@ legale) e si può lanciare a mano da Actions. Fa due cose diverse:
 | **Dump** | `supabase db dump` in tre file gzippati: `schema.sql.gz`, `dati.sql.gz`, `ruoli.sql.gz` | Rimettere in piedi il database |
 | **Relazione** | `scripts/backup-report.mjs` → `relazione.html` | Sapere **cosa c'era dentro** quella settimana |
 
-⚠️ **I backup NON vanno su master, e non è una preferenza.** `netlify.toml` pubblica la radice
-del repo (`publish = "."`): un file su master è scaricabile da chiunque conosca l'indirizzo, e un
-redirect **non** lo impedisce — un file fisico ha la precedenza sui redirect (è la stessa regola
-per cui `/` è servita da `index.html`). Dump e relazione vivono quindi sul ramo **`backups`**, che
-Netlify non distribuisce e che nessun altro workflow guarda. È un ramo **orfano**: la storia dei
-backup non c'entra con quella del codice, e innestarla su master si porterebbe dentro ogni commit
-della repo.
+### ⚠️ Nel repository non resta niente, e la ragione è che è PUBBLICO
 
-⚠️ **Si tengono le ultime 12 fotografie** (`QUANTE_TENERE`, tre mesi) più `relazione-latest.html`,
-che è un indirizzo che non cambia — «l'ultima relazione» deve stare sempre allo stesso posto, o il
-collegamento va riscritto ogni settimana. Il `README.md` del ramo si **riscrive da capo** a ogni
-giro: un elenco aggiornato a mano dice il falso dopo tre settimane.
+`garsal1971/garsal-apps` è un repository **pubblico**. Patrimonio, spese, reddito e task non ci
+vanno **né su master** — dove per giunta `netlify.toml` pubblica la radice (`publish = "."`),
+quindi ogni file è anche scaricabile dal sito, e un redirect non lo impedisce perché un file
+fisico ha la precedenza — **né su un ramo a parte**, che chiunque apra la pagina del repo legge
+lo stesso. Un ramo `backups` era stato scritto e ritirato prima di girare una sola volta: è la
+soluzione che sembra prudente e non lo è.
+
+Dump e relazione salgono quindi su **Google Drive** (`scripts/backup-drive.py`), in una cartella
+dell'account di Salvatore. ⚠️ **Senza i segreti di Drive il job si ferma e non c'è nessun
+ripiego**: lasciarli «per intanto» nel repo sarebbe esattamente la cosa che questo passo esiste
+per impedire.
+
+⚠️ **Un refresh token, non un account di servizio.** Un service account non ha spazio proprio su
+Drive: caricando in una cartella condivisa da un account Google personale il file resterebbe di
+sua proprietà e la richiesta fallisce con `storageQuotaExceeded`. Funziona solo su un Drive
+condiviso, che è roba di Workspace. Col refresh token dell'account personale i file nascono
+**suoi**, nel suo spazio. È la stessa scelta già fatta per `YT_OAUTH_TOKEN`.
+
+⚠️ **I nomi sono piatti** (`2026-09-06-relazione.html`), non una cartella per data: la data si
+legge dal nome, l'elenco arriva già ordinato e la rotazione è un confronto di stringhe. Si
+tengono le ultime 12 **date** (`QUANTE_TENERE`) — le date e non i file, o un giro che ha
+prodotto un file solo farebbe sparire una fotografia intera.
 
 ⚠️ **Un dump fallito non porta giù la relazione.** Il passo del dump non fa morire il job: segna
-`DUMP_ESITO=ko`, la relazione si scrive lo stesso, il ramo si aggiorna con quello che c'è, e il
-verdetto arriva nell'ultimo passo — così il run è rosso *e* i dati leggibili ci sono comunque. Il
-`README.md` mostra un trattino dove il file manca, quindi un backup a metà si vede.
+`DUMP_ESITO=ko`, la relazione si scrive lo stesso, su Drive sale quel che c'è, e il verdetto
+arriva nell'ultimo passo — così il run è rosso *e* i dati leggibili ci sono comunque.
+
+### Come si legge: `relazione.html` + `backup-drive`
+
+`relazione.html` (voce **🗄️ Backup** nel ☰ di AppSphere) elenca le fotografie e apre la relazione
+scelta. Non parla con Drive: passa dalla Edge Function **`backup-drive`**.
+
+⚠️ **La pagina non può parlare con Drive da sé**, e non è una complicazione gratuita: servirebbe
+un token Google con lo scope `drive.readonly` — il permesso di leggere **tutto** il Drive di
+Salvatore, chiesto al login di ogni app — per arrivare a una cartella sola. Con la Edge Function
+la credenziale sta nei Secrets e la pagina presenta il suo JWT Supabase.
+
+⚠️ **Il JWT si verifica contro Supabase** (`/auth/v1/user`), non si decodifica e basta: un JWT si
+scrive a mano in dieci secondi, e questa funzione apre il patrimonio di famiglia. Passa il solo
+`BACKUP_EMAIL` — Teresa, Rosa e Ada hanno un login valido e qui non c'entrano.
+
+⚠️ **Si legge e basta**: nessuna scrittura, nessuna cancellazione. La rotazione la fa il workflow,
+che è l'unico posto dove qualcosa si cancella — una funzione raggiungibile dal browser che sa
+cancellare i backup è un backup che un giorno non c'è più. E il download controlla che il file
+stia **in quella cartella**: senza il controllo sul padre, un id qualsiasi aprirebbe qualunque
+file del Drive, cioè proprio quello che si è evitato non chiedendo `drive.readonly`.
+
+⚠️ **Dalla funzione passa solo la relazione, non i dump**: un gzip restituito come testo sarebbe
+una stringa rotta e un megabyte di JSON per niente. I dump si scaricano da Drive, e la pagina ci
+mette il collegamento. La relazione si apre in un `iframe` con `srcdoc` e `sandbox`: porta il suo
+CSS e non si mescola con quello della pagina.
 
 ### ⚠️ La relazione NON contiene i riservati
 
 Le schede di Memo, i gruppi di Events Log e i task marcati `riservato` si **contano e non si
-elencano**. La modalità nascosta esiste perché quella roba non si legga di sfuggita, e la
-relazione è un file HTML che si apre senza chiedere niente a nessuno. Nel **dump** ci sono per
-forza — quello è un backup, non una lettura.
+elencano**. La modalità nascosta esiste perché quella roba non si legga di sfuggita. Nel **dump**
+ci sono per forza — quello è un backup, non una lettura.
 
 ⚠️ Il filtro è nella **query** e non nel disegno (`filtroRiservato()`), come in `memo.html` e in
 `events-log.html`, e va scritto `or=(riservato.eq.false,riservato.is.null)`: la colonna è arrivata
@@ -4195,12 +4230,25 @@ controllo dentro la funzione ma il permesso. Da `anon` e `authenticated` non si 
 già note (`index.html` e `home/PortedApps.kt`): se divergono, il totale della relazione non è
 quello che la home mostra. Vale la stessa regola — non tutti i numeri di `score_query` sono punti.
 
-### I segreti
+### I segreti, e i due posti in cui vanno
 
-| Segreto | Serve a | Se manca |
-|---|---|---|
-| `SUPABASE_ACCESS_TOKEN` | `supabase db dump` (già usato da `deploy.yml`) | Il job si ferma subito dicendo quale manca |
-| `SUPABASE_SERVICE_KEY` | Leggere i dati per la relazione (già usato da `ytp-download-audio.yml`) | Idem |
+| Segreto | GitHub | Supabase | Serve a |
+|---|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | ✔ | — | `supabase db dump` (già usato da `deploy.yml`) |
+| `SUPABASE_SERVICE_KEY` | ✔ | — | Leggere i dati per la relazione (già usato da `ytp-download-audio.yml`) |
+| `GDRIVE_CLIENT_ID` | ✔ | ✔ | Client OAuth di Google Cloud |
+| `GDRIVE_CLIENT_SECRET` | ✔ | ✔ | idem |
+| `GDRIVE_REFRESH_TOKEN` | ✔ | ✔ | Caricare e leggere **come Salvatore** |
+| `GDRIVE_FOLDER_ID` | ✔ | ✔ | La cartella dei backup (dall'indirizzo di Drive) |
+
+⚠️ **Gli stessi quattro valori vanno in tutt'e due i posti**: il workflow carica, la Edge Function
+legge. Se divergono, i backup si scrivono in una cartella e la pagina ne guarda un'altra — e non
+lo dice nessuno, perché l'elenco torna semplicemente vuoto.
+
+Il refresh token si ottiene una volta sola, a mano: OAuth client di tipo *Desktop* su Google
+Cloud, scope `https://www.googleapis.com/auth/drive.file`, consenso una volta, e si conserva il
+`refresh_token`. `drive.file` basta e avanza — dà accesso ai soli file creati da quel client,
+cioè i backup, e non a tutto il Drive.
 
 Nessuna password del database: come in `deploy.yml`, la CLI si crea da sola un ruolo di login
 temporaneo, e **non si usa `supabase link`** — chiama `/v1/projects/{ref}/api-keys`, che dal
