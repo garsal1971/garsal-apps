@@ -545,6 +545,36 @@ semplice di far ragionare l'IA su cifre sbagliate, e chiede come prima cosa **il
 che è il numero che serve per compilare la voce. ⚠️ La voce dell'assicurazione **resta fuori dal
 proprio prompt**: il premio è quello che si sta chiedendo, e il capitale è la somma delle altre.
 
+⚠️ **💼 Redditi da lavoro perso è un terzo riquadro, e sta FUORI da ogni conto.** Sotto
+Dotazioni, con le stesse quattro colonne: quanto si continuerebbe a guadagnare lavorando fino a
+ciascuna data. Non entra nel totale delle dotazioni, né nella scopertura, né nel capitale da
+assicurare — sommarlo alle dotazioni conterebbe due volte l'accordo con l'azienda, che quello
+stesso periodo lo copre già dalla sua parte. È un metro accanto agli altri, non una voce di
+`fnz_coverage_items`: non si compila, non si esclude e non si scrive a mano.
+
+| Ingrediente | Da dove |
+|---|---|
+| Netto di un anno | 💶 Reddito → 🧾 Liquidazione, colonna **calcolata** *Reddito netto* (`INCOME_CALC.reddito_netto`, imponibile − imposta netta) dell'anno più recente **che ce l'ha** — stessa regola di «Pensione Ada» e dell'accordo |
+| Anni | `sc.anni`, gli anni che mancano da oggi alla data della colonna — gli stessi che moltiplicano i flussi del fabbisogno |
+| Scivolo | `sc.scivolo` = `USCITA_NATURALE_ANNI` (5) su 🌿 Naturale e 🧭 Concordata, **0** sulle due colonne della pensione |
+
+Il conto è `netto × [ min(anni, scivolo) × 0,80 + max(0, anni − scivolo) ]`.
+
+⚠️ **Gli anni di scivolo si contano DENTRO gli anni che mancano, non in più**: sono gli ultimi
+prima della data, quindi con un traguardo a meno di cinque anni ci finiscono tutti e il periodo
+vale interamente l'80 %. Con l'anticipata fra 9 anni e un netto di 50.000: 🌿 4 anni → 160.000,
+🧭 1 anno → 40.000, 🚪 9 anni → 450.000.
+
+⚠️ **I 5 anni sono gli STESSI di `USCITA_NATURALE_ANNI`** e non una seconda costante uguale per
+caso: l'uscita naturale *è* l'anticipata meno lo scivolo, e la concordata quello scivolo se lo
+porta dentro. Uno `SCIVOLO_ANNI = 5` scritto accanto sarebbero due verità sullo stesso dato.
+`SCIVOLO_PCT` (80) sta invece per conto suo, ed è scritto anche a schermo accanto al numero.
+
+⚠️ **Il netto si legge da `INCOME_CALC` e non si riscrive qui**: una seconda formula per lo
+stesso numero sono due redditi diversi il giorno che una delle due cambia. Ne eredita anche il
+caveat — **non toglie le addizionali** regionale e comunale — e la cella lo dice. Senza
+imponibile o imposta netta il riquadro non inventa niente: dice dove compilarli.
+
 ⚠️ **Le voci NON sono una tabella, sono schede** (`.cov-item` + `.cov-vals`): tre colonne di
 importi accanto a una voce che è prosa, coi caratteri di sistema grandi, danno righe alte mezzo
 schermo col testo oltre il bordo destro — provato e ritirato. I tre importi sono una griglia

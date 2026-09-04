@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.11.0</title>
+  <title>GarsalFinanza v1.12.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -163,6 +163,7 @@
     .cov-vals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 8px; margin-top: 8px; }
     .cov-val { background: var(--c-bg); border-radius: 8px; padding: 6px 10px; }
     .cov-val-label { font-size: .72rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .cov-val-note { font-size: .72rem; color: var(--c-muted); margin-top: 2px; }
     .cov-tot { border-top: 2px solid var(--c-border); padding-top: 12px; margin-top: 4px; }
     /* Una voce esclusa dal conto resta a schermo: sbiadita e con gli importi barrati. Sparire
        sarebbe il modo peggiore di toglierla — un totale più basso senza niente che dica perché. */
@@ -590,8 +591,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.11.0';
-const APP_BUILD   = '2026-09-04T10:00:00Z';
+const APP_VERSION = 'v1.12.0';
+const APP_BUILD   = '2026-09-04T11:30:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -4016,6 +4017,12 @@ function anniTxt(n) {
    la farebbe muovere insieme a quel che dovrebbe misurare. Cambiando 5+1+2 dal ✎ si sposta la
    sola 🧭 Uscita concordata; questa resta dov'è. */
 const USCITA_NATURALE_ANNI = 5;
+/* ⚠️ Gli anni di scivolo sono GLI STESSI cinque, e non un secondo numero uguale per caso:
+   l'uscita naturale È l'anticipata meno lo scivolo, e la concordata quello scivolo se lo porta
+   dentro. Un `SCIVOLO_ANNI = 5` scritto accanto sarebbe due verità sullo stesso dato, che
+   divergono il giorno che una delle due cambia. Le due colonne della pensione non ce l'hanno:
+   lì si lavora fino in fondo. */
+const SCIVOLO_PCT = 80;
 function coverageScenarios() {
   const f   = pensionForecastByScenario();
   const ant = f.anticipata?.pension_date || null;
@@ -4028,11 +4035,12 @@ function coverageScenarios() {
   const nat = ant ? spostaAnni(ant, -USCITA_NATURALE_ANNI) : null;
   return [
     { key: 'naturale',        icon: '🌿', label: 'Uscita naturale', breve: 'Naturale',
-      sub: `Anticipata − ${anniTxt(USCITA_NATURALE_ANNI)}`, date: nat, cls: 'cov-rif' },
+      sub: `Anticipata − ${anniTxt(USCITA_NATURALE_ANNI)}`, date: nat, cls: 'cov-rif',
+      scivolo: USCITA_NATURALE_ANNI },
     { key: 'accompagnamento', icon: '🧭', label: 'Uscita concordata', breve: 'Uscita',
-      sub: `Anticipata − ${anniTxt(u.anni)}`, date: acc },
-    { key: 'anticipata',      icon: '🚪',  label: 'Pensione anticipata',   breve: 'Anticipata', sub: 'Simulazione INPS', date: ant },
-    { key: 'vecchiaia',       icon: '🏛️', label: 'Pensione di vecchiaia', breve: 'Vecchiaia',  sub: 'Simulazione INPS', date: vec },
+      sub: `Anticipata − ${anniTxt(u.anni)}`, date: acc, scivolo: USCITA_NATURALE_ANNI },
+    { key: 'anticipata',      icon: '🚪',  label: 'Pensione anticipata',   breve: 'Anticipata', sub: 'Simulazione INPS', date: ant, scivolo: 0 },
+    { key: 'vecchiaia',       icon: '🏛️', label: 'Pensione di vecchiaia', breve: 'Vecchiaia',  sub: 'Simulazione INPS', date: vec, scivolo: 0 },
   ].map(s => ({ ...s, anni: anniFinoA(s.date), anno: s.date ? s.date.slice(0, 4) : '—' }));
 }
 
@@ -4205,6 +4213,40 @@ function coverageScopertura(scenario) {
   return { fab, dot, scopertura: fab.total - dot.total, capitale: cap.total, capitaleMancanti: cap.mancanti };
 }
 
+/* ── 💼 Redditi da lavoro — il riquadro che sta FUORI dai conti ────────────
+   Quanto si continuerebbe a guadagnare lavorando fino a ciascuna delle quattro date: il netto
+   di un anno per gli anni che mancano, con gli anni di scivolo contati all'80 %.
+
+   ⚠️ Non è una dotazione e non entra in nessun totale — né in quello delle dotazioni, né nella
+   scopertura, né nel capitale da assicurare. È un metro accanto agli altri: sommarlo alle
+   dotazioni conterebbe due volte l'accordo con l'azienda, che quello stesso periodo lo copre
+   già dalla sua parte.
+
+   ⚠️ Il netto è il «Reddito netto» calcolato di 💶 Reddito (imponibile − imposta netta) e si
+   legge da `INCOME_CALC`, non riscritto qui: una seconda formula per lo stesso numero sono due
+   redditi diversi il giorno che una delle due cambia. Vale l'anno più recente **che ce l'ha**,
+   come per «Pensione Ada» e per l'accordo: un anno appena aperto azzererebbe la voce in
+   silenzio. ⚠️ Non toglie le addizionali regionale e comunale, come dice la colonna da cui
+   viene. */
+function coverageNettoLavoro() {
+  const byYear = incomeByYear();
+  const anni = Object.keys(byYear).map(Number).filter(y => INCOME_CALC.reddito_netto(byYear[y]) != null);
+  if (!anni.length) return null;
+  const year = Math.max(...anni);
+  return { value: INCOME_CALC.reddito_netto(byYear[year]), year };
+}
+/* ⚠️ Gli anni di scivolo si contano DENTRO gli anni che mancano, non in più: sono gli ultimi
+   prima della data, quindi con un traguardo a meno di cinque anni ci finiscono tutti. Il resto
+   del periodo — se ce n'è — vale il netto pieno.
+   ⚠️ `sc.anni` null (data della simulazione mancante) porta a null e non a zero, come per i
+   flussi del fabbisogno: non sapere fino a quando non è saperlo pari a niente. */
+function coverageRedditoLavoro(sc, netto) {
+  if (!netto || sc.anni == null) return null;
+  const scivolo = Math.min(sc.anni, sc.scivolo || 0);
+  const pieni   = Math.max(0, sc.anni - scivolo);
+  return { value: netto.value * (scivolo * SCIVOLO_PCT / 100 + pieni), scivolo, pieni };
+}
+
 function renderCoperture() {
   // Primo ingresso: si disegna con quello che c'è e si ridisegna quando i dati arrivano, come
   // renderPrevidenza. Previsione INPS e reddito servono alle voci automatiche, quindi si
@@ -4241,6 +4283,7 @@ function renderCoperture() {
     ${renderCoverageRiepilogo(scen)}
     ${renderCoverageSide(COVERAGE_SIDES[0], scen)}
     ${renderCoverageSide(COVERAGE_SIDES[1], scen)}
+    ${renderCoverageRedditoLavoro(scen)}
   `);
 }
 
@@ -4387,14 +4430,42 @@ function renderCoverageSide(side, scen) {
     </div>`;
 }
 
+/* Il riquadro dei redditi da lavoro: una riga sola, le stesse quattro colonne degli altri due,
+   e sotto ogni importo gli anni da cui viene — un numero che non si può rifare a mente è un
+   numero di cui non ci si fida. */
+function renderCoverageRedditoLavoro(scen) {
+  const netto = coverageNettoLavoro();
+  const conti = scen.map(s => coverageRedditoLavoro(s, netto));
+  const num   = n => n.toFixed(1).replace('.', ',');
+  return `
+    <div class="card">
+      <div class="card-header-row">
+        <div class="card-title">💼 Redditi da lavoro perso</div>
+        <span class="text-muted text-sm">Fuori dai totali: è un riferimento</span>
+      </div>
+      <div class="cov-item">
+        <div class="text-muted text-sm">Quello che si continuerebbe a guadagnare lavorando fino a
+        ciascuna data: il netto di un anno per gli anni che mancano, con gli anni di scivolo
+        contati al ${SCIVOLO_PCT} %.</div>
+        ${netto
+          ? `<div class="text-muted text-sm">Reddito ${netto.year} · reddito netto ${fmtEUR(netto.value)} all'anno (imponibile − imposta netta, addizionali escluse)</div>`
+          : `<div class="text-muted text-sm">Manca il reddito netto: compila imponibile e imposta netta in 💶 Reddito → 🧾 Liquidazione dichiarazione.</div>`}
+        ${renderCoverageVals(scen, conti.map(c => c && c.value), 'fw-700', scen.map((s, k) => conti[k]
+          ? `${num(s.anni)} anni${conti[k].scivolo > 0 ? ` · ${num(conti[k].scivolo)} di scivolo al ${SCIVOLO_PCT} %` : ''}`
+          : ''))}
+      </div>
+    </div>`;
+}
+
 // Le celle degli importi: una per scenario, ciascuna con la sua etichetta. Vanno a capo da sé
 // (`auto-fit` in `rem`, quindi la soglia cresce col testo) invece di scorrere di lato: un
 // numero che sta oltre il bordo è un numero che non si legge.
-function renderCoverageVals(colonne, valori, cls = 'fw-600') {
+function renderCoverageVals(colonne, valori, cls = 'fw-600', note = null) {
   return `<div class="cov-vals">${colonne.map((c, k) => `
     <div class="cov-val ${c.cls || ''}">
       <div class="cov-val-label">${c.icon ? c.icon + ' ' : ''}${c.anno} · ${c.breve}</div>
       <div class="mono ${cls}">${fmtEUR(valori[k])}</div>
+      ${note && note[k] ? `<div class="cov-val-note">${note[k]}</div>` : ''}
     </div>`).join('')}</div>`;
 }
 
