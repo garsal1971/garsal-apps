@@ -1,0 +1,269 @@
+name: Backup settimanale
+
+# ⚠️ I backup NON vanno su master. `netlify.toml` pubblica la radice del repo
+# (`publish = "."`), quindi un file su master è scaricabile da chiunque
+# conosca l'indirizzo — e un redirect non lo impedisce, perché un file fisico
+# ha la precedenza sui redirect. Dump e relazione vivono quindi sul ramo
+# `backups`, che Netlify non distribuisce e nessun altro workflow guarda.
+
+on:
+  schedule:
+    # Domenica alle 02:00 UTC = 04:00 in ora legale (CEST). ⚠️ pg_cron e le
+    # Actions lavorano in UTC e non conoscono il cambio ora: tornata l'ora
+    # solare questo scatta alle 03:00 italiane. Per un backup notturno non
+    # cambia niente — è annotato perché non sembri una svista.
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      solo_relazione:
+        description: 'Salta il dump e rigenera la sola relazione'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backup-settimanale
+  cancel-in-progress: false
+
+env:
+  SUPABASE_PROJECT_REF: jajlmmdsjlvzgcxiiypk
+  RAMO_BACKUP: backups
+  # Quante fotografie tenere. Una all'settimana: 12 sono tre mesi. Il dump
+  # gzippato pesa qualche megabyte, e un repo che cresce senza fine è un repo
+  # che un giorno non si clona più.
+  QUANTE_TENERE: 12
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Controlla i segreti
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CHIAVE: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          set -euo pipefail
+          mancano=""
+          [ -n "${TOKEN:-}"  ] || mancano="$mancano SUPABASE_ACCESS_TOKEN"
+          [ -n "${CHIAVE:-}" ] || mancano="$mancano SUPABASE_SERVICE_KEY"
+          if [ -n "$mancano" ]; then
+            echo "::error::Mancano i segreti:$mancano — vanno aggiunti in Settings → Secrets → Actions"
+            exit 1
+          fi
+          echo "  → segreti a posto"
+
+      - name: Data del backup
+        id: quando
+        run: echo "giorno=$(date -u '+%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Stesso trucco di deploy.yml: niente `supabase link`, che chiama
+      # /v1/projects/{ref}/api-keys — endpoint che dal 7 agosto 2026 risponde
+      # con un errore del suo stesso schema e porterebbe giù tutto il job.
+      # Si scrivono a mano i due file che `link` metteva in supabase/.temp.
+      - name: Prepara la connessione a Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p supabase/.temp
+          printf '%s' "$SUPABASE_PROJECT_REF" > supabase/.temp/project-ref
+          curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/config/database/pooler" \
+            > /tmp/pooler.json
+          python3 - <<'PY' > supabase/.temp/pooler-url
+          import json
+          rows = json.load(open('/tmp/pooler.json'))
+          if isinstance(rows, dict):
+              rows = [rows]
+          primary = next(r for r in rows if str(r.get('database_type', '')).upper() == 'PRIMARY')
+          conn = primary['connection_string']
+          if str(primary.get('pool_mode', '')).lower() != 'session':
+              conn = conn.replace(':6543/', ':5432/')
+          print(conn, end='')
+          PY
+          echo "  → project ref e URL del pooler pronti"
+
+      # Tre file e non uno: lo schema si legge, i dati si ripristinano, i ruoli
+      # servono solo a rimettere in piedi un progetto da zero. Un dump unico
+      # obbligherebbe a leggere trentamila righe di COPY per rivedere una
+      # definizione di tabella.
+      - name: Dump del database
+        id: dump
+        if: ${{ github.event.inputs.solo_relazione != 'true' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/dump
+          esito=0
+          for pezzo in "schema:" "dati:--data-only --use-copy" "ruoli:--role-only"; do
+            nome="${pezzo%%:*}"
+            flag="${pezzo#*:}"
+            echo "▶ dump $nome"
+            # shellcheck disable=SC2086
+            if supabase db dump --linked $flag -f "/tmp/dump/${nome}.sql"; then
+              gzip -9 "/tmp/dump/${nome}.sql"
+              echo "  ✔ $(du -h "/tmp/dump/${nome}.sql.gz" | cut -f1)"
+            else
+              echo "::error::dump $nome fallito"
+              # Lo schema e i dati sono il backup: senza, il giro non è
+              # riuscito. I ruoli no — si rifanno a mano e non valgono un
+              # fallimento che nasconde un dump buono.
+              [ "$nome" = "ruoli" ] || esito=1
+            fi
+          done
+          # ⚠️ Il job NON muore qui. Un dump fallito è un guaio, ma la
+          # relazione si può scrivere lo stesso e il ramo va aggiornato con
+          # quello che c'è: il fallimento si dichiara in fondo, dopo il
+          # commit, così il run è rosso e i dati leggibili ci sono comunque.
+          if [ "$esito" != 0 ]; then
+            echo "DUMP_ESITO=ko" >> "$GITHUB_ENV"
+          fi
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import hashlib, json, pathlib
+          file = []
+          for p in sorted(pathlib.Path('/tmp/dump').glob('*.gz')):
+              file.append({
+                  'nome': p.name,
+                  'bytes': p.stat().st_size,
+                  'sha256': hashlib.sha256(p.read_bytes()).hexdigest(),
+              })
+          print('BACKUP_DUMP_INFO=' + json.dumps({'file': file}, separators=(',', ':')))
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Scrivi la relazione
+        env:
+          SUPABASE_URL: https://jajlmmdsjlvzgcxiiypk.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          BACKUP_USER_EMAIL: garsal1971@gmail.com
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dump
+          node scripts/backup-report.mjs /tmp/dump/relazione.html
+
+      - name: Metti tutto sul ramo backups
+        env:
+          GIORNO: ${{ steps.quando.outputs.giorno }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          WT=/tmp/ramo-backup
+          git fetch origin "$RAMO_BACKUP:$RAMO_BACKUP" 2>/dev/null || true
+          if git rev-parse --verify "$RAMO_BACKUP" >/dev/null 2>&1; then
+            git worktree add "$WT" "$RAMO_BACKUP"
+          else
+            # Ramo orfano: la storia dei backup non c'entra niente con quella
+            # del codice, e innestarla su master si porterebbe dietro ogni
+            # commit della repo dentro un ramo che nessuno ci legge.
+            git worktree add --detach "$WT"
+            git -C "$WT" checkout --orphan "$RAMO_BACKUP"
+            git -C "$WT" rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          mkdir -p "$WT/$GIORNO"
+          cp /tmp/dump/*.gz "$WT/$GIORNO/" 2>/dev/null || true
+          cp /tmp/dump/relazione.html "$WT/$GIORNO/relazione.html"
+          # Un indirizzo che non cambia: «l'ultima relazione» deve stare sempre
+          # allo stesso posto, o il collegamento va riscritto ogni settimana.
+          cp /tmp/dump/relazione.html "$WT/relazione-latest.html"
+
+          # Rotazione. Si tengono le ultime QUANTE_TENERE cartelle datate.
+          ls -1d "$WT"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] 2>/dev/null \
+            | sort -r | tail -n +$((QUANTE_TENERE + 1)) \
+            | while read -r vecchia; do echo "  ✂ tolgo $(basename "$vecchia")"; rm -rf "$vecchia"; done
+
+          # L'indice si riscrive da capo a ogni giro: un elenco aggiornato a
+          # mano è un elenco che dopo tre settimane dice il falso.
+          {
+            echo "# Backup di garsal-apps"
+            echo
+            echo "Ramo \`$RAMO_BACKUP\` — **non è su master e Netlify non lo pubblica**."
+            echo "Ci finiscono ogni domenica il dump del database e la relazione che ne racconta il contenuto."
+            echo
+            echo "Ultima relazione: [\`relazione-latest.html\`](relazione-latest.html)"
+            echo
+            echo "| Data | Relazione | Schema | Dati | Ruoli |"
+            echo "|---|---|---|---|---|"
+            ls -1d "$WT"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] 2>/dev/null | sort -r | while read -r d; do
+              g=$(basename "$d")
+              riga="| $g |"
+              for f in relazione.html schema.sql.gz dati.sql.gz ruoli.sql.gz; do
+                if [ -f "$d/$f" ]; then riga="$riga [$(du -h "$d/$f" | cut -f1)]($g/$f) |"; else riga="$riga — |"; fi
+              done
+              echo "$riga"
+            done
+            echo
+            echo "## Come si ripristina"
+            echo
+            echo '```bash'
+            echo "gunzip -c schema.sql.gz | psql \"\$DB_URL\""
+            echo "gunzip -c dati.sql.gz   | psql \"\$DB_URL\""
+            echo '```'
+            echo
+            echo "> Rigenerato da \`.github/workflows/backup.yml\` — non modificare a mano."
+          } > "$WT/README.md"
+
+          git -C "$WT" add -A
+          if git -C "$WT" diff --cached --quiet; then
+            echo "  → niente di nuovo, nessun commit"
+            exit 0
+          fi
+          git -C "$WT" commit -m "chore: backup del $GIORNO"
+
+          # Il push si riprova: un altro giro (o un lancio a mano) può aver
+          # spostato il ramo nel frattempo, ed è una gara, non un errore.
+          for tentativo in 1 2 3 4 5; do
+            if git -C "$WT" push origin "$RAMO_BACKUP"; then
+              echo "  ✔ spinto al tentativo $tentativo"; exit 0
+            fi
+            echo "  ⚠ push rifiutato, rileggo il ramo (tentativo $tentativo)"
+            git -C "$WT" fetch origin "$RAMO_BACKUP"
+            git -C "$WT" rebase "origin/$RAMO_BACKUP" || { echo "::error::conflitto sul ramo backups"; exit 1; }
+            sleep $((tentativo * 2))
+          done
+          echo "::error::push su $RAMO_BACKUP fallito dopo cinque tentativi"
+          exit 1
+
+      - name: Riepilogo
+        if: always()
+        env:
+          GIORNO: ${{ steps.quando.outputs.giorno }}
+        run: |
+          {
+            echo "## Backup del $GIORNO"
+            echo
+            echo "| File | Peso |"
+            echo "|---|---|"
+            for f in /tmp/dump/*; do
+              [ -f "$f" ] && echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) |"
+            done
+            echo
+            echo "Ramo: \`$RAMO_BACKUP\` · cartella \`$GIORNO/\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Il dump è riuscito?
+        if: always()
+        run: |
+          if [ "${DUMP_ESITO:-ok}" = "ko" ]; then
+            echo "::error::Il dump del database è fallito: sul ramo backups c'è la relazione ma non i dati."
+            exit 1
+          fi
+          echo "  ✔ tutto a posto"

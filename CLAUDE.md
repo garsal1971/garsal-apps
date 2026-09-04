@@ -4119,6 +4119,99 @@ sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono compari
 
 ---
 
+## Backup settimanale — il dump e la relazione
+
+`.github/workflows/backup.yml` gira **ogni domenica** (cron `0 2 * * 0`, cioè le 04:00 in ora
+legale) e si può lanciare a mano da Actions. Fa due cose diverse:
+
+| Cosa | Come | A che serve |
+|---|---|---|
+| **Dump** | `supabase db dump` in tre file gzippati: `schema.sql.gz`, `dati.sql.gz`, `ruoli.sql.gz` | Rimettere in piedi il database |
+| **Relazione** | `scripts/backup-report.mjs` → `relazione.html` | Sapere **cosa c'era dentro** quella settimana |
+
+⚠️ **I backup NON vanno su master, e non è una preferenza.** `netlify.toml` pubblica la radice
+del repo (`publish = "."`): un file su master è scaricabile da chiunque conosca l'indirizzo, e un
+redirect **non** lo impedisce — un file fisico ha la precedenza sui redirect (è la stessa regola
+per cui `/` è servita da `index.html`). Dump e relazione vivono quindi sul ramo **`backups`**, che
+Netlify non distribuisce e che nessun altro workflow guarda. È un ramo **orfano**: la storia dei
+backup non c'entra con quella del codice, e innestarla su master si porterebbe dentro ogni commit
+della repo.
+
+⚠️ **Si tengono le ultime 12 fotografie** (`QUANTE_TENERE`, tre mesi) più `relazione-latest.html`,
+che è un indirizzo che non cambia — «l'ultima relazione» deve stare sempre allo stesso posto, o il
+collegamento va riscritto ogni settimana. Il `README.md` del ramo si **riscrive da capo** a ogni
+giro: un elenco aggiornato a mano dice il falso dopo tre settimane.
+
+⚠️ **Un dump fallito non porta giù la relazione.** Il passo del dump non fa morire il job: segna
+`DUMP_ESITO=ko`, la relazione si scrive lo stesso, il ramo si aggiorna con quello che c'è, e il
+verdetto arriva nell'ultimo passo — così il run è rosso *e* i dati leggibili ci sono comunque. Il
+`README.md` mostra un trattino dove il file manca, quindi un backup a metà si vede.
+
+### ⚠️ La relazione NON contiene i riservati
+
+Le schede di Memo, i gruppi di Events Log e i task marcati `riservato` si **contano e non si
+elencano**. La modalità nascosta esiste perché quella roba non si legga di sfuggita, e la
+relazione è un file HTML che si apre senza chiedere niente a nessuno. Nel **dump** ci sono per
+forza — quello è un backup, non una lettura.
+
+⚠️ Il filtro è nella **query** e non nel disegno (`filtroRiservato()`), come in `memo.html` e in
+`events-log.html`, e va scritto `or=(riservato.eq.false,riservato.is.null)`: la colonna è arrivata
+dopo le righe, quindi le vecchie hanno NULL e con la sola uguaglianza sparirebbero tutte.
+
+⚠️ **`cm_apps.riservato` è un'altra cosa e non filtra niente qui**: quella spunta nasconde la
+*bolla* nel launcher, non i dati — Finanza è marcata così — e la relazione di Finanza è
+esattamente ciò per cui questa relazione esiste.
+
+### ⚠️ Lo schema si legge, non si indovina
+
+Metà di queste tabelle non sta in nessuna migration (`ts_*`, `hb_*`, `el_*`, `ps_*`,
+`cm_categories`, `cm_priorities`, `cm_rewards`…): sono nate a mano in produzione, e i nomi delle
+colonne non sono verificabili dal repo. Lo script legge quindi lo **spec OpenAPI di PostgREST**
+(`GET /rest/v1/`) e chiede solo colonne che esistono davvero; dove il nome può variare passa da
+`campo(riga, 'title', 'name', 'nome')`. Una tabella che non c'è dà una **riga che lo dice** nella
+sezione *⚠️ Cosa non è stato letto*, non una relazione che si interrompe a metà.
+
+Per la stessa ragione c'è la sezione **📊 Inventario**, che conta le righe di **ogni** tabella
+dello schema: è la rete che impedisce a una tabella nuova di restare invisibile finché qualcuno
+non la aggiunge a mano alle sezioni.
+
+⚠️ **Ogni sezione è indipendente**: una che salta non porta giù le altre. Una relazione parziale
+che dice cosa manca vale più di nessuna relazione.
+
+### ⚠️ I punti passano da `backup_scores`, non da una seconda formula
+
+`cm_apps.score_query` è SQL scritto in tabella che parla di `auth.uid()`. Il backup gira con la
+**service key**: lì `auth.uid()` è NULL — ogni conteggio tornerebbe zero — e `run_score_query`
+rifiuta comunque chi non presenta un JWT con l'email di Salvatore.
+`backup_scores(p_user)` (`20260904120000_backup_scores.sql`) esegue **la stessa** query di
+`cm_apps` sostituendo `auth.uid()` con l'uuid passato: non è un secondo modo di calcolare i punti,
+che sarebbero due punteggi diversi il giorno che uno dei due cambia.
+
+⚠️ **EXECUTE al solo `service_role`**: la funzione esegue SQL arbitrario preso da
+`cm_apps.score_query`, esattamente come `run_score_query_unrestricted`, e la guardia non è un
+controllo dentro la funzione ma il permesso. Da `anon` e `authenticated` non si raggiunge affatto.
+
+⚠️ **`APP_SENZA_PUNTI` è duplicato una terza volta** dentro `backup-report.mjs`, accanto alle due
+già note (`index.html` e `home/PortedApps.kt`): se divergono, il totale della relazione non è
+quello che la home mostra. Vale la stessa regola — non tutti i numeri di `score_query` sono punti.
+
+### I segreti
+
+| Segreto | Serve a | Se manca |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | `supabase db dump` (già usato da `deploy.yml`) | Il job si ferma subito dicendo quale manca |
+| `SUPABASE_SERVICE_KEY` | Leggere i dati per la relazione (già usato da `ytp-download-audio.yml`) | Idem |
+
+Nessuna password del database: come in `deploy.yml`, la CLI si crea da sola un ruolo di login
+temporaneo, e **non si usa `supabase link`** — chiama `/v1/projects/{ref}/api-keys`, che dal
+7 agosto 2026 risponde con un errore del suo stesso schema e porterebbe giù tutto il job. I due
+file che `link` metteva in `supabase/.temp` si scrivono a mano.
+
+`backup.sh` e `backup.ps1` restano quello che erano: il dump **a mano** dal proprio PC, che chiede
+la password. Non c'entrano con questo giro e non vanno tenuti allineati.
+
+---
+
 ## Development Workflow
 
 ### No build step
@@ -4385,7 +4478,8 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
-10. **Otto app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati e Calorie hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+10. **`APP_SENZA_PUNTI` vive in tre posti**: `index.html`, `home/PortedApps.kt` e `scripts/backup-report.mjs`. Se divergono, home web, home nativa e relazione settimanale mostrano tre totali diversi — dettagli in *Backup settimanale*.
+11. **Otto app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati e Calorie hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 
