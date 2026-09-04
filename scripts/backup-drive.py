@@ -110,13 +110,13 @@ def main():
     cartella = os.environ['GDRIVE_FOLDER_ID'] if os.environ.get('GDRIVE_FOLDER_ID') else None
     token = accesso()
 
-    caricati = []
+    caricati = {}
     for p in file:
         if not os.path.isfile(p):
             continue
         nome = f'{giorno}-{os.path.basename(p)}'
         r = carica(token, cartella, p, nome)
-        caricati.append(nome)
+        caricati[nome] = r.get('id')
         print(f'  ↑ {nome} ({int(r.get("size", 0)) // 1024} KB)')
     if not caricati:
         raise SystemExit('backup-drive: nessun file da caricare')
@@ -129,8 +129,16 @@ def main():
     tutti = elenco(token, cartella)
     date = sorted({f['name'][:10] for f in tutti if len(f['name']) >= 10 and f['name'][4] == '-'}, reverse=True)
     da_buttare = set(date[quante:])
+    # ⚠️ Drive ammette due file con lo stesso nome, quindi rilanciare il backup
+    # nello stesso giorno lascerebbe DUE «2026-09-04-relazione.html» e la pagina
+    # ne elencherebbe due sotto la stessa data, indistinguibili. La copia
+    # vecchia si toglie **dopo** che la nuova è salita: al contrario, un
+    # caricamento fallito porterebbe via anche quella che c'era.
+    doppioni = {f['id'] for f in tutti
+                if f['name'] in caricati and f['id'] != caricati[f['name']]}
+
     for f in tutti:
-        if f['name'][:10] in da_buttare:
+        if f['name'][:10] in da_buttare or f['id'] in doppioni:
             chiedi(f'{DRIVE}/files/{f["id"]}', intestazioni={'Authorization': f'Bearer {token}'}, metodo='DELETE')
             print(f'  ✂ {f["name"]}')
 
