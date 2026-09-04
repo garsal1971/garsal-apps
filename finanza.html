@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.14.0</title>
+  <title>GarsalFinanza v1.15.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -598,8 +598,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.14.0';
-const APP_BUILD   = '2026-09-04T13:30:00Z';
+const APP_VERSION = 'v1.15.0';
+const APP_BUILD   = '2026-09-04T14:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -4334,13 +4334,12 @@ function renderCoverageRiepilogo(scen) {
         <div class="card-title">📅 Quanto manca, e per quando</div>
         <span class="text-muted text-sm">Le dotazioni sono quelle di oggi</span>
       </div>
-      ${renderUscitaRiga(scenarioEtichetta(scen))}
       ${senzaData.length ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaData.map(s => s.label).join(' e ')}: manca la data. Compila la simulazione in 🏛️ Simulazione INPS — un fabbisogno contato su un orizzonte inventato non direbbe niente.</p>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th></th>
           ${scen.map(s => `<th class="text-right ${s.cls || ''}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
-            ${renderScenarioNota(s)}</th>`).join('')}
+            ${renderUscitaNota(s)}${renderScenarioNota(s)}</th>`).join('')}
         </tr></thead>
         <tbody>
           <tr>
@@ -4426,20 +4425,20 @@ function openScenarioNotaModal(key) {
 
 /* ⚠️ 🧭 Uscita concordata è l'unica delle quattro date che si decide, non si subisce: due le dà
    l'INPS, la 🌿 naturale è un riferimento fisso, questa è un'ipotesi di trattativa. Perciò
-   l'addizione sta scritta a schermo, con
-   accanto il ✎ che la cambia — un «Anticipata − 8 anni» senza gli addendi è un numero che non
-   si può discutere con nessuno.
-   ⚠️ Il ✎ sta in TESTA alla riga come sulle voci: su un telefono quel che sta a destra finisce
-   oltre il bordo. */
-function renderUscitaRiga(sc) {
+   l'addizione sta scritta **sotto il titolo della sua colonna**, con accanto il ✎ che la cambia —
+   un «Anticipata − 8 anni» senza gli addendi è un numero che non si può discutere con nessuno.
+   ⚠️ Sta in quella cella e non sopra la tabella: è una proprietà di quella colonna, e in cima
+   parlava di una colonna che il lettore doveva ancora trovare.
+   ⚠️ Non ripete né il nome né la data — l'intestazione porta già il primo e la riga «Data» la
+   seconda — e passa dallo stesso `.cov-desc` della descrizione: va a capo invece di allargare la
+   colonna, che con l'intestazione `nowrap` la spingerebbe oltre il bordo. */
+function renderUscitaNota(sc) {
+  if (sc.key !== 'accompagnamento') return '';
   const u = uscita();
   const addendi = USCITA_VOCI.map(o => `${anniTxt(u[o.key])} di ${o.label.toLowerCase()}`).join(' + ');
-  return `
-    <div class="hstack gap-4 mb-12" style="flex-wrap:wrap">
+  return `<div class="cov-desc text-sm">
       <button class="btn-icon" data-action="edit-uscita" title="Cambia le durate dell'uscita">✎</button>
-      <span class="fw-600">${sc.icon} ${sc.label}</span>
-      <span class="text-muted text-sm">${addendi} = ${anniTxt(u.anni)} prima dell'anticipata${
-        sc.date ? `, cioè dal ${fmtDate(sc.date)}` : ''}</span>
+      <span>${addendi} = ${anniTxt(u.anni)} prima dell'anticipata</span>
     </div>`;
 }
 
