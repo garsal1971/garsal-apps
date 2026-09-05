@@ -1108,6 +1108,30 @@ restano `'attesa'`, che è quello che erano davvero: l'app sapeva parlare in un 
 | `frz_vault` | Una riga per utente: dov'è la cartella su Drive e i suoi due oggetti di servizio, più le date di collaudo ed export |
 | `frz_files` | Una riga per file: `drive_file_id`, `meta_enc` (nome, tipo, dimensione vera, note — **tutto cifrato**), peso del cifrato |
 | `frz_thumbs` | Le miniature, cifrate. Tabella a parte perché l'elenco si legge a ogni apertura e deve restare leggero |
+| `frz_boxes` | Gli **scomparti**: `meta_enc` (nome ed emoji, cifrati), `position`. `frz_files.box_id` li collega |
+
+⚠️ **Gli scomparti sono ORGANIZZAZIONE, non separazione**, e il nome inganna: due scomparti
+**non si proteggono a vicenda** — le 24 parole sono una sola per tutto il forziere, quindi chi
+lo apre li apre tutti. Servono a tenere in ordine (Documenti, Casa, Ada). La separazione vera —
+un forziere che l'altro non apre — vorrebbe dire **24 parole per forziere**, cioè N segreti da
+ricordare per sempre: è un'altra funzionalità e va decisa sapendo che costa quello.
+
+⚠️ **Il nome dello scomparto è cifrato** come quello dei file: uno scomparto «Divorzio» scritto
+in chiaro in una colonna racconta la storia da solo, che è precisamente ciò che
+`frz_files.meta_enc` esiste per evitare. Ne discende che l'elenco degli scomparti si legge solo
+a forziere aperto — e va bene, perché prima non c'è comunque niente da vedere.
+
+⚠️ **Su Drive non cambia niente: nessuna sottocartella per scomparto.** Una cartella «Divorzio»
+rimetterebbe in chiaro proprio il nome appena cifrato, e vanificherebbe l'aver dato ai file nomi
+uuid. Gli scomparti vivono **solo nell'indice cifrato**, quindi la proprietà «ogni `.gpg` si
+riapre da solo» resta intatta: perso il database si perde l'ordine, non un byte.
+
+⚠️ **`box_id` è `ON DELETE SET NULL`, non CASCADE**: cancellare uno scomparto non porta via i
+file, che tornano in «Senza scomparto» — un contenitore che si porta dietro il contenuto è il
+modo più veloce di perdere un documento per sbaglio. NULL è uno stato buono e non un dato
+mancante, ed è per questo che le righe già in archivio non hanno avuto bisogno di nessuna
+migrazione. La conferma di eliminazione **dice cosa non succede**, o davanti a trenta documenti
+si preme Annulla.
 
 ⚠️ **In queste tabelle non c'è niente da attaccare, ed è la scelta che regge tutto.** Il
 segreto sono **24 parole** che stanno solo nella testa di Salvatore; i file cifrati stanno su
@@ -3757,11 +3781,38 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   versione installata oggi sulla gran parte dei computer. Con SEIPDv1 il file lo apre qualunque gpg
   degli ultimi vent'anni, ed è tutto il punto di aver scelto questo formato. **Verificato**: file
   prodotto dalla pagina, aperto da **GnuPG 2.4.4** con `--use-embedded-filename`, byte identici.
-- **Le librerie stanno in `/vendor/` sul nostro dominio, non su un CDN**: questa pagina maneggia le
-  24 parole, e una libreria servita da terzi può essere sostituita a runtime e portarsele via senza
-  che nessuno se ne accorga. ⚠️ È una **deroga** alla regola «ogni app è un file HTML solo», ed è
-  l'unica ragione per cui la si accetta. 7-Zip si carica **solo premendo Esporta**, così l'uso
-  quotidiano resta leggero.
+- ⚠️ **QUESTA PAGINA NON CARICA NIENTE DA TERZI** (v1.2.0), ed è la regola che la protegge più di
+  ogni altra: mentre è aperta tiene in memoria le 24 parole, quindi **qualunque** script che gira
+  qui dentro può leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
+  codice che qualcun altro può cambiare quando vuole.
+  ⚠️ Fino alla v1.1.0 la regola era **scritta e non rispettata**: accanto a OpenPGP e 7-Zip
+  vendorizzati c'era `supabase-js@2` da jsDelivr — per giunta non fissato a una versione, cioè
+  «l'ultima 2.x che servono oggi». Al suo posto c'è ora un **client PostgREST minimale** scritto
+  nella pagina, con la stessa forma di chiamata di supabase-js (`db('tab').select().eq(…)`,
+  risposta `{data, error}`) così chi arriva dalle altre app non impara un secondo dialetto.
+  ⚠️ `esegui()` **rifiuta una PATCH o una DELETE senza filtri**: qui non capita, ma il giorno che
+  una riga si scrivesse senza `.eq()` il danno sarebbe silenzioso e completo. È lo stesso
+  ragionamento dei DELETE col `user_id` ridondante in Obiettivi.
+  ⚠️ Via anche **Google Fonts**: un CSS non legge una variabile JavaScript, quindi il rischio era
+  di un altro ordine — ma «da terzi non si carica niente» è una regola che regge solo senza
+  eccezioni, e i caratteri di sistema qui non costano niente.
+- **Le due librerie stanno in `/vendor/` sul nostro dominio**, ferme e verificabili. ⚠️ È una
+  **deroga** alla regola «ogni app è un file HTML solo», ed è l'unica ragione per cui la si
+  accetta. 7-Zip si carica **solo premendo Esporta**, così l'uso quotidiano resta leggero.
+- **Gli scomparti** (v1.2.0): una barra di pillole sopra l'elenco — `Tutti · 📁 nome · Senza
+  scomparto · ➕`. Il ➕ carica **nello scomparto aperto**, il 📁 su una scheda sposta un file,
+  e l'export continua a fare quel che l'elenco mostra, quindi esportare un solo scomparto viene
+  gratis. ⚠️ Da «Tutti» il file nasce **fuori** da ogni scomparto invece che nel primo della
+  lista: una scelta presa dall'app al posto di chi carica si scopre cercando il file altrove.
+  ⚠️ «Senza scomparto» compare **solo se serve**: senza nessuno scomparto sarebbe un doppione di
+  «Tutti», e a zero file una pillola che non apre niente. Dettagli nello schema `frz_*`.
+- ⚠️ **F12 non si disabilita, e non servirebbe.** Da una pagina web non si può, e provarci copre
+  solo un tasto: restano il menù del browser, le altre scorciatoie, gli strumenti già aperti,
+  `view-source:`, un proxy — e il codice che blocca il tasto è a sua volta JavaScript, che si
+  mette in pausa dagli strumenti stessi. Ma soprattutto **chi preme F12 è già seduto al computer
+  col forziere aperto**: può leggere lo schermo. Il forziere protegge da chi ha il database, il
+  Drive o un backup; per il resto valgono il blocco automatico e il blocco schermo del sistema.
+  Il rischio vero della stessa famiglia era il CDN, ed è quello che si è chiuso.
 - **La chiave dell'indice è una `CryptoKey` con `extractable: false`**: esiste nel browser ma da
   JavaScript non se ne leggono i byte. Le 24 parole invece devono stare in una stringa in memoria
   (servono a OpenPGP per cifrare i file nuovi) — ⚠️ e per questo il forziere si **chiude da sé**
