@@ -3,14 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.1.0</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- ⚠️ OpenPGP.js dal NOSTRO dominio e non da un CDN. Questa pagina maneggia le 24 parole:
-     una libreria servita da terzi potrebbe essere sostituita a runtime e portarsele via
-     senza che nessuno se ne accorga. Sta nel repository, ferma e verificabile. -->
+<title>🔐 Forziere v1.2.0</title>
+<!-- ⚠️ QUESTA PAGINA NON CARICA NIENTE DA TERZI, e non è pignoleria: mentre è aperta
+     tiene in memoria le 24 parole, quindi QUALUNQUE script che gira qui dentro può
+     leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
+     codice che qualcun altro può cambiare quando vuole.
+     ⚠️ Fino alla v1.1.0 c'era `supabase-js@2` da jsDelivr — per giunta non fissato a una
+     versione — accanto a queste due librerie vendorizzate: la regola era scritta e non
+     rispettata. Al suo posto c'è ora un client PostgREST minimale scritto qui sotto,
+     come fa `weight-quest.html`.
+     ⚠️ Per la stessa ragione niente Google Fonts: un CSS non legge una variabile
+     JavaScript, quindi il rischio era di un altro ordine, ma «da terzi non si carica
+     niente» è una regola che regge solo se non ha eccezioni — e i caratteri di sistema
+     qui costano nulla. -->
 <script src="/vendor/openpgp.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Darker+Grotesque:wght@500;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
   --primary:#1F2937; --secondary:#6C5CE7; --success:#00967A; --warning:#F39C12;
@@ -19,7 +25,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{
-  font-family:'Darker Grotesque',sans-serif;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   background:linear-gradient(150deg,#0b1220 0%,#1F2937 45%,#0f172a 100%);
   background-attachment:fixed;min-height:100vh;color:var(--dark);
   padding-top:56px;overflow-x:hidden;
@@ -34,9 +40,9 @@ body{
 #garsal-top-bar-text{font-size:15px;font-weight:700;color:#fff}
 .topbar-spacer{flex:1}
 .header-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.app-version{font-family:'Space Mono',monospace;font-size:.62rem;color:rgba(255,255,255,.8);
+.app-version{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.62rem;color:rgba(255,255,255,.8);
   background:rgba(0,0,0,.18);padding:4px 9px;border-radius:99px}
-.sync-badge{font-family:'Space Mono',monospace;font-size:.62rem;padding:4px 9px;border-radius:99px;
+.sync-badge{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.62rem;padding:4px 9px;border-radius:99px;
   background:rgba(0,0,0,.2);color:rgba(255,255,255,.8);white-space:nowrap}
 .sync-badge.offline{background:rgba(231,76,60,.85);color:#fff}
 .sync-badge.ok{background:rgba(0,150,122,.9);color:#fff}
@@ -76,7 +82,7 @@ input[type=text],input[type=password],input[type=search],textarea,select{
   width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:12px;
   font-family:inherit;font-size:1rem;background:var(--input-bg);color:var(--dark);min-height:44px}
 textarea{resize:vertical;line-height:1.45}
-.mono{font-family:'Space Mono',monospace;font-size:.9rem}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 .hint{font-size:.88rem;color:var(--muted);font-weight:600;margin-top:5px}
 
 /* ── AVVISI ── */
@@ -93,8 +99,20 @@ textarea{resize:vertical;line-height:1.45}
 .ricorda{background:#0f172a;color:#e2e8f0;border-radius:16px;padding:16px 18px;margin-bottom:16px}
 .ricorda .t{font-weight:900;font-size:1.02rem;color:#fff;margin-bottom:8px}
 .ricorda ol{margin:0 0 0 18px;font-weight:700;line-height:1.6}
-.ricorda code{font-family:'Space Mono',monospace;background:rgba(255,255,255,.12);
+.ricorda code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:rgba(255,255,255,.12);
   padding:2px 6px;border-radius:5px;font-size:.86rem}
+
+/* ── SCOMPARTI ──
+   Una riga di pillole che SCORRE e non va a capo: coi caratteri di sistema grandi sei
+   scomparti su 360 px andrebbero a capo tre volte e spingerebbero l'elenco sotto la
+   piega. È la stessa regola delle righe di pulsanti. */
+.box-bar{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:thin}
+.box-bar>*{flex:0 0 auto}
+.box-pill{border:1px solid var(--border);background:var(--input-bg);color:var(--dark);
+  border-radius:99px;padding:8px 14px;font-family:inherit;font-size:.95rem;font-weight:800;
+  cursor:pointer;min-height:38px;display:flex;align-items:center;gap:6px}
+.box-pill.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.box-pill .n{opacity:.65;font-weight:700}
 
 /* ── ELENCO FILE ──
    Schede e non righe di tabella: sei colonne coi caratteri grandi si tagliano o vanno a
@@ -131,7 +149,7 @@ textarea{resize:vertical;line-height:1.45}
 .visore-corpo img,.visore-corpo video{max-width:100%;max-height:100%;display:block;object-fit:contain}
 .visore-corpo iframe{width:100%;height:100%;border:0;background:#fff}
 .visore-corpo pre{width:100%;height:100%;margin:0;padding:16px;overflow:auto;color:#e2e8f0;
-  font-family:'Space Mono',ui-monospace,monospace;font-size:.86rem;white-space:pre-wrap;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86rem;white-space:pre-wrap;
   word-break:break-word;text-align:left}
 .visore-corpo audio{width:min(90%,520px)}
 .visore-niente{color:#94a3b8;font-weight:700;text-align:center;padding:24px}
@@ -155,7 +173,7 @@ textarea{resize:vertical;line-height:1.45}
   <div class="topbar-spacer"></div>
   <div class="header-right">
     <span class="sync-badge" id="syncBadge">···</span>
-    <span class="app-version" id="versionBadge">v1.1.0</span>
+    <span class="app-version" id="versionBadge">v1.2.0</span>
   </div>
 </div>
 
@@ -242,6 +260,8 @@ textarea{resize:vertical;line-height:1.45}
         <span class="muted small" id="contoFile"></span>
       </div>
 
+      <div class="box-bar" id="barraBox"></div>
+
       <input type="search" id="inCerca" placeholder="🔎 Cerca fra i nomi (la ricerca è qui, non sul server)">
 
       <div class="row-btns">
@@ -286,8 +306,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.1.0';
-var BUILD_TIME  = '2026-09-05T13:10:00Z';
+var APP_VERSION = 'v1.2.0';
+var BUILD_TIME  = '2026-09-05T14:05:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -308,18 +328,98 @@ var SUPABASE_KEY = _IS_DEV
   ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbW15d2l0cmJtY3NteXRqYmFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3ODE1NDUsImV4cCI6MjA4OTM1NzU0NX0.pAtj6THjWXibrMulU1IVGH-BFx4YkjkNT_x07lNUfWE'
   : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
 
-var sb = null, sbAccessToken = null, currentUserId = null;
+var sbAccessToken = null, currentUserId = null, sbPronto = false;
 
 function decodeJWT(t){ try{ return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }catch(e){ return null; } }
 
+// ============================================================
+// POSTGREST — il client minimale che ha preso il posto di supabase-js
+// ============================================================
+// ⚠️ Scritto qui e non caricato da un CDN: vedi il commento in testa alla pagina. La
+// forma delle chiamate è **la stessa di supabase-js** di proposito (`db('tab').select()
+// .eq(...)`, risposta `{data, error}`), così chi arriva da tasks.html o da memo.html
+// trova quello che si aspetta e non deve imparare un secondo dialetto.
+// Serve solo il pezzo che questa pagina usa davvero: select/insert/update/delete con
+// eq, in, order e single. Non è un rimpiazzo generale della libreria.
+function db(tabella){
+  var q = { tabella: tabella, metodo: 'GET', corpo: null, filtri: [], param: [], torna: false, uno: null };
+  var e = encodeURIComponent;
+  var api = {
+    select: function(cols){
+      q.param.push('select=' + e(cols || '*'));
+      if (q.metodo !== 'GET') q.torna = true;   // `.insert(...).select()` = ridammi la riga
+      return api;
+    },
+    insert: function(riga){ q.metodo = 'POST';   q.corpo = riga; return api; },
+    update: function(riga){ q.metodo = 'PATCH';  q.corpo = riga; return api; },
+    delete: function(){      q.metodo = 'DELETE';               return api; },
+    eq: function(col, val){ q.filtri.push(e(col) + '=eq.' + e(val)); return api; },
+    in: function(col, vals){ q.filtri.push(e(col) + '=in.(' + vals.map(e).join(',') + ')'); return api; },
+    order: function(col, opt){
+      q.param.push('order=' + e(col) + '.' + (opt && opt.ascending === false ? 'desc' : 'asc'));
+      return api;
+    },
+    single:      function(){ q.uno = 'esatta'; return api; },
+    maybeSingle: function(){ q.uno = 'forse';  return api; },
+    // Thenable: `await db(...)...` funziona a qualsiasi punto della catena, come là.
+    then: function(ok, ko){ return esegui(q).then(ok, ko); }
+  };
+  return api;
+}
+
+async function esegui(q){
+  // ⚠️ Una PATCH o una DELETE senza filtri tocca TUTTE le righe che la RLS lascia
+  // passare. Qui non capita — ogni chiamata ha il suo `.eq()` — ma il giorno che una
+  // riga si scrivesse per sbaglio senza, il danno sarebbe silenzioso e completo: meglio
+  // fermarsi. È lo stesso ragionamento dei DELETE col `user_id` ridondante in Obiettivi.
+  if ((q.metodo === 'PATCH' || q.metodo === 'DELETE') && !q.filtri.length) {
+    return { data: null, error: { message: q.metodo + ' senza filtri: mi fermo', status: 0 } };
+  }
+  var url = SUPABASE_URL + '/rest/v1/' + q.tabella;
+  var pezzi = q.filtri.concat(q.param);
+  if (pezzi.length) url += '?' + pezzi.join('&');
+
+  var headers = {
+    apikey: SUPABASE_KEY,
+    Authorization: 'Bearer ' + sbAccessToken,
+    'Content-Type': 'application/json'
+  };
+  if (q.torna) headers.Prefer = 'return=representation';
+
+  try {
+    var r = await fetch(url, {
+      method: q.metodo, headers: headers,
+      body: q.corpo == null ? undefined : JSON.stringify(q.corpo)
+    });
+    if (!r.ok) {
+      var testo = await r.text();
+      var msg = testo;
+      try { msg = JSON.parse(testo).message || testo; } catch(err){}
+      // `status` serve a `handleAuthError`, che sul 401 chiude il forziere.
+      return { data: null, error: { message: msg, status: r.status } };
+    }
+    // DELETE e PATCH senza `.select()` non restituiscono niente, come là.
+    if (r.status === 204 || !q.torna && q.metodo !== 'GET') return { data: null, error: null };
+
+    var dati = await r.json();
+    if (q.uno) {
+      // Stesso contratto di supabase-js: `single()` pretende una riga sola,
+      // `maybeSingle()` ammette lo zero e risponde `data: null`.
+      if (dati.length === 1) return { data: dati[0], error: null };
+      if (dati.length === 0 && q.uno === 'forse') return { data: null, error: null };
+      return { data: null, error: { message: 'attesa una riga sola, ne sono tornate ' + dati.length, status: 406 } };
+    }
+    return { data: dati, error: null };
+  } catch(err){
+    return { data: null, error: { message: String(err && err.message || err), status: 0 } };
+  }
+}
+
 function initWithToken(token){
-  if (sb) return;
+  if (sbPronto) return;
+  sbPronto = true;
   sbAccessToken = token;
   localStorage.setItem('sb_token', token);
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth:{persistSession:false,autoRefreshToken:false},
-    global:{headers:{Authorization:'Bearer '+token}}
-  });
   var p = decodeJWT(token);
   currentUserId = p && p.sub ? p.sub : null;
   document.getElementById('authOverlay').classList.remove('on');
@@ -333,7 +433,7 @@ function handleAuthError(error){
             || m.indexOf('invalid jwt') !== -1 || m.indexOf('not authenticated') !== -1;
   if (!isAuth) return false;
   chiudiForziere('la sessione è scaduta');
-  sb = null; sbAccessToken = null;
+  sbPronto = false; sbAccessToken = null;
   localStorage.removeItem('sb_token');
   document.getElementById('authOverlay').classList.add('on');
   return true;
@@ -350,17 +450,15 @@ _authChannel.onmessage = function(e){
     // ⚠️ Uscendo dalla suite il forziere si CHIUDE, non resta aperto in una scheda
     // dimenticata: le 24 parole vivono in memoria e devono sparire con la sessione.
     chiudiForziere('sei uscito da AppSphere');
-    sb = null; sbAccessToken = null;
+    sbPronto = false; sbAccessToken = null;
     localStorage.removeItem('sb_token');
     document.getElementById('authOverlay').classList.add('on');
   } else if (e.data.type === 'TOKEN_REFRESH' && e.data.sbToken){
-    var t = e.data.sbToken;
-    localStorage.setItem('sb_token', t);
-    sbAccessToken = t;
-    if (sb) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth:{persistSession:false,autoRefreshToken:false},
-      global:{headers:{Authorization:'Bearer '+t}}
-    });
+    // Il token nuovo basta scriverlo: ogni chiamata lo rilegge da `sbAccessToken`.
+    // Con la libreria bisognava invece ricostruire il client, che è esattamente il
+    // genere di passo che una volta ci si dimentica.
+    localStorage.setItem('sb_token', e.data.sbToken);
+    sbAccessToken = e.data.sbToken;
   }
 };
 
@@ -380,6 +478,8 @@ var S = {
   parole: null,         // le 24 parole normalizzate — solo mentre il forziere è aperto
   chiaveIndice: null,   // CryptoKey non estraibile: nemmeno questo codice ne legge i byte
   file: [],             // l'elenco, coi metadati già decifrati
+  boxes: [],            // gli scomparti, coi nomi già decifrati
+  box: null,            // null = tutti · '_senza' = fuori da ogni scomparto · id = quello
   thumbs: {},           // id → dataURL, riempito pigramente
   cerca: '',
   visore: null,        // il file aperto adesso: blob + byte in chiaro, buttati alla chiusura
@@ -627,7 +727,7 @@ function rinviaBlocco(){
 });
 
 function chiudiForziere(perche){
-  S.parole = null; S.chiaveIndice = null; S.file = []; S.thumbs = {};
+  S.parole = null; S.chiaveIndice = null; S.file = []; S.boxes = []; S.box = null; S.thumbs = {};
   if (S.timerBlocco) { clearTimeout(S.timerBlocco); S.timerBlocco = null; }
   chiudiModale();
   if (S.vault) { mostraPagina('pgSblocca'); $('statoSblocco').textContent = perche ? '🔒 Chiuso: ' + perche + '.' : ''; }
@@ -639,7 +739,7 @@ function chiudiForziere(perche){
 // ============================================================
 async function startApp(){
   setSync('', 'leggo…');
-  var r = await sb.from('frz_vault').select('*').eq('user_id', currentUserId).maybeSingle();
+  var r = await db('frz_vault').select('*').eq('user_id', currentUserId).maybeSingle();
   if (handleAuthError(r.error)) return;
   if (r.error) { setSync('offline', 'errore'); alert('Errore: ' + r.error.message); return; }
   S.vault = r.data || null;
@@ -682,7 +782,7 @@ $('btnCrea').addEventListener('click', async function(){
     var idScorc = (await drive('put', { nome:'scorciatoia.gpg', base64: b64(scorc) })).id;
 
     avanzamento('barraCrea','statoCrea', 0.85, 'Registro il forziere…');
-    var ins = await sb.from('frz_vault').insert({
+    var ins = await db('frz_vault').insert({
       user_id: currentUserId,
       drive_folder_id: init.cartella,
       drive_indice_id: idIndice,
@@ -791,7 +891,8 @@ async function entraDentro(){
 // L'ELENCO
 // ============================================================
 async function caricaElenco(){
-  var r = await sb.from('frz_files').select('*').eq('user_id', currentUserId)
+  await caricaBoxes();
+  var r = await db('frz_files').select('*').eq('user_id', currentUserId)
             .order('creato_il', { ascending:false });
   if (handleAuthError(r.error)) return;
   if (r.error) { alert('Errore: ' + r.error.message); return; }
@@ -809,18 +910,196 @@ async function caricaElenco(){
   caricaMiniature();
 }
 
+// ============================================================
+// GLI SCOMPARTI
+// ============================================================
+// ⚠️ Sono ORGANIZZAZIONE, non separazione: le 24 parole sono una sola per tutto il
+// forziere, quindi chi lo apre apre tutti gli scomparti. Servono a tenere in ordine, e
+// il giorno che servisse davvero un forziere che l'altro non apre, quello vuol dire 24
+// parole per forziere — cioè N segreti per sempre, non una tendina in più.
+async function caricaBoxes(){
+  var r = await db('frz_boxes').select('*').eq('user_id', currentUserId)
+            .order('position', { ascending:true });
+  if (r.error) { S.boxes = []; return; }
+  S.boxes = [];
+  for (var i = 0; i < (r.data||[]).length; i++){
+    var meta;
+    // Come per i file: uno scomparto che non si decifra si mostra e lo dice, invece di
+    // sparire portandosi dietro l'elenco di quel che contiene.
+    try { meta = await decifraMeta(r.data[i].meta_enc); }
+    catch(e){ meta = { nome:'(nome illeggibile)', emoji:'⚠️' }; }
+    S.boxes.push({ riga: r.data[i], meta: meta });
+  }
+}
+
+function nomeBox(id){
+  if (id === '_senza') return 'Senza scomparto';
+  var b = S.boxes.find(function(x){ return x.riga.id === id; });
+  return b ? ((b.meta.emoji || '📁') + ' ' + (b.meta.nome || '')) : '';
+}
+function contaBox(id){
+  return S.file.filter(function(f){
+    return id === '_senza' ? !f.riga.box_id : f.riga.box_id === id;
+  }).length;
+}
+
+function disegnaBoxes(){
+  var senza = contaBox('_senza');
+  var h = '<button class="box-pill' + (S.box === null ? ' on' : '') + '" onclick="vaiBox(null)">' +
+          'Tutti <span class="n">' + S.file.length + '</span></button>';
+  S.boxes.forEach(function(b){
+    h += '<button class="box-pill' + (S.box === b.riga.id ? ' on' : '') +
+         '" onclick="vaiBox(\'' + b.riga.id + '\')">' +
+         esc((b.meta.emoji || '📁') + ' ' + (b.meta.nome || '')) +
+         ' <span class="n">' + contaBox(b.riga.id) + '</span></button>';
+  });
+  // ⚠️ «Senza scomparto» compare solo se serve davvero: senza nessuno scomparto
+  // sarebbe un doppione di «Tutti», e a zero file sarebbe una pillola che non apre niente.
+  if (S.boxes.length && senza)
+    h += '<button class="box-pill' + (S.box === '_senza' ? ' on' : '') + '" onclick="vaiBox(\'_senza\')">' +
+         'Senza scomparto <span class="n">' + senza + '</span></button>';
+  if (S.box && S.box !== '_senza')
+    h += '<button class="box-pill" onclick="modificaBox(\'' + S.box + '\')">✎</button>';
+  h += '<button class="box-pill" onclick="nuovoBox()">➕ Scomparto</button>';
+  $('barraBox').innerHTML = h;
+}
+
+// Dove finisce un file caricato adesso. ⚠️ Da «Tutti» e da «Senza scomparto» il file
+// nasce fuori da ogni scomparto: metterlo d'ufficio nel primo della lista sarebbe una
+// scelta presa dall'app al posto di chi carica, e la si scoprirebbe cercandolo altrove.
+function boxCorrente(){ return (S.box && S.box !== '_senza') ? S.box : null; }
+
+function vaiBox(id){ S.box = id; disegnaGriglia(); caricaMiniature(); }
+
+function nuovoBox(){
+  formBox(null);
+}
+function modificaBox(id){
+  var b = S.boxes.find(function(x){ return x.riga.id === id; });
+  if (b) formBox(b);
+}
+
+var EMOJI_BOX = ['📁','📄','🏠','🏥','💼','🎓','🚗','💳','📜','🔑','🧾','❤️'];
+
+function formBox(b){
+  var scelta = b ? (b.meta.emoji || '📁') : '📁';
+  apriModale(
+    '<h3>' + (b ? '✎ Scomparto' : '➕ Nuovo scomparto') + '</h3>' +
+    '<label for="bxNome">Nome</label>' +
+    '<input type="text" id="bxNome" maxlength="40" value="' + esc(b ? (b.meta.nome||'') : '') + '" placeholder="Documenti, Casa, Ada…">' +
+    '<div class="hint">Il nome è cifrato come quello dei file: nel database non si legge.</div>' +
+    '<label>Segno</label>' +
+    '<div class="box-bar" id="bxEmoji">' + EMOJI_BOX.map(function(e){
+      return '<button type="button" class="box-pill' + (e === scelta ? ' on' : '') +
+             '" data-e="' + e + '">' + e + '</button>';
+    }).join('') + '</div>' +
+    '<div class="row-btns">' +
+      '<button class="btn ok" id="bxOk">Salva</button>' +
+      (b ? '<button class="btn danger" id="bxDel">🗑 Elimina</button>' : '') +
+      '<button class="btn ghost" onclick="chiudiModale()">Annulla</button>' +
+    '</div><div class="hint" id="bxStato"></div>');
+
+  $('bxEmoji').addEventListener('click', function(ev){
+    var t = ev.target.closest('[data-e]');
+    if (!t) return;
+    scelta = t.dataset.e;
+    [].forEach.call(this.children, function(c){ c.classList.toggle('on', c === t); });
+  });
+  $('bxNome').focus();
+
+  $('bxOk').addEventListener('click', async function(){
+    var nome = $('bxNome').value.trim();
+    if (!nome) { $('bxStato').textContent = 'Serve un nome.'; return; }
+    this.disabled = true;
+    try {
+      var meta = await cifraMeta({ nome: nome, emoji: scelta });
+      if (b){
+        var u = await db('frz_boxes').update({ meta_enc: meta }).eq('id', b.riga.id);
+        if (u.error) throw new Error(u.error.message);
+      } else {
+        var ins = await db('frz_boxes').insert({
+          user_id: currentUserId, meta_enc: meta, position: S.boxes.length
+        }).select().single();
+        if (ins.error) throw new Error(ins.error.message);
+        S.box = ins.data.id;   // appena creato, ci si entra: è quel che si stava per fare
+      }
+      chiudiModale();
+      await caricaBoxes();
+      disegnaBoxes(); disegnaGriglia();
+    } catch(e){
+      $('bxStato').textContent = '❌ ' + e.message;
+      this.disabled = false;
+    }
+  });
+
+  if (b) $('bxDel').addEventListener('click', async function(){
+    var n = contaBox(b.riga.id);
+    // ⚠️ La conferma dice cosa NON succede: i file non si cancellano. Senza scriverlo,
+    // davanti a «elimini lo scomparto?» con dentro trenta documenti si preme Annulla —
+    // ed è la domanda giusta a cui questa app deve dare la risposta rassicurante vera.
+    if (!confirm('Elimino lo scomparto?\n\n' +
+      (n ? 'I ' + n + ' file che contiene NON si cancellano: tornano in «Senza scomparto».'
+         : 'È vuoto.'))) return;
+    this.disabled = true;
+    try {
+      var d = await db('frz_boxes').delete().eq('id', b.riga.id);
+      if (d.error) throw new Error(d.error.message);
+      S.box = null;
+      chiudiModale();
+      await caricaElenco();   // i box_id sono andati a NULL nel database: si rilegge
+    } catch(e){
+      $('bxStato').textContent = '❌ ' + e.message;
+      this.disabled = false;
+    }
+  });
+}
+
+// Spostare un file da uno scomparto all'altro.
+function spostaFile(id){
+  var f = S.file.find(function(x){ return x.riga.id === id; });
+  if (!f) return;
+  if (!S.boxes.length) return nuovoBox();
+  var attuale = f.riga.box_id || '_senza';
+  apriModale(
+    '<h3>📁 Sposta «' + esc(f.meta.nome || '') + '»</h3>' +
+    '<div class="box-bar" style="margin-top:12px">' +
+      ['_senza'].concat(S.boxes.map(function(b){ return b.riga.id; })).map(function(bid){
+        return '<button class="box-pill' + (bid === attuale ? ' on' : '') +
+               '" onclick="spostaIn(\'' + id + '\',\'' + bid + '\')">' + esc(nomeBox(bid)) + '</button>';
+      }).join('') +
+    '</div>' +
+    '<div class="row-btns"><button class="btn ghost" onclick="chiudiModale()">Annulla</button></div>');
+}
+
+async function spostaIn(id, bid){
+  var f = S.file.find(function(x){ return x.riga.id === id; });
+  if (!f) return;
+  var nuovo = bid === '_senza' ? null : bid;
+  var u = await db('frz_files').update({ box_id: nuovo }).eq('id', id);
+  if (u.error) { alert('Non ce l\'ho fatta: ' + u.error.message); return; }
+  f.riga.box_id = nuovo;
+  chiudiModale();
+  disegnaBoxes(); disegnaGriglia();
+}
+
 function filtrati(){
+  var lista = S.file;
+  if (S.box === '_senza') lista = lista.filter(function(f){ return !f.riga.box_id; });
+  else if (S.box) lista = lista.filter(function(f){ return f.riga.box_id === S.box; });
   var q = S.cerca.trim().toLowerCase();
-  if (!q) return S.file;
-  return S.file.filter(function(f){ return (f.meta.nome||'').toLowerCase().indexOf(q) !== -1; });
+  if (!q) return lista;
+  return lista.filter(function(f){ return (f.meta.nome||'').toLowerCase().indexOf(q) !== -1; });
 }
 
 function disegnaGriglia(){
   var lista = filtrati(), g = $('griglia');
+  disegnaBoxes();
   $('contoFile').textContent = S.file.length
     ? (lista.length === S.file.length ? S.file.length + ' file' : lista.length + ' di ' + S.file.length)
     : '';
   $('vuoto').style.display = S.file.length ? 'none' : 'block';
+  $('btnCarica').textContent = '📥 Metti dentro un file' +
+    (boxCorrente() ? ' → ' + nomeBox(S.box) : '');
   g.innerHTML = lista.map(function(f){
     var id = f.riga.id, m = f.meta;
     var mini = S.thumbs[id]
@@ -834,6 +1113,7 @@ function disegnaGriglia(){
       '</div>' +
       '<div class="azioni">' +
         '<button class="btn small ok" onclick="apriFile(\'' + id + '\')">👁 Apri</button>' +
+        '<button class="btn small ghost" onclick="spostaFile(\'' + id + '\')">📁</button>' +
         '<button class="btn small danger" onclick="elimina(\'' + id + '\')">🗑</button>' +
       '</div></div>';
   }).join('');
@@ -847,7 +1127,7 @@ async function caricaMiniature(){
   var ids = filtrati().slice(0, 60).map(function(f){ return f.riga.id; })
               .filter(function(id){ return !S.thumbs[id]; });
   if (!ids.length) return;
-  var r = await sb.from('frz_thumbs').select('file_id,thumb_enc').in('file_id', ids);
+  var r = await db('frz_thumbs').select('file_id,thumb_enc').in('file_id', ids);
   if (r.error || !r.data) return;
   for (var i = 0; i < r.data.length; i++){
     try {
@@ -896,14 +1176,15 @@ async function caricaFile(files){
 
       avanzamento('barraOp','statoOp', 0.95, etichetta + ' — registro…');
       var meta = { nome: f.name, tipo: f.type || '', size: f.size, il: new Date().toISOString() };
-      var ins = await sb.from('frz_files').insert({
+      var ins = await db('frz_files').insert({
         id: idRiga, user_id: currentUserId, drive_file_id: driveId,
-        meta_enc: await cifraMeta(meta), size_bytes: gpg.length
+        meta_enc: await cifraMeta(meta), size_bytes: gpg.length,
+        box_id: boxCorrente()
       }).select().single();
       if (ins.error) throw new Error(ins.error.message);
 
       if (mini){
-        var t = await sb.from('frz_thumbs').insert({
+        var t = await db('frz_thumbs').insert({
           file_id: idRiga, user_id: currentUserId, thumb_enc: await cifraBytes(mini)
         });
         if (!t.error) S.thumbs[idRiga] = 'data:image/jpeg;base64,' + b64(mini);
@@ -1049,7 +1330,7 @@ async function elimina(id){
     // su Drive un file cifrato che nessuno sa più cos'è e che nessuno può più cancellare
     // dall'app. Stessa scelta delle foto di Memo.
     await drive('delete', { id: f.riga.drive_file_id });
-    var d = await sb.from('frz_files').delete().eq('id', id);
+    var d = await db('frz_files').delete().eq('id', id);
     if (d.error) throw new Error(d.error.message);
     S.file = S.file.filter(function(x){ return x.riga.id !== id; });
     delete S.thumbs[id];
@@ -1092,7 +1373,8 @@ $('btnExport').addEventListener('click', function(){
   apriModale(
     '<h3>💾 Esporta in .7z</h3>' +
     '<p class="muted small" style="margin:8px 0 12px">Un archivio unico con ' + lista.length +
-    (lista.length === S.file.length ? ' file' : ' file <strong>dei ' + S.file.length + ' che hai</strong> — la ricerca sta filtrando l\'elenco') +
+    (lista.length === S.file.length ? ' file' : ' file <strong>dei ' + S.file.length + ' che hai</strong> — l\'elenco è filtrato' +
+      (boxCorrente() ? ' sullo scomparto ' + esc(nomeBox(S.box)) : '') + (S.cerca.trim() ? ' dalla ricerca' : '')) +
     ', <strong>in chiaro dentro</strong> e protetti dalla cifratura AES-256 del 7z. Lo apri con un doppio clic (serve 7-Zip, Keka o WinRAR).</p>' +
     (totale > 400*1024*1024 ? '<div class="avviso giallo">⚠️ Sono ' + peso(totale) +
       '. L\'archivio si costruisce nella memoria del browser: sopra il mezzo giga può non farcela. Se si ferma, esporta in due volte usando la ricerca per restringere l\'elenco.</div>' : '') +
@@ -1140,7 +1422,7 @@ async function esporta(bottone, password){
     // secondo export sullo stesso caricamento di pagina si porta dietro i file del primo.
     nomi.concat([uscita]).forEach(function(n){ try { z.FS.unlink(n); } catch(e){} });
 
-    await sb.from('frz_vault').update({ esportato_il: new Date().toISOString() })
+    await db('frz_vault').update({ esportato_il: new Date().toISOString() })
       .eq('user_id', currentUserId);
     S.vault.esportato_il = new Date().toISOString();
     disegnaAvvisi();
@@ -1247,7 +1529,7 @@ function apriCollaudo(){
     try {
       var raw = await drive('get', { id: S.vault.drive_indice_id });
       await decifraTesto(raw, can);
-      await sb.from('frz_vault').update({ collaudato_il: new Date().toISOString() })
+      await db('frz_vault').update({ collaudato_il: new Date().toISOString() })
         .eq('user_id', currentUserId);
       S.vault.collaudato_il = new Date().toISOString();
       $('coStato').innerHTML = '<span style="color:var(--success)">✅ Aprono. Il recupero funziona.</span>';
@@ -1291,7 +1573,7 @@ function cambiaPassphrase(obbligatoria){
       // continuerebbe ad aprire il forziere.
       var d = await drive('put', { nome:'scorciatoia.gpg', base64: b64(scorc), id: S.vault.drive_scorciatoia_id });
       if (d.id !== S.vault.drive_scorciatoia_id){
-        await sb.from('frz_vault').update({ drive_scorciatoia_id: d.id }).eq('user_id', currentUserId);
+        await db('frz_vault').update({ drive_scorciatoia_id: d.id }).eq('user_id', currentUserId);
         S.vault.drive_scorciatoia_id = d.id;
       }
       chiudiModale();
