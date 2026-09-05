@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.2.1</title>
+<title>🔐 Forziere v1.2.2</title>
 <!-- ⚠️ QUESTA PAGINA NON CARICA NIENTE DA TERZI, e non è pignoleria: mentre è aperta
      tiene in memoria le 24 parole, quindi QUALUNQUE script che gira qui dentro può
      leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
@@ -173,7 +173,7 @@ textarea{resize:vertical;line-height:1.45}
   <div class="topbar-spacer"></div>
   <div class="header-right">
     <span class="sync-badge" id="syncBadge">···</span>
-    <span class="app-version" id="versionBadge">v1.2.1</span>
+    <span class="app-version" id="versionBadge">v1.2.2</span>
   </div>
 </div>
 
@@ -306,8 +306,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.2.1';
-var BUILD_TIME  = '2026-09-05T16:20:00Z';
+var APP_VERSION = 'v1.2.2';
+var BUILD_TIME  = '2026-09-05T17:05:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -484,6 +484,8 @@ var S = {
   cerca: '',
   visore: null,        // il file aperto adesso: blob + byte in chiaro, buttati alla chiusura
   timerBlocco: null,
+  scorc: null,          // `scorciatoia.gpg` CIFRATA: non è un segreto (sta su Drive così
+                        // com'è), e serve a verificare la passphrase senza chiedere la rete
   occupato: 0,          // quante operazioni lunghe sono in corso adesso (vedi bloccoSeNascosto)
   timerNascosto: null
 };
@@ -770,6 +772,7 @@ window.addEventListener('pagehide', function(){
 
 function chiudiForziere(perche){
   S.parole = null; S.chiaveIndice = null; S.file = []; S.boxes = []; S.box = null; S.thumbs = {};
+  S.scorc = null;
   if (S.timerBlocco) { clearTimeout(S.timerBlocco); S.timerBlocco = null; }
   if (S.timerNascosto) { clearInterval(S.timerNascosto); S.timerNascosto = null; }
   chiudiModale();
@@ -822,6 +825,7 @@ $('btnCrea').addEventListener('click', async function(){
 
     avanzamento('barraCrea','statoCrea', 0.65, 'Preparo la scorciatoia della passphrase…');
     var scorc = await cifraTesto(can, pw);
+    S.scorc = scorc;
     var idScorc = (await drive('put', { nome:'scorciatoia.gpg', base64: b64(scorc) })).id;
 
     avanzamento('barraCrea','statoCrea', 0.85, 'Registro il forziere…');
@@ -870,6 +874,7 @@ $('btnSblocca').addEventListener('click', async function(){
   $('statoSblocco').textContent = 'Apro…';
   try {
     var scorc = await drive('get', { id: S.vault.drive_scorciatoia_id });
+    S.scorc = scorc;
     var parole;
     try { parole = await decifraTesto(scorc, pw); }
     catch(e){ throw new Error('passphrase sbagliata'); }
@@ -1334,7 +1339,7 @@ function mostraVisore(f, dati, nome){
       '<span class="muted small">' + esc(peso(dati.length)) + '</span>' +
     '</div>' +
     '<div class="visore-corpo">' + corpo + '</div>' +
-    '<div class="row-btns">' +
+    '<div class="row-btns" id="visoreAzioni">' +
       '<button class="btn ghost" onclick="chiudiModale()">Chiudi</button>' +
       '<button class="btn" onclick="scaricaDalVisore()">⬇️ Scarica lo stesso</button>' +
     '</div>' +
@@ -1351,9 +1356,87 @@ function visoreRotto(el){
     '.<br>Scaricalo per aprirlo col suo programma.</div>';
 }
 
+// ⚠️ La passphrase si verifica APRENDO la scorciatoia, non confrontandola con qualcosa
+// che sta in memoria: in memoria non c'è: allo sblocco serve ad aprire `scorciatoia.gpg`
+// e viene buttata subito, ed è giusto che resti così. Se ne escono esattamente le 24
+// parole che il forziere sta usando, è quella. È lo stesso controllo dello sblocco — e un
+// confronto con una variabile sarebbe un controllo che passa sempre.
+async function passphraseGiusta(pw){
+  if (!S.parole) return false;
+  if (!S.scorc) S.scorc = await drive('get', { id: S.vault.drive_scorciatoia_id });
+  try { return normParole(await decifraTesto(S.scorc, pw)) === S.parole; }
+  catch(e){ return false; }
+}
+
+// ⚠️ La richiesta sta DENTRO il visore e non in una seconda finestra: `#modalBody` è uno
+// solo, quindi un `apriModale` qui sopra cancellerebbe il visore, e `chiudiModale` revoca
+// il blob — cioè proprio il file che si sta per scaricare. Prende il posto della riga dei
+// pulsanti, e Annulla la rimette com'era.
+function chiediPassphrase(){
+  return new Promise(function(risolvi){
+    var azioni = $('visoreAzioni');
+    if (!azioni) return risolvi(false);
+    var pulsanti = azioni.innerHTML, conParole = false;
+
+    function chiudi(esito){ azioni.innerHTML = pulsanti; risolvi(esito); }
+
+    async function prova(){
+      var v = $('dlIn').value;
+      if (!v) return;
+      if (!S.parole) { $('dlStato').textContent = '❌ il forziere si è chiuso'; return; }
+      $('dlOk').disabled = true;
+      $('dlStato').textContent = 'Controllo…';
+      var ok;
+      try { ok = conParole ? (normParole(v) === S.parole) : await passphraseGiusta(v); }
+      catch(e){ ok = false; }
+      if (ok) return chiudi(true);
+      $('dlStato').textContent = conParole
+        ? '❌ non sono le parole di questo forziere'
+        : '❌ passphrase sbagliata';
+      $('dlOk').disabled = false;
+    }
+
+    // ⚠️ Le 24 parole restano una via, come nella schermata di sblocco: chi è entrato con
+    // loro e ha risposto «Dopo» al cambio passphrase ha su Drive una scorciatoia che si
+    // apre con quella VECCHIA, ormai dimenticata — senza questa via lo scaricamento gli
+    // resterebbe chiuso per sempre, e nessuno gli direbbe perché.
+    function disegna(){
+      azioni.innerHTML =
+        '<div class="tiny muted" style="margin-bottom:6px">' + (conParole
+          ? 'Le 24 parole, tutto minuscolo e separate da uno spazio.'
+          : 'Sta per uscire un file in chiaro dal forziere: riscrivi la passphrase.') + '</div>' +
+        (conParole
+          ? '<textarea id="dlIn" class="mono" rows="3" spellcheck="false" autocomplete="off"></textarea>'
+          : '<input type="password" id="dlIn" autocomplete="current-password">') +
+        '<div class="hint" id="dlStato"></div>' +
+        '<div class="row-btns">' +
+          '<button class="btn" id="dlOk">⬇️ Scarica</button>' +
+          '<button class="btn ghost" id="dlAlt">' +
+            (conParole ? 'Uso la passphrase' : 'Ho scordato la passphrase') + '</button>' +
+          '<button class="btn ghost" id="dlNo">Annulla</button>' +
+        '</div>';
+      $('dlIn').focus();
+      $('dlOk').addEventListener('click', prova);
+      $('dlAlt').addEventListener('click', function(){ conParole = !conParole; disegna(); });
+      $('dlNo').addEventListener('click', function(){ chiudi(false); });
+      if (!conParole) $('dlIn').addEventListener('keydown', function(e){
+        if (e.key === 'Enter') prova();
+      });
+    }
+    disegna();
+  });
+}
+
 // Lo scaricamento è rimasto, ma è una scelta che si fa guardando il file — non il modo
-// normale di aprirlo.
-function scaricaDalVisore(){
+// normale di aprirlo. ⚠️ E costa la passphrase: è l'unico gesto che porta un documento
+// FUORI dal forziere, in chiaro, e chiederla è il modo di dire che al computer ci sei tu
+// adesso. ⚠️ Il controllo sta qui e NON in `salvaSulDisco()`, che è condivisa con l'export
+// (una password la chiede già di suo) e con APRI-QUESTO, che di segreti non ne porta.
+async function scaricaDalVisore(){
+  if (!S.visore) return;
+  if (!await chiediPassphrase()) return;
+  // Fra la domanda e la risposta il blocco automatico può essere scattato, e allora quei
+  // byte non ci sono più: meglio non scaricare niente che scaricare un residuo.
   if (!S.visore) return;
   salvaSulDisco(S.visore.dati, S.visore.nome, S.visore.tipo);
 }
@@ -1624,6 +1707,7 @@ function cambiaPassphrase(obbligatoria){
         await db('frz_vault').update({ drive_scorciatoia_id: d.id }).eq('user_id', currentUserId);
         S.vault.drive_scorciatoia_id = d.id;
       }
+      S.scorc = scorc;
       chiudiModale();
     } catch(e){
       $('cpStato').textContent = '❌ ' + e.message;

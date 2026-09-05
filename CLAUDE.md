@@ -3849,6 +3849,32 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   per il PDF, forzando `application/pdf`; un SVG passa da `<img>`, dove gli script non partono;
   tutto il resto che il browser non sa mostrare **lo dice e offre lo scaricamento**, invece di
   restare un riquadro nero.
+- ⚠️ **Scaricare costa la passphrase** (v1.2.2): il ⬇️ dentro il visore la chiede **ogni
+  volta**, prima di far uscire il file. È l'unico gesto che porta un documento **fuori** dal
+  forziere, in chiaro e per sempre, e la domanda serve a dire che al computer ci sei tu
+  *adesso* — ricordarla anche solo per pochi minuti toglierebbe la protezione proprio nel
+  caso per cui esiste, la scrivania lasciata un momento.
+  ⚠️ **Si verifica APRENDO la scorciatoia** (`passphraseGiusta`), non confrontandola con
+  qualcosa in memoria: in memoria non c'è — allo sblocco serve ad aprire `scorciatoia.gpg`
+  e viene buttata subito, e deve restare così. Se ne escono **esattamente le 24 parole che
+  il forziere sta usando**, è quella: è lo stesso controllo dello sblocco, e distingue
+  perfino la scorciatoia di un *altro* forziere, che si aprirebbe benissimo portando però
+  parole diverse. Un confronto con una variabile sarebbe un controllo che passa sempre.
+  ⚠️ **La scorciatoia cifrata si tiene in memoria** (`S.scorc`, riempita allo sblocco, alla
+  creazione e al cambio passphrase): non è un segreto — su Drive sta esattamente così — e
+  senza di lei la verifica chiederebbe la rete, cioè col Drive irraggiungibile la pagina
+  mostrerebbe il file e non lo farebbe scaricare.
+  ⚠️ **La domanda sta DENTRO il visore**, al posto della riga dei pulsanti, e non in una
+  seconda finestra: `#modalBody` è uno solo, quindi un `apriModale` lì sopra cancellerebbe
+  il visore e `chiudiModale` revocherebbe il blob — cioè proprio il file che si sta per
+  scaricare.
+  ⚠️ **Le 24 parole restano una via**, come nella schermata di sblocco: chi è entrato con
+  loro e ha risposto «Dopo» al cambio passphrase ha su Drive una scorciatoia che si apre
+  con quella **vecchia e dimenticata**, e senza questa via lo scaricamento gli resterebbe
+  chiuso per sempre senza che niente glielo spieghi.
+  ⚠️ Il controllo sta in `scaricaDalVisore()` e **non** in `salvaSulDisco()`, che è
+  condivisa con l'export `.7z` — che una password la chiede già di suo — e con
+  📄 Scarica APRI-QUESTO, che di segreti non ne porta nessuno.
 - **Export `.7z`** (💾): i documenti dentro stanno **in chiaro**, protetti dalla cifratura AES-256
   del 7z stesso — un archivio pieno di `.gpg` sarebbe una scatola dentro una scatola e non
   risparmierebbe niente a chi lo apre. ⚠️ **`-mhe=on` cifra anche l'elenco dei nomi**: senza, la
