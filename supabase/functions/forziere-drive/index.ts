@@ -21,10 +21,16 @@
 // di qui — Drive non ha indirizzi firmati — ma **in flusso**, senza mettersi il file in
 // pancia: `new Response(risposta.body)` lo lascia scorrere.
 //
+// ⚠️ DA v2: UNA SOTTOCARTELLA PER SCOMPARTO. La cartella si chiama con un **uuid**, non
+// col nome dello scomparto — quello sta cifrato in `scomparti.gpg` — quindi chi guarda il
+// Drive vede quello che vedeva prima e nient'altro. Le azioni che ne discendono sono
+// `mkdir`, `rmdir` e `move`; `upload-url`, `put`, `list` e `delete` accettano ora una
+// cartella di destinazione.
+//
 // Secrets: GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN,
 //          e FORZIERE_EMAIL (facoltativo). ⚠️ NON usa GDRIVE_FOLDER_ID: la cartella del
 //          forziere se la crea da sé e non è quella dei backup.
-// v1 — 2026-09-05
+// v2 — 2026-09-05
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,12 +44,20 @@ const EMAIL_OK = (Deno.env.get('FORZIERE_EMAIL') ?? 'garsal1971@gmail.com').toLo
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const NOME_CARTELLA = 'Forziere AppSphere';
+const MIME_CARTELLA = 'application/vnd.google-apps.folder';
 
 function risposta(corpo: unknown, stato = 200) {
   return new Response(JSON.stringify(corpo), {
     status: stato,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Un apostrofo o una barra rovescia dentro una query di Drive la spezzano. I nomi che
+// passano di qui sono uuid, ma una funzione che si fida del chiamante è una funzione che
+// prima o poi riceve altro.
+function perQuery(s: string) {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 // Il token di Drive dura un'ora e si tiene in memoria: rifarlo a ogni chiamata sarebbe un
@@ -92,7 +106,7 @@ async function chiChiama(req: Request): Promise<string | null> {
 // mescolare le due cose vorrebbe dire che una rotazione sbagliata cancella il forziere.
 async function cartella(token: string): Promise<string> {
   const q = new URLSearchParams({
-    q: `name = '${NOME_CARTELLA}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    q: `name = '${NOME_CARTELLA}' and mimeType = '${MIME_CARTELLA}' and trashed = false`,
     fields: 'files(id,name)',
     pageSize: '10',
   });
@@ -104,24 +118,74 @@ async function cartella(token: string): Promise<string> {
   const c = await fetch(`${DRIVE}/files?fields=id`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: NOME_CARTELLA, mimeType: 'application/vnd.google-apps.folder' }),
+    body: JSON.stringify({ name: NOME_CARTELLA, mimeType: MIME_CARTELLA }),
   });
   if (!c.ok) throw new Error(`Drive mkdir: HTTP ${c.status} — ${(await c.text()).slice(0, 200)}`);
   return (await c.json()).id;
 }
 
-// ⚠️ Il file si tocca solo se sta in QUELLA cartella. Senza il controllo sul padre, un id
-// qualsiasi raggiungerebbe qualunque file creato dall'applicazione — i backup compresi.
-async function dentroLaCartella(token: string, id: string, padre: string) {
-  const r = await fetch(`${DRIVE}/files/${encodeURIComponent(id)}?fields=id,name,parents,size`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+async function metadati(token: string, id: string) {
+  const r = await fetch(
+    `${DRIVE}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,parents,size`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
   if (!r.ok) throw new Error(`Drive get: HTTP ${r.status}`);
-  const m = await r.json();
+  return await r.json();
+}
+
+// La cartella dove scrivere: la radice del forziere, oppure una sua sottocartella DIRETTA.
+// ⚠️ Un solo livello, e non è una semplificazione da togliere il giorno che servisse di
+// più: un albero da percorrere è un controllo che prima o poi lascia passare qualcosa, e
+// qui quel qualcosa sarebbe un file fuori dal forziere. Gli scomparti sono piatti per la
+// stessa ragione per cui sono organizzazione e non separazione.
+async function destinazione(token: string, padre: string, id: string): Promise<string> {
+  if (!id || id === padre) return padre;
+  const m = await metadati(token, id);
+  if (m.mimeType !== MIME_CARTELLA) throw new Error('quella non è una cartella');
   if (!Array.isArray(m.parents) || !m.parents.includes(padre)) {
-    throw new Error('quel file non sta nella cartella del forziere');
+    throw new Error('quella cartella non sta nel forziere');
   }
-  return m;
+  return id;
+}
+
+// ⚠️ Il file si tocca solo se sta nel forziere. Senza il controllo sul padre, un id
+// qualsiasi raggiungerebbe qualunque file creato dall'applicazione — i backup compresi.
+// «Nel forziere» vuol dire nella radice **o in una sua sottocartella diretta**: il
+// controllo scende di un livello e si ferma lì, per la ragione scritta in `destinazione`.
+async function dentroLaCartella(token: string, id: string, padre: string) {
+  const m = await metadati(token, id);
+  const genitori: string[] = Array.isArray(m.parents) ? m.parents : [];
+  if (genitori.includes(padre)) return m;
+  for (const g of genitori) {
+    try {
+      const n = await metadati(token, g);
+      if (n.mimeType === MIME_CARTELLA && Array.isArray(n.parents) && n.parents.includes(padre)) {
+        return m;
+      }
+    } catch { /* un genitore che non si legge non è un genitore buono */ }
+  }
+  throw new Error('quel file non sta nella cartella del forziere');
+}
+
+// L'elenco di una cartella, seguendo le pagine: fermarsi alla prima non darebbe un errore,
+// darebbe qualche file in meno.
+async function elenco(token: string, dove: string) {
+  const file: Array<Record<string, unknown>> = [];
+  let pagina: string | undefined;
+  do {
+    const q = new URLSearchParams({
+      q: `'${perQuery(dove)}' in parents and trashed = false`,
+      fields: 'nextPageToken, files(id,name,size,mimeType,modifiedTime)',
+      pageSize: '500',
+    });
+    if (pagina) q.set('pageToken', pagina);
+    const r = await fetch(`${DRIVE}/files?${q}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(`Drive list: HTTP ${r.status}`);
+    const d = await r.json();
+    file.push(...(d.files ?? []));
+    pagina = d.nextPageToken;
+  } while (pagina);
+  return file;
 }
 
 Deno.serve(async (req) => {
@@ -142,10 +206,73 @@ Deno.serve(async (req) => {
       return risposta({ ok: true, cartella: padre });
     }
 
+    // Una cartella per scomparto. Il NOME è un uuid che sceglie la pagina: il nome vero
+    // dello scomparto è cifrato in `scomparti.gpg` e qui non arriva mai.
+    if (azione === 'mkdir') {
+      const nome = String(body.nome ?? '').trim();
+      if (!nome) return risposta({ ok: false, error: 'serve il nome della cartella' }, 400);
+      const r = await fetch(`${DRIVE}/files?fields=id`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nome, mimeType: MIME_CARTELLA, parents: [padre] }),
+      });
+      if (!r.ok) {
+        return risposta({ ok: false, error: `Drive mkdir: HTTP ${r.status} — ${(await r.text()).slice(0, 200)}` }, 502);
+      }
+      return risposta({ ok: true, id: (await r.json()).id });
+    }
+
+    // ⚠️ Si rifiuta di cancellare una cartella che contiene ancora qualcosa. Drive butta
+    // via una cartella **col suo contenuto**, mentre `frz_files.box_id` è
+    // `ON DELETE SET NULL`: cancellando uno scomparto i file devono tornare in «Senza
+    // scomparto», non sparire. Chi chiama sposta prima e cancella dopo.
+    if (azione === 'rmdir') {
+      const id = String(body.id ?? '');
+      if (!id) return risposta({ ok: false, error: "serve l'id della cartella" }, 400);
+      const dove = await destinazione(token, padre, id);
+      if (dove === padre) return risposta({ ok: false, error: 'la radice non si cancella' }, 400);
+      const dentro = await elenco(token, dove);
+      if (dentro.length) {
+        return risposta({ ok: false, error: `la cartella contiene ancora ${dentro.length} file` }, 409);
+      }
+      const r = await fetch(`${DRIVE}/files/${encodeURIComponent(dove)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok && r.status !== 404) {
+        return risposta({ ok: false, error: `Drive rmdir: HTTP ${r.status}` }, 502);
+      }
+      return risposta({ ok: true });
+    }
+
+    // Sposta un file fra la radice e uno scomparto (o fra due scomparti). Drive non ha una
+    // «move»: si aggiunge il padre nuovo e si tolgono quelli vecchi nella stessa PATCH.
+    if (azione === 'move') {
+      const id = String(body.id ?? '');
+      if (!id) return risposta({ ok: false, error: "serve l'id del file" }, 400);
+      const m = await dentroLaCartella(token, id, padre);
+      const dove = await destinazione(token, padre, String(body.cartella ?? ''));
+      const vecchi: string[] = (Array.isArray(m.parents) ? m.parents : []).filter((p: string) => p !== dove);
+      if (!vecchi.length) return risposta({ ok: true, id, cartella: dove });
+      const q = new URLSearchParams({
+        addParents: dove,
+        removeParents: vecchi.join(','),
+        fields: 'id,parents',
+      });
+      const r = await fetch(`${DRIVE}/files/${encodeURIComponent(id)}?${q}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!r.ok) return risposta({ ok: false, error: `Drive move: HTTP ${r.status} — ${(await r.text()).slice(0, 200)}` }, 502);
+      return risposta({ ok: true, id, cartella: dove });
+    }
+
     // Apre un caricamento: i byte poi vanno dal browser a Google, non da qui.
     if (azione === 'upload-url') {
       const nome = String(body.nome ?? '').trim();
       if (!nome) return risposta({ ok: false, error: "serve il nome del file" }, 400);
+      const dove = await destinazione(token, padre, String(body.cartella ?? ''));
       const r = await fetch(`${UPLOAD}/files?uploadType=resumable&fields=id`, {
         method: 'POST',
         headers: {
@@ -156,7 +283,7 @@ Deno.serve(async (req) => {
           ...(body.bytes ? { 'X-Upload-Content-Length': String(body.bytes) } : {}),
           'X-Upload-Content-Type': 'application/octet-stream',
         },
-        body: JSON.stringify({ name: nome, parents: [padre] }),
+        body: JSON.stringify({ name: nome, parents: [dove] }),
       });
       if (!r.ok) {
         return risposta({ ok: false, error: `Drive upload-url: HTTP ${r.status} — ${(await r.text()).slice(0, 200)}` }, 502);
@@ -166,8 +293,9 @@ Deno.serve(async (req) => {
       return risposta({ ok: true, url });
     }
 
-    // Gli oggetti di servizio (indice.gpg, scorciatoia.gpg) sono poche centinaia di byte:
-    // per loro un caricamento ripristinabile sarebbe tre viaggi di rete per niente.
+    // Gli oggetti di servizio (indice.gpg, scorciatoia.gpg, scomparti.gpg, contenuto.gpg)
+    // sono poche centinaia di byte: per loro un caricamento ripristinabile sarebbe tre
+    // viaggi di rete per niente.
     // Fa anche da RIPIEGO per i file veri quando il caricamento diretto a Google non
     // passa (una policy del browser, un proxy aziendale che rompe la richiesta PUT fra
     // domini): meglio un file che entra passando di qui che un forziere in cui non si
@@ -183,13 +311,32 @@ Deno.serve(async (req) => {
         return risposta({ ok: false, error: 'troppo grande per «put»: serve «upload-url»' }, 400);
       }
       const bin = Uint8Array.from(atob(dati), (c) => c.charCodeAt(0));
+      const dove = await destinazione(token, padre, String(body.cartella ?? ''));
 
       // Se esiste già lo si SOVRASCRIVE invece di crearne un secondo: due `indice.gpg`
       // nella stessa cartella e non si saprebbe più quale è quello buono.
       let id = String(body.id ?? '');
       if (id) { try { await dentroLaCartella(token, id, padre); } catch { id = ''; } }
 
-      const meta = id ? {} : { name: nome, parents: [padre] };
+      // ⚠️ `perNome` lo chiedono SOLO gli indici, e non è una comodità estesa ai documenti:
+      // là il nome è un uuid e due file non si chiamano mai uguale, quindi un upsert per
+      // nome non aggiungerebbe niente e aggiungerebbe un modo di sovrascrivere un
+      // documento per sbaglio. Un indice invece è «il contenuto di questa cartella»: ce
+      // n'è uno solo per definizione, e il suo id può essersi perso col database.
+      if (!id && body.perNome) {
+        const q = new URLSearchParams({
+          q: `name = '${perQuery(nome)}' and '${perQuery(dove)}' in parents and trashed = false`,
+          fields: 'files(id)',
+          pageSize: '2',
+        });
+        const cerca = await fetch(`${DRIVE}/files?${q}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (cerca.ok) {
+          const d = await cerca.json();
+          if (d.files?.length) id = d.files[0].id;
+        }
+      }
+
+      const meta = id ? {} : { name: nome, parents: [dove] };
       const confine = 'frz' + crypto.randomUUID().replace(/-/g, '');
       const testa = `--${confine}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${confine}\r\nContent-Type: application/octet-stream\r\n\r\n`;
       const coda = `\r\n--${confine}--\r\n`;
@@ -210,7 +357,7 @@ Deno.serve(async (req) => {
         },
       );
       if (!r.ok) return risposta({ ok: false, error: `Drive put: HTTP ${r.status} — ${(await r.text()).slice(0, 200)}` }, 502);
-      return risposta({ ok: true, id: (await r.json()).id });
+      return risposta({ ok: true, id: (await r.json()).id, cartella: dove });
     }
 
     // Scaricamento IN FLUSSO: i byte attraversano la funzione senza fermarcisi dentro.
@@ -248,24 +395,20 @@ Deno.serve(async (req) => {
     }
 
     // Serve a ritrovare gli oggetti di servizio quando la riga di `frz_vault` si è persa:
-    // il forziere deve poter ripartire dal solo Drive.
+    // il forziere deve poter ripartire dal solo Drive. `cartella` guarda dentro uno
+    // scomparto; `dentro: true` scende anche nelle sottocartelle, un livello solo, che è
+    // tutto quel che c'è.
     if (azione === 'list') {
-      const file: Array<Record<string, unknown>> = [];
-      let pagina: string | undefined;
-      do {
-        const q = new URLSearchParams({
-          q: `'${padre}' in parents and trashed = false`,
-          fields: 'nextPageToken, files(id,name,size,modifiedTime)',
-          pageSize: '500',
-        });
-        if (pagina) q.set('pageToken', pagina);
-        const r = await fetch(`${DRIVE}/files?${q}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!r.ok) throw new Error(`Drive list: HTTP ${r.status}`);
-        const d = await r.json();
-        file.push(...(d.files ?? []));
-        pagina = d.nextPageToken;
-      } while (pagina);
-      return risposta({ ok: true, cartella: padre, file });
+      const dove = await destinazione(token, padre, String(body.cartella ?? ''));
+      const file = await elenco(token, dove);
+      if (body.dentro && dove === padre) {
+        for (const f of file.filter((x) => x.mimeType === MIME_CARTELLA)) {
+          for (const g of await elenco(token, String(f.id))) {
+            file.push({ ...g, cartella: f.id });
+          }
+        }
+      }
+      return risposta({ ok: true, cartella: dove, radice: padre, file });
     }
 
     return risposta({ ok: false, error: `azione sconosciuta: ${azione}` }, 400);

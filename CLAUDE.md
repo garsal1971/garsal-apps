@@ -1108,7 +1108,7 @@ restano `'attesa'`, che è quello che erano davvero: l'app sapeva parlare in un 
 | `frz_vault` | Una riga per utente: dov'è la cartella su Drive e i suoi due oggetti di servizio, più le date di collaudo ed export |
 | `frz_files` | Una riga per file: `drive_file_id`, `meta_enc` (nome, tipo, dimensione vera, note — **tutto cifrato**), peso del cifrato |
 | `frz_thumbs` | Le miniature, cifrate. Tabella a parte perché l'elenco si legge a ogni apertura e deve restare leggero |
-| `frz_boxes` | Gli **scomparti**: `meta_enc` (nome ed emoji, cifrati), `position`. `frz_files.box_id` li collega |
+| `frz_boxes` | Gli **scomparti**: `meta_enc` (nome ed emoji, cifrati), `position`, `drive_folder_id` (la sua cartella su Drive, che si chiama con un uuid). `frz_files.box_id` li collega |
 
 ⚠️ **Gli scomparti sono ORGANIZZAZIONE, non separazione**, e il nome inganna: due scomparti
 **non si proteggono a vicenda** — le 24 parole sono una sola per tutto il forziere, quindi chi
@@ -1121,10 +1121,18 @@ in chiaro in una colonna racconta la storia da solo, che è precisamente ciò ch
 `frz_files.meta_enc` esiste per evitare. Ne discende che l'elenco degli scomparti si legge solo
 a forziere aperto — e va bene, perché prima non c'è comunque niente da vedere.
 
-⚠️ **Su Drive non cambia niente: nessuna sottocartella per scomparto.** Una cartella «Divorzio»
-rimetterebbe in chiaro proprio il nome appena cifrato, e vanificherebbe l'aver dato ai file nomi
-uuid. Gli scomparti vivono **solo nell'indice cifrato**, quindi la proprietà «ogni `.gpg` si
-riapre da solo» resta intatta: perso il database si perde l'ordine, non un byte.
+⚠️ **Su Drive uno scomparto È una cartella, e si chiama con un uuid** (v1.3.0,
+`20260905180000_frz_boxes_drive_folder.sql`). Fino alla v1.2.2 non c'erano sottocartelle
+affatto, e la ragione scritta allora era che una cartella «Divorzio» rimetterebbe in chiaro il
+nome appena cifrato. La ragione era giusta e la conclusione no: **il problema non erano le
+cartelle, era il loro NOME**. Con un uuid chi guarda il Drive vede quello che vedeva prima —
+quante cartelle, quanti file, i pesi, le date — e nient'altro.
+
+⚠️ **`drive_folder_id` NULL è uno stato buono**: «lo scomparto c'è ma la sua cartella non è
+ancora stata fatta». Ci nascono tutti gli scomparti già in archivio, e la riempie
+**📁 Riordina il Drive** (Impostazioni) o il primo file che ci si carica dentro
+(`assicuraCartella`). Un NOT NULL avrebbe voluto dire una migration che inventa un id di Drive,
+cioè un id che non apre nessuna cartella.
 
 ⚠️ **`box_id` è `ON DELETE SET NULL`, non CASCADE**: cancellare uno scomparto non porta via i
 file, che tornano in «Senza scomparto» — un contenitore che si porta dietro il contenuto è il
@@ -1151,14 +1159,64 @@ sbagliare un dettaglio e non si apre più niente, e quei dettagli non stanno in 
 Il file si porta dentro algoritmo, sale e giri, e il programma li legge da sé. Una prima
 versione del progetto aveva quella ricetta ed è stata **ritirata prima di scrivere una riga**.
 
-**I tre oggetti su Drive**, nella cartella `Forziere AppSphere` (che la Edge Function si crea
+**Gli oggetti su Drive**, nella cartella `Forziere AppSphere` (che la Edge Function si crea
 da sé, e **non** è quella dei backup — una rotazione sbagliata cancellerebbe il forziere):
+
+```
+Forziere AppSphere/
+├─ indice.gpg          la chiave dell'indice        (24 parole)
+├─ scorciatoia.gpg     le 24 parole                 (passphrase — l'eccezione)
+├─ scomparti.gpg       quale cartella è quale scomparto   (24 parole)
+├─ contenuto.gpg       i file che non stanno in nessuno scomparto   (24 parole)
+├─ <uuid>.gpg          …e quei file
+└─ <uuid-cartella>/    una per scomparto, nome uuid
+   ├─ contenuto.gpg    i file di questo scomparto   (24 parole)
+   └─ <uuid>.gpg
+```
 
 | Oggetto | Cos'è | Chiuso con |
 |---|---|---|
 | `<uuid>.gpg` | un documento | le 24 parole |
 | `indice.gpg` | la chiave dell'indice (32 byte casuali) | le 24 parole |
+| `scomparti.gpg` | id, nome, emoji e cartella di ogni scomparto | le 24 parole |
+| `contenuto.gpg` | nome, tipo, dimensione e data dei file di **quella** cartella | le 24 parole |
 | `scorciatoia.gpg` | le 24 parole | la passphrase quotidiana |
+
+⚠️ **Tutto su Drive è cifrato con le 24 parole, con UNA eccezione dichiarata**:
+`scorciatoia.gpg`, che le 24 parole le *contiene* — cifrarlo con loro sarebbe circolare e non
+aprirebbe niente a chi la passphrase ce l'ha e le parole no. È il suo mestiere.
+
+⚠️ **I due indici esistono perché il database non sia indispensabile nemmeno per ORIENTARSI.**
+Prima la proprietà era «perso il database, ogni `.gpg` si riapre lo stesso» — vera, ma erano
+trecento file di nome `<uuid>.gpg` e l'unico modo di sapere cosa fossero era aprirli a uno a
+uno. Ora `gpg -d contenuto.gpg` restituisce l'elenco di quella cartella e `gpg -d scomparti.gpg`
+dice quale cartella è quale scomparto. Sono una **comodità**: senza, i documenti si aprono lo
+stesso e ciascuno porta dentro il proprio nome originale.
+
+⚠️ **LA VERITÀ RESTA IL DATABASE.** Gli indici sono una copia, riscritta dopo ogni caricamento,
+eliminazione, spostamento e modifica di uno scomparto (`scriviIndici`). Se una riscrittura non
+passa **la pagina lo dice** — un avviso giallo col pulsante *Rifalli adesso* — e in Impostazioni
+c'è **🔄 Rifai gli indici**. Senza quel rimedio sarebbero due verità che divergono in silenzio,
+che è il difetto pagato altrove con lo snapshot del patrimonio. Per la stessa ragione
+`scriviIndici` **non blocca e non fa fallire l'operazione vera**: il file è già caricato e la
+riga già scritta.
+
+⚠️ **Gli indici si scrivono per NOME (`perNome`) e non per id**: il loro id non sta in nessuna
+colonna, e il giorno che il database non c'è più dev'essere il Drive a dire qual è. Lo chiedono
+**solo** gli indici — sui documenti, dove il nome è un uuid e due file non si chiamano mai
+uguale, un upsert per nome non aggiungerebbe niente e aggiungerebbe un modo di sovrascrivere
+un documento per sbaglio.
+
+⚠️ **`rmdir` si rifiuta di cancellare una cartella non vuota**, e non è prudenza generica:
+Drive butta via una cartella **col suo contenuto**, mentre `box_id` è `ON DELETE SET NULL` —
+nell'ordine sbagliato la riga sopravvive e il file no. Eliminando uno scomparto la pagina
+sposta prima i suoi file in radice, poi toglie il solo `contenuto.gpg` di quella cartella
+(che `rmdir` conterebbe come contenuto), poi `rmdir`, e **solo alla fine** cancella la riga.
+
+⚠️ **`dentroLaCartella` scende di UN livello e si ferma lì.** Il controllo esiste perché un id
+qualsiasi non raggiunga un file fuori dal forziere — i backup compresi — e un albero da
+percorrere è un controllo che prima o poi lascia passare qualcosa. Gli scomparti sono piatti
+per la stessa ragione per cui sono organizzazione e non separazione.
 
 ⚠️ **`indice.gpg` fa anche da PROVA**: se si apre, le parole sono quelle giuste; se no, no. Un
 verificatore a parte sarebbe una seconda verità sulla stessa domanda — e un oracolo in più per
@@ -1463,7 +1521,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html`, `casarosa.html` e da `finanza.html` → 🌹 Danaro di Rosa) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
 | `notification-action` | manuale (da `telegram-webhook` e dall'APK nativo) | Che cosa fa un pulsante di un promemoria: ✅ Fatto, ⏸ rinvia, ❌ annulla. **L'unica implementazione**, chiamata sia dal bot sia dal telefono |
-| `forziere-drive` | manuale (da `forziere.html`) | Il ponte col Drive del Forziere: crea la cartella, apre i caricamenti, restituisce e cancella i file. ⚠️ **Non vede mai niente in chiaro** — tutto quel che le passa davanti è già cifrato con OpenPGP dalle 24 parole, che qui non arrivano né adesso né mai. Il caricamento **non passa di qui**: `upload-url` chiede a Google un indirizzo ripristinabile e i byte vanno dal browser a Google diretti (con ripiego su `put` per i file piccoli, se quella strada è bloccata). Lo scaricamento passa — Drive non ha indirizzi firmati — ma **in flusso** |
+| `forziere-drive` | manuale (da `forziere.html`) | Il ponte col Drive del Forziere: crea la cartella (e una sottocartella per scomparto, con `mkdir`/`rmdir`/`move`), apre i caricamenti, restituisce e cancella i file. ⚠️ **Non vede mai niente in chiaro** — tutto quel che le passa davanti è già cifrato con OpenPGP dalle 24 parole, che qui non arrivano né adesso né mai. Il caricamento **non passa di qui**: `upload-url` chiede a Google un indirizzo ripristinabile e i byte vanno dal browser a Google diretti (con ripiego su `put` per i file piccoli, se quella strada è bloccata). Lo scaricamento passa — Drive non ha indirizzi firmati — ma **in flusso** |
 | `al-food-search` | manuale (da `calorie.html`) | **Legge e basta**: cerca un alimento per nome o per codice a barre nelle banche dati pubbliche e lo restituisce **già normalizzato**. Fonti in ordine: Open Food Facts Search-a-licious, la vecchia `/cgi/search.pl` come ripiego, e USDA FoodData Central se c'è il secret `USDA_API_KEY`. Ogni fonte torna col suo esito (HTTP, tempo, errore) |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
@@ -3806,6 +3864,20 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   lista: una scelta presa dall'app al posto di chi carica si scopre cercando il file altrove.
   ⚠️ «Senza scomparto» compare **solo se serve**: senza nessuno scomparto sarebbe un doppione di
   «Tutti», e a zero file una pillola che non apre niente. Dettagli nello schema `frz_*`.
+- **Una cartella su Drive per scomparto, e due indici cifrati** (v1.3.0): la cartella si chiama
+  con un **uuid** — non col nome dello scomparto, che resta cifrato — e accanto ai file ci sono
+  `scomparti.gpg` (quale cartella è quale scomparto) e un `contenuto.gpg` per cartella (nome,
+  tipo, dimensione e data dei suoi file). Servono a **orientarsi col solo Drive**: prima erano
+  trecento `<uuid>.gpg` che si aprivano tutti e non dicevano niente finché non li si apriva.
+  ⚠️ La verità resta il database, gli indici sono una copia riscritta a ogni operazione, e
+  quando una riscrittura non passa la pagina lo dice con un avviso e un pulsante. Dettagli
+  (compresi `perNome`, `rmdir` su cartella non vuota e il controllo a un livello solo) nello
+  schema `frz_*`.
+- **📁 Riordina il Drive** (Impostazioni), una-tantum: crea le cartelle che mancano, porta ogni
+  file dentro quella del suo scomparto e riscrive tutti gli indici. Serve ai forzieri nati prima
+  della v1.3.0 e come rimedio a un'operazione fallita a metà. ⚠️ È un **pulsante** e non una
+  cosa che parte aprendo la pagina: su trecento file sono trecento chiamate a Drive, e un'app
+  che ci mette due minuti ad aprirsi senza dire perché si smette di aprirla.
 - ⚠️ **F12 non si disabilita, e non servirebbe.** Da una pagina web non si può, e provarci copre
   solo un tasto: restano il menù del browser, le altre scorciatoie, gli strumenti già aperti,
   `view-source:`, un proxy — e il codice che blocca il tasto è a sua volta JavaScript, che si

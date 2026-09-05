@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.2.2</title>
+<title>🔐 Forziere v1.3.0</title>
 <!-- ⚠️ QUESTA PAGINA NON CARICA NIENTE DA TERZI, e non è pignoleria: mentre è aperta
      tiene in memoria le 24 parole, quindi QUALUNQUE script che gira qui dentro può
      leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
@@ -173,7 +173,7 @@ textarea{resize:vertical;line-height:1.45}
   <div class="topbar-spacer"></div>
   <div class="header-right">
     <span class="sync-badge" id="syncBadge">···</span>
-    <span class="app-version" id="versionBadge">v1.2.2</span>
+    <span class="app-version" id="versionBadge">v1.3.0</span>
   </div>
 </div>
 
@@ -278,6 +278,7 @@ textarea{resize:vertical;line-height:1.45}
 
       <div id="avvisoCollaudo"></div>
       <div id="avvisoExport"></div>
+      <div id="avvisoIndici"></div>
 
       <div class="griglia" id="griglia"></div>
       <div class="vuoto" id="vuoto" style="display:none">Il forziere è vuoto.</div>
@@ -306,8 +307,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.2.2';
-var BUILD_TIME  = '2026-09-05T17:05:00Z';
+var APP_VERSION = 'v1.3.0';
+var BUILD_TIME  = '2026-09-05T19:40:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -487,7 +488,8 @@ var S = {
   scorc: null,          // `scorciatoia.gpg` CIFRATA: non è un segreto (sta su Drive così
                         // com'è), e serve a verificare la passphrase senza chiedere la rete
   occupato: 0,          // quante operazioni lunghe sono in corso adesso (vedi bloccoSeNascosto)
-  timerNascosto: null
+  timerNascosto: null,
+  indiciRotti: false    // l'ultima riscrittura degli indici su Drive non è andata a segno
 };
 
 var MINUTI_BLOCCO = 10;
@@ -643,21 +645,21 @@ async function drive(azione, corpo){
 // Sono già cifrati, quindi passare di là non cambia niente di quel che qualcuno vedrebbe:
 // cambia solo chi trasporta i byte.
 var RIPIEGO_MAX = 8 * 1024 * 1024;
-async function driveCarica(nome, bytes, onProgresso){
+async function driveCarica(nome, bytes, onProgresso, cartella){
   try {
-    return await driveCaricaDiretto(nome, bytes, onProgresso);
+    return await driveCaricaDiretto(nome, bytes, onProgresso, cartella);
   } catch(e){
     if (bytes.length > RIPIEGO_MAX) throw e;
     console.warn('caricamento diretto non riuscito, ripiego sulla funzione:', e.message);
     if (onProgresso) onProgresso(0.5);
-    var r = await drive('put', { nome: nome, base64: b64(bytes) });
+    var r = await drive('put', { nome: nome, base64: b64(bytes), cartella: cartella || '' });
     if (onProgresso) onProgresso(1);
     return r.id;
   }
 }
 
-async function driveCaricaDiretto(nome, bytes, onProgresso){
-  var d = await drive('upload-url', { nome: nome, bytes: bytes.length });
+async function driveCaricaDiretto(nome, bytes, onProgresso, cartella){
+  var d = await drive('upload-url', { nome: nome, bytes: bytes.length, cartella: cartella || '' });
   var r = await new Promise(function(risolvi, rifiuta){
     var x = new XMLHttpRequest();
     x.open('PUT', d.url, true);
@@ -840,6 +842,14 @@ $('btnCrea').addEventListener('click', async function(){
     S.vault = ins.data;
     S.parole = can;
     S.chiaveIndice = await importaChiaveIndice(chiave);
+
+    // I due indici nascono col forziere, vuoti. ⚠️ Un `contenuto.gpg` che dice «qui non
+    // c'è niente» non è inutile: è la prova che l'indice esiste e si apre, il primo
+    // giorno invece che al primo recupero. Se non passano non si ferma la creazione —
+    // il forziere c'è comunque, e il rimedio è un pulsante nelle Impostazioni.
+    S.boxes = []; S.file = [];
+    try { await tuttiGliIndici(); } catch(err){ console.warn('indici iniziali:', err); }
+
     avanzamento('barraCrea','statoCrea', null, '');
     $('inParole').value = ''; $('inParole2').value = ''; $('inPass').value = ''; $('inPass2').value = '';
 
@@ -1073,7 +1083,12 @@ function formBox(b){
       }
       chiudiModale();
       await caricaBoxes();
+      // Uno scomparto nuovo si porta dietro la sua cartella su Drive: farla adesso vuol
+      // dire che il primo file ci finisce dentro senza aspettare nessun riordino.
+      var creato = b ? null : S.box;
+      if (creato){ try { await assicuraCartella(creato); } catch(err){ console.warn(err); } }
       disegnaBoxes(); disegnaGriglia();
+      scriviIndici(creato ? [creato] : [], true);
     } catch(e){
       $('bxStato').textContent = '❌ ' + e.message;
       this.disabled = false;
@@ -1089,16 +1104,42 @@ function formBox(b){
       (n ? 'I ' + n + ' file che contiene NON si cancellano: tornano in «Senza scomparto».'
          : 'È vuoto.'))) return;
     this.disabled = true;
+    S.occupato++;
     try {
+      // ⚠️ I file ESCONO PRIMA, poi si toglie la cartella, e solo alla fine si cancella la
+      // riga. Drive butta via una cartella **col suo contenuto**, mentre `box_id` è
+      // ON DELETE SET NULL: nell'ordine sbagliato la riga sopravvive e il file no — cioè
+      // esattamente il contrario di quello che la conferma ha appena promesso.
+      var cart = b.riga.drive_folder_id || '';
+      if (cart){
+        var dentro = fileDiBox(b.riga.id);
+        for (var i = 0; i < dentro.length; i++){
+          $('bxStato').textContent = 'Sposto i file… ' + (i+1) + '/' + dentro.length;
+          if (dentro[i].riga.drive_file_id)
+            await drive('move', { id: dentro[i].riga.drive_file_id, cartella: '' });
+        }
+        // ⚠️ Nella cartella resta il suo `contenuto.gpg`, che `rmdir` conta come
+        // contenuto e per cui si rifiuterebbe di cancellarla. Si toglie l'indice — che
+        // parla di uno scomparto che sta per non esistere più — e nient'altro: se resta
+        // dentro qualcos'altro, `rmdir` deve dire di no. È la rete che impedisce a una
+        // cartella di portarsi via un documento.
+        $('bxStato').textContent = 'Tolgo la cartella…';
+        var resti = (await drive('list', { cartella: cart })).file || [];
+        for (var k = 0; k < resti.length; k++){
+          if (resti[k].name === IDX_CONTENUTO) await drive('delete', { id: resti[k].id });
+        }
+        await drive('rmdir', { id: cart });
+      }
       var d = await db('frz_boxes').delete().eq('id', b.riga.id);
       if (d.error) throw new Error(d.error.message);
       S.box = null;
       chiudiModale();
       await caricaElenco();   // i box_id sono andati a NULL nel database: si rilegge
+      scriviIndici([null], true);
     } catch(e){
       $('bxStato').textContent = '❌ ' + e.message;
       this.disabled = false;
-    }
+    } finally { S.occupato--; }
   });
 }
 
@@ -1123,11 +1164,194 @@ async function spostaIn(id, bid){
   var f = S.file.find(function(x){ return x.riga.id === id; });
   if (!f) return;
   var nuovo = bid === '_senza' ? null : bid;
-  var u = await db('frz_files').update({ box_id: nuovo }).eq('id', id);
-  if (u.error) { alert('Non ce l\'ho fatta: ' + u.error.message); return; }
-  f.riga.box_id = nuovo;
+  var vecchio = f.riga.box_id || null;
+  if (nuovo === vecchio) { chiudiModale(); return; }
+  S.occupato++;
+  try {
+    // ⚠️ Prima Drive, poi il database. Al contrario, una rete che cade lascerebbe la riga
+    // in uno scomparto e il file nella cartella di un altro — e la differenza non si
+    // vedrebbe da nessuna parte finché il database non serve davvero.
+    var cart = await assicuraCartella(nuovo);
+    if (f.riga.drive_file_id) await drive('move', { id: f.riga.drive_file_id, cartella: cart });
+    var u = await db('frz_files').update({ box_id: nuovo }).eq('id', id);
+    if (u.error) throw new Error(u.error.message);
+    f.riga.box_id = nuovo;
+    chiudiModale();
+    disegnaBoxes(); disegnaGriglia();
+    scriviIndici([vecchio, nuovo], false);
+  } catch(e){ alert('Non ce l\'ho fatta: ' + e.message); }
+  finally { S.occupato--; }
+}
+
+// ============================================================
+// GLI INDICI SU DRIVE — perché il database non sia indispensabile per ORIENTARSI
+// ============================================================
+// Fino alla v1.2.2 la proprietà era: perso il database, ogni `.gpg` si riapriva lo stesso.
+// Vera, ma erano trecento file di nome `<uuid>.gpg` e l'unico modo di sapere cosa fossero
+// era aprirli a uno a uno. Accanto ai file ci sono ora due indici, cifrati anche loro con
+// le 24 parole, e `gpg -d` ne tira fuori nomi, tipi, date e scomparti.
+//
+// ⚠️ LA VERITÀ RESTA IL DATABASE. Gli indici sono una COPIA, riscritta dopo ogni
+// operazione; se una riscrittura non passa la pagina lo dice e offre «🔄 Rifai gli
+// indici». Senza quel pulsante sarebbero due verità che divergono in silenzio — il
+// difetto che questa repo paga già altrove (lo snapshot del patrimonio).
+//
+// ⚠️ Il NOME della cartella di uno scomparto è un uuid e non il suo nome: una cartella
+// «Divorzio» racconterebbe la storia da sola, che è esattamente ciò che `meta_enc`
+// esiste per evitare. Chi guarda il Drive vede quello che vedeva prima — quante cartelle,
+// quanti file, i pesi, le date — e nient'altro.
+var IDX_SCOMPARTI = 'scomparti.gpg';
+var IDX_CONTENUTO = 'contenuto.gpg';
+
+function boxDi(id){ return S.boxes.find(function(x){ return x.riga.id === id; }) || null; }
+
+// La cartella su Drive di uno scomparto. '' = la radice del forziere.
+function cartellaDi(boxId){
+  var b = boxId ? boxDi(boxId) : null;
+  return (b && b.riga.drive_folder_id) || '';
+}
+
+// Quella cartella, creandola se non c'è ancora. ⚠️ È qui che `drive_folder_id` passa da
+// NULL a un id: gli scomparti nati prima della v1.3.0 ce l'hanno vuoto, e non è un dato
+// mancante — è «la cartella non l'ha ancora fatta nessuno».
+async function assicuraCartella(boxId){
+  if (!boxId) return '';
+  var b = boxDi(boxId);
+  if (!b) return '';
+  if (b.riga.drive_folder_id) return b.riga.drive_folder_id;
+  var r = await drive('mkdir', { nome: crypto.randomUUID() });
+  var u = await db('frz_boxes').update({ drive_folder_id: r.id }).eq('id', boxId);
+  if (u.error) throw new Error(u.error.message);
+  b.riga.drive_folder_id = r.id;
+  return r.id;
+}
+
+function fileDiBox(boxId){
+  return S.file.filter(function(f){
+    return boxId ? f.riga.box_id === boxId : !f.riga.box_id;
+  });
+}
+
+async function scriviIndiceScomparti(){
+  var payload = { v:1, il:new Date().toISOString(), scomparti: S.boxes.map(function(b){
+    return { id: b.riga.id, nome: b.meta.nome || '', emoji: b.meta.emoji || '',
+             cartella: b.riga.drive_folder_id || null };
+  }) };
+  var gpg = await cifraTesto(JSON.stringify(payload, null, 1), S.parole);
+  // ⚠️ `perNome` e non l'id: l'id dell'indice non sta in nessuna colonna, e il giorno che
+  // il database non c'è più dev'essere il Drive a dire qual è. Lo chiedono solo gli
+  // indici — sui documenti, dove il nome è un uuid, sarebbe un modo in più di
+  // sovrascrivere per sbaglio.
+  await drive('put', { nome: IDX_SCOMPARTI, base64: b64(gpg), perNome: true });
+}
+
+async function scriviIndiceContenuto(boxId){
+  var cart = cartellaDi(boxId);
+  if (boxId && !cart) return;   // scomparto senza cartella: non c'è dove scriverlo
+  var b = boxId ? boxDi(boxId) : null;
+  var payload = {
+    v: 1, il: new Date().toISOString(),
+    scomparto: b ? { id: b.riga.id, nome: b.meta.nome || '', emoji: b.meta.emoji || '' } : null,
+    // ⚠️ `file` è il NOME su Drive, non l'id di Drive: chi recupera ha in mano una
+    // cartella di file, non l'API di Google.
+    file: fileDiBox(boxId).map(function(f){
+      return { file: f.riga.id + '.gpg', nome: f.meta.nome || '', tipo: f.meta.tipo || '',
+               size: f.meta.size == null ? null : f.meta.size,
+               il: f.meta.il || f.riga.creato_il || null };
+    })
+  };
+  var gpg = await cifraTesto(JSON.stringify(payload, null, 1), S.parole);
+  await drive('put', { nome: IDX_CONTENUTO, base64: b64(gpg), perNome: true, cartella: cart });
+}
+
+async function tuttiGliIndici(){
+  await scriviIndiceScomparti();
+  await scriviIndiceContenuto(null);
+  for (var i = 0; i < S.boxes.length; i++) await scriviIndiceContenuto(S.boxes[i].riga.id);
+}
+
+// ⚠️ Non si aspetta e non si fa aspettare: l'operazione vera (il file caricato, la riga
+// cancellata) è già finita e archiviata nel database. Un indice che non si riscrive è una
+// comodità in meno, non un dato perso — quindi si segnala e basta.
+async function scriviIndici(box, ancheScomparti){
+  if (!S.parole) return;
+  try {
+    if (ancheScomparti) await scriviIndiceScomparti();
+    var visti = [];
+    (box || []).forEach(function(x){
+      var k = x || null;
+      if (visti.indexOf(k) === -1) visti.push(k);
+    });
+    for (var i = 0; i < visti.length; i++) await scriviIndiceContenuto(visti[i]);
+    if (S.indiciRotti){ S.indiciRotti = false; disegnaAvvisi(); }
+  } catch(e){
+    console.warn('indici su Drive:', e);
+    if (!S.indiciRotti){ S.indiciRotti = true; disegnaAvvisi(); }
+  }
+}
+
+async function rifaiIndici(){
+  if (!S.parole) return;
+  S.occupato++;
+  try {
+    avanzamento('barraOp','statoOp', 0.4, 'Riscrivo gli indici…');
+    await tuttiGliIndici();
+    avanzamento('barraOp','statoOp', null, '');
+    S.indiciRotti = false; disegnaAvvisi();
+    alert('Indici riscritti: ' + (S.boxes.length + 1) + ' cartelle.');
+  } catch(e){
+    avanzamento('barraOp','statoOp', null, '');
+    S.indiciRotti = true; disegnaAvvisi();
+    alert('Non ce l\'ho fatta: ' + e.message);
+  } finally { S.occupato--; }
+}
+
+// Una-tantum, dalle Impostazioni: crea le cartelle che mancano, porta ogni file dentro la
+// cartella del suo scomparto e riscrive tutti gli indici. Serve ai forzieri nati prima
+// della v1.3.0 — e come rimedio se una di quelle operazioni è fallita a metà.
+// ⚠️ È un PULSANTE e non una cosa che parte aprendo la pagina: su trecento file sono
+// trecento chiamate a Drive, e un'app che ci mette due minuti ad aprirsi senza dire
+// perché si smette di aprirla.
+async function riordinaDrive(){
+  if (!S.parole) return;
+  if (!confirm('Metto in ordine il Drive.\n\nCreo una cartella per ogni scomparto, ci porto ' +
+               'dentro i file che ci appartengono e riscrivo gli indici. Nessun file viene ' +
+               'cancellato e niente cambia nel database.')) return;
   chiudiModale();
-  disegnaBoxes(); disegnaGriglia();
+  S.occupato++;
+  try {
+    avanzamento('barraOp','statoOp', 0.05, 'Preparo le cartelle…');
+    for (var i = 0; i < S.boxes.length; i++) await assicuraCartella(S.boxes[i].riga.id);
+
+    avanzamento('barraOp','statoOp', 0.15, 'Guardo dov\'è ogni file…');
+    var l = await drive('list', { dentro: true });
+    var dove = {};
+    (l.file || []).forEach(function(x){ dove[x.id] = x.cartella || l.radice; });
+
+    var spostati = 0, tot = S.file.length || 1;
+    for (var j = 0; j < S.file.length; j++){
+      var f = S.file[j];
+      if (!f.riga.drive_file_id) continue;
+      var atteso = cartellaDi(f.riga.box_id) || l.radice;
+      // Un file già al posto giusto non si tocca: `move` funzionerebbe lo stesso, ma
+      // sarebbe una chiamata di rete per non fare niente, moltiplicata per l'archivio.
+      if (dove[f.riga.drive_file_id] === atteso) continue;
+      avanzamento('barraOp','statoOp', 0.15 + (j/tot)*0.7, 'Sposto… ' + (spostati+1));
+      await drive('move', { id: f.riga.drive_file_id, cartella: cartellaDi(f.riga.box_id) });
+      spostati++;
+    }
+
+    avanzamento('barraOp','statoOp', 0.9, 'Riscrivo gli indici…');
+    await tuttiGliIndici();
+    avanzamento('barraOp','statoOp', null, '');
+    S.indiciRotti = false; disegnaAvvisi();
+    alert('Fatto.\n\nCartelle: ' + S.boxes.length + '\nFile spostati: ' + spostati +
+          '\nIndici riscritti: ' + (S.boxes.length + 1) + '.');
+  } catch(e){
+    avanzamento('barraOp','statoOp', null, '');
+    S.indiciRotti = true; disegnaAvvisi();
+    alert('Non ce l\'ho fatta: ' + e.message);
+  } finally { S.occupato--; }
 }
 
 function filtrati(){
@@ -1216,12 +1440,14 @@ async function caricaFile(files){
       var gpg = await cifraFile(bytes, f.name, S.parole);
       bytes = null;
 
-      // Il nome su Drive è l'id e basta: la cartella non deve raccontare niente a chi la
-      // guarda dall'esterno. Il nome vero sta dentro il pacchetto cifrato.
+      // Il nome su Drive è l'id e basta: né la cartella né il nome del file devono
+      // raccontare niente a chi li guarda dall'esterno. Il nome vero sta dentro il
+      // pacchetto cifrato, e quello dello scomparto dentro `scomparti.gpg`.
+      var cart = await assicuraCartella(boxCorrente());
       var idRiga = crypto.randomUUID();
       var driveId = await driveCarica(idRiga + '.gpg', gpg, function(q){
         avanzamento('barraOp','statoOp', 0.25 + q*0.65, etichetta + ' — carico… ' + Math.round(q*100) + '%');
-      });
+      }, cart);
 
       avanzamento('barraOp','statoOp', 0.95, etichetta + ' — registro…');
       var meta = { nome: f.name, tipo: f.type || '', size: f.size, il: new Date().toISOString() };
@@ -1246,6 +1472,9 @@ async function caricaFile(files){
     } finally { S.occupato--; }
   }
   avanzamento('barraOp','statoOp', null, '');
+  // Un indice per volta e non uno per file: l'intera infornata finisce nello stesso
+  // scomparto, e riscriverlo a ogni giro sarebbe la stessa cosa fatta N volte.
+  scriviIndici([boxCorrente()], false);
 }
 
 async function miniatura(file){
@@ -1461,9 +1690,11 @@ async function elimina(id){
     await drive('delete', { id: f.riga.drive_file_id });
     var d = await db('frz_files').delete().eq('id', id);
     if (d.error) throw new Error(d.error.message);
+    var dovEra = f.riga.box_id || null;
     S.file = S.file.filter(function(x){ return x.riga.id !== id; });
     delete S.thumbs[id];
     disegnaGriglia();
+    scriviIndici([dovEra], false);
   } catch(e){ alert('Non ce l\'ho fatta: ' + e.message); }
   finally { S.occupato--; }
 }
@@ -1604,6 +1835,27 @@ function testoLeggimi(){
 'Nient\'altro: non serve internet, non serve',
 'l\'applicazione, non serve nessun codice.',
 '',
+'--------------------------------------------',
+'  COME CAPIRE CHE COS\'È OGNI FILE',
+'--------------------------------------------',
+'Su Drive i file si chiamano <uuid>.gpg, e ogni',
+'cartella ne ha uno che si chiama diversamente:',
+'',
+'    gpg -d contenuto.gpg',
+'',
+'Restituisce l\'elenco di quella cartella — nome,',
+'tipo, dimensione e data di ogni file — e nella',
+'cartella principale c\'è anche:',
+'',
+'    gpg -d scomparti.gpg',
+'',
+'che dice quale cartella è quale scomparto.',
+'Le stesse 24 parole aprono anche questi.',
+'',
+'Sono una COMODITÀ: senza di loro i documenti si',
+'aprono lo stesso, uno per uno, e ciascuno porta',
+'dentro il proprio nome originale.',
+'',
 '⚠️ Se hai perso le 24 parole non c\'è niente da',
 '   fare, per nessuno. Non esiste nessuna copia.',
 '   È la ragione per cui questo forziere esiste.',
@@ -1636,6 +1888,15 @@ function disegnaAvvisi(){
     ? (S.file.length ? '<div class="avviso blu">💾 <strong>Non hai ancora nessuna copia in mano tua.</strong> ' +
         'I file stanno su Drive: perso l\'account Google, sono persi. L\'export su una chiavetta è la copia che nessuno ti può togliere.</div>' : '')
     : (g > 60 ? '<div class="avviso giallo">💾 L\'ultimo export è di <strong>' + g + ' giorni fa</strong>. Quello che hai messo dentro da allora esiste in un posto solo.</div>' : '');
+
+  // ⚠️ Un indice non riscritto non è un dato perso — il database ce l'ha — ma tacerlo
+  // vorrebbe dire scoprire il giorno del recupero che l'indice parla di un forziere di
+  // sei mesi fa. Si dice, e si offre il rimedio nella stessa riga.
+  $('avvisoIndici').innerHTML = S.indiciRotti
+    ? '<div class="avviso giallo">🗂️ <strong>Gli indici su Drive sono rimasti indietro.</strong> ' +
+      'I tuoi file stanno tutti al loro posto — è la copia dell\'elenco che non si è riscritta. ' +
+      '<button class="btn small" style="margin-left:6px" onclick="rifaiIndici()">Rifalli adesso</button></div>'
+    : '';
 }
 
 // ============================================================
@@ -1733,6 +1994,15 @@ $('btnImpostazioni').addEventListener('click', function(){
       '<button class="btn" onclick="chiudiModale();cambiaPassphrase(false)">🔑 Cambia passphrase</button>' +
       '<button class="btn ghost" onclick="chiudiModale();apriCollaudo()">🧪 Rifai il collaudo</button>' +
       '<button class="btn ghost" onclick="mostraParole()">👁 Rivedi le 24 parole</button>' +
+    '</div>' +
+    '<div class="sep"></div>' +
+    '<div class="tiny muted" style="margin-bottom:8px">Su Drive ogni scomparto ha una cartella ' +
+    '(che si chiama con un uuid, non col suo nome) e accanto ai file ci sono due indici cifrati: ' +
+    '<code>scomparti.gpg</code> e <code>contenuto.gpg</code>. Servono a ritrovare i nomi con ' +
+    '<code>gpg -d</code> il giorno che il database non ci fosse più.</div>' +
+    '<div class="row-btns">' +
+      '<button class="btn ghost" onclick="riordinaDrive()">📁 Riordina il Drive</button>' +
+      '<button class="btn ghost" onclick="chiudiModale();rifaiIndici()">🔄 Rifai gli indici</button>' +
     '</div>' +
     '<div class="sep"></div>' +
     '<div class="tiny muted">Il forziere si chiude da sé dopo ' + MINUTI_BLOCCO +
