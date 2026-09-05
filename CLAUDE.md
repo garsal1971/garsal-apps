@@ -3818,6 +3818,22 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   (servono a OpenPGP per cifrare i file nuovi) — ⚠️ e per questo il forziere si **chiude da sé**
   dopo `MINUTI_BLOCCO`, alla chiusura della scheda e all'uscita da AppSphere (`LOGOUT` sul
   `BroadcastChannel`). Niente `localStorage`, niente `sessionStorage`, mai.
+- ⚠️ **Il timer da solo non basta: si chiude anche quando la scheda se ne va o passa in secondo
+  piano** (v1.2.1, `pagehide` + `visibilitychange`). Una scheda che se ne va può **tornare
+  indietro dalla cache di navigazione del browser** (bfcache) col forziere ancora aperto — e in
+  quello stato i timer sono congelati, quindi i dieci minuti non passano mai: era l'unico stato
+  in cui il forziere restava aperto per ore senza che nessuno lo guardasse. Rientrare costa la
+  passphrase, cioè due secondi.
+  ⚠️ **`pagehide` e non `beforeunload`**: il secondo non scatta affatto su iOS e su Android
+  quando la scheda viene semplicemente messa via, che è il caso per cui questo serve.
+  ⚠️ **Un'operazione lunga in corso non si interrompe a metà** (`S.occupato`, alzato da
+  caricamento, apertura, eliminazione ed export): chiudendo il forziere mentre un file sta
+  salendo, le 24 parole e la chiave dell'indice sparirebbero a caricamento avviato — il file
+  resterebbe su Drive **senza la sua riga**, cioè un pacchetto cifrato che nessuno sa più cos'è
+  e che dall'app non si può più togliere. Nascosta la scheda si aspetta la fine (un
+  `setInterval`, che in una scheda nascosta il browser rallenta a uno scatto al minuto: qui va
+  bene, non si sta contando niente). Su `pagehide` invece si chiude comunque — la pagina se ne
+  sta andando e con lei tutto quello che c'era da salvare.
 - ⚠️ **Un file si APRE nella pagina, non si scarica** (v1.1.0): il tocco sull'anteprima o su
   👁 Apri lo decifra e lo mostra in un visore — immagini, PDF, video, audio e testo. Scaricare
   è rimasto, ma dentro il visore e come **seconda** scelta dichiarata: un documento sceso nella
