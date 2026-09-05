@@ -320,6 +320,7 @@ async function sezPunteggi() {
       'casaterrasini.html',
       'contabilita.html',
       'cost-analysis.html',
+      'forziere.html',
     ]);
     lordo = punteggi
       .filter((a) => !SENZA_PUNTI.has(a.html_file) && Number.isFinite(Number(a.score)))

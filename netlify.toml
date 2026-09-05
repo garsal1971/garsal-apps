@@ -43,6 +43,25 @@
     Content-Type = "application/json"
     Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
 
+# ── Le librerie del Forziere ──────────────────────────────────────────────────
+# OpenPGP.js e 7-Zip in WebAssembly stanno qui e non su un CDN: `forziere.html`
+# maneggia le 24 parole, e una libreria servita da terzi può essere sostituita a
+# runtime e portarsele via senza che nessuno se ne accorga. Cambiano solo quando
+# le aggiorniamo a mano, quindi possono restare in cache a lungo — ed è anche
+# quello che tiene leggera l'apertura della pagina.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+# `WebAssembly.instantiateStreaming` rifiuta un tipo diverso da application/wasm,
+# e senza 7-Zip l'export .7z non parte.
+[[headers]]
+  for = "/vendor/7zz.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
+    Cache-Control = "public, max-age=604800"
+
 # ── Branch deploy per dev/** ──────────────────────────────────────────────────
 # I branch dev/** ottengono un URL preview: dev--<branch>--<sitename>.netlify.app
 # NON vengono auto-mergiati su master (workflow separato deploy-dev.yml).
