@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.7.5</title>
+  <title>Situazione Teresa v1.8.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -142,6 +142,10 @@
       .table-wrap .table td { display: block; border: none; padding: 4px 0; text-align: left; }
       .table-wrap .table td:before { content: attr(data-label); font-weight: 700; font-size: .7rem; color: var(--c-muted); text-transform: uppercase; display: block; margin-bottom: 2px; }
       .table-wrap .table td.text-right { text-align: left; }
+      /* La riga dei totali è fatta di th: senza queste due righe si impilerebbe
+         come le altre ma senza l'etichetta che dice quale numero si sta leggendo. */
+      .table-wrap .table tfoot th { display: block; border-top: none; padding: 4px 0; text-align: left; }
+      .table-wrap .table tfoot th:before { content: attr(data-label); font-weight: 700; font-size: .7rem; color: var(--c-muted); text-transform: uppercase; display: block; margin-bottom: 2px; }
     }
 
     @media (max-width: 768px) {
@@ -251,6 +255,7 @@
       <nav class="sidebar" id="sidebar">
         <button class="nav-item active" data-view="risparmio">🏡 Conto Risparmio</button>
         <button class="nav-item" data-view="spese">💰 Conto Spese</button>
+        <button class="nav-item" data-view="portafoglio">📈 Portafoglio</button>
         <button class="nav-item" data-view="analisi-costi">🧾 Spese Famiglia</button>
         <!-- Niente data-view: è un download, non una vista — la sessione resta in localStorage,
              quindi la schermata di login (dove sta l'altro riquadro APK) può non ricomparire per
@@ -330,6 +335,10 @@
 
       </div>
 
+      <!-- Riempite da pfRender() / caOpen() la prima volta che si aprono: i loro dati non
+           servono alle altre viste e non vale la pena leggerli a ogni avvio. -->
+      <div id="view-portafoglio" class="view"></div>
+
       <div id="view-analisi-costi" class="view"></div>
 
       </main>
@@ -341,8 +350,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.7.5';
-    const BUILD_TIME  = '2026-08-03T10:55:00Z';
+    const APP_VERSION = 'v1.8.0';
+    const BUILD_TIME  = '2026-09-05T09:30:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1098,6 +1107,355 @@ function caSummaryHTML(list) {
     + caSummaryGroupHTML('💸 Spese', caCategoryTotals(spese), spese.reduce((s, t) => s + Math.abs(t.amount), 0));
 }
 
+
+    /* ══════════════════════════════════════════════════════════════════
+       PORTAFOGLIO CONTO RISPARMIO — vista in sola lettura
+
+       ⚠️ LOGICA PORTATA DA finanza.html, come la vista Spese Famiglia qui
+       sopra: `pfHoldings` è `computeHoldings`, `pfNetSpent`/`pfCash` sono
+       `portfolioNetSpent`/`computePortfolioCash`, `pfQuote` è
+       `computeFundShares`. Se cambia una regola di là, va cambiata anche
+       qui, o le due pagine diranno due numeri diversi sullo stesso conto.
+
+       ⚠️ Le percentuali di Teresa e Salvatore sono le QUOTE DEL FONDO
+       collegato (versamenti rivalutati con l'indice ISTAT FOI), non
+       `fnz_portfolios.ownership_percentage`: quel campo in Finanza porta
+       già la sola quota del partecipante di riferimento, e usarlo qui la
+       conterebbe due volte. Qui «Tutto» è il portafoglio intero.
+
+       ⚠️ Niente colonna delle tasse: sarebbe una terza copia delle
+       aliquote di `finanza.html`, e su questa pagina nessuno la chiede.
+       ══════════════════════════════════════════════════════════════════ */
+    const PF = {
+      loaded: false,
+      portfolio: null,
+      fund: null,
+      transactions: [],
+      products: [],
+      prices: {},
+      contributions: [],
+      participants: [],
+      foi: [],
+      // '' = tutto il portafoglio; altrimenti la chiave del partecipante.
+      // null = non ancora scelta: la sceglie pfLoad al primo caricamento.
+      quota: null,
+    };
+
+    const pfEURc = v => v == null ? '—' : new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(v);
+    const pfNum  = v => v == null ? '—' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: 6 }).format(v);
+    const pfPct  = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+    const pfPnlCls = v => v == null ? '' : v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+    // Un elenco di valori dentro un `in.(…)` di PostgREST: le virgolette
+    // servono per i simboli che contengono virgole o spazi, che senza di
+    // loro spezzerebbero l'elenco in due valori.
+    const pfIn = vals => `in.(${vals.map(v => '"' + encodeURIComponent(String(v)) + '"').join(',')})`;
+
+    /* ── Caricamento ────────────────────────────────────────────────── */
+    async function pfLoad() {
+      // La RLS restituisce il solo portafoglio del Conto Risparmio; il
+      // filtro sul nome è la stessa regola scritta in chiaro, così se un
+      // giorno la policy si allargasse la pagina resterebbe su di lui.
+      const portfolios = await sb('fnz_portfolios?select=*&order=created_at.asc');
+      PF.portfolio = portfolios.find(p => /conto\s*risparmio/i.test(p.name || '')) || portfolios[0] || null;
+      if (!PF.portfolio) { PF.loaded = true; return; }
+
+      const pid = PF.portfolio.id;
+      const [transactions, funds] = await Promise.all([
+        sb(`fnz_transactions?select=*&portfolio_id=eq.${pid}&order=date.asc,created_at.asc`),
+        sb(`fnz_funds?select=*&linked_portfolio_id=eq.${pid}`),
+      ]);
+      PF.transactions = transactions;
+      PF.fund = funds[0] || null;
+
+      const productIds = [...new Set(transactions.map(t => t.product_id).filter(Boolean))];
+      PF.products = productIds.length ? await sb(`fnz_products?select=*&id=${pfIn(productIds)}`) : [];
+
+      // I prezzi si leggono dalla cache e non dallo storico: è una riga
+      // per simbolo e porta già la chiusura precedente, quindi dice le
+      // stesse cifre di Finanza senza scaricare mesi di quotazioni.
+      const symbols = [...new Set(PF.products.map(p => p.symbol).filter(Boolean))];
+      PF.prices = {};
+      if (symbols.length) {
+        const rows = await sb(`fnz_price_cache?select=*&currency=eq.EUR&symbol=${pfIn(symbols)}`);
+        for (const r of rows) PF.prices[r.symbol] = r;
+      }
+
+      if (PF.fund) {
+        const [contributions, participants, foi] = await Promise.all([
+          sb(`fnz_fund_contributions?select=*&fund_id=eq.${PF.fund.id}&order=date.asc,created_at.asc`),
+          sb(`fnz_fund_participants?select=*&fund_id=eq.${PF.fund.id}&order=name.asc`),
+          sb('fnz_foi_index?select=*&order=year.asc'),
+        ]);
+        PF.contributions = contributions;
+        PF.participants  = participants;
+        PF.foi           = foi;
+      }
+
+      // La pagina è la sua, quindi si apre sulla sua parte; il selettore
+      // resta lì per guardare il resto.
+      if (PF.quota === null) {
+        const mia = pfQuote().participants.find(p => /teresa/i.test(pfNomePartecipante(p)));
+        PF.quota = mia ? mia.key : '';
+      }
+      PF.loaded = true;
+    }
+
+    /* ── Posizioni ──────────────────────────────────────────────────── */
+    function pfHoldings() {
+      const txs = PF.transactions.slice()
+        .sort((a, b) => ((a.date || '') + (a.created_at || '')).localeCompare((b.date || '') + (b.created_at || '')));
+      const map = new Map(); // productId → { qty, costBasis }
+      for (const tx of txs) {
+        if (!map.has(tx.product_id)) map.set(tx.product_id, { qty: 0, costBasis: 0 });
+        const h   = map.get(tx.product_id);
+        const qty = parseFloat(tx.quantity);
+        const prc = parseFloat(tx.price);
+        const com = parseFloat(tx.commission || 0);
+        if (tx.type === 'BUY') {
+          h.costBasis += qty * prc + com;
+          h.qty += qty;
+        } else {
+          if (h.qty > 0) h.costBasis -= (h.costBasis / h.qty) * qty;
+          h.qty -= qty;
+        }
+      }
+      return Array.from(map.entries())
+        .filter(([, h]) => h.qty > 0.000001)
+        .map(([productId, h]) => {
+          const product = PF.products.find(p => p.id === productId);
+          if (!product) return null;
+          const pd           = PF.prices[product.symbol] || null;
+          const currentPrice = pd?.price != null ? parseFloat(pd.price) : null;
+          const currentValue = currentPrice != null ? h.qty * currentPrice : null;
+          const avgCost      = h.qty > 0 ? h.costBasis / h.qty : 0;
+          // Senza prezzo il valore ripiega sul costo, come in Finanza: la
+          // plusvalenza è allora zero, non un buco riempito a occhio.
+          const valore = currentValue ?? h.costBasis;
+          return {
+            product, qty: h.qty, avgCost, costBasis: h.costBasis, pd,
+            currentPrice, currentValue, valore,
+            pnl: valore - h.costBasis,
+            changePct: pd?.change_pct != null ? parseFloat(pd.change_pct) : null,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.valore - a.valore);
+    }
+    /* Quanto è uscito dal conto per comprare titoli: un acquisto porta via
+       anche la commissione, una vendita ne restituisce al netto. */
+    function pfNetSpent() {
+      return PF.transactions.reduce((s, t) => {
+        const lordo = parseFloat(t.quantity) * parseFloat(t.price);
+        const com   = parseFloat(t.commission || 0);
+        return s + (t.type === 'BUY' ? lordo + com : -(lordo - com));
+      }, 0);
+    }
+    /* La liquidità del portafoglio: i soldi versati nel fondo e non ancora
+       investiti. Si usa il totale NOMINALE dei versamenti e non quello
+       rivalutato: la rivalutazione serve a dividere le quote in modo equo,
+       non è denaro che sta sul conto. Mai sotto zero. */
+    function pfCash() {
+      if (!PF.fund) return 0;
+      return Math.max(0, pfQuote().totalNominal - pfNetSpent());
+    }
+
+    /* ── Quote del fondo (rivalutazione ISTAT FOI) ──────────────────── */
+    const PF_COUNTED_STATUS = ['auto', 'confermato'];
+    const pfRowCounts = c => PF_COUNTED_STATUS.includes(c.status || 'confermato');
+    const pfParticipantKey = c => c.participant_id || `name:${(c.participant || '').trim().toUpperCase()}`;
+    function pfNomePartecipante(p) {
+      const reg = p.participantId ? PF.participants.find(x => x.id === p.participantId) : null;
+      return reg?.name || p.participant || '(senza nome)';
+    }
+    function pfQuote() {
+      const counted = PF.contributions.filter(pfRowCounts);
+      const idx = new Map(PF.foi.map(r => [r.year, parseFloat(r.index_value)]));
+      const vuoto = { referenceYear: null, participants: [], totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false };
+      if (!counted.length) return vuoto;
+      const referenceYear = Math.min(...counted.map(c => parseInt(c.date.slice(0, 4), 10)));
+      let hasMissingIndex = false;
+      const rows = counted.map(c => {
+        const year   = parseInt(c.date.slice(0, 4), 10);
+        const amount = parseFloat(c.amount);
+        const refIdx = idx.get(referenceYear), yIdx = idx.get(year);
+        const coefficient = (refIdx == null || yIdx == null) ? null : refIdx / yIdx;
+        if (coefficient == null) hasMissingIndex = true;
+        return { ...c, year, amount, adjusted: coefficient != null ? amount * coefficient : null };
+      });
+      const byParticipant = new Map();
+      for (const r of rows) {
+        const key = pfParticipantKey(r);
+        const cur = byParticipant.get(key) || {
+          key, participantId: r.participant_id || null, participant: r.participant,
+          count: 0, totalNominal: 0, totalAdjusted: 0, hasMissingIndex: false,
+        };
+        cur.count += 1;
+        // Somma algebrica: un prelievo ha importo negativo e abbassa solo
+        // la quota di chi lo ha fatto, non quella di tutti gli altri.
+        cur.totalNominal += r.amount;
+        if (r.adjusted != null) cur.totalAdjusted += r.adjusted; else cur.hasMissingIndex = true;
+        byParticipant.set(key, cur);
+      }
+      const totalNominal  = rows.reduce((s, r) => s + r.amount, 0);
+      const totalAdjusted = rows.reduce((s, r) => s + (r.adjusted || 0), 0);
+      const participants = [...byParticipant.values()]
+        .map(p => ({ ...p, percentage: totalAdjusted !== 0 ? (p.totalAdjusted / totalAdjusted) * 100 : 0 }))
+        .sort((a, b) => b.totalAdjusted - a.totalAdjusted);
+      return { referenceYear, participants, totalNominal, totalAdjusted, hasMissingIndex };
+    }
+    /* La frazione con cui si moltiplica ogni importo: 1 su «Tutto», la
+       percentuale del partecipante scelto altrimenti. */
+    function pfOwn(quote) {
+      if (!PF.quota) return 1;
+      const p = quote.participants.find(x => x.key === PF.quota);
+      return p ? p.percentage / 100 : 1;
+    }
+
+    /* ── Vista ──────────────────────────────────────────────────────── */
+    async function pfOpen(container) {
+      if (!container) return;
+      if (!PF.loaded) {
+        container.innerHTML = '<div class="ca-empty">Caricamento portafoglio…</div>';
+        try { await pfLoad(); }
+        catch (e) {
+          container.innerHTML = `<div class="ca-empty">Impossibile caricare il portafoglio.<br>${caEsc(e.message)}</div>`;
+          return;
+        }
+      }
+      pfRender();
+    }
+
+    function pfSetQuota(v) { PF.quota = v; pfRender(); }
+
+    function pfRender() {
+      const container = document.getElementById('view-portafoglio');
+      if (!container) return;
+      if (!PF.portfolio) {
+        container.innerHTML = '<div class="ca-empty">Nessun portafoglio da mostrare.<br>Se dovresti vederne uno, il permesso di lettura non è ancora arrivato fin qui.</div>';
+        return;
+      }
+      const quote    = pfQuote();
+      const own      = pfOwn(quote);
+      const holdings = pfHoldings();
+      const scelto   = PF.quota ? quote.participants.find(p => p.key === PF.quota) : null;
+      const etichetta = scelto ? `quota di ${caEsc(pfNomePartecipante(scelto))}` : 'portafoglio intero';
+
+      const titoli   = holdings.reduce((s, h) => s + h.valore, 0) * own;
+      const cash     = pfCash() * own;
+      const valore   = titoli + cash;
+      const costo    = holdings.reduce((s, h) => s + h.costBasis, 0) * own;
+      // P&L e variazione giornaliera restano sui soli titoli: la liquidità
+      // non guadagna né perde, e sommarla al valore senza sommarla al costo
+      // la farebbe comparire come utile il giorno che entra sul conto.
+      const pnl      = titoli - costo;
+      const pnlPct   = costo > 0 ? (pnl / costo) * 100 : null;
+      const senzaPrezzo = holdings.filter(h => h.currentPrice == null).length;
+
+      const opzioni = [{ v: '', label: '👥 Tutto il portafoglio' }]
+        .concat(quote.participants.map(p => ({
+          v: p.key,
+          label: `${pfNomePartecipante(p)} · ${p.percentage.toFixed(1)}%`,
+        })));
+
+      container.innerHTML = `
+      <div class="hstack gap-8 mb-20" style="justify-content:space-between; flex-wrap:wrap;">
+        <h2 class="section-title" style="margin-bottom:0">📈 ${caEsc(PF.portfolio.name)}</h2>
+        <select id="pf-quota-select" class="year-select" onchange="pfSetQuota(this.value)">
+          ${opzioni.map(o => `<option value="${caEsc(o.v)}"${o.v === PF.quota ? ' selected' : ''}>${caEsc(o.label)}</option>`).join('')}
+        </select>
+      </div>
+
+      <p class="ca-note">
+        Sola consultazione: qui i dati non si modificano. Gli importi mostrati sono
+        <strong>la ${etichetta}</strong>${scelto ? ` (${scelto.percentage.toFixed(1)} % del totale)` : ''};
+        quantità e prezzi restano invece quelli veri, per intero.
+      </p>
+
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">Valore</div><div class="kpi-value mono">${fmtEUR(valore)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">di cui liquidità</div><div class="kpi-value mono">${fmtEUR(cash)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Investito</div><div class="kpi-value mono">${fmtEUR(costo)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Guadagno / Perdita</div><div class="kpi-value mono ${pfPnlCls(pnl)}">${fmtEUR(pnl)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Rendimento</div><div class="kpi-value mono ${pfPnlCls(pnlPct)}">${pfPct(pnlPct)}</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Posizioni</div>
+        ${senzaPrezzo ? `<p class="text-muted text-sm mb-20">⚠️ ${senzaPrezzo === 1 ? 'Una posizione non ha' : `${senzaPrezzo} posizioni non hanno`} un prezzo aggiornato: ${senzaPrezzo === 1 ? 'il suo valore è' : 'i loro valori sono'} quello di acquisto.</p>` : ''}
+        ${holdings.length === 0
+          ? '<div class="text-muted text-sm">Nessun titolo in portafoglio: quello che c\'è è tutta liquidità.</div>'
+          : `<div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Titolo</th>
+                <th class="text-right">Quantità</th>
+                <th class="text-right">Costo medio</th>
+                <th class="text-right">Prezzo</th>
+                <th class="text-right">Valore</th>
+                <th class="text-right">P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${holdings.map(h => `
+              <tr>
+                <td data-label="Titolo">
+                  <div class="fw-600">${caEsc(h.product.symbol || '')}</div>
+                  <div class="text-muted text-sm">${caEsc(h.product.name || '')}</div>
+                </td>
+                <td class="text-right mono" data-label="Quantità">${pfNum(h.qty)}</td>
+                <td class="text-right mono" data-label="Costo medio">${pfEURc(h.avgCost)}</td>
+                <td class="text-right mono ${pfPnlCls(h.changePct)}" data-label="Prezzo">${h.currentPrice != null ? pfEURc(h.currentPrice) : '—'}</td>
+                <td class="text-right mono fw-600" data-label="Valore">${fmtEUR(h.valore * own)}</td>
+                <td class="text-right mono ${pfPnlCls(h.pnl)}" data-label="P&L">${fmtEUR(h.pnl * own)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Quote del fondo</div>
+        ${quote.participants.length === 0
+          ? '<div class="text-muted text-sm">Nessun versamento registrato: le quote non si possono calcolare.</div>'
+          : `<p class="text-muted text-sm mb-20">
+              Le percentuali si calcolano sui versamenti <strong>rivalutati con l'indice ISTAT FOI</strong>
+              al ${quote.referenceYear ?? '—'}, l'anno del primo versamento: mille euro versati allora
+              valgono più di mille euro versati oggi.
+              ${quote.hasMissingIndex ? '<br>⚠️ Per qualche anno l\'indice FOI non è in archivio: quei versamenti entrano solo nel totale nominale, quindi le percentuali sono provvisorie.' : ''}
+            </p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Partecipante</th>
+                  <th class="text-right">Versato</th>
+                  <th class="text-right">Rivalutato</th>
+                  <th class="text-right">Quota</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${quote.participants.map(p => `
+                <tr${p.key === PF.quota ? ' style="background:var(--c-bg)"' : ''}>
+                  <td data-label="Partecipante"><span class="fw-600">${caEsc(pfNomePartecipante(p))}</span>${p.hasMissingIndex ? ' <span class="text-muted text-sm">(FOI incompleto)</span>' : ''}</td>
+                  <td class="text-right mono" data-label="Versato">${fmtEUR(p.totalNominal)}</td>
+                  <td class="text-right mono" data-label="Rivalutato">${fmtEUR(p.totalAdjusted)}</td>
+                  <td class="text-right mono fw-600" data-label="Quota">${p.percentage.toFixed(1)} %</td>
+                </tr>`).join('')}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th data-label="Partecipante">Totale</th>
+                  <th class="text-right mono" data-label="Versato">${fmtEUR(quote.totalNominal)}</th>
+                  <th class="text-right mono" data-label="Rivalutato">${fmtEUR(quote.totalAdjusted)}</th>
+                  <th class="text-right mono" data-label="Quota">100,0 %</th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>`}
+      </div>`;
+    }
+
     /* ── Navigazione tra le sezioni ── */
     function navigate(view) {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -1106,8 +1464,9 @@ function caSummaryHTML(list) {
       document.querySelector(`.nav-item[data-view="${view}"]`)?.classList.add('active');
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('mobile-nav-overlay').classList.remove('open');
-      // I dati di Spese Famiglia si caricano solo quando la vista viene aperta
+      // I dati di Spese Famiglia e del Portafoglio si caricano solo quando la vista viene aperta
       if (view === 'analisi-costi') caOpen(document.getElementById('view-analisi-costi'));
+      if (view === 'portafoglio')   pfOpen(document.getElementById('view-portafoglio'));
     }
 
     // Solo le voci con data-view: il collegamento all'APK usa la stessa classe per avere lo
