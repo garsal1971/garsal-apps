@@ -3989,6 +3989,42 @@ Teresa legge i dati via RLS con lo stesso meccanismo del resto della sua pagina
 tabelle `ca_*` sono ristrette alle righe di Salvatore con `garsal_user_id()`: quelle tabelle **non
 sono monoutente** — Ada ha i propri dati di Analisi Costi e non devono comparire.
 
+### 📈 Portafoglio Conto Risparmio in `situazione-teresa.html` — logica portata da Finanza
+
+La voce 📈 **Portafoglio** mostra a Teresa il portafoglio **CONTO RISPARMIO** di Finanza — valore,
+liquidità, investito, P&L, le posizioni titolo per titolo e le quote del fondo collegato — con un
+selettore `👥 Tutto · Teresa · Salvatore` che rifà ogni importo sulla quota scelta.
+
+⚠️ **Le percentuali sono le QUOTE DEL FONDO, non `fnz_portfolios.ownership_percentage`**: quel
+campo lo riscrive `syncFundOwnership()` con la sola quota del partecipante di riferimento, e
+usarlo qui la conterebbe due volte. «Tutto» è quindi il portafoglio **intero**, che in Finanza non
+si legge da nessuna parte — lì il valore è già in quota.
+
+⚠️ **Quantità e prezzi restano interi, solo gli importi vanno in quota** — è la stessa scelta di
+`renderPortafoglioDetail()` in `finanza.html`: il prezzo di un titolo è quello che è, e mostrarne
+il 55 % sarebbe un numero che non esiste da nessuna parte.
+
+⚠️ **Terza copia della logica del portafoglio** (dopo `finanza.html` e la Edge Function
+`save-snapshot`): `pfHoldings` è `computeHoldings`, `pfNetSpent`/`pfCash` sono
+`portfolioNetSpent`/`computePortfolioCash`, `pfQuote` è `computeFundShares`. Cambiando una regola
+di là va cambiata anche qui, o le due pagine diranno due numeri diversi sullo stesso conto. È la
+stessa duplicazione voluta della vista Spese Famiglia, un blocco più in su.
+
+⚠️ **I prezzi si leggono da `fnz_price_cache` e non da `fnz_price_history`**: è una riga per
+simbolo e porta già la chiusura precedente, quindi dice le stesse cifre di Finanza (dove
+`computePricesFromHistory` ricava lo storico da quella stessa cache, via trigger) senza scaricare
+mesi di quotazioni su una pagina che le userebbe per una riga sola.
+
+⚠️ **Niente colonna delle tasse**: sarebbe una terza copia delle aliquote, e qui nessuno la chiede.
+
+⚠️ **La RLS è ristretta al solo Conto Risparmio**
+(`20260905120000_guest_teresa_portafoglio_conto_risparmio.sql`): il perno è
+`teresa_cr_portfolios()`, che torna i portafogli con `name ILIKE '%conto risparmio%'`;
+da lì discendono movimenti, prodotti, simboli dei prezzi, il fondo collegato e i suoi versamenti.
+`fnz_foi_index` si legge intera perché è l'indice ISTAT, un dato pubblico. ⚠️ **Rinominando quel
+portafoglio senza la parola «risparmio» la sezione si svuota senza nessun errore**: non è un
+difetto della pagina, è il filtro che non aggancia più.
+
 ### `spuntiamola.html` — Spuntiamola
 - Conto alla rovescia "a spunte": si imposta un periodo **dal giorno X al giorno Y** e si spunta
   un giorno alla volta fino al traguardo
@@ -4547,6 +4583,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 6. **Duplicate `renderTaskCard`**: `tasks.html` defines `renderTaskCard` in two places (dashboard view and categories/management view). Both must be kept in sync when changing card rendering logic.
 7. **Calcolo patrimonio duplicato**: la logica dello snapshot vive sia in `finanza.html` sia in `supabase/functions/save-snapshot/index.ts`, più una versione ridotta in `index.html` (`fetchPortfolioLiveValue`). Modificarne una sola fa divergere in silenzio lo snapshot notturno o l'avviso in home — dettagli in *Edge Functions e job schedulati*.
 8. **Vista Spese Famiglia duplicata**: lo stesso blocco in sola lettura vive in `finanza.html` e in `situazione-teresa.html`. Modificarne uno solo fa divergere in silenzio le due pagine — dettagli in *App Details → Vista "Spese Famiglia" in sola lettura*.
+8b. **Il portafoglio ha una terza copia**: `situazione-teresa.html` porta `computeHoldings` / `computePortfolioCash` / `computeFundShares` come `pfHoldings` / `pfCash` / `pfQuote` per la vista 📈 Portafoglio. Cambiarne una in `finanza.html` e non qui fa divergere in silenzio le due pagine — dettagli in *App Details → 📈 Portafoglio Conto Risparmio*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
 10. **`APP_SENZA_PUNTI` vive in tre posti**: `index.html`, `home/PortedApps.kt` e `scripts/backup-report.mjs`. Se divergono, home web, home nativa e relazione settimanale mostrano tre totali diversi — dettagli in *Backup settimanale*.
 11. **Otto app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati e Calorie hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
