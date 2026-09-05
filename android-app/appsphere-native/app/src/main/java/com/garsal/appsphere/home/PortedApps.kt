@@ -76,6 +76,7 @@ object AppSenzaPunti {
         "casaterrasini.html",
         "contabilita.html",
         "cost-analysis.html",
+        "forziere.html",
     )
 
     /** Vero se il numero di quell'app è un punteggio, e quindi si mostra e si somma. */

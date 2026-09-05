@@ -1102,6 +1102,56 @@ si vive, e le due cose convivono nel tempo senza essere la stessa. Sta anche in 
 perché riaprendo l'archivio non si saprebbe più di che stecca si trattava. Le righe nate prima
 restano `'attesa'`, che è quello che erano davvero: l'app sapeva parlare in un modo solo.
 
+### Forziere (`frz_*`)
+| Table | Purpose |
+|---|---|
+| `frz_vault` | Una riga per utente: dov'è la cartella su Drive e i suoi due oggetti di servizio, più le date di collaudo ed export |
+| `frz_files` | Una riga per file: `drive_file_id`, `meta_enc` (nome, tipo, dimensione vera, note — **tutto cifrato**), peso del cifrato |
+| `frz_thumbs` | Le miniature, cifrate. Tabella a parte perché l'elenco si legge a ogni apertura e deve restare leggero |
+
+⚠️ **In queste tabelle non c'è niente da attaccare, ed è la scelta che regge tutto.** Il
+segreto sono **24 parole** che stanno solo nella testa di Salvatore; i file cifrati stanno su
+Google Drive e le due chiavi di servizio pure. Chi si portasse via un dump del database non
+avrebbe nemmeno *su cosa* provare a indovinare.
+
+⚠️ **Il database NON è indispensabile**, ed è la proprietà per cui il Forziere esiste: ogni
+`.gpg` si riapre da solo con `gpg -d` e le 24 parole, e porta dentro di sé il proprio nome
+originale (pacchetto *literal* di OpenPGP). Perso il database non si perde un byte — si perde
+la comodità di sfogliare, cercare e vedere le miniature. Nessuna modifica futura deve togliere
+questa proprietà.
+
+⚠️ **Il formato è OpenPGP simmetrico e non un formato nostro.** La procedura di recupero
+dev'essere **ricordabile a mente** — `gpg -d documento.gpg`, poi le 24 parole — e una ricetta
+nostra (normalizzazione, sale, giri, HKDF) sarebbe fragile proprio dove non può esserlo: basta
+sbagliare un dettaglio e non si apre più niente, e quei dettagli non stanno in nessuna testa.
+Il file si porta dentro algoritmo, sale e giri, e il programma li legge da sé. Una prima
+versione del progetto aveva quella ricetta ed è stata **ritirata prima di scrivere una riga**.
+
+**I tre oggetti su Drive**, nella cartella `Forziere AppSphere` (che la Edge Function si crea
+da sé, e **non** è quella dei backup — una rotazione sbagliata cancellerebbe il forziere):
+
+| Oggetto | Cos'è | Chiuso con |
+|---|---|---|
+| `<uuid>.gpg` | un documento | le 24 parole |
+| `indice.gpg` | la chiave dell'indice (32 byte casuali) | le 24 parole |
+| `scorciatoia.gpg` | le 24 parole | la passphrase quotidiana |
+
+⚠️ **`indice.gpg` fa anche da PROVA**: se si apre, le parole sono quelle giuste; se no, no. Un
+verificatore a parte sarebbe una seconda verità sulla stessa domanda — e un oracolo in più per
+chi prova a indovinare.
+
+⚠️ **I metadati non passano da OpenPGP ma da AES-256-GCM** sotto la chiave dell'indice: ogni
+apertura OpenPGP con una password rifà la derivazione lenta, e per trecento nomi di file
+vorrebbe dire trecento derivazioni, cioè minuti. La chiave dell'indice è 32 byte casuali —
+non si indovina, quindi non serve renderla lenta.
+
+⚠️ **La ricerca è lato client e non può essere altrimenti**: il server i nomi non li può
+leggere. È il prezzo dell'E2EE ed è giusto pagarlo qui.
+
+⚠️ **Quel che resta visibile** a chi guarda il database o il Drive: **quanti** file ci sono,
+**quanto pesano** e **quando** sono stati caricati. Non si può nascondere senza complicazioni
+sproporzionate, e va detto invece di lasciarlo credere protetto.
+
 ### SOS (`sos_*`)
 | Table | Purpose |
 |---|---|
@@ -1389,6 +1439,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `enable-banking-fondo-sync` | manuale (da `finanza.html`, scheda fondo) | Importa i bonifici di un conto in `fnz_fund_contributions`: CRDT → versamento (controparte = debtor), DBIT → prelievo (controparte = creditor), match su IBAN e poi su nome; senza match la riga entra come `da_rivedere` |
 | `enable-banking-transactions` | manuale (da `conto-risparmio-teresa.html`, `conto-spese-teresa.html`, `spese-ada.html`, `casarosa.html` e da `finanza.html` → 🌹 Danaro di Rosa) | **Legge e basta**: restituisce movimenti (importo con segno, `card` quando la banca espone la carta usata) e saldi normalizzati di un conto, senza scrivere niente. Destinazione, categorie e controllo dei doppioni restano al chiamante — Conto Risparmio, Contribuzione e Spese Ada hanno già i propri |
 | `notification-action` | manuale (da `telegram-webhook` e dall'APK nativo) | Che cosa fa un pulsante di un promemoria: ✅ Fatto, ⏸ rinvia, ❌ annulla. **L'unica implementazione**, chiamata sia dal bot sia dal telefono |
+| `forziere-drive` | manuale (da `forziere.html`) | Il ponte col Drive del Forziere: crea la cartella, apre i caricamenti, restituisce e cancella i file. ⚠️ **Non vede mai niente in chiaro** — tutto quel che le passa davanti è già cifrato con OpenPGP dalle 24 parole, che qui non arrivano né adesso né mai. Il caricamento **non passa di qui**: `upload-url` chiede a Google un indirizzo ripristinabile e i byte vanno dal browser a Google diretti (con ripiego su `put` per i file piccoli, se quella strada è bloccata). Lo scaricamento passa — Drive non ha indirizzi firmati — ma **in flusso** |
 | `al-food-search` | manuale (da `calorie.html`) | **Legge e basta**: cerca un alimento per nome o per codice a barre nelle banche dati pubbliche e lo restituisce **già normalizzato**. Fonti in ordine: Open Food Facts Search-a-licious, la vecchia `/cgi/search.pl` come ripiego, e USDA FoodData Central se c'è il secret `USDA_API_KEY`. Ogni fonte torna col suo esito (HTTP, tempo, errore) |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
@@ -3678,6 +3729,75 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   misura per le scale, quello osservato per i numeri liberi. **Per una scelta al posto della
   miniatura c'è la distribuzione** (`.dist`): un numero non ce l'ha, e quello che si vuole sapere
   è quante volte è uscita ciascuna opzione.
+
+### `forziere.html` — Forziere
+- I file che devono stare al sicuro: cifrati **sul computer di Salvatore** prima di partire, e
+  archiviati su Google Drive. Si apre dalla bolla in AppSphere, che però ha `riservato = true`:
+  **si vede solo in modalità nascosta**, come Finanza. Un forziere annunciato in home a chiunque
+  guardi lo schermo da sopra la spalla è metà del lavoro buttato.
+- **Due segreti, non uno.** Le **24 parole** (che le sceglie l'utente, non l'app) sono la chiave
+  vera: con loro si cifra e si decifra. La **passphrase** è solo una scorciatoia per l'uso
+  quotidiano. ⚠️ **Non è la passphrase a cifrare i file** — se lo fosse, cambiarla vorrebbe dire
+  ricifrare l'archivio; invece si rifà solo `scorciatoia.gpg`, una manciata di byte, e i file non
+  si toccano nemmeno con 10 GB dentro.
+- ⚠️ **Le 24 parole non si possono cambiare**: sono la password OpenPGP di ogni file già scritto.
+  Si scelgono una volta sola. Il form controlla quello che conta davvero — **almeno 12 parole,
+  almeno 10 diverse, nessuna ripetuta più di due volte** — e **non** la lunghezza delle singole
+  parole, che non c'entra quasi niente: 24 parole casuali valgono ~250 bit anche se sono tutte da
+  tre lettere. Quel che toglie forza è il senso compiuto (indovinata una, la successiva viene da
+  sé), la ripetizione, e l'essere ricavate da nomi o date di famiglia.
+- ⚠️ **La normalizzazione dev'essere rifacibile a mente davanti a un terminale**, perché le stesse
+  parole si riscrivono dentro gpg, che non normalizza niente e prende i byte che digiti. Quindi la
+  forma canonica è la più semplice che esista — **tutto minuscolo, una parola dopo l'altra separate
+  da uno spazio solo** — e la pagina la **mostra** alla creazione perché sia quella che si ricorda.
+  Qualsiasi regola più furba sarebbe irripetibile. `normParole()` vive in due posti,
+  `forziere.html` e `APRI-QUESTO.html`, e **vanno cambiati insieme**.
+- ⚠️ **`openpgp.config.aeadProtect = false` non è un ripiego: è la compatibilità.** OpenPGP.js v6
+  userebbe di suo SEIPDv2 (AEAD, RFC 9580), che GnuPG legge solo dalla **2.5** in poi — cioè non la
+  versione installata oggi sulla gran parte dei computer. Con SEIPDv1 il file lo apre qualunque gpg
+  degli ultimi vent'anni, ed è tutto il punto di aver scelto questo formato. **Verificato**: file
+  prodotto dalla pagina, aperto da **GnuPG 2.4.4** con `--use-embedded-filename`, byte identici.
+- **Le librerie stanno in `/vendor/` sul nostro dominio, non su un CDN**: questa pagina maneggia le
+  24 parole, e una libreria servita da terzi può essere sostituita a runtime e portarsele via senza
+  che nessuno se ne accorga. ⚠️ È una **deroga** alla regola «ogni app è un file HTML solo», ed è
+  l'unica ragione per cui la si accetta. 7-Zip si carica **solo premendo Esporta**, così l'uso
+  quotidiano resta leggero.
+- **La chiave dell'indice è una `CryptoKey` con `extractable: false`**: esiste nel browser ma da
+  JavaScript non se ne leggono i byte. Le 24 parole invece devono stare in una stringa in memoria
+  (servono a OpenPGP per cifrare i file nuovi) — ⚠️ e per questo il forziere si **chiude da sé**
+  dopo `MINUTI_BLOCCO`, alla chiusura della scheda e all'uscita da AppSphere (`LOGOUT` sul
+  `BroadcastChannel`). Niente `localStorage`, niente `sessionStorage`, mai.
+- **Export `.7z`** (💾): i documenti dentro stanno **in chiaro**, protetti dalla cifratura AES-256
+  del 7z stesso — un archivio pieno di `.gpg` sarebbe una scatola dentro una scatola e non
+  risparmierebbe niente a chi lo apre. ⚠️ **`-mhe=on` cifra anche l'elenco dei nomi**: senza, la
+  lista dei file si legge senza password, e i nomi sono metà del segreto. La password sono le 24
+  parole, ma se ne può mettere un'altra per dare quella copia a qualcuno senza consegnare anche il
+  forziere. **Verificato** con 7-Zip vero: senza password nemmeno l'elenco si apre.
+- ⚠️ **L'export è la risposta a «perdo l'account Google»**, che il progetto inizialmente non
+  copriva: i file stanno su Drive, quindi perso l'account sono persi — le 24 parole aprirebbero
+  benissimo qualcosa che non c'è più. La pagina dice da quanti giorni non lo si fa, e lo dice a
+  gran voce finché non se n'è fatto **nemmeno uno**.
+- **`APRI-QUESTO.html`** è la via d'uscita che non dipende da questa app: apre i `.gpg` **offline**,
+  con OpenPGP.js **incorporato dentro** (nessuna `fetch`, nessun CDN — si può staccare la rete e
+  controllare). Si genera con `scripts/build-apri-questo.py` da `vendor/openpgp.min.js`
+  e va **rigenerato quando la libreria si aggiorna**.
+- **Il collaudo del primo giorno**: appena creato, la pagina fa riscrivere le 24 parole e le prova
+  **come le proverebbe un recupero vero** (aprendo `indice.gpg`), non confrontandole con quelle che
+  ha in memoria — un collaudo che si confronta con sé stesso passerebbe sempre. Sapere che il
+  recupero funziona costa un minuto oggi; scoprire che non funziona costa il forziere fra dieci
+  anni. ⚠️ Quando le parole non aprono, la pagina **non dice quale** è sbagliata — non può, o
+  vedrebbe le parole — ma **dice che è successo**, ed è tutta la differenza fra un errore di
+  battitura e credere di aver perso tutto.
+- ⚠️ **Una riga di `frz_files` che non si decifra non fa saltare l'elenco**: si mostra e si dice
+  che c'è. Sparire sarebbe il modo peggiore di segnalare un problema — un file in meno e nessuno
+  che spieghi perché. Stessa regola per una miniatura illeggibile.
+- ⚠️ **Cancellando, prima il file su Drive e poi la riga.** Al contrario, una rete che cade
+  lascerebbe su Drive un file cifrato che nessuno sa più cos'è e che dall'app non si può più
+  togliere. È la stessa scelta delle foto di Memo.
+- ⚠️ **Il numero della bolla è un conteggio di file e non un punteggio**: sta in `APP_SENZA_PUNTI`
+  (`index.html`), `AppSenzaPunti` (`PortedApps.kt`) e `SENZA_PUNTI` (`scripts/backup-report.mjs`).
+- **Non esiste in nativo** (fase 1 solo web). La biometria sul telefono è la fase 2: la chiave
+  maestra avvolta nel Keystore di Android, così le 24 parole si scrivono una volta sola.
 
 ### `casarosa.html` — Cassa Casa Rosa
 - Movimenti e saldo della cassa di Casa Rosa (`cntrs_transactions`, `cntrs_categories`,
