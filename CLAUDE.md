@@ -3767,6 +3767,21 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   (servono a OpenPGP per cifrare i file nuovi) — ⚠️ e per questo il forziere si **chiude da sé**
   dopo `MINUTI_BLOCCO`, alla chiusura della scheda e all'uscita da AppSphere (`LOGOUT` sul
   `BroadcastChannel`). Niente `localStorage`, niente `sessionStorage`, mai.
+- ⚠️ **Un file si APRE nella pagina, non si scarica** (v1.1.0): il tocco sull'anteprima o su
+  👁 Apri lo decifra e lo mostra in un visore — immagini, PDF, video, audio e testo. Scaricare
+  è rimasto, ma dentro il visore e come **seconda** scelta dichiarata: un documento sceso nella
+  cartella Download **esce dal forziere** e resta lì in chiaro finché qualcuno non se ne
+  ricorda, che è l'opposto di quel che questa app fa. Il file decifrato vive in un blob in
+  memoria e si butta chiudendo.
+  ⚠️ **Il blob si revoca in `chiudiModale()`** e non in un pulsante: da quella finestra si esce
+  anche col ✕, con l'indietro di Android e col blocco automatico, e un blob non revocato resta
+  raggiungibile per tutta la vita della pagina.
+  ⚠️ **Il tipo con cui si costruisce il blob lo decide `comeMostrare()`, non `meta.tipo`**: un
+  file dichiarato `text/html` dentro un `<iframe>` girerebbe **nella nostra origine**, cioè
+  nella pagina che in quel momento tiene le 24 parole in memoria. L'iframe si usa quindi solo
+  per il PDF, forzando `application/pdf`; un SVG passa da `<img>`, dove gli script non partono;
+  tutto il resto che il browser non sa mostrare **lo dice e offre lo scaricamento**, invece di
+  restare un riquadro nero.
 - **Export `.7z`** (💾): i documenti dentro stanno **in chiaro**, protetti dalla cifratura AES-256
   del 7z stesso — un archivio pieno di `.gpg` sarebbe una scatola dentro una scatola e non
   risparmierebbe niente a chi lo apre. ⚠️ **`-mhe=on` cifra anche l'elenco dei nomi**: senza, la
