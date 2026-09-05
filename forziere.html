@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.0.0</title>
+<title>🔐 Forziere v1.1.0</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- ⚠️ OpenPGP.js dal NOSTRO dominio e non da un CDN. Questa pagina maneggia le 24 parole:
      una libreria servita da terzi potrebbe essere sostituita a runtime e portarsele via
@@ -119,6 +119,23 @@ textarea{resize:vertical;line-height:1.45}
   max-height:90vh;overflow-y:auto;overflow-x:hidden}
 .modal h3{font-size:1.3rem;font-weight:900;margin-bottom:4px}
 
+/* ── IL VISORE ──
+   Il file si guarda QUI DENTRO e non si scarica: un documento sceso nella cartella
+   Download resta in chiaro sul disco, fuori dal forziere, e ci resta finché qualcuno
+   non se ne ricorda. Il file decifrato vive in un blob in memoria, e si butta chiudendo. */
+.modal.visore{max-width:1100px;width:96vw;padding:16px}
+.visore-testa{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.visore-testa .nome{font-weight:900;font-size:1.05rem;min-width:0;word-break:break-word}
+.visore-corpo{background:#0f172a;border-radius:14px;overflow:auto;display:flex;
+  align-items:center;justify-content:center;height:min(74vh,860px)}
+.visore-corpo img,.visore-corpo video{max-width:100%;max-height:100%;display:block;object-fit:contain}
+.visore-corpo iframe{width:100%;height:100%;border:0;background:#fff}
+.visore-corpo pre{width:100%;height:100%;margin:0;padding:16px;overflow:auto;color:#e2e8f0;
+  font-family:'Space Mono',ui-monospace,monospace;font-size:.86rem;white-space:pre-wrap;
+  word-break:break-word;text-align:left}
+.visore-corpo audio{width:min(90%,520px)}
+.visore-niente{color:#94a3b8;font-weight:700;text-align:center;padding:24px}
+
 /* ── BARRA DI AVANZAMENTO ── */
 .barra{height:10px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:10px}
 .barra i{display:block;height:100%;background:var(--success);width:0;transition:width .2s}
@@ -138,7 +155,7 @@ textarea{resize:vertical;line-height:1.45}
   <div class="topbar-spacer"></div>
   <div class="header-right">
     <span class="sync-badge" id="syncBadge">···</span>
-    <span class="app-version" id="versionBadge">v1.0.0</span>
+    <span class="app-version" id="versionBadge">v1.1.0</span>
   </div>
 </div>
 
@@ -269,8 +286,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.0.0';
-var BUILD_TIME  = '2026-09-05T12:30:00Z';
+var APP_VERSION = 'v1.1.0';
+var BUILD_TIME  = '2026-09-05T13:10:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -365,6 +382,7 @@ var S = {
   file: [],             // l'elenco, coi metadati già decifrati
   thumbs: {},           // id → dataURL, riempito pigramente
   cerca: '',
+  visore: null,        // il file aperto adesso: blob + byte in chiaro, buttati alla chiusura
   timerBlocco: null
 };
 
@@ -568,7 +586,15 @@ function peso(n){
   return (n/1073741824).toFixed(2) + ' GB';
 }
 function apriModale(html){ $('modalBody').innerHTML = html; $('overlay').classList.add('on'); }
-function chiudiModale(){ $('overlay').classList.remove('on'); $('modalBody').innerHTML = ''; }
+function chiudiModale(){
+  $('overlay').classList.remove('on');
+  $('modalBody').innerHTML = '';
+  $('modalBody').classList.remove('visore');
+  // ⚠️ Il blob del file decifrato si revoca QUI e non nel pulsante di chiusura: da questa
+  // finestra si esce anche col ✕, con l'indietro di Android e col blocco automatico, e un
+  // blob non revocato resta raggiungibile per tutta la vita della pagina.
+  if (S.visore){ try { URL.revokeObjectURL(S.visore.url); } catch(e){} S.visore = null; }
+}
 function avanzamento(barra, stato, frazione, testo){
   var b = $(barra);
   b.style.display = frazione == null ? 'none' : 'block';
@@ -801,13 +827,13 @@ function disegnaGriglia(){
       ? '<img src="' + S.thumbs[id] + '" alt="">'
       : iconaPer(m.tipo, m.nome);
     return '<div class="tile">' +
-      '<div class="anteprima" id="th_' + id + '">' + mini + '</div>' +
+      '<div class="anteprima" id="th_' + id + '" style="cursor:zoom-in" onclick="apriFile(\'' + id + '\')">' + mini + '</div>' +
       '<div class="corpo">' +
         '<div class="nome">' + esc(m.nome || '(senza nome)') + '</div>' +
         '<div class="muted tiny">' + esc(peso(m.size || f.riga.size_bytes)) + '</div>' +
       '</div>' +
       '<div class="azioni">' +
-        '<button class="btn small ok" onclick="scarica(\'' + id + '\')">⬇️ Apri</button>' +
+        '<button class="btn small ok" onclick="apriFile(\'' + id + '\')">👁 Apri</button>' +
         '<button class="btn small danger" onclick="elimina(\'' + id + '\')">🗑</button>' +
       '</div></div>';
   }).join('');
@@ -905,22 +931,105 @@ async function miniatura(file){
 }
 
 // ============================================================
-// TIRARE FUORI UN FILE
+// GUARDARE UN FILE — dentro la pagina, non nella cartella Download
 // ============================================================
-async function scarica(id){
+// ⚠️ Aprire NON è scaricare, ed è il punto. Un documento scaricato esce dal forziere: si
+// posa in chiaro nella cartella Download, dove resta finché qualcuno non se ne ricorda —
+// e lì non è più cifrato da niente. Qui il file decifrato vive in un blob in memoria, si
+// guarda, e chiudendo la finestra sparisce. Lo scaricamento resta, ma come **seconda**
+// scelta e dichiarata, dentro il visore.
+
+// Che cosa il browser sa mostrare, e come. ⚠️ Il tipo si decide QUI e non si prende da
+// `meta.tipo`: un file dichiarato `text/html` dentro un iframe girerebbe **nella nostra
+// origine**, con accesso alla pagina che in quel momento tiene le 24 parole in memoria.
+// L'iframe si usa quindi solo per il PDF, e il blob si costruisce forzando quel tipo.
+// Un SVG passa invece da <img>, dove gli script non partono.
+function comeMostrare(tipo){
+  tipo = String(tipo || '').toLowerCase();
+  if (tipo.indexOf('image/') === 0) return { modo:'img',   tipo: tipo };
+  if (tipo.indexOf('video/') === 0) return { modo:'video', tipo: tipo };
+  if (tipo.indexOf('audio/') === 0) return { modo:'audio', tipo: tipo };
+  if (tipo === 'application/pdf')   return { modo:'pdf',   tipo: 'application/pdf' };
+  if (tipo.indexOf('text/') === 0 || tipo === 'application/json')
+    return { modo: tipo === 'text/html' ? 'niente' : 'testo', tipo: 'text/plain' };
+  return { modo:'niente', tipo:'application/octet-stream' };
+}
+
+var TESTO_MAX = 2 * 1024 * 1024;
+
+async function apriFile(id){
   var f = S.file.find(function(x){ return x.riga.id === id; });
   if (!f) return;
   try {
-    avanzamento('barraOp','statoOp', 0.3, 'Scarico ' + (f.meta.nome||'') + '…');
+    avanzamento('barraOp','statoOp', 0.3, 'Prendo ' + (f.meta.nome||'') + '…');
     var gpg = await drive('get', { id: f.riga.drive_file_id });
     avanzamento('barraOp','statoOp', 0.75, 'Decifro…');
     var r = await decifraFile(gpg, S.parole);
     avanzamento('barraOp','statoOp', null, '');
-    salvaSulDisco(r.dati, r.nome || f.meta.nome || 'file', f.meta.tipo);
+    mostraVisore(f, r.dati, r.nome || f.meta.nome || 'documento');
   } catch(e){
     avanzamento('barraOp','statoOp', null, '');
     alert('Non sono riuscito ad aprirlo: ' + e.message);
   }
+}
+
+function mostraVisore(f, dati, nome){
+  var q = comeMostrare(f.meta.tipo);
+  var url = URL.createObjectURL(new Blob([dati], { type: q.tipo }));
+  S.visore = { url: url, nome: nome, tipo: f.meta.tipo || '', dati: dati };
+
+  var corpo;
+  // ⚠️ `onerror`: il tipo dichiarato dice che il browser DOVREBBE saperlo mostrare, ma un
+  // .mov o un'immagine in un formato esotico lo mettono lo stesso in difficoltà — e senza
+  // questo si guarderebbe un riquadro nero senza sapere perché.
+  var rotto = ' onerror="visoreRotto(this)"';
+  if (q.modo === 'img')   corpo = '<img src="' + url + '" alt="' + esc(nome) + '"' + rotto + '>';
+  else if (q.modo === 'pdf')   corpo = '<iframe src="' + url + '" title="' + esc(nome) + '"></iframe>';
+  else if (q.modo === 'video') corpo = '<video src="' + url + '" controls playsinline' + rotto + '></video>';
+  else if (q.modo === 'audio') corpo = '<audio src="' + url + '" controls' + rotto + '></audio>';
+  else if (q.modo === 'testo') {
+    corpo = dati.length > TESTO_MAX
+      ? '<div class="visore-niente">Sono ' + peso(dati.length) + ' di testo: troppi per mostrarli tutti senza bloccare la pagina.<br>Scaricalo per leggerlo.</div>'
+      : '<pre>' + esc(new TextDecoder().decode(dati)) + '</pre>';
+  } else {
+    // ⚠️ Un tipo che non si sa mostrare lo DICE, e dice anche quale: «non si apre» senza
+    // spiegare perché si legge come un difetto dell'app invece che come un limite del
+    // browser. E lascia comunque la via d'uscita, che è lo scaricamento.
+    corpo = '<div class="visore-niente">' + iconaPer(f.meta.tipo, nome) +
+      '<br>Questo tipo di file il browser non lo sa mostrare' +
+      (f.meta.tipo ? ' <span class="mono">(' + esc(f.meta.tipo) + ')</span>' : '') +
+      '.<br>Scaricalo per aprirlo col suo programma.</div>';
+  }
+
+  apriModale(
+    '<div class="visore-testa">' +
+      '<span class="nome">' + esc(nome) + '</span>' +
+      '<div class="topbar-spacer"></div>' +
+      '<span class="muted small">' + esc(peso(dati.length)) + '</span>' +
+    '</div>' +
+    '<div class="visore-corpo">' + corpo + '</div>' +
+    '<div class="row-btns">' +
+      '<button class="btn ghost" onclick="chiudiModale()">Chiudi</button>' +
+      '<button class="btn" onclick="scaricaDalVisore()">⬇️ Scarica lo stesso</button>' +
+    '</div>' +
+    '<div class="tiny muted" style="margin-top:8px">Scaricandolo esce dal forziere: resta in chiaro nella cartella Download finché non lo cancelli.</div>');
+
+  $('modalBody').classList.add('visore');
+}
+
+function visoreRotto(el){
+  var box = el.parentNode;
+  if (!box) return;
+  box.innerHTML = '<div class="visore-niente">Il browser non riesce ad aprire questo file' +
+    (S.visore && S.visore.tipo ? ' <span class="mono">(' + esc(S.visore.tipo) + ')</span>' : '') +
+    '.<br>Scaricalo per aprirlo col suo programma.</div>';
+}
+
+// Lo scaricamento è rimasto, ma è una scelta che si fa guardando il file — non il modo
+// normale di aprirlo.
+function scaricaDalVisore(){
+  if (!S.visore) return;
+  salvaSulDisco(S.visore.dati, S.visore.nome, S.visore.tipo);
 }
 
 function salvaSulDisco(bytes, nome, tipo){
