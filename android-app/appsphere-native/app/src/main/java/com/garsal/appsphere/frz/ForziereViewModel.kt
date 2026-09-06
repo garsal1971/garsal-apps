@@ -42,8 +42,14 @@ data class Visione(
     val testo: String? = null,
     /** ⚠️ Un file **temporaneo in cache**: vedi la nota su `apriDocumento`. */
     val pdf: File? = null,
+    /** Video o audio, anch'esso temporaneo in cache. */
+    val media: File? = null,
+    val video: Boolean = false,
     val nonSiApre: String? = null,
-)
+) {
+    /** Il temporaneo da cancellare chiudendo, se ce n'è uno. */
+    val temporaneo: File? get() = pdf ?: media
+}
 
 data class ForziereState(
     val fase: FaseForziere = FaseForziere.CARICO,
@@ -315,41 +321,71 @@ class ForziereViewModel : ViewModel() {
      * resta niente.
      *
      * ⚠️ Immagini e testo non toccano il disco: stanno in memoria come il blob
-     * della pagina. Un **PDF** invece ha bisogno di un descrittore di file, che
-     * `PdfRenderer` non sa prendere dalla memoria — quindi si scrive un
-     * temporaneo nella cache **privata dell'app**, e si cancella chiudendo il
-     * visore. Non esce mai di lì: nessun `Intent`, nessun altro programma, e
-     * quindi nessuna copia in un'app che non è questa. La cache si ripulisce
-     * anche all'avvio e alla chiusura del forziere, per quel che fosse rimasto
-     * da un arresto anomalo.
+     * della pagina. **PDF, video e audio** invece hanno bisogno di un
+     * descrittore di file — né `PdfRenderer` né `MediaPlayer` sanno prendere i
+     * byte dalla memoria — quindi si scrive un temporaneo nella cache
+     * **privata dell'app**, e si cancella chiudendo il visore. Non esce mai di
+     * lì: nessun `Intent`, nessun altro programma, e quindi nessuna copia in
+     * un'app che non è questa. La cache si ripulisce anche all'avvio e alla
+     * chiusura del forziere, per quel che fosse rimasto da un arresto anomalo.
      *
-     * ⚠️ Quel che il telefono non sa mostrare **lo dice**, invece di restare un
-     * riquadro nero: si apre dal PC. Un visore che finge di aver aperto qualcosa
-     * è peggio di uno che ammette di non saperlo fare.
+     * ⚠️ **Video e audio si guardano qui**, con `MediaPlayer` — il player del
+     * sistema, dentro l'app, senza nessuna libreria in più: siamo a 43 MiB
+     * contro i 50 oltre i quali l'APK committato dà noia, e media3/ExoPlayer
+     * costerebbe qualche MiB per fare la stessa cosa su un file locale.
+     *
+     * ⚠️ Quel che resta fuori (archivi, fogli, documenti Office) **lo dice**,
+     * invece di restare un riquadro nero o di aprirsi altrove: si guarda dal PC.
+     * Un visore che finge di aver aperto qualcosa è peggio di uno che ammette di
+     * non saperlo fare.
      */
     fun apriDocumento(ctx: Context, doc: FrzDocumento) {
         val a = aperto ?: return
         viewModelScope.launch {
             occupato++
             _stato.value = _stato.value.copy(stato = "Apro «${doc.meta.nome}»…", avanzamento = 0.1f, errore = null)
+            var scaricato: File? = null
             try {
-                val gpg = withContext(Dispatchers.IO) { ForziereDrive.scaricaBytes(doc.driveFileId) }
-                _stato.value = _stato.value.copy(avanzamento = 0.6f, stato = "Decifro…")
-                val chiaro = withContext(Dispatchers.Default) {
-                    val out = ByteArrayOutputStream(gpg.size)
-                    ForzierePgp.decifra(gpg.inputStream(), a.parole, out)
-                    out.toByteArray()
-                }
                 val tipo = doc.meta.tipo.lowercase()
+                if (!sappiamoMostrare(tipo)) {
+                    // ⚠️ Non si scarica nemmeno: sarebbero minuti di rete e mezzo
+                    // giga di cache per finire su un riquadro che dice «qui non
+                    // si apre».
+                    _stato.value = _stato.value.copy(
+                        visione = Visione(doc, nonSiApre = tipoLeggibile(doc.meta.tipo)),
+                        stato = null, avanzamento = null,
+                    )
+                    return@launch
+                }
+
+                // ⚠️ **Il cifrato scende su un file, non in memoria.** Un video
+                // di mezzo giga letto in un `ByteArray` e poi decifrato in un
+                // secondo `ByteArray` sono un giga di heap: l'app muore prima di
+                // mostrare qualcosa. In flusso invece la dimensione non conta.
+                scaricato = withContext(Dispatchers.IO) {
+                    val f = File(cartellaCache(ctx), UUID.randomUUID().toString() + ".gpg")
+                    f.outputStream().use { out -> ForziereDrive.scarica(doc.driveFileId, out) }
+                    f
+                }
+                _stato.value = _stato.value.copy(avanzamento = 0.6f, stato = "Decifro…")
+
+                val cifrato = scaricato!!
                 val visione = when {
-                    tipo.startsWith("image/") -> Visione(doc, immagine = chiaro)
-                    tipo == "application/pdf" -> Visione(doc, pdf = withContext(Dispatchers.IO) {
-                        val f = File(cartellaCache(ctx), UUID.randomUUID().toString() + ".pdf")
-                        f.writeBytes(chiaro); f
-                    })
+                    // Immagini e testo restano in memoria: sono l'unica cosa che
+                    // si può mostrare senza passare da un file, e non passarci è
+                    // sempre meglio.
+                    tipo.startsWith("image/") ->
+                        Visione(doc, immagine = decifraInMemoria(cifrato, a.parole))
                     tipo.startsWith("text/") || tipo == "application/json" ->
-                        Visione(doc, testo = String(chiaro, Charsets.UTF_8))
-                    else -> Visione(doc, nonSiApre = tipoLeggibile(doc.meta.tipo))
+                        Visione(doc, testo = String(decifraInMemoria(cifrato, a.parole), Charsets.UTF_8))
+                    tipo == "application/pdf" ->
+                        Visione(doc, pdf = decifraSuFile(ctx, cifrato, a.parole, ".pdf"))
+                    else ->
+                        Visione(
+                            doc,
+                            media = decifraSuFile(ctx, cifrato, a.parole, estensioneDi(tipo)),
+                            video = tipo.startsWith("video/"),
+                        )
                 }
                 _stato.value = _stato.value.copy(visione = visione, stato = null, avanzamento = null)
             } catch (e: Exception) {
@@ -357,15 +393,73 @@ class ForziereViewModel : ViewModel() {
                     stato = null, avanzamento = null,
                     errore = "«${doc.meta.nome}» non si apre: " + (e.message ?: "errore"),
                 )
-            } finally { occupato--; rinviaBlocco() }
+            } finally {
+                // ⚠️ Il `.gpg` temporaneo se ne va SEMPRE: è già stato
+                // decifrato, e lasciarlo lì sarebbe una copia in più di un
+                // documento che nessuno ripulisce.
+                scaricato?.delete()
+                occupato--; rinviaBlocco()
+            }
         }
     }
 
+    private suspend fun decifraInMemoria(cifrato: File, parole: String): ByteArray =
+        withContext(Dispatchers.Default) {
+            val out = ByteArrayOutputStream(cifrato.length().toInt().coerceAtLeast(32))
+            cifrato.inputStream().use { ForzierePgp.decifra(it, parole, out) }
+            out.toByteArray()
+        }
+
+    private suspend fun decifraSuFile(
+        ctx: Context,
+        cifrato: File,
+        parole: String,
+        estensione: String,
+    ): File = withContext(Dispatchers.Default) {
+        val f = File(cartellaCache(ctx), UUID.randomUUID().toString() + estensione)
+        cifrato.inputStream().use { ins -> f.outputStream().use { out ->
+            ForzierePgp.decifra(ins, parole, out)
+        } }
+        f
+    }
+
     fun chiudiVisore(ctx: Context) {
-        _stato.value.visione?.pdf?.delete()
+        _stato.value.visione?.temporaneo?.delete()
         _stato.value = _stato.value.copy(visione = null)
         pulisciCache(ctx)
         tocca()
+    }
+
+    /**
+     * Quel che il telefono sa mostrare **dentro l'app**: immagini, testo, PDF,
+     * video e audio — gli stessi del visore della pagina.
+     *
+     * ⚠️ Quel che non c'è (archivi, fogli di calcolo, documenti Office) **si
+     * dice**, invece di aprirsi in un altro programma: un `Intent` ne farebbe
+     * una copia in chiaro in un'app che non è questa, e da lì il forziere non la
+     * riprende più.
+     */
+    private fun sappiamoMostrare(tipo: String): Boolean =
+        tipo.startsWith("image/") || tipo.startsWith("text/") || tipo == "application/json" ||
+            tipo == "application/pdf" || tipo.startsWith("video/") || tipo.startsWith("audio/")
+
+    /**
+     * ⚠️ **`MediaPlayer` guarda anche l'estensione**, non solo i byte: un file
+     * senza estensione lo apre lo stesso quasi sempre, ma su alcuni telefoni
+     * (e su alcuni contenitori) sbaglia l'estrattore e resta nero. Il tipo lo
+     * sappiamo dai metadati, quindi gliela diamo.
+     */
+    private fun estensioneDi(tipo: String): String = when (tipo) {
+        "video/mp4", "video/quicktime" -> ".mp4"
+        "video/webm" -> ".webm"
+        "video/3gpp" -> ".3gp"
+        "video/x-matroska" -> ".mkv"
+        "audio/mpeg", "audio/mp3" -> ".mp3"
+        "audio/mp4", "audio/aac" -> ".m4a"
+        "audio/ogg", "audio/opus" -> ".ogg"
+        "audio/wav", "audio/x-wav" -> ".wav"
+        "audio/flac" -> ".flac"
+        else -> if (tipo.startsWith("video/")) ".mp4" else ".m4a"
     }
 
     private fun tipoLeggibile(tipo: String): String =
