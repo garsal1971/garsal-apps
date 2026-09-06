@@ -2103,7 +2103,7 @@ e non si vedrebbe finché non lo si prova su un launcher che la usa.
 | Home a bolle, avvisi, riquadro del totale, login, biometria | `home/`, `MainActivity.kt`, `core/` |
 | Catalogo premi (riscossione, gestione, cronologia) | `premi/` |
 | Notifiche push dei promemoria (canale `android`) | `notifiche/` — vedi *Notifiche, tre canali* |
-| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/`, `obiettivi/` (la bolla apre il 📆 **Piano quotidiano**) |
+| App portate | `spuntiamola/`, `eventslog/`, `tasks/`, `tafiri/`, `peso/`, `memo/`, `abituati/`, `calorie/`, `obiettivi/` (la bolla apre il 📆 **Piano quotidiano**), `frz/` (Forziere: bolla 🙈 riservata) |
 
 ### ⚠️ Righe di pulsanti e liste di scelta: due componenti condivisi, non uno per schermata
 
@@ -2755,6 +2755,99 @@ un'azione storta ma la **schermata vuota**. È la stessa scelta di `ts_tasks`. C
 priorità invece **si leggono da `TasksRepository`**: `cm_categories` e `cm_priorities` sono
 condivise coi task, e un secondo decoder per le stesse due tabelle sarebbe una seconda verità.
 
+### ⚠️ Forziere nativo: quattro cose, e i formati provati prima di scriverli
+
+`frz/` porta sul telefono **sbloccare, sfogliare, aprire un documento, metterne dentro uno**.
+La bolla ha `riservato = true` in `cm_apps`, quindi **si vede solo in modalità nascosta**, come
+Finanza — un forziere annunciato in home a chiunque guardi lo schermo da sopra la spalla è metà
+del lavoro buttato.
+
+⚠️ **Restano su `forziere.html`, e non è una mancanza da colmare col tempo**: la **creazione** del
+forziere, il **collaudo** delle 24 parole, l'**export `.7z`** e il **cambio della passphrase**.
+Sono le quattro operazioni che si fanno una volta e vanno fatte bene, con le parole davanti e
+senza fretta; un forziere creato a metà da un telefono in autobus è il modo peggiore di
+cominciare. Il nativo, se il forziere non c'è, **lo dice** invece di offrirsi di farlo.
+
+#### ⚠️ Qui la cosa duplicata sono i FORMATI, non le regole
+
+Nelle altre otto app gemelle a divergere sono le regole di calcolo. Qui no: le regole stanno tutte
+nel formato dei file, e un errore **non si recupera** — un `.gpg` scritto male non lo riapre più
+nessuno, nemmeno con le parole giuste.
+
+| Cosa | Dove | Deve valere identico |
+|---|---|---|
+| Documenti e indici | `ForzierePgp.kt` / `cifraFile`, `cifraTesto` | OpenPGP simmetrico, **AES-256**, **MDC (SEIPD v1)**, S2K iterato SHA-256 byte **224** |
+| Metadati e miniature | `ForziereCripto.kt` / `cifraMeta`, `cifraBytes` | AES-256-GCM, tag 128 bit, sul filo `base64(iv[12] ‖ cifrato‖tag)` |
+| Le 24 parole | `ForziereCripto.normParole` / `normParole()` | NFC, spazi collassati a uno, trim, minuscolo |
+
+⚠️ **`aeadProtect = false` di là è `setWithIntegrityPacket(true)` di qua**, ed è la stessa scelta:
+SEIPD **v1** col vecchio MDC, che `gpg` legge da vent'anni, e non l'AEAD di RFC 9580, che vuole
+GnuPG **2.5**. Se una delle due implementazioni passasse all'AEAD, i suoi file si aprirebbero solo
+da lei.
+
+⚠️ **Il byte S2K è 224 da tutt'e due le parti** — 16 MiB di SHA-256 per tentativo. Non è
+un'impostazione estetica: è quanto costa a chi prova a indovinare le parole. Un numero più basso
+di qua renderebbe più economico attaccare i file scritti dal telefono, **senza che niente lo
+dica**.
+
+⚠️ **Provato, non dedotto.** Prima di scrivere una riga di Kotlin i due sensi sono stati verificati
+su una JVM — OpenPGP.js scrive e BouncyCastle rilegge, poi il contrario, byte identici e nome
+originale ritrovato — e per soprammercato **GnuPG 2.4.4** apre tutt'e due con
+`--use-embedded-filename`. Lo stesso per AES-GCM: WebCrypto scrive, JCE rilegge, e viceversa. In
+un forziere non è il posto dove fidarsi della documentazione: chi tocca questi formati **rifaccia
+la prova**.
+
+⚠️ **BouncyCastle, variante `jdk15to18`**, e le sue tre parti servono tutte: `bcpg` si porta
+dietro `bcprov` e `bcutil`, e senza `bcutil` la prima decifratura muore con un
+`NoClassDefFoundError` su `CryptlibObjectIdentifiers`. Si usa l'**API leggera** (le classi `Bc*`),
+che non registra nessun provider JCE — è il modo che funziona su Android. ⚠️ **Pesa**, e con
+`minifyEnabled false` finisce intera nel DEX: è la stessa faccenda dell'avviso su
+`material-icons-extended`, con la differenza che qui non c'è un'alternativa leggera — l'unica
+sarebbe riscrivere OpenPGP a mano, che in un forziere è precisamente ciò che non si fa.
+
+#### Le altre cose che sono la funzionalità
+
+- **Il forziere si chiude da sé**: dieci minuti come nella pagina (`MINUTI_BLOCCO`), **e appena
+  l'app passa in secondo piano** (`ON_STOP`) — è l'equivalente del `visibilitychange` di là. Uno
+  schermo lasciato acceso su un elenco di documenti è la cosa da cui il forziere protegge.
+  ⚠️ **Il selettore dei file è un'altra Activity**, quindi manda questa in `ON_STOP`: senza una
+  scusa esplicita (`apriUnaFinestraDiSistema`, che vale **una volta sola**) il forziere si
+  chiuderebbe proprio nel gesto con cui si sta per metterci dentro qualcosa. La biometria invece
+  non c'entra — `BiometricPrompt` è una finestra di questa stessa Activity.
+- ⚠️ **Un'operazione lunga non si interrompe a metà** (`occupato`, come `S.occupato`): chiudendo
+  mentre un file sta salendo, le parole sparirebbero a caricamento avviato e il file resterebbe su
+  Drive **senza la sua riga** — un pacchetto cifrato che nessuno sa più cos'è e che dall'app non si
+  può più togliere.
+- ⚠️ **Aprire non è scaricare**, ed è il punto anche qui. Immagini e testo non toccano il disco:
+  stanno in memoria come il blob della pagina. Un **PDF** ha bisogno di un descrittore di file, che
+  `PdfRenderer` non prende dalla memoria — quindi si scrive un temporaneo nella **cache privata**
+  dell'app e lo si disegna **dentro l'app**, mai passandolo a un altro programma con un `Intent`,
+  che ne farebbe una copia in chiaro in un'app che non è questa. Il temporaneo se ne va chiudendo
+  il visore, e la cache si ripulisce all'avvio e a ogni chiusura del forziere.
+  ⚠️ **Quel che non si sa mostrare lo dice** (video, audio, archivi): si apre dal PC. Un visore che
+  finge di aver aperto qualcosa è peggio di uno che ammette di non saperlo fare. **Lo scaricamento
+  non c'è affatto**, e non è una dimenticanza: è l'unico gesto che porta un documento *fuori* dal
+  forziere, e sul telefono finirebbe in una cartella condivisa con tutte le app.
+- ⚠️ **Gli indici su Drive li riscrive anche il telefono** (`contenuto.gpg` dello scomparto in cui
+  il file è entrato). Senza, un caricamento dal telefono lascerebbe l'indice indietro **in
+  silenzio**, che è il difetto che gli indici esistono per non avere. E come di là **non bloccano e
+  non fanno fallire il caricamento**: il file è già su Drive e la riga già scritta, quindi si
+  segnala e basta — `🔄 Rifai gli indici` sta sul PC.
+- ⚠️ **La miniatura si fa PRIMA di cifrare**, dall'originale: dopo non c'è più niente da guardare.
+  320 px di lato e JPEG 0,72, gli stessi numeri di `miniatura()`. Una miniatura che non entra non
+  fa fallire un caricamento riuscito.
+- ⚠️ **Da «Tutti» il file nasce fuori da ogni scomparto**, non nel primo della lista: una scelta
+  presa dall'app al posto di chi carica si scopre cercando il file altrove. Stessa regola di là.
+- ⚠️ **La ricerca è lato client**, e non può essere altrimenti: il server i nomi non li può
+  leggere. È il prezzo dell'E2EE.
+- ⚠️ **`ForziereBiometria` è il gemello di `ForziereKeystore`** dell'APK WebView, riga per riga —
+  due progetti Gradle separati non condividono sorgenti. **Cambiando uno, cambia anche l'altro.**
+  Il blob avvolto è però di questa installazione: ogni APK ha la sua chiave nel TEE, quindi le due
+  registrazioni sono indipendenti, e va bene così. Qui l'impronta si **registra da dentro**, col
+  forziere già aperto, che è l'unico momento in cui le parole ci sono già e non si fa riscrivere
+  niente. E lo sblocco passa comunque da `indice.gpg`: il Keystore dice **chi sei**, non che quelle
+  parole aprano *questo* forziere.
+
 ### Cosa compare in home: il registro `PortedApps`
 
 Il web mostra tutte le righe attive di `cm_apps`; qui si mostrano **solo le app che esistono in
@@ -3028,10 +3121,11 @@ disegna a mano come `CerchiOlimpici` in `core/Logo.kt`. Il workflow avvisa se l'
 usato dagli altri progetti Android. **Le due versioni sono agganciate**: aggiornando supabase-kt va
 guardata la sua `kotlin-stdlib` e allineato il `build.gradle` di root.
 
-### ⚠️ Otto app ora esistono in due implementazioni
+### ⚠️ Nove app ora esistono in due implementazioni
 
 `spuntiamola.html`, `obiettivi.html`, `events-log.html`, `ta-firi.html`, `weight-quest.html`,
-`memo.html`, `habit-tracker.html` e `calorie.html` hanno un gemello Kotlin che lavora sulle
+`memo.html`, `habit-tracker.html`, `calorie.html` e `forziere.html` hanno un gemello Kotlin che
+lavora sulle
 **stesse tabelle e sugli stessi campi**. È voluto — si spunta un giorno dal nativo e lo si ritrova
 sul web con la sua emoji — ma non è gratis: **cambiare le regole di una senza l'altra le fa
 divergere in silenzio**, esattamente come per lo snapshot del patrimonio e la vista Spese Famiglia.
@@ -3125,7 +3219,15 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   nativo porta 📊 Dashboard, 📓 Diario e il ➕ che segna un alimento; 🍎 Alimenti e ⚙️ Impostazioni
   restano di là, e da qui si leggono soltanto. Dettagli nella sezione qui sopra.
 
-(`tasks.html` è la nona, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
+- **Forziere** — qui la cosa da tenere allineata **sono i formati**, non le regole: OpenPGP
+  simmetrico AES-256 con **MDC (SEIPD v1)** e S2K iterato **224** da una parte, e
+  `base64(iv[12] ‖ cifrato‖tag)` in AES-256-GCM per i metadati dall'altra. Un byte di
+  differenza e il telefono legge «nome illeggibile» su tutto quel che ha scritto il PC — o,
+  peggio, scrive `.gpg` che il PC (e `gpg`) non aprono. Il nativo porta **sbloccare, sfogliare,
+  aprire, mettere dentro**; creazione, collaudo, export `.7z` e cambio passphrase restano di là.
+  Dettagli nella sezione qui sopra.
+
+(`tasks.html` è la decima, ma ha una sezione tutta sua: le RPC del ciclo di vita.)
 
 ---
 
@@ -4035,7 +4137,10 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   esce dal TEE, quindi altrove è rumore. Non va su Drive né nel database, che sarebbero un
   secondo bersaglio per niente. E **💣 Cancella tutto se lo porta via** (`bioDimentica()`), o
   resterebbe un «👆 Sblocca» che riapre le parole di un forziere che non esiste più.
-- **Non esiste in nativo**: la pagina è web, e sul telefono gira dentro l'APK WebView.
+- **Esiste anche in nativo** (`android-app/appsphere-native/app/.../frz/`), ma per **quattro cose
+  sole**: sbloccare, sfogliare, aprire un documento, metterne dentro uno. Creazione del forziere,
+  collaudo delle 24 parole, export `.7z` e cambio della passphrase **restano qui** — dettagli in
+  *AppSphere nativa → Forziere nativo*.
 
 ### `casarosa.html` — Cassa Casa Rosa
 - Movimenti e saldo della cassa di Casa Rosa (`cntrs_transactions`, `cntrs_categories`,
@@ -4944,7 +5049,7 @@ All user-facing strings, comments, and variable names (where contextual) are in 
 8b. **Il portafoglio ha una terza copia**: `situazione-teresa.html` porta `computeHoldings` / `computePortfolioCash` / `computeFundShares` come `pfHoldings` / `pfCash` / `pfQuote` per la vista 📈 Portafoglio. Cambiarne una in `finanza.html` e non qui fa divergere in silenzio le due pagine — dettagli in *App Details → 📈 Portafoglio Conto Risparmio*.
 9. **Snapshot solo all'apertura di Finanza**: `fnz_dashboard_snapshots` viene scritto da `autoSaveSnapshot` quando si apre l'app, e dal job delle 23:00. Chi legge lo snapshot come "valore attuale" durante il giorno ottiene un dato fermo alla notte precedente: per il valore aggiornato bisogna ricalcolarlo sui prezzi correnti.
 10. **`APP_SENZA_PUNTI` vive in tre posti**: `index.html`, `home/PortedApps.kt` e `scripts/backup-report.mjs`. Se divergono, home web, home nativa e relazione settimanale mostrano tre totali diversi — dettagli in *Backup settimanale*.
-11. **Otto app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati e Calorie hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
+11. **Nove app esistono anche in Kotlin**: Spuntiamola, Obiettivi, Events Log, Ta Firi?, Ti pisasti? (Weight Quest), Memo, Abituati, Calorie e Forziere hanno un gemello nativo in `android-app/appsphere-native/` che scrive sulle stesse tabelle (Tasks pure, con la sua sezione a parte). Cambiare le regole in uno solo dei due li fa divergere in silenzio — dettagli in *AppSphere nativa*.
 
 ---
 

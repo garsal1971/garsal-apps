@@ -34,8 +34,8 @@ android {
         applicationId "com.garsal.appsphere"
         minSdk 28
         targetSdk 36
-        versionCode 72
-        versionName "1.0.71"
+        versionCode 73
+        versionName "1.0.72"
     }
 
     // Le pagine HTML scelgono fra dev e produzione dall'hostname (_IS_DEV).
@@ -133,6 +133,23 @@ dependencies {
     // nel manifest lo fa scaricare all'installazione, così al primo OCR è già
     // pronto.
     implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1'
+    // Forziere: OpenPGP simmetrico (AES-256 + MDC, SEIPD v1), lo stesso formato
+    // che `forziere.html` scrive con OpenPGP.js e che un `gpg` qualunque apre.
+    //
+    // ⚠️ Variante **jdk15to18** e non `jdk18on`: è quella che BouncyCastle
+    // pubblica per Android: `jdk18on` è un jar multi-release, con classi sotto
+    // `META-INF/versions` che qui non servono e che il compilatore DEX deve
+    // scartare. `bcpg` si porta dietro `bcprov` e `bcutil`, e servono tutt'e
+    // tre: senza `bcutil` la prima decifratura muore con un
+    // `NoClassDefFoundError` su `CryptlibObjectIdentifiers` — verificato.
+    //
+    // ⚠️ **Pesa**, e con `minifyEnabled false` finisce intero nel DEX: è la
+    // stessa faccenda dell'avviso su `material-icons-extended`, con la
+    // differenza che qui non c'è un'alternativa leggera — l'unica sarebbe
+    // riscrivere OpenPGP a mano, che in un forziere è precisamente ciò che non
+    // si fa. Il workflow avvisa oltre i 25 MB: quel numero va guardato.
+    implementation 'org.bouncycastle:bcpg-jdk15to18:1.78.1'
+
     // FileProvider per la foto scattata dalla fotocamera: la si scrive in
     // cache e se ne passa l'uri alla fotocamera di sistema.
     implementation 'androidx.core:core-ktx:1.16.0'
