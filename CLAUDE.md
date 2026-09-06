@@ -3878,6 +3878,30 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   della v1.3.0 e come rimedio a un'operazione fallita a metà. ⚠️ È un **pulsante** e non una
   cosa che parte aprendo la pagina: su trecento file sono trecento chiamate a Drive, e un'app
   che ci mette due minuti ad aprirsi senza dire perché si smette di aprirla.
+- **💣 Cancella tutto** (Impostazioni → zona rossa, v1.4.0): non svuota l'archivio, **fa
+  smettere di esistere il forziere**. Se ne vanno i documenti su Drive, le miniature, gli
+  scomparti con le loro cartelle, i due indici e — questa è la differenza — anche
+  `indice.gpg` e `scorciatoia.gpg`, più le righe di tutt'e quattro le tabelle `frz_*`.
+  ⚠️ Le 24 parole non aprono più niente **non perché siano sbagliate ma perché non c'è più
+  niente da aprire**, e la finestra lo dice con quelle parole prima, non dopo.
+  ⚠️ **Costa CANCELLA _e_ la passphrase**, che è più di quanto chiedono `spese-personali` e
+  `obiettivi` (lì basta la parola): qui il forziere è già aperto, e chi trova la scrivania
+  incustodita non deve poterlo svuotare scrivendo sette lettere. La passphrase si verifica
+  con `passphraseGiusta` — aprendo davvero la scorciatoia, come lo scaricamento — e le 24
+  parole restano la via per chi l'ha dimenticata.
+  ⚠️ **L'export si offre lì dentro**, col numero di giorni dall'ultimo (e in rosso se non
+  se n'è mai fatto uno): è l'unica copia che sopravvive a quel pulsante, e ricordarsene
+  dopo non serve a niente.
+  ⚠️ **Prima Drive, poi il database**, come in `elimina()`: nell'ordine inverso resterebbero
+  `.gpg` che nessuno sa più cosa siano e che dall'app non si possono più togliere. Una rete
+  che cade lascia un forziere a metà, e **ripremendo si riprende** invece di ricominciare —
+  la finestra lo dice.
+  ⚠️ **L'elenco da cancellare lo dà Drive e non il database** (`list` con `dentro`): così se
+  ne vanno anche i file di righe perdute, che il database non nominerebbe affatto. È
+  l'opposto di 📁 Riordina il Drive, che parte dal database perché lì la verità è quella.
+  ⚠️ Le cartelle si tolgono **dopo** i file, o `rmdir` le rifiuta; e la cartella
+  «Forziere AppSphere» **resta, vuota** — `rmdir` si rifiuta sulla radice per costruzione, e
+  il forziere successivo la ritrova per nome.
 - ⚠️ **F12 non si disabilita, e non servirebbe.** Da una pagina web non si può, e provarci copre
   solo un tasto: restano il menù del browser, le altre scorciatoie, gli strumenti già aperti,
   `view-source:`, un proxy — e il codice che blocca il tasto è a sua volta JavaScript, che si
