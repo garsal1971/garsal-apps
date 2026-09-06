@@ -1736,6 +1736,14 @@ lasciata vuota cancella la descrizione invece di salvare `''`, e la ℹ️ **com
 descrizione c'è** — un'icona su ogni riga smetterebbe di distinguere le righe che hanno qualcosa
 da dire.
 
+⚠️ **I 34 prodotti in archivio nascono già descritti**
+(`20260906130000_fnz_products_descrizioni.sql`), e l'UPDATE tocca **solo le righe con
+`description` NULL**: una descrizione corretta a mano dall'app è più vera di quella scritta lì, e
+un UPDATE cieco la riscriverebbe in silenzio alla prima riesecuzione. Il confronto è sul
+**simbolo** e non sull'ISIN — le sei crypto un ISIN non ce l'hanno, e un JOIN per ISIN le
+lascerebbe fuori senza dirlo. Le descrizioni non contengono prezzi, valori né giudizi di
+convenienza: quelli cambiano, e lì resterebbero scritti per sempre.
+
 ⚠️ **Il blocco è duplicato in `situazione-teresa.html`** (`pfInfoProdotto` / `pfMostraTip`, gemelli
 di `infoProdotto` / `mostraProdTip`), per la vista 📈 Portafoglio: stesse classi CSS, stesso
 comportamento. Se lo cambi in una, portalo nell'altra. Nessun cambio di RLS è servito — le policy
