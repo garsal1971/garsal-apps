@@ -1716,6 +1716,31 @@ sono **identici a prima**: la tripla copia dello snapshot resta allineata senza 
 e la serie storica continua a confrontare grandezze omogenee. Portando il netto nello snapshot,
 i valori salvati fino a oggi diventerebbero non confrontabili con quelli nuovi.
 
+### La descrizione di un prodotto (`fnz_products.description`)
+
+Che cos'è quello strumento e, se è un fondo o un ETF, che cosa contiene. Si scrive dal form del
+prodotto (💼 Prodotti → ✎) e si legge **dovunque il prodotto compaia** — posizioni di un
+portafoglio, posizioni di un dossier, elenco movimenti, elenco prodotti, pagina Prezzi — come
+tooltip appeso a una ℹ️; nella finestra delle transazioni di una posizione, che è già dedicata a
+quel prodotto, si legge invece **per esteso** invece che dietro un'icona.
+
+⚠️ **Non è il `title` nativo**: quello al tocco non compare, e sul telefono è lì che serve. Il
+riquadro è nostro (`mostraProdTip()`), in `position: fixed` sul body — dentro una tabella che
+scorre di lato l'overflow lo ritaglierebbe — e si apre col mouse al passaggio, col dito toccando
+la ℹ️, dove **resta aperto** finché non si tocca altrove. ⚠️ La chiusura al clic altrove è in
+**cattura**: nella fase di bolla arriverebbe dopo il `case 'prod-info'` che lo riapre, e la ℹ️
+toccata due volte non si chiuderebbe mai.
+
+⚠️ **NULL non è stringa vuota**, ed è la stessa scelta delle caselle di `fnz_income`: la casella
+lasciata vuota cancella la descrizione invece di salvare `''`, e la ℹ️ **compare solo dove la
+descrizione c'è** — un'icona su ogni riga smetterebbe di distinguere le righe che hanno qualcosa
+da dire.
+
+⚠️ **Il blocco è duplicato in `situazione-teresa.html`** (`pfInfoProdotto` / `pfMostraTip`, gemelli
+di `infoProdotto` / `mostraProdTip`), per la vista 📈 Portafoglio: stesse classi CSS, stesso
+comportamento. Se lo cambi in una, portalo nell'altra. Nessun cambio di RLS è servito — le policy
+di `fnz_products` sono per riga, e la pagina ospite legge `select=*`.
+
 ### ⚠️ Logica dello snapshot duplicata
 
 Il calcolo del patrimonio esiste in **due copie che devono restare allineate**:

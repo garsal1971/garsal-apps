@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.16.0</title>
+  <title>GarsalFinanza v1.17.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -410,6 +410,15 @@
     .ca-group-count { font-size: .74rem; color: var(--c-muted); font-weight: 600; }
     .ca-empty { text-align: center; padding: 40px; color: var(--c-muted); font-size: .88rem; }
     @media (max-width: 900px) { .ca-charts { grid-template-columns: 1fr; } }
+
+    /* ── Descrizione del prodotto: la ℹ️ e il suo riquadro ──────────────────
+       Il `title` nativo al tocco non compare, ed è sul telefono che serve; il
+       riquadro è quindi nostro, in `position: fixed` sul body — dentro una
+       tabella che scorre di lato l'overflow lo ritaglierebbe. Vedi
+       `mostraProdTip()`. */
+    .prod-info { background: none; border: 0; padding: 0 2px; margin-left: 4px; cursor: pointer; font-size: .8em; line-height: 1; opacity: .7; vertical-align: middle; }
+    .prod-info:hover, .prod-info:focus-visible { opacity: 1; }
+    #prod-tip { position: fixed; z-index: 3000; display: none; max-width: min(340px, calc(100vw - 16px)); background: var(--c-text); color: #fff; padding: 10px 12px; border-radius: var(--radius-sm); font-size: .82rem; line-height: 1.45; box-shadow: 0 8px 26px rgba(0,0,0,.28); white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -608,8 +617,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.16.0';
-const APP_BUILD   = '2026-09-04T15:30:00Z';
+const APP_VERSION = 'v1.17.0';
+const APP_BUILD   = '2026-09-06T14:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -1442,6 +1451,37 @@ const fmtOra = ts => {
 // Testo che arriva dalla banca (descrizioni, nomi di controparte) prima di finire in un
 // template HTML: non è scritto da noi e non deve poter chiudere un tag.
 const esc = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/* ── La descrizione di un prodotto ────────────────────────────────────────────
+   `fnz_products.description` dice che cos'è quello strumento — se è un fondo,
+   cosa contiene — e si legge dovunque il prodotto compaia, senza aprire la
+   scheda. La ℹ️ c'è **solo dove la descrizione c'è**: un'icona su ogni riga
+   smetterebbe di distinguere le righe che hanno qualcosa da dire.
+   ⚠️ Il testo viaggia in `data-desc` e non si va a rileggere il prodotto per id:
+   così la stessa funzione serve le posizioni, i prezzi e i movimenti, che il
+   prodotto ce l'hanno già in mano. */
+function infoProdotto(prod) {
+  const d = (prod?.description || '').trim();
+  if (!d) return '';
+  return `<button type="button" class="prod-info" data-action="prod-info" data-desc="${esc(d)}" aria-label="Descrizione del prodotto" title="Descrizione">ℹ️</button>`;
+}
+let prodTipEl = null;      // il riquadro, uno solo per pagina
+let prodTipFisso = null;   // la ℹ️ toccata: resta aperto finché non si tocca altrove
+function mostraProdTip(btn) {
+  if (!prodTipEl) { prodTipEl = document.createElement('div'); prodTipEl.id = 'prod-tip'; document.body.appendChild(prodTipEl); }
+  prodTipEl.textContent = btn.dataset.desc || '';
+  // Si misura da fermo in alto a sinistra: partendo dalla posizione di prima, il
+  // riquadro sarebbe già schiacciato contro un bordo e la misura direbbe un'altezza
+  // che non è la sua.
+  prodTipEl.style.cssText = 'display:block;left:0;top:0';
+  const r = btn.getBoundingClientRect(), b = prodTipEl.getBoundingClientRect(), m = 8;
+  const left = Math.max(m, Math.min(r.left + r.width / 2 - b.width / 2, window.innerWidth - b.width - m));
+  const sotto = r.bottom + 6;
+  const top = sotto + b.height > window.innerHeight - m ? Math.max(m, r.top - b.height - 6) : sotto;
+  prodTipEl.style.left = left + 'px';
+  prodTipEl.style.top  = top + 'px';
+}
+function chiudiProdTip() { if (prodTipEl) prodTipEl.style.display = 'none'; prodTipFisso = null; }
 // Orario di scrittura di uno snapshot. Mostra la sola ora quando è stato scritto
 // nel giorno cui lo snapshot si riferisce (il caso normale); se è stato scritto
 // in un altro giorno aggiunge la data, altrimenti l'ora da sola ingannerebbe.
@@ -2130,7 +2170,7 @@ function renderPortafoglioDetail() {
               : visibleHoldings.map(h => `
               <tr data-action="open-position-transactions" data-product-id="${h.product.id}" style="cursor:pointer">
                 <td class="mono fw-600">${h.product.symbol}</td>
-                <td><div class="truncate" style="max-width:160px">${h.product.name}</div></td>
+                <td><div class="truncate" style="max-width:160px">${h.product.name}${infoProdotto(h.product)}</div></td>
                 <td>${assetBadge(h.product.asset_type)}</td>
                 <td class="mono">${fmtNum(h.qty)}</td>
                 <td class="mono">${fmtEURc(h.avgCost)}</td>
@@ -2281,7 +2321,7 @@ function renderTransazioni() {
             <td><div class="truncate" style="max-width:110px">${ds ? `${ds.bank_name} — ${ds.title}` : '—'}</div></td>
             <td><span class="badge ${t.type === 'BUY' ? 'badge-buy' : 'badge-sell'}">${t.type === 'BUY' ? 'CARICO' : 'SCARICO'}</span></td>
             <td class="mono fw-600">${pr?.symbol ?? '—'}</td>
-            <td><div class="truncate" style="max-width:130px">${pr?.name ?? '—'}</div></td>
+            <td><div class="truncate" style="max-width:130px">${pr?.name ?? '—'}${pr ? infoProdotto(pr) : ''}</div></td>
             <td class="mono">${fmtNum(t.quantity)}</td>
             <td class="mono">${fmtEURc(t.price)}</td>
             <td class="mono fw-600">${fmtEUR(t.quantity * t.price)}</td>
@@ -2316,7 +2356,7 @@ function renderProdotti() {
             </td>
             <td class="mono fw-600">${p.symbol}</td>
             <td class="mono text-sm text-muted">${p.isin || '—'}</td>
-            <td>${p.name}</td>
+            <td>${p.name}${infoProdotto(p)}</td>
             <td>${assetBadge(p.asset_type)}</td>
             <td class="text-muted text-sm">${p.exchange || '—'}</td>
             <td class="mono text-sm">${p.currency}</td>
@@ -2425,7 +2465,7 @@ function renderDossierDetail() {
             <tbody>${holdings.map(h => `
               <tr data-action="open-dossier-position-transactions" data-product-id="${h.product.id}" style="cursor:pointer">
                 <td class="mono fw-600">${h.product.symbol}</td>
-                <td><div class="truncate" style="max-width:160px">${h.product.name}</div></td>
+                <td><div class="truncate" style="max-width:160px">${h.product.name}${infoProdotto(h.product)}</div></td>
                 <td>${assetBadge(h.product.asset_type)}</td>
                 <td class="mono">${fmtNum(h.qty)}</td>
                 <td class="mono">${fmtEURc(h.avgCost)}</td>
@@ -5457,7 +5497,7 @@ function renderPrezzi() {
 
   let rows = products.map(p => {
     const l = latestMap.get(p.symbol);
-    return { symbol: p.symbol, name: p.name, currency: p.currency, asset_type: p.asset_type, latest: l, haPrezzoOggi: hasPriceOggi.has(p.symbol) };
+    return { symbol: p.symbol, name: p.name, description: p.description, currency: p.currency, asset_type: p.asset_type, latest: l, haPrezzoOggi: hasPriceOggi.has(p.symbol) };
   });
 
   // Aggiungi simboli in price_history ma non in products
@@ -5501,7 +5541,7 @@ function renderPrezzi() {
               : '<span class="badge badge-r-medio">Non oggi</span>';
           return `<tr${rowClass} data-action="price-detail" data-symbol="${r.symbol}">
             <td class="mono fw-600">${r.symbol}</td>
-            <td class="text-muted text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.name || '—'}</td>
+            <td class="text-muted text-sm" style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.name || '—'}${infoProdotto(r)}</td>
             <td>${r.asset_type ? assetBadge(r.asset_type) : '—'}</td>
             <td class="mono fw-600">${r.latest ? fmtEURc(r.latest.price) : '—'}</td>
             <td class="mono text-sm">${r.latest ? fmtDate(r.latest.price_date) : '—'}</td>
@@ -5832,6 +5872,11 @@ function openNewProductModal(productId = null) {
           </select>
         </div>
       </div>
+      <div class="form-group">
+        <label class="form-label">Descrizione <span class="text-muted text-sm">(che cos'è questo strumento: se è un fondo, che cosa contiene)</span></label>
+        <textarea name="description" class="form-input" rows="4"
+          placeholder="ETF azionario che replica l'indice MSCI Europe: circa 400 società a grande e media capitalizzazione di 15 paesi europei sviluppati. Ad accumulazione, replica fisica.">${esc(prod?.description || '')}</textarea>
+      </div>
       <div class="form-divider">Tag</div>
       ${tagSelectsHtml(prod?.tags || {})}
       <div class="modal-footer">
@@ -5847,6 +5892,10 @@ function openNewProductModal(productId = null) {
       asset_type: data.asset_type, exchange: (data.exchange || '').trim().toUpperCase(),
       currency: data.currency, tags,
       isin: (data.isin || '').trim().toUpperCase() || null,
+      // Casella vuota = NULL e non stringa vuota: «non l'ho ancora scritta» è la
+      // stessa scelta delle caselle di `fnz_income`, ed è quello che la ℹ️ guarda
+      // per decidere se comparire.
+      description: (data.description || '').trim() || null,
     };
     if (prod) await sbUpd('fnz_products', `id=eq.${prod.id}`, payload);
     else      await sbIns('fnz_products', { ...payload, user_id: S.session.user.id });
@@ -6151,6 +6200,7 @@ function openPositionTransactionsModal(productId) {
   const today = new Date().toISOString().slice(0, 10);
 
   openModal(`Transazioni: ${product.symbol}`, `
+    <div class="text-muted text-sm" style="margin-bottom:12px">${esc(product.name)}${product.description ? `<div style="margin-top:4px">${esc(product.description)}</div>` : ''}</div>
     <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
       <button class="btn btn-primary btn-sm" data-action="new-transaction" data-portfolio-id="${portfolioId}" data-product-id="${productId}">+ Nuova transazione</button>
       <button class="btn btn-outline btn-sm" data-action="reload-position-modal" data-product-id="${productId}">🔄 Aggiorna</button>
@@ -6186,6 +6236,7 @@ function openDossierPositionTransactionsModal(productId) {
   const txs = S.transactions.filter(t => t.dossier_id === dossierId && t.product_id === productId);
 
   openModal(`Transazioni: ${product.symbol}`, `
+    <div class="text-muted text-sm" style="margin-bottom:12px">${esc(product.name)}${product.description ? `<div style="margin-top:4px">${esc(product.description)}</div>` : ''}</div>
     <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
       <button class="btn btn-primary btn-sm" data-action="new-transaction" data-dossier-id="${dossierId}" data-product-id="${productId}">+ Nuova transazione</button>
       <button class="btn btn-outline btn-sm" data-action="reload-dossier-position-modal" data-product-id="${productId}">🔄 Aggiorna</button>
@@ -8039,6 +8090,10 @@ document.addEventListener('click', async e => {
         renderDanaroRosa();
       }
       break;
+    case 'prod-info':
+      // Toccandola resta aperto: sul telefono non c'è nessun «esce col mouse».
+      if (prodTipFisso === t) chiudiProdTip(); else { prodTipFisso = t; mostraProdTip(t); }
+      break;
     case 'new-product':     openNewProductModal(); break;
     case 'edit-product':    openNewProductModal(t.dataset.id); break;
     case 'new-tagcat':      openTagCatModal(); break;
@@ -8130,6 +8185,24 @@ function closeMobileNav() {
   document.getElementById('mobile-nav-overlay').classList.remove('open');
 }
 document.addEventListener('click', e => { if (e.target === $('modal-overlay')) closeModal(); });
+
+/* Il riquadro della descrizione: col mouse si apre passandoci sopra, col dito
+   toccando la ℹ️ (case 'prod-info'). ⚠️ La chiusura al clic altrove sta in
+   cattura: nella fase di bolla arriverebbe **dopo** il case che lo riapre, e la
+   ℹ️ toccata due volte non si chiuderebbe mai. */
+document.addEventListener('mouseover', e => {
+  const b = e.target.closest('.prod-info');
+  if (b && !prodTipFisso) mostraProdTip(b);
+});
+document.addEventListener('mouseout', e => {
+  const b = e.target.closest('.prod-info');
+  if (b && !prodTipFisso && !b.contains(e.relatedTarget)) chiudiProdTip();
+});
+document.addEventListener('click', e => { if (!e.target.closest('.prod-info')) chiudiProdTip(); }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') chiudiProdTip(); });
+// Il riquadro è in `fixed`: scorrendo resterebbe fermo mentre la ℹ️ se ne va.
+window.addEventListener('scroll', chiudiProdTip, true);
+window.addEventListener('resize', chiudiProdTip);
 document.addEventListener('click', e => { if (e.target === $('hist-modal-overlay')) closeHistModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeHistModal(); } });
 document.getElementById('hist-modal-close').addEventListener('click', closeHistModal);

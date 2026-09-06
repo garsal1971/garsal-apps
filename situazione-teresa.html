@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Situazione Teresa v1.8.0</title>
+  <title>Situazione Teresa v1.9.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -188,6 +188,15 @@
     .ca-group-count { font-size: .74rem; color: var(--c-muted); font-weight: 600; }
     .ca-empty { text-align: center; padding: 40px; color: var(--c-muted); font-size: .88rem; }
     @media (max-width: 900px) { .ca-charts { grid-template-columns: 1fr; } }
+
+    /* ── Descrizione del prodotto: la ℹ️ e il suo riquadro ──────────────────
+       Gemella del blocco in finanza.html (stesse classi, stesso comportamento):
+       il `title` nativo al tocco non compare, e il riquadro sta in
+       `position: fixed` sul body perché la tabella che scorre di lato non lo
+       ritagli. Se lo cambi di là, cambialo anche qui. */
+    .prod-info { background: none; border: 0; padding: 0 2px; margin-left: 4px; cursor: pointer; font-size: .8em; line-height: 1; opacity: .7; vertical-align: middle; }
+    .prod-info:hover, .prod-info:focus-visible { opacity: 1; }
+    #prod-tip { position: fixed; z-index: 3000; display: none; max-width: min(340px, calc(100vw - 16px)); background: var(--c-text); color: #fff; padding: 10px 12px; border-radius: var(--radius-sm); font-size: .82rem; line-height: 1.45; box-shadow: 0 8px 26px rgba(0,0,0,.28); white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -350,8 +359,8 @@
   </div>
 
   <script>
-    const APP_VERSION = 'v1.8.0';
-    const BUILD_TIME  = '2026-09-05T09:30:00Z';
+    const APP_VERSION = 'v1.9.0';
+    const BUILD_TIME  = '2026-09-06T14:20:00Z';
     console.log('%c SITUAZIONE TERESA ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
         'background:#7c3aed;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
         'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1200,6 +1209,50 @@ function caSummaryHTML(list) {
       PF.loaded = true;
     }
 
+    /* ── La descrizione di un prodotto ───────────────────────────────
+       `fnz_products.description` dice che cos'è quello strumento. La ℹ️ c'è
+       **solo dove la descrizione c'è**: un'icona su ogni riga smetterebbe di
+       distinguere le righe che hanno qualcosa da dire. Gemella di
+       `infoProdotto()` / `mostraProdTip()` in finanza.html. */
+    function pfInfoProdotto(prod) {
+      const d = (prod?.description || '').trim();
+      if (!d) return '';
+      return `<button type="button" class="prod-info" data-prod-info data-desc="${caEsc(d)}" aria-label="Descrizione del prodotto" title="Descrizione">ℹ️</button>`;
+    }
+    let pfTipEl = null, pfTipFisso = null;
+    function pfMostraTip(btn) {
+      if (!pfTipEl) { pfTipEl = document.createElement('div'); pfTipEl.id = 'prod-tip'; document.body.appendChild(pfTipEl); }
+      pfTipEl.textContent = btn.dataset.desc || '';
+      // Si misura da fermo in alto a sinistra: dalla posizione di prima sarebbe già
+      // schiacciato contro un bordo, e la misura direbbe un'altezza che non è la sua.
+      pfTipEl.style.cssText = 'display:block;left:0;top:0';
+      const r = btn.getBoundingClientRect(), b = pfTipEl.getBoundingClientRect(), m = 8;
+      const left = Math.max(m, Math.min(r.left + r.width / 2 - b.width / 2, window.innerWidth - b.width - m));
+      const sotto = r.bottom + 6;
+      const top = sotto + b.height > window.innerHeight - m ? Math.max(m, r.top - b.height - 6) : sotto;
+      pfTipEl.style.left = left + 'px';
+      pfTipEl.style.top  = top + 'px';
+    }
+    function pfChiudiTip() { if (pfTipEl) pfTipEl.style.display = 'none'; pfTipFisso = null; }
+    document.addEventListener('mouseover', e => {
+      const b = e.target.closest('[data-prod-info]');
+      if (b && !pfTipFisso) pfMostraTip(b);
+    });
+    document.addEventListener('mouseout', e => {
+      const b = e.target.closest('[data-prod-info]');
+      if (b && !pfTipFisso && !b.contains(e.relatedTarget)) pfChiudiTip();
+    });
+    // Toccandola resta aperto: sul telefono non c'è nessun «esce col mouse».
+    document.addEventListener('click', e => {
+      const b = e.target.closest('[data-prod-info]');
+      if (!b) { pfChiudiTip(); return; }
+      if (pfTipFisso === b) pfChiudiTip(); else { pfTipFisso = b; pfMostraTip(b); }
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') pfChiudiTip(); });
+    // Il riquadro è in `fixed`: scorrendo resterebbe fermo mentre la ℹ️ se ne va.
+    window.addEventListener('scroll', pfChiudiTip, true);
+    window.addEventListener('resize', pfChiudiTip);
+
     /* ── Posizioni ──────────────────────────────────────────────────── */
     function pfHoldings() {
       const txs = PF.transactions.slice()
@@ -1401,7 +1454,7 @@ function caSummaryHTML(list) {
               <tr>
                 <td data-label="Titolo">
                   <div class="fw-600">${caEsc(h.product.symbol || '')}</div>
-                  <div class="text-muted text-sm">${caEsc(h.product.name || '')}</div>
+                  <div class="text-muted text-sm">${caEsc(h.product.name || '')}${pfInfoProdotto(h.product)}</div>
                 </td>
                 <td class="text-right mono" data-label="Quantità">${pfNum(h.qty)}</td>
                 <td class="text-right mono" data-label="Costo medio">${pfEURc(h.avgCost)}</td>
