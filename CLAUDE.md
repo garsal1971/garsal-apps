@@ -4000,8 +4000,42 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   togliere. È la stessa scelta delle foto di Memo.
 - ⚠️ **Il numero della bolla è un conteggio di file e non un punteggio**: sta in `APP_SENZA_PUNTI`
   (`index.html`), `AppSenzaPunti` (`PortedApps.kt`) e `SENZA_PUNTI` (`scripts/backup-report.mjs`).
-- **Non esiste in nativo** (fase 1 solo web). La biometria sul telefono è la fase 2: la chiave
-  maestra avvolta nel Keystore di Android, così le 24 parole si scrivono una volta sola.
+- **👆 Sblocco con l'impronta** (v1.5.0, la **fase 2**): le 24 parole avvolte nel **Keystore di
+  Android** e riaperte con l'impronta, così sul telefono non si digita più niente per aprire. Vive
+  **nell'APK WebView** (`com.garsalapps` v1.2.0), non nel nativo: `ForziereKeystore.kt` fa la
+  crittografia, `AndroidBridge` espone cinque metodi, e `forziere.html` li usa **solo se li
+  trova** — sul PC la pagina resta identica a prima.
+  ⚠️ **Apre il forziere e NIENT'ALTRO**: ⬇️ scaricare un file e la 💣 zona pericolosa continuano
+  a chiedere la passphrase scritta. Là la domanda non è «chi sei» ma «sei sicuro», e un dito
+  appoggiato è il gesto meno deliberato che ci sia — chi tocca `scaricaDalVisore` o
+  `zonaPericolosa` non ci porti l'impronta senza rifare quel ragionamento.
+  ⚠️ **`ForziereKeystore` NON è `showBiometricPrompt()`, e riusare quello sarebbe un buco.** Il
+  cancello dell'app chiede l'impronta e poi *chiama una funzione* — e su un telefono senza
+  impronta né PIN apre lo stesso, di proposito. Qui invece non c'è nessuna decisione da
+  scavalcare: la chiave nasce con `setUserAuthenticationRequired(true)` e il `Cipher` arriva al
+  prompt dentro un `CryptoObject`, quindi senza autenticazione fresca non produce un byte.
+  **Fallisce chiuso.**
+  ⚠️ **Solo `BIOMETRIC_STRONG`, mai `DEVICE_CREDENTIAL`**: legare la chiave al PIN del telefono
+  vorrebbe dire che il forziere si apre con quello che si digita davanti a chiunque in autobus —
+  e sotto API 30 quella coppia con un `CryptoObject` non è nemmeno ammessa.
+  ⚠️ **`setInvalidatedByBiometricEnrollment(true)`**: un'impronta nuova sul telefono **uccide la
+  chiave**, e la registrazione va rifatta. Senza, chi si fa aggiungere il proprio dito a un
+  telefono lasciato sbloccato si porterebbe via il forziere. La pagina lo dice com'è —
+  «di solito è un'impronta nuova» — invece di far leggere un guasto.
+  ⚠️ **Le parole NON passano da `evaluateJavascript`**: là finirebbero dentro una stringa di
+  codice sorgente. Il ponte risponde solo «è andata», e il JS le va a prendere con
+  `forzierePrendiParole()`, che **le restituisce e le cancella** — è il giro di
+  `getPendingImageBase64` + `clearPendingImage`.
+  ⚠️ **Si registra dalle Impostazioni, a forziere aperto**: lì le 24 parole sono già in memoria e
+  già verificate, quindi non si fa riscrivere niente. Sulla schermata di sblocco non ci sono
+  ancora.
+  ⚠️ **Lo sblocco passa comunque da `apriConParole`**: il Keystore dice che sei tu, non che quelle
+  parole aprano *questo* forziere — sono due domande diverse, e la seconda la fa `indice.gpg`.
+  ⚠️ Il blob avvolto sta **solo su quel telefono**, nelle preferenze: la chiave che lo apre non
+  esce dal TEE, quindi altrove è rumore. Non va su Drive né nel database, che sarebbero un
+  secondo bersaglio per niente. E **💣 Cancella tutto se lo porta via** (`bioDimentica()`), o
+  resterebbe un «👆 Sblocca» che riapre le parole di un forziere che non esiste più.
+- **Non esiste in nativo**: la pagina è web, e sul telefono gira dentro l'APK WebView.
 
 ### `casarosa.html` — Cassa Casa Rosa
 - Movimenti e saldo della cassa di Casa Rosa (`cntrs_transactions`, `cntrs_categories`,

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.4.0</title>
+<title>🔐 Forziere v1.5.0</title>
 <!-- ⚠️ QUESTA PAGINA NON CARICA NIENTE DA TERZI, e non è pignoleria: mentre è aperta
      tiene in memoria le 24 parole, quindi QUALUNQUE script che gira qui dentro può
      leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
@@ -173,7 +173,7 @@ textarea{resize:vertical;line-height:1.45}
   <div class="topbar-spacer"></div>
   <div class="header-right">
     <span class="sync-badge" id="syncBadge">···</span>
-    <span class="app-version" id="versionBadge">v1.4.0</span>
+    <span class="app-version" id="versionBadge">v1.5.0</span>
   </div>
 </div>
 
@@ -233,6 +233,10 @@ textarea{resize:vertical;line-height:1.45}
         <div class="row-btns">
           <button class="btn" id="btnSblocca">Apri</button>
           <button class="btn ghost" id="btnUsaParole">Ho scordato la passphrase</button>
+        </div>
+        <!-- Compare solo dentro l'APK, e solo se questo telefono è registrato. -->
+        <div class="row-btns" id="rigaImpronta" style="display:none">
+          <button class="btn ok" id="btnImpronta">👆 Sblocca con l'impronta</button>
         </div>
         <div class="hint" id="statoSblocco"></div>
       </div>
@@ -307,8 +311,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.4.0';
-var BUILD_TIME  = '2026-09-06T09:10:00Z';
+var APP_VERSION = 'v1.5.0';
+var BUILD_TIME  = '2026-09-06T10:30:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -778,7 +782,13 @@ function chiudiForziere(perche){
   if (S.timerBlocco) { clearTimeout(S.timerBlocco); S.timerBlocco = null; }
   if (S.timerNascosto) { clearInterval(S.timerNascosto); S.timerNascosto = null; }
   chiudiModale();
-  if (S.vault) { mostraPagina('pgSblocca'); $('statoSblocco').textContent = perche ? '🔒 Chiuso: ' + perche + '.' : ''; }
+  if (S.vault) {
+    mostraPagina('pgSblocca');
+    $('statoSblocco').textContent = perche ? '🔒 Chiuso: ' + perche + '.' : '';
+    // Registrata l'impronta e richiuso il forziere, il pulsante dev'esserci
+    // subito: `startApp` è passato una volta sola, all'avvio della pagina.
+    mostraSbloccoImpronta();
+  }
   setSync('', 'chiuso');
 }
 
@@ -793,6 +803,7 @@ async function startApp(){
   S.vault = r.data || null;
   setSync('', S.vault ? 'chiuso' : 'nuovo');
   mostraPagina(S.vault ? 'pgSblocca' : 'pgCrea');
+  if (S.vault) mostraSbloccoImpronta();
   if (!S.vault) $('inParole').focus(); else $('inSbloccoPass').focus();
 }
 
@@ -895,6 +906,7 @@ $('btnSblocca').addEventListener('click', async function(){
   } finally { this.disabled = false; }
 });
 $('inSbloccoPass').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('btnSblocca').click(); });
+$('btnImpronta').addEventListener('click', sbloccaConImpronta);
 
 $('btnUsaParole').addEventListener('click', function(){
   apriModale(
@@ -1981,6 +1993,134 @@ function cambiaPassphrase(obbligatoria){
 // IMPOSTAZIONI
 // ============================================================
 
+
+// ============================================================
+// 👆 SBLOCCO COL TELEFONO — la fase 2
+// ============================================================
+// Le 24 parole avvolte nel Keystore di Android e riaperte con l'impronta, così
+// sul telefono non si digita più niente. Il lavoro vero sta in
+// `ForziereKeystore.kt` dentro l'APK WebView (`com.garsalapps`): qui c'è solo
+// il ponte.
+//
+// ⚠️ **Apre il forziere e NIENT'ALTRO.** Lo ⬇️ scaricamento e la 💣 zona
+// pericolosa continuano a chiedere la passphrase scritta: là la domanda non è
+// «chi sei» ma «sei sicuro», e un dito appoggiato è il gesto meno deliberato
+// che ci sia. Chi tocca `scaricaDalVisore` o `zonaPericolosa` non porti qui
+// l'impronta senza rifare quel ragionamento.
+//
+// ⚠️ Sul PC non cambia niente: senza il ponte, `bioPonte()` torna null e la
+// pagina resta esattamente quella di prima.
+var _bioAttese = {};
+
+// La chiama il Kotlin con `evaluateJavascript`. ⚠️ Riceve l'esito e non le
+// parole: quelle si vanno a prendere dopo, con una lettura che le cancella.
+function forziereCallback(id, esito){
+  var f = _bioAttese[id];
+  delete _bioAttese[id];
+  if (f) f(esito);
+}
+
+// ⚠️ Si cerca il METODO, non il ponte: `window.AndroidBridge` esiste anche
+// negli APK precedenti alla 1.2.0, e chiedergli uno sblocco che non conosce
+// darebbe un errore invece del ripiego sulla passphrase.
+function bioPonte(){
+  try {
+    var b = window.AndroidBridge;
+    return (b && typeof b.forziereDisponibile === 'function') ? b : null;
+  } catch(e){ return null; }
+}
+function bioDisponibile(){
+  var b = bioPonte();
+  try { return !!b && b.forziereDisponibile(); } catch(e){ return false; }
+}
+function bioRegistrato(){
+  var b = bioPonte();
+  try { return !!b && b.forziereRegistrato(); } catch(e){ return false; }
+}
+function bioDimentica(){
+  var b = bioPonte();
+  try { if (b) b.forziereDimentica(); } catch(e){ /* niente da togliere */ }
+}
+
+function bioChiedi(azione, parole){
+  return new Promise(function(risolvi){
+    var b = bioPonte();
+    if (!b) return risolvi('errore');
+    var id = 'bio' + Math.random().toString(36).slice(2);
+    _bioAttese[id] = risolvi;
+    try {
+      if (azione === 'registra') b.forziereRegistra(parole, id);
+      else b.forziereApri(id);
+    } catch(e){ delete _bioAttese[id]; risolvi('errore'); }
+  });
+}
+
+// Le quattro risposte del Kotlin dette a chi legge. «Scaduta» non è un errore:
+// è un'impronta nuova sul telefono che ha invalidato la chiave, ed è successo
+// apposta — va detto così, o si legge come un guasto.
+function bioMessaggio(esito){
+  if (esito === 'rinuncia') return '';                     // ha annullato: non si dice niente
+  if (esito === 'scaduta')  return '👆 La registrazione non vale più (di solito è un\'impronta nuova sul telefono). Apri con la passphrase e rifalla.';
+  return '❌ Lo sblocco con l\'impronta non è riuscito.';
+}
+
+function mostraSbloccoImpronta(){
+  var riga = $('rigaImpronta');
+  if (!riga) return;
+  riga.style.display = (bioDisponibile() && bioRegistrato()) ? '' : 'none';
+}
+
+async function sbloccaConImpronta(){
+  var b = $('btnImpronta');
+  b.disabled = true;
+  $('statoSblocco').textContent = 'Aspetto l\'impronta…';
+  try {
+    var esito = await bioChiedi('apri');
+    if (esito !== 'ok'){
+      $('statoSblocco').textContent = bioMessaggio(esito);
+      if (esito === 'scaduta') mostraSbloccoImpronta();
+      return;
+    }
+    var parole = bioPonte().forzierePrendiParole();
+    if (!parole) { $('statoSblocco').textContent = bioMessaggio('errore'); return; }
+    $('statoSblocco').textContent = 'Apro…';
+    // ⚠️ Si passa comunque da `apriConParole`, che prova le parole su
+    // `indice.gpg`: il Keystore dice che sei tu, non che quelle parole aprano
+    // questo forziere. Sono due domande diverse e la seconda la fa lui.
+    await apriConParole(normParole(parole));
+  } catch(e){
+    $('statoSblocco').textContent = '❌ ' + e.message;
+  } finally { b.disabled = false; }
+}
+
+// Dalle Impostazioni, a forziere aperto: le parole sono già in memoria e già
+// verificate, quindi non si fa riscrivere niente. È la ragione per cui la
+// registrazione sta lì dentro e non sulla schermata di sblocco, dove le parole
+// non ci sono ancora.
+async function registraImpronta(){
+  if (!S.parole) return;
+  var b = bioPonte();
+  if (!b) return;
+  chiudiModale();
+  avanzamento('barraOp','statoOp', 0.5, 'Aspetto l\'impronta…');
+  var esito = await bioChiedi('registra', S.parole);
+  avanzamento('barraOp','statoOp', null, '');
+  if (esito === 'ok'){
+    alert('Fatto: da adesso questo telefono apre il forziere con l\'impronta.\n\n' +
+          'La passphrase resta valida, e serve comunque per scaricare un file e per la zona pericolosa.');
+  } else if (esito !== 'rinuncia'){
+    alert(bioMessaggio(esito).replace(/^[👆❌] /, ''));
+  }
+}
+
+function togliImpronta(){
+  if (!confirm('Tolgo lo sblocco con l\'impronta da questo telefono?\n\n' +
+               'I file non si toccano: si torna ad aprire il forziere con la passphrase.')) return;
+  bioDimentica();
+  chiudiModale();
+  alert('Tolto. Su questo telefono il forziere si riapre con la passphrase.');
+}
+
 // ============================================================
 // ZONA PERICOLOSA — il forziere che smette di esistere
 // ============================================================
@@ -2121,6 +2261,11 @@ async function cancellaTutto(){
     // ⚠️ `S.vault = null` PRIMA di `chiudiForziere()`: quella funzione, con un vault in
     // piedi, riporterebbe sulla schermata di sblocco — cioè chiederebbe la passphrase di
     // un forziere che non esiste più.
+    // ⚠️ Via anche la registrazione dell'impronta, o su questo telefono
+    // resterebbe un «👆 Sblocca» che riapre le parole di un forziere che non
+    // esiste più — e le parole di un forziere cancellato non sono un segreto
+    // che valga la pena tenersi nel Keystore.
+    bioDimentica();
     S.vault = null;
     chiudiForziere(null);
     mostraPagina('pgCrea');
@@ -2156,6 +2301,20 @@ $('btnImpostazioni').addEventListener('click', function(){
       '<button class="btn ghost" onclick="chiudiModale();apriCollaudo()">🧪 Rifai il collaudo</button>' +
       '<button class="btn ghost" onclick="mostraParole()">👁 Rivedi le 24 parole</button>' +
     '</div>' +
+    // Solo dentro l'APK e solo dove l'impronta c'è: sul PC questa riga non
+    // compare affatto, invece di offrire un pulsante che non farebbe niente.
+    (bioDisponibile()
+      ? '<div class="sep"></div>' +
+        '<div class="row-btns">' +
+          (bioRegistrato()
+            ? '<button class="btn ghost" onclick="togliImpronta()">👆 Togli lo sblocco con l\'impronta</button>'
+            : '<button class="btn" onclick="registraImpronta()">👆 Apri con l\'impronta su questo telefono</button>') +
+        '</div>' +
+        '<div class="tiny muted" style="margin-top:6px">' + (bioRegistrato()
+          ? 'Questo telefono apre il forziere con l\'impronta. Scaricare un file e la zona pericolosa chiedono comunque la passphrase.'
+          : 'Le 24 parole restano chiuse nel Keystore del telefono e si riaprono con l\'impronta: qui dentro non si scrive più la passphrase per aprire. ⬇️ Scaricare e 💣 cancellare continuano a chiederla.') +
+        '</div>'
+      : '') +
     '<div class="sep"></div>' +
     '<div class="tiny muted" style="margin-bottom:8px">Su Drive ogni scomparto ha una cartella ' +
     '(che si chiama con un uuid, non col suo nome) e accanto ai file ci sono due indici cifrati: ' +
