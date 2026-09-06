@@ -328,7 +328,14 @@ private fun Dentro(vm: ForziereViewModel, s: ForziereState) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (s.improntaRegistrata) {
-                    Text("👆 L'impronta apre questo forziere", color = Palette.muted, fontSize = 13.sp)
+                    // ⚠️ `weight(1f)` sulla scritta: coi caratteri di sistema
+                    // grandi, senza, la frase spinge «Togli» fuori dallo schermo.
+                    Text(
+                        "👆 L'impronta apre questo forziere",
+                        color = Palette.muted,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f),
+                    )
                     TextButton(onClick = { vm.togliImpronta(ctx) }) { Text("Togli") }
                 } else {
                     TextButton(onClick = {
