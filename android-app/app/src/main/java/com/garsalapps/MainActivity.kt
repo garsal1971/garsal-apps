@@ -102,6 +102,14 @@ class MainActivity : AppCompatActivity() {
     private var pendingOcrText: String? = null
     private var pendingOcrImageBase64: String = ""
     private var pendingOcrImageMime: String = "image/jpeg"
+
+    // Le 24 parole appena riaperte dal Keystore, in attesa che il JavaScript
+    // se le prenda. ⚠️ NON viaggiano in un `evaluateJavascript`: là finirebbero
+    // dentro una stringa di codice sorgente, cioè nel posto peggiore in cui
+    // mettere un segreto. Il JS riceve solo «è andata», poi chiama
+    // `forzierePrendiParole()`, che le restituisce e **le cancella**: è lo
+    // stesso giro di `getPendingImageBase64` + `clearPendingImage`.
+    private var forziereParole: String = ""
     private var openMemoAfterAuth: Boolean = false  // apri memo.html invece del launcher dopo biometrica
     private val MEMO_URL = "https://garsal.netlify.app/memo.html"
 
@@ -330,6 +338,118 @@ class MainActivity : AppCompatActivity() {
                 Log.e("MainActivity", "performOcr: $e")
                 runOnUiThread { webView.evaluateJavascript("ocrCallback('$callbackId','');", null) }
             }
+        }
+
+        // ---- Forziere: le 24 parole avvolte nel Keystore (vedi ForziereKeystore) ----
+        // ⚠️ `forziere.html` cerca il METODO e non solo il ponte: negli APK
+        // precedenti a questo `window.AndroidBridge` c'è lo stesso, e chiedergli
+        // uno sblocco che non conosce darebbe un errore invece di un ripiego
+        // sulla passphrase. È la stessa regola di `checkUpdate` nel launcher.
+        @android.webkit.JavascriptInterface
+        fun forziereDisponibile(): Boolean = ForziereKeystore.disponibile(this@MainActivity)
+
+        @android.webkit.JavascriptInterface
+        fun forziereRegistrato(): Boolean = ForziereKeystore.registrato(this@MainActivity)
+
+        @android.webkit.JavascriptInterface
+        fun forziereDimentica() { ForziereKeystore.dimentica(this@MainActivity) }
+
+        @android.webkit.JavascriptInterface
+        fun forziereRegistra(parole: String, callbackId: String) {
+            val ctx = this@MainActivity
+            runOnUiThread {
+                val cifratore = try { ForziereKeystore.cifratore() } catch (e: Exception) {
+                    Log.e("MainActivity", "forziereRegistra: $e")
+                    return@runOnUiThread rispondiForziere(callbackId, ForziereKeystore.ERRORE)
+                }
+                promptForziere("Ricorda su questo telefono", cifratore, { c ->
+                    try {
+                        ForziereKeystore.avvolgi(ctx, c, parole)
+                        rispondiForziere(callbackId, ForziereKeystore.OK)
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "avvolgi: $e")
+                        ForziereKeystore.dimentica(ctx)
+                        rispondiForziere(callbackId, ForziereKeystore.ERRORE)
+                    }
+                }, { esito -> rispondiForziere(callbackId, esito) })
+            }
+        }
+
+        @android.webkit.JavascriptInterface
+        fun forziereApri(callbackId: String) {
+            val ctx = this@MainActivity
+            runOnUiThread {
+                val decifratore = ForziereKeystore.decifratore(ctx)
+                    ?: return@runOnUiThread rispondiForziere(callbackId, ForziereKeystore.SCADUTA)
+                promptForziere("Apri il forziere", decifratore, { c ->
+                    try {
+                        forziereParole = ForziereKeystore.svolgi(ctx, c)
+                        rispondiForziere(callbackId, ForziereKeystore.OK)
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "svolgi: $e")
+                        rispondiForziere(callbackId, ForziereKeystore.ERRORE)
+                    }
+                }, { esito -> rispondiForziere(callbackId, esito) })
+            }
+        }
+
+        /** Una lettura sola: chi arriva dopo trova la stringa vuota. */
+        @android.webkit.JavascriptInterface
+        fun forzierePrendiParole(): String {
+            val p = forziereParole
+            forziereParole = ""
+            return p
+        }
+    }
+
+    private fun rispondiForziere(callbackId: String, esito: String) {
+        val id = org.json.JSONObject.quote(callbackId)
+        val es = org.json.JSONObject.quote(esito)
+        runOnUiThread { webView.evaluateJavascript("forziereCallback($id,$es);", null) }
+    }
+
+    /**
+     * Il prompt legato alla chiave, che è la differenza fra questo e
+     * `showBiometricPrompt()` in fondo al file: là si chiede un'identità e poi
+     * si apre l'app — un ramo di codice che decide — qui invece si consegna il
+     * `Cipher` al prompt, e se l'impronta non passa quel `Cipher` non produce un
+     * byte. Non c'è niente da scavalcare perché non c'è nessuna decisione.
+     *
+     * ⚠️ Niente `DEVICE_CREDENTIAL`, quindi il pulsante negativo è obbligatorio:
+     * senza, `authenticate` solleva e lo sblocco non comparirebbe mai.
+     */
+    private fun promptForziere(
+        titolo: String,
+        cifratore: javax.crypto.Cipher,
+        onFatto: (javax.crypto.Cipher) -> Unit,
+        onNo: (String) -> Unit,
+    ) {
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    val c = result.cryptoObject?.cipher
+                    if (c == null) onNo(ForziereKeystore.ERRORE) else onFatto(c)
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    onNo(ForziereKeystore.RINUNCIA)
+                }
+            }
+        )
+        try {
+            prompt.authenticate(
+                BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Forziere")
+                    .setSubtitle(titolo)
+                    .setAllowedAuthenticators(BIOMETRIC_STRONG)
+                    .setNegativeButtonText("Annulla")
+                    .build(),
+                BiometricPrompt.CryptoObject(cifratore)
+            )
+        } catch (e: Exception) {
+            Log.e("MainActivity", "promptForziere: $e")
+            onNo(ForziereKeystore.ERRORE)
         }
     }
 
