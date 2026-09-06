@@ -2819,15 +2819,29 @@ sarebbe riscrivere OpenPGP a mano, che in un forziere è precisamente ciò che n
   Drive **senza la sua riga** — un pacchetto cifrato che nessuno sa più cos'è e che dall'app non si
   può più togliere.
 - ⚠️ **Aprire non è scaricare**, ed è il punto anche qui. Immagini e testo non toccano il disco:
-  stanno in memoria come il blob della pagina. Un **PDF** ha bisogno di un descrittore di file, che
-  `PdfRenderer` non prende dalla memoria — quindi si scrive un temporaneo nella **cache privata**
-  dell'app e lo si disegna **dentro l'app**, mai passandolo a un altro programma con un `Intent`,
-  che ne farebbe una copia in chiaro in un'app che non è questa. Il temporaneo se ne va chiudendo
-  il visore, e la cache si ripulisce all'avvio e a ogni chiusura del forziere.
-  ⚠️ **Quel che non si sa mostrare lo dice** (video, audio, archivi): si apre dal PC. Un visore che
-  finge di aver aperto qualcosa è peggio di uno che ammette di non saperlo fare. **Lo scaricamento
-  non c'è affatto**, e non è una dimenticanza: è l'unico gesto che porta un documento *fuori* dal
-  forziere, e sul telefono finirebbe in una cartella condivisa con tutte le app.
+  stanno in memoria come il blob della pagina. **PDF, video e audio** hanno bisogno di un
+  descrittore di file — né `PdfRenderer` né `MediaPlayer` prendono i byte dalla memoria — quindi
+  si scrive un temporaneo nella **cache privata** dell'app e lo si mostra **dentro l'app**, mai
+  passandolo a un altro programma con un `Intent`, che ne farebbe una copia in chiaro in un'app
+  che non è questa. Il temporaneo se ne va chiudendo il visore, e la cache si ripulisce all'avvio
+  e a ogni chiusura del forziere.
+  ⚠️ **Video e audio col `VideoView` del sistema, non con una libreria in più**: il file è locale
+  e già decifrato, quindi non c'è niente da mettere in streaming, e `media3`/ExoPlayer costerebbe
+  qualche MiB nel DEX di un APK già a 43 MiB contro i 50 oltre cui dà noia. Il `MediaController`
+  porta play, pausa e barra di scorrimento senza scriverne una riga.
+  ⚠️ **Guardare un film È usare il forziere**: il blocco a dieci minuti conta i tocchi, e in
+  mezz'ora di video non ce n'è nessuno — senza un battito che rimanda **mentre riproduce** (e solo
+  allora: in pausa il conto riparte) il forziere si chiuderebbe da sé a metà. `ON_STOP` chiude
+  comunque: uscire dall'app resta uscire dall'app.
+  ⚠️ **Il cifrato scende su un FILE e non in memoria**: un video di mezzo giga letto in un
+  `ByteArray` e poi decifrato in un secondo `ByteArray` sono un giga di heap, cioè l'app che muore
+  prima di mostrare qualcosa. In flusso la dimensione non conta, e il `.gpg` temporaneo si cancella
+  sempre.
+  ⚠️ **Quel che resta fuori lo dice** (archivi, fogli, documenti Office) e **non si scarica
+  nemmeno**: sarebbero minuti di rete per finire su un riquadro che dice «qui non si apre».
+  **Lo scaricamento non c'è affatto**, e non è una dimenticanza: è l'unico gesto che porta un
+  documento *fuori* dal forziere, e sul telefono finirebbe in una cartella condivisa con tutte le
+  app.
 - ⚠️ **Gli indici su Drive li riscrive anche il telefono** (`contenuto.gpg` dello scomparto in cui
   il file è entrato). Senza, un caricamento dal telefono lascerebbe l'indice indietro **in
   silenzio**, che è il difetto che gli indici esistono per non avere. E come di là **non bloccano e
@@ -3224,7 +3238,8 @@ I punti dove la regola *è* la funzionalità, e non un dettaglio:
   `base64(iv[12] ‖ cifrato‖tag)` in AES-256-GCM per i metadati dall'altra. Un byte di
   differenza e il telefono legge «nome illeggibile» su tutto quel che ha scritto il PC — o,
   peggio, scrive `.gpg` che il PC (e `gpg`) non aprono. Il nativo porta **sbloccare, sfogliare,
-  aprire, mettere dentro**; creazione, collaudo, export `.7z` e cambio passphrase restano di là.
+  aprire (immagini, testo, PDF, video e audio), mettere dentro**; creazione, collaudo, export
+  `.7z` e cambio passphrase restano di là.
   Dettagli nella sezione qui sopra.
 
 (`tasks.html` è la decima, ma ha una sezione tutta sua: le RPC del ciclo di vita.)

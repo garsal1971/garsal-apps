@@ -3,6 +3,8 @@ package com.garsal.appsphere.frz
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
+import android.widget.MediaController
+import android.widget.VideoView
 import android.os.ParcelFileDescriptor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -70,6 +73,7 @@ import com.garsal.appsphere.core.GarsalTopBar
 import com.garsal.appsphere.core.Palette
 import com.garsal.appsphere.core.Pillola
 import com.garsal.appsphere.core.RigaScorrevole
+import kotlinx.coroutines.delay
 import java.io.File
 
 /**
@@ -454,6 +458,7 @@ private fun Visore(vm: ForziereViewModel, v: Visione) {
                     } else NonSiApre("questa immagine il telefono non la sa decodificare")
                 }
                 v.pdf != null -> VisorePdf(v.pdf)
+                v.media != null -> VisoreMedia(vm, v.media, v.video)
                 v.testo != null -> Text(
                     v.testo,
                     fontFamily = FontFamily.Monospace,
@@ -514,6 +519,66 @@ private fun VisorePdf(file: File) {
     }
 }
 
+/**
+ * Video e audio, col player del sistema.
+ *
+ * ⚠️ **`VideoView` e non una libreria in più.** Qui il file è locale e già
+ * decifrato: non c'è niente da mettere in streaming, niente DRM, nessun
+ * formato adattivo. `media3`/ExoPlayer costerebbe qualche MiB nel DEX — su un
+ * APK che è già a 43 MiB contro i 50 oltre cui dà noia — per fare esattamente
+ * questo. E il `MediaController` porta con sé play, pausa e la barra di
+ * scorrimento senza scriverne una riga.
+ *
+ * ⚠️ **Il file non esce di qui**: nessun `Intent`, nessun player di sistema —
+ * che ne farebbe una copia in chiaro in un'app che non è questa. È lo stesso
+ * ragionamento del PDF.
+ *
+ * ⚠️ **Guardare un film È usare il forziere.** Il blocco a dieci minuti conta i
+ * tocchi, e in mezz'ora di video non ce n'è nessuno: senza questo battito il
+ * forziere si chiuderebbe da sé a metà. Si rimanda **solo mentre riproduce** —
+ * in pausa il conto riparte, com'è giusto — e `ON_STOP` chiude comunque:
+ * uscire dall'app resta uscire dall'app.
+ *
+ * ⚠️ `stopPlayback()` all'uscita, o l'audio continua a suonare su un visore che
+ * non c'è più.
+ */
+@Composable
+private fun VisoreMedia(vm: ForziereViewModel, file: File, video: Boolean) {
+    var player by remember(file) { mutableStateOf<VideoView?>(null) }
+
+    LaunchedEffect(file) {
+        while (true) {
+            delay(60_000)
+            if (player?.isPlaying == true) vm.tocca()
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        if (!video) {
+            Text(
+                "🎵 Audio",
+                color = Palette.muted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        AndroidView(
+            factory = { c ->
+                VideoView(c).apply {
+                    setVideoPath(file.absolutePath)
+                    setMediaController(MediaController(c).also { it.setAnchorView(this) })
+                    setOnPreparedListener { start() }
+                    player = this
+                }
+            },
+            onRelease = { it.stopPlayback() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color.Black),
+        )
+    }
+}
+
 @Composable
 private fun NonSiApre(perche: String) {
     Column(
@@ -522,9 +587,9 @@ private fun NonSiApre(perche: String) {
     ) {
         Text("Qui non si apre", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Text(
-            "Il telefono mostra immagini, PDF e testo. Per il resto ($perche) il documento " +
-                "si apre dal computer, dove il visore del Forziere sa fare di più. " +
-                "Il file è dentro e sta bene: qui manca il modo di guardarlo, non il documento.",
+            "Il telefono mostra immagini, testo, PDF, video e audio. Per il resto ($perche) il " +
+                "documento si guarda dal computer. Il file è dentro e sta bene, e non è nemmeno " +
+                "stato scaricato: qui manca il modo di mostrarlo, non il documento.",
             color = Palette.muted,
         )
     }
