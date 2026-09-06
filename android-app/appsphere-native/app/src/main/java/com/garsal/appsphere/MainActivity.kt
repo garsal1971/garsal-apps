@@ -47,6 +47,7 @@ import com.garsal.appsphere.abituati.AbituatiScreen
 import com.garsal.appsphere.calorie.CalorieScreen
 import com.garsal.appsphere.core.Supabase
 import com.garsal.appsphere.eventslog.EventsLogScreen
+import com.garsal.appsphere.frz.ForziereScreen
 import com.garsal.appsphere.home.HomeScreen
 import com.garsal.appsphere.home.Route
 import com.garsal.appsphere.memo.MemoScreen
@@ -338,6 +339,9 @@ private fun Navigazione() {
         }
         composable(Route.ABITUATI) {
             AbituatiScreen(onIndietro = { nav.popBackStack() })
+        }
+        composable(Route.FORZIERE) {
+            ForziereScreen(onIndietro = { nav.popBackStack() })
         }
         composable(Route.CALORIE) {
             CalorieScreen(onIndietro = { nav.popBackStack() })

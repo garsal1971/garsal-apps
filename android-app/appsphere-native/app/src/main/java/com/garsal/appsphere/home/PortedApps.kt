@@ -15,6 +15,7 @@ object Route {
     const val MEMO = "memo"
     const val ABITUATI = "abituati"
     const val CALORIE = "calorie"
+    const val FORZIERE = "forziere"
 }
 
 /**
@@ -138,6 +139,17 @@ object PortedApps {
             titoloDiRipiego = "Calorie",
             descrizioneDiRipiego = "Diario alimentare",
             coloreDiRipiego = "#D97706",
+        ),
+        // ⚠️ La bolla di Forziere ha `riservato = true` in `cm_apps`, quindi si
+        // vede **solo in modalità nascosta** — come Finanza, e per la stessa
+        // ragione: un forziere annunciato in home a chiunque guardi lo schermo
+        // da sopra la spalla è metà del lavoro buttato. Il filtro lo fa già
+        // `HomeRepository`, qui non c'è niente di diverso da dire.
+        "forziere.html" to AppPortata(
+            route = Route.FORZIERE,
+            titoloDiRipiego = "🔐 Forziere",
+            descrizioneDiRipiego = "I file al sicuro, cifrati end-to-end",
+            coloreDiRipiego = "#1F2937",
         ),
         "weight-quest.html" to AppPortata(
             route = Route.PESO,
