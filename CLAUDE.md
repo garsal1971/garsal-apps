@@ -2189,6 +2189,13 @@ in Smart Blocker sono due perché sono due pacchetti con `applicationId` diversi
 due posti che mostrano la stessa cifra sono due cifre che divergono il giorno che una delle due
 resta indietro.
 
+⚠️ **Nel dialogo il testo è BIANCO**, e non è una preferenza: `Theme.Sos` estende
+`Theme.AppCompat.NoActionBar`, che è il tema **scuro** — la finestra ha il fondo grigio antracite,
+e i due testi scritti a mano ci stavano sopra in `#444444` e `#1F2937`, cioè quasi invisibili
+(v1.1.1). Il default di `testo()` era già `Color.WHITE`: erano le due sole chiamate dell'app che
+lo scavalcavano. ⚠️ Un testo **secondario** si segna con l'`alpha` e non con un colore più scuro:
+su fondo scuro «più scuro» vuol dire «meno leggibile», non «meno importante».
+
 ---
 
 ## AppSphere nativa — l'unico modulo Android che non è un WebView
