@@ -480,7 +480,7 @@ silenzio. È la stessa scelta di `fnz_income`.
 | `fonte` | Da dove viene il numero |
 |---|---|
 | `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada, varie ed eventuali) |
-| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS e UniCredit lordo da 💶 Reddito |
+| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS da 💶 Reddito |
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
 | `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
 
@@ -498,34 +498,30 @@ per difetto l'altra. La fine si **ricava** e non si scrive: un 2034 messo a mano
 direbbe ancora 2034. Il conto è in anni interi (`2034 − anno in corso`) così si rifà a mente, e a
 corso finito la voce vale zero — che è quello che sarà.
 
-⚠️ **«Accordo con azienda» è l'unica voce che vale DIVERSO da una colonna all'altra**, ed è la
-ragione per cui anche le dotazioni ne hanno quattro (prima ne avevano una sola, *Valore oggi*):
-l'accordo esiste nel piano dell'uscita concordata e non negli altri, dove si lavora fino alla
-pensione oppure si esce senza aver trattato niente. Il conto è `coverageAccordoAzienda(sc)`:
+⚠️ **Il fabbisogno ha quattro colonne, le 🧰 Dotazioni UNA SOLA** (v1.18.0): quello che servirà
+dipende da quando si smette di lavorare, quello con cui ci si arriva no. La colonna si etichetta
+*Valore oggi* — o *Valore a &lt;mese&gt;* quando la ⏳ macchina del tempo è mossa, perché è a quella
+data che quel numero è scritto — e vive in `coverageColonnaOggi()`, che **non è uno scenario ma un
+istante**: `anni` vale `null`, così una riga con `periodicity` annua rimasta da un salvataggio
+vecchio darebbe `null` e non zero, come ogni flusso senza orizzonte.
 
-| Ingrediente | Da dove |
-|---|---|
-| Retribuzione di un anno | 💶 Reddito, riquadro *Redditi*, riga **UniCredit lordo** dell'anno più recente **che ce l'ha** — stessa regola di «Pensione Ada» |
-| Netto | − `TAX_TFR_SEPARATA` (27 %): l'incentivo all'esodo è tassato a tassazione **separata**, non con l'IRPEF della busta |
-| Anni | `accordoAnni()`, **uno per scenario** (di partenza 0 · 3 · 0 · 0), in `cm_settings` chiave `fnz_accordo_azienda_anni` |
+⚠️ **Fino alla v1.17.0 le colonne erano quattro anche qui**, e la ragione era una voce sola:
+🤝 «Accordo con azienda», l'unica che valesse diverso da una colonna all'altra (l'accordo esiste
+nel piano dell'uscita concordata e non negli altri). Tolta lei, le quattro colonne ripetevano
+quattro volte lo stesso numero per ogni voce: una tabella larga che non diceva niente più di una
+cella. Con la voce se n'è andato tutto quello che esisteva solo per lei — `coverageAccordoAzienda`,
+`accordoAnni()` con `ACCORDO_CHIAVE`/`ACCORDO_DEFAULT`, il blocco «anni per scenario» nel ✎ e il
+flag `perScenario` nel badge *scritto a mano*.
 
-⚠️ **Gli anni si scrivono per colonna e non si ricavano dalle durate di `uscita()`**: legarli
-alla loro somma scriverebbe lo stesso importo in tutte le colonne, che è l'opposto di quel che
-la tabella mostra. **Zero è una risposta buona**, non un dato mancante: nelle due colonne della
-pensione — e nella 🌿 uscita naturale, dove non si è trattato niente — dice «qui l'azienda non
-mette niente». Resta però **modificabile dal ✎** anche lì: la chiave `naturale` sta in
-`ACCORDO_DEFAULT` come le altre tre, e il form ne disegna una casella per colonna. Non stanno in
-`fnz_coverage_items` perché lì c'è **una riga per voce**, non una per voce e scenario.
-
-⚠️ Il 27 % è la **stessa stima dichiarata** del TFR (vedi il regime fiscale degli asset), con lo
-stesso caveat: l'aliquota vera dipende dal reddito di riferimento degli ultimi cinque anni.
-L'etichetta della riga la scrive accanto al numero, insieme all'anno del reddito da cui viene.
+⚠️ **In archivio però non è stato cancellato niente**: la riga `accordo_azienda` di
+`fnz_coverage_items` e la chiave `cm_settings.fnz_accordo_azienda_anni` restano dove sono e non
+le legge più nessuno — un dato che non si mostra più non è un dato da buttare, e rimetterla in
+elenco è una riga di `COVERAGE_ITEMS`.
 
 ⚠️ Il form di una dotazione **non chiede la periodicità**: una dotazione è quello che c'è oggi e
 la sua colonna non ha un orizzonte su cui moltiplicare, quindi `annuo` lì darebbe `null` e basta.
-Un importo **scritto a mano** su questa voce resta un override come su tutte le altre, ma vale
-**uguale su tutte le date** — e il badge lo dice invece di mostrare «al posto di X», che
-sarebbe la cifra di una colonna sola.
+Un importo **scritto a mano** resta un override come su tutte le altre voci, col badge che dice
+*al posto di X* — ora che la colonna è una sola, X è una cifra e non quattro.
 
 ⚠️ **L'asset si collega per id e non si indovina dal titolo**: una voce agganciata al nome
 smetterebbe di leggere il giorno che qualcuno rinomina «Casa Rosa» in «Casa di Rosa», e lo
@@ -576,9 +572,8 @@ dell'assicurazione va **per ultima** in `COVERAGE_ITEMS` e non è un caso — il
 di quelle che la precedono.
 
 ⚠️ **Le dotazioni non si proiettano da sé**: un TFR o un portafoglio proiettati sarebbero un
-rendimento inventato messo accanto a numeri veri. Le quattro colonne ripetono quindi lo stesso
-numero quattro volte per ogni voce **tranne l'accordo con l'azienda**, che è l'unica a dipendere
-dal piano che si sta guardando. Spostando la ⏳ macchina del tempo si rivalutano anche loro —
+rendimento inventato messo accanto a numeri veri — ed è la ragione per cui il loro riquadro ha
+una colonna sola. Spostando la ⏳ macchina del tempo si rivalutano anche loro —
 ma è una scelta **visibile**, fatta muovendo una barra e con la percentuale scritta accanto, non
 un moltiplicatore che gira di nascosto.
 
@@ -592,9 +587,11 @@ dice invece di tacere.
 
 ⚠️ **Tutta la catena del calcolo passa dallo SCENARIO e non dai soli anni che mancano**
 (`coverageValoreA(item, sc)`, `coverageTotaleA(side, sc)`, `coverageCapitale(sc)`,
-`coverageAuto(item, sc)`): quasi tutte le voci guardano solo `sc.anni`, ma l'accordo con
-l'azienda deve sapere **quale colonna** si sta disegnando, e sul filo dei soli anni quella
-distinzione non passerebbe.
+`coverageAuto(item, sc)`): oggi tutte le voci guardano il solo `sc.anni`, ma una fonte automatica
+che dovesse distinguere **quale colonna** si sta disegnando sul filo dei soli anni non potrebbe
+farlo — è quello che serviva all'accordo con l'azienda fino alla v1.17.0. Passare lo scenario
+intero non costa niente e tiene la porta aperta. Alle dotazioni si passa la colonna unica di
+`coverageColonnaOggi()`, che ha la stessa forma.
 
 ⚠️ **Una voce si può togliere dal conto senza cancellarla** (`excluded`,
 `20260902110000_...`): il ☑️/🚫 accanto al ✎ la spegne e la riaccende, su tutte le voci — sia
@@ -632,15 +629,17 @@ che è il numero che serve per compilare la voce. ⚠️ La voce dell'assicurazi
 proprio prompt**: il premio è quello che si sta chiedendo, e il capitale è la somma delle altre.
 
 ⚠️ **💼 Redditi da lavoro perso è un terzo riquadro, e sta FUORI da ogni conto.** Sotto
-Dotazioni, con le stesse quattro colonne: quanto si continuerebbe a guadagnare lavorando fino a
-ciascuna data. Non entra nel totale delle dotazioni, né nella scopertura, né nel capitale da
-assicurare — sommarlo alle dotazioni conterebbe due volte l'accordo con l'azienda, che quello
-stesso periodo lo copre già dalla sua parte. È un metro accanto agli altri, non una voce di
-`fnz_coverage_items`: non si compila, non si esclude e non si scrive a mano.
+Dotazioni, con le **quattro colonne** del fabbisogno — non con la colonna unica delle dotazioni,
+perché la domanda a cui risponde è proprio «fino a quale data»: quanto si continuerebbe a
+guadagnare lavorando fino a ciascuna. Non entra nel totale delle dotazioni, né nella scopertura,
+né nel capitale da assicurare: è un reddito che si prenderebbe **lavorando**, non un capitale che
+si ha già, e sommarlo direbbe che i due si possono spendere insieme. È un metro accanto agli
+altri, non una voce di `fnz_coverage_items`: non si compila, non si esclude e non si scrive a
+mano.
 
 Il netto di un anno è 💶 Reddito → 🧾 Liquidazione, colonna **calcolata** *Reddito netto*
 (`INCOME_CALC.reddito_netto`, imponibile − imposta netta) dell'anno più recente **che ce l'ha** —
-stessa regola di «Pensione Ada» e dell'accordo.
+stessa regola di «Pensione Ada».
 
 ⚠️ **Le quattro colonne non rispondono tutte alla stessa domanda**, ed è voluto: sulle due uscite
 si conta quello che **manca** rispetto a lavorare fino alla pensione, sulle due pensioni il netto
