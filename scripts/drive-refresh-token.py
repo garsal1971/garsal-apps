@@ -184,6 +184,14 @@ Va messo — insieme a CLIENT_ID, CLIENT_SECRET e FOLDER_ID — in DUE posti:
 
 GDRIVE_FOLDER_ID è la parte finale dell'indirizzo della cartella su Drive:
   drive.google.com/drive/folders/[QUESTO]
+
+Su Drive la suite sta tutta in una cartella sola:
+  AppSphere/
+  ├─ backups/   ← GDRIVE_FOLDER_ID
+  └─ rooms/     ← il Forziere, che la sua cartella se la cerca per nome
+L'id di «AppSphere» va nel solo Supabase, come GDRIVE_APPSPHERE_FOLDER_ID
+(facoltativo): dice a forziere-drive dove creare «rooms» se un giorno non
+ci fosse.
 """)
 
 
