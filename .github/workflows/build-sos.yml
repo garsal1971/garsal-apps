@@ -82,7 +82,30 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           VERSION=$(grep versionName android-app/sos/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          VERSION_CODE=$(grep versionCode android-app/sos/build.gradle | grep -o '[0-9]\+' | head -1)
           cp android-app/sos/build/outputs/apk/release/sos-release.apk /tmp/Sos-latest.apk
+
+          # ── La scheda della build ─────────────────────────────────────────
+          # Il nome del pacchetto è fisso (`Sos-latest.apk`), quindi da fuori
+          # una build vale l'altra: senza questa scheda né ⚙️ → 📱 Versione app
+          # dentro l'APK né il pannello di comandi.html possono dire *quale*
+          # versione si sta per scaricare.
+          # ⚠️ Stesse sette chiavi delle schede di AppSphere e Smart Blocker:
+          # le leggono `Aggiornamento.kt` e `mostraVersione()` in comandi.html.
+          BYTES=$(stat -c%s /tmp/Sos-latest.apk)
+          SHA=$(sha256sum /tmp/Sos-latest.apk | cut -d' ' -f1)
+          cat > /tmp/Sos-latest.json <<EOF
+          {
+            "app": "SOS",
+            "version": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "$GITHUB_SHA",
+            "bytes": $BYTES,
+            "sha256": "$SHA"
+          }
+          EOF
+          cat /tmp/Sos-latest.json
 
           for i in 1 2 3 4 5; do
             git fetch origin master
@@ -91,12 +114,18 @@ jobs:
 
             mkdir -p releases
             cp /tmp/Sos-latest.apk releases/Sos-latest.apk
-            git add releases/Sos-latest.apk
 
-            if git diff --staged --quiet; then
+            # ⚠️ La scheda si aggiorna solo se si aggiorna l'APK: `builtAt`
+            # cambia a ogni run, e commetterla da sola vorrebbe dire annunciare
+            # una build nuova per un pacchetto identico a quello di prima.
+            git add releases/Sos-latest.apk
+            if git diff --staged --quiet && [ -f releases/Sos-latest.json ]; then
               echo "APK non cambiato, skip commit"
               exit 0
             fi
+
+            cp /tmp/Sos-latest.json releases/Sos-latest.json
+            git add releases/Sos-latest.json
 
             git commit -m "chore: aggiorna APK SOS v${VERSION} [skip actions]"
             if git push origin master; then
