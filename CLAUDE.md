@@ -506,17 +506,49 @@ istante**: `anni` vale `null`, così una riga con `periodicity` annua rimasta da
 vecchio darebbe `null` e non zero, come ogni flusso senza orizzonte.
 
 ⚠️ **Fino alla v1.17.0 le colonne erano quattro anche qui**, e la ragione era una voce sola:
-🤝 «Accordo con azienda», l'unica che valesse diverso da una colonna all'altra (l'accordo esiste
-nel piano dell'uscita concordata e non negli altri). Tolta lei, le quattro colonne ripetevano
-quattro volte lo stesso numero per ogni voce: una tabella larga che non diceva niente più di una
-cella. Con la voce se n'è andato tutto quello che esisteva solo per lei — `coverageAccordoAzienda`,
-`accordoAnni()` con `ACCORDO_CHIAVE`/`ACCORDO_DEFAULT`, il blocco «anni per scenario» nel ✎ e il
-flag `perScenario` nel badge *scritto a mano*.
+🤝 «Accordo con azienda», l'unica che valesse diverso da una colonna all'altra. Per ogni altra
+voce quelle quattro colonne ripetevano quattro volte lo stesso numero — una tabella larga che non
+diceva niente più di una cella — quindi **l'accordo si è spostato nel riepilogo** (v1.19.0), dove
+le quattro colonne ci sono già, invece di tenerne in piedi altre quattro qui per lui solo.
 
-⚠️ **In archivio però non è stato cancellato niente**: la riga `accordo_azienda` di
-`fnz_coverage_items` e la chiave `cm_settings.fnz_accordo_azienda_anni` restano dove sono e non
-le legge più nessuno — un dato che non si mostra più non è un dato da buttare, e rimetterla in
-elenco è una riga di `COVERAGE_ITEMS`.
+### 🤝 Accordo con azienda — una riga del riepilogo, non una voce delle Dotazioni
+
+Quello che l'azienda metterebbe per l'uscita: la retribuzione di un anno per gli anni che si
+riesce a farsi riconoscere. Sta nel riquadro 📅 *Quanto manca, e per quando*, **fra Dotazioni e
+Scopertura**, e vive in `coverageAccordoAzienda(sc)` / `coverageAccordo(sc)` — non in
+`COVERAGE_ITEMS` e non in `fnz_coverage_items`.
+
+| Ingrediente | Da dove |
+|---|---|
+| Retribuzione di un anno | 💶 Reddito, riquadro *Redditi*, riga **UniCredit lordo** dell'anno più recente **che ce l'ha** — stessa regola di «Pensione Ada» |
+| Netto | − `TAX_TFR_SEPARATA` (27 %): l'incentivo all'esodo è tassato a tassazione **separata**, non con l'IRPEF della busta |
+| Anni | `accordoAnni()`, **uno per scenario** (di partenza 0 · 3 · 0 · 0), in `cm_settings` chiave `fnz_accordo_azienda_anni` |
+
+⚠️ **Entra nella scopertura e NON nel capitale da assicurare**: la scopertura dice quanto manca al
+netto di quel che si incasserebbe, quindi l'accordo si somma alle dotazioni prima di sottrarle al
+fabbisogno; il capitale copre il fabbisogno per intero perché **la polizza paga comunque e un
+accordo da trattare no** — è la stessa prudenza per cui nemmeno TFR, case e portafogli si
+sottraggono.
+
+⚠️ **Gli anni si scrivono per colonna e non si ricavano dalle durate di `uscita()`**: legarli alla
+loro somma scriverebbe lo stesso importo in tutte le colonne, che è l'opposto di quel che la riga
+esiste per mostrare. **Zero è una risposta buona**, non un dato mancante: nelle due colonne della
+pensione — e nella 🌿 uscita naturale, dove non si è trattato niente — dice «qui l'azienda non
+mette niente», e la cella lo scrive. Resta comunque **modificabile dal ✎**, che sta **sulla riga
+dell'accordo** (`edit-accordo` → `openAccordoModal`) e apre una casella per colonna: è accanto ai
+numeri che cambia, non nell'intestazione di una colonna sola.
+
+⚠️ **Il valore si rivaluta in `coverageAccordo` e non in `coverageBase`**: non è una riga di
+`fnz_coverage_items`, quindi non ha un importo scritto a mano da coprire né una periodicità da
+leggere — è la stessa strada di 💼 Redditi da lavoro perso.
+
+⚠️ Il 27 % è la **stessa stima dichiarata** del TFR (vedi il regime fiscale degli asset), con lo
+stesso caveat: l'aliquota vera dipende dal reddito di riferimento degli ultimi cinque anni.
+L'etichetta della riga la scrive accanto al numero, insieme all'anno del reddito da cui viene.
+
+⚠️ **La sua vecchia riga `accordo_azienda` di `fnz_coverage_items` resta in archivio e non la
+legge più nessuno**: un importo scritto a mano lì dentro non copre più niente. Gli anni per
+scenario invece si leggono ancora, dalla stessa chiave `cm_settings`.
 
 ⚠️ Il form di una dotazione **non chiede la periodicità**: una dotazione è quello che c'è oggi e
 la sua colonna non ha un orizzonte su cui moltiplicare, quindi `annuo` lì darebbe `null` e basta.
@@ -587,11 +619,12 @@ dice invece di tacere.
 
 ⚠️ **Tutta la catena del calcolo passa dallo SCENARIO e non dai soli anni che mancano**
 (`coverageValoreA(item, sc)`, `coverageTotaleA(side, sc)`, `coverageCapitale(sc)`,
-`coverageAuto(item, sc)`): oggi tutte le voci guardano il solo `sc.anni`, ma una fonte automatica
-che dovesse distinguere **quale colonna** si sta disegnando sul filo dei soli anni non potrebbe
-farlo — è quello che serviva all'accordo con l'azienda fino alla v1.17.0. Passare lo scenario
-intero non costa niente e tiene la porta aperta. Alle dotazioni si passa la colonna unica di
-`coverageColonnaOggi()`, che ha la stessa forma.
+`coverageAuto(item, sc)`): oggi tutte le **voci** guardano il solo `sc.anni`, ma una fonte che
+deve distinguere **quale colonna** si sta disegnando sul filo dei soli anni non potrebbe farlo —
+è il caso di 🤝 «Accordo con azienda», e la ragione per cui non è una voce ma una riga del
+riepilogo. Passare lo scenario intero non costa niente e tiene la porta aperta. Alle **dotazioni**
+si passa invece la colonna unica di `coverageColonnaOggi()`, che ha la stessa forma: sono quello
+che c'è oggi, uguale in ogni piano.
 
 ⚠️ **Una voce si può togliere dal conto senza cancellarla** (`excluded`,
 `20260902110000_...`): il ☑️/🚫 accanto al ✎ la spegne e la riaccende, su tutte le voci — sia
@@ -632,10 +665,9 @@ proprio prompt**: il premio è quello che si sta chiedendo, e il capitale è la 
 Dotazioni, con le **quattro colonne** del fabbisogno — non con la colonna unica delle dotazioni,
 perché la domanda a cui risponde è proprio «fino a quale data»: quanto si continuerebbe a
 guadagnare lavorando fino a ciascuna. Non entra nel totale delle dotazioni, né nella scopertura,
-né nel capitale da assicurare: è un reddito che si prenderebbe **lavorando**, non un capitale che
-si ha già, e sommarlo direbbe che i due si possono spendere insieme. È un metro accanto agli
-altri, non una voce di `fnz_coverage_items`: non si compila, non si esclude e non si scrive a
-mano.
+né nel capitale da assicurare — sommarlo conterebbe due volte l'🤝 accordo con l'azienda, che
+quello stesso periodo lo copre già dalla sua parte. È un metro accanto agli altri, non una voce di
+`fnz_coverage_items`: non si compila, non si esclude e non si scrive a mano.
 
 Il netto di un anno è 💶 Reddito → 🧾 Liquidazione, colonna **calcolata** *Reddito netto*
 (`INCOME_CALC.reddito_netto`, imponibile − imposta netta) dell'anno più recente **che ce l'ha** —
