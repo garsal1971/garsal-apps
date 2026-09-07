@@ -318,14 +318,19 @@ class MainActivity : AppCompatActivity() {
                 else android.text.format.DateFormat.format("dd/MM HH:mm", quando))
             if (inCoda > 0) append("\nGiri da spedire: ").append(inCoda)
         }
-        col.aggiungi(testo(this, info, 15f, Color.parseColor("#444444"), center = false), 0, this)
+        // ⚠️ Bianco, non un grigio scuro: `Theme.AppCompat` è il tema **scuro**, quindi
+        // la finestra ha il fondo grigio antracite e un testo scritto per il bianco lì
+        // dentro non si legge. Il riepilogo è secondario e lo dice con l'alpha — che è
+        // la stessa cosa che fa il ⚙ in barra — non con un colore più scuro: sul fondo
+        // scuro «più scuro» vuol dire «meno leggibile», non «meno importante».
+        col.aggiungi(testo(this, info, 15f, Color.WHITE, center = false, alpha = 0.75f), 0, this)
 
         val dlg = AlertDialog.Builder(this).setTitle("Impostazioni").setView(
             ScrollView(this).apply { addView(col) }
         ).setNegativeButton("Chiudi", null).create()
 
         fun voce(label: String, azione: () -> Unit) {
-            col.aggiungi(testo(this, label, 17f, Color.parseColor("#1F2937"),
+            col.aggiungi(testo(this, label, 17f, Color.WHITE,
                 bold = true, center = false).apply {
                 setPadding(dp(4), dp(16), dp(4), dp(16))
                 minimumHeight = dp(52)
