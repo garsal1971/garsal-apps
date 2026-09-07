@@ -2145,6 +2145,50 @@ La ragione è la stessa per cui il bottone è grande: si preme in un momento di 
 momento non si può inciampare in una sessione scaduta o in una schermata di Google che chiede di
 riautenticarsi.
 
+### ⚠️ L'icona è il marchio AppSphere col badge, ed è la quinta copia
+
+Dalla v1.1.0 l'icona sono i **cinque cerchi di AppSphere su fondo nero** con un **badge rosso
+`SOS`** in alto a destra (`src/main/res/drawable/ic_launcher_foreground.xml`). Fino alla v1.0.1
+era un cerchio bianco spesso su fondo rosso, e la ragione scritta allora era che «una scritta SOS
+a questa dimensione sarebbe illeggibile»: vale per una scritta a tutta icona — dentro un badge
+alto 23 dp le tre lettere ne prendono 10,7, cioè quasi la metà, e si leggono anche a 48 dp.
+
+⚠️ **I cinque cerchi sono copiati IDENTICI** da `appsphere-native/…/ic_launcher_foreground.xml`:
+è la **quinta** copia del marchio (vedi *Il marchio vive in quattro posti*, che ora ne conta
+cinque) e va cambiata insieme alle altre.
+
+⚠️ **Il fondo è nero e non più `sos_red`**: il marchio è pensato su fondo scuro, e sul rosso il
+suo cerchio rosso sparirebbe nel fondo. Il rosso resta il colore dell'app — lo porta il badge,
+che è la cosa che la distingue.
+
+⚠️ **L'alone scuro attorno al badge non è decorazione**: il badge è `#EE334E` e sta sopra al
+cerchio rosso del marchio (`#CA372E`). Senza, i due si toccherebbero senza un bordo e a 48 dp nel
+cassetto si leggerebbero come una macchia sola. È la stessa scelta del lucchetto di Smart Blocker.
+
+⚠️ **Il badge non sporge dall'angolo come nella foto di riferimento**: la tela adattiva
+garantisce solo il **cerchio da 36 dp di raggio**, e il punto peggiore — l'angolo alto-destro
+dell'alone, (80, 30) — cade a 35,4 dp dal centro. Sporgendo, la maschera tonda lo taglierebbe, e
+**non si vedrebbe finché non lo si prova su un launcher che la usa**.
+
+⚠️ **Le lettere sono tracciati e non testo**: un `<vector>` non sa disegnare una stringa e un
+font qui non c'è. La S sono due archi da 225° agganciati nel mezzo, la O un'ellisse — cambiando
+la dimensione del badge vanno rifatte le coordinate, non c'è un `textSize` da toccare.
+
+### ⚠️ ⚙️ → 📱 Versione app: il quarto giro identico
+
+Dalla v1.1.0 il dialogo Impostazioni ha una voce in più, **📱 Versione app**, fra il permesso
+overlay e lo scollegamento: dice quale versione è installata, quale è pubblicata, e apre il
+download nel browser di sistema. `Aggiornamento.kt` è il **gemello riga per riga** di quello di
+Smart Blocker, dell'APK WebView e del nativo — stessa scheda `-latest.json`, stesse sette chiavi,
+stesso dialogo.
+
+⚠️ **Qui l'APK è uno solo**, quindi il nome della scheda è una costante e non un `BuildConfig`:
+in Smart Blocker sono due perché sono due pacchetti con `applicationId` diversi.
+
+⚠️ **La versione non si scrive anche nel riepilogo delle Impostazioni**: la dice il dialogo, e
+due posti che mostrano la stessa cifra sono due cifre che divergono il giorno che una delle due
+resta indietro.
+
 ---
 
 ## AppSphere nativa — l'unico modulo Android che non è un WebView
@@ -2346,8 +2390,12 @@ negli APK precedenti a questo ponte.
 
 ⚠️ **E da Smart Blocker, che fa tre** (v1.6.0): `build-smartblocker.yml` pubblica **due** schede —
 una per flavor, perché sono due APK con `applicationId` diversi — e la voce sta nel suo ☰ come
-nell'APK WebView. Cambiando la forma della scheda in un workflow, cambiala **negli altri due** e in
-`mostraVersione()` di `comandi.html`, che ora disegna tutt'e quattro i pulsanti.
+nell'APK WebView.
+
+⚠️ **E da SOS, che fa quattro** (v1.1.0): `build-sos.yml` pubblica `Sos-latest.json` e la voce sta
+nel suo dialogo **⚙️ Impostazioni**, che è il menù che quell'app ha. Cambiando la forma della
+scheda in un workflow, cambiala **negli altri tre** e in `mostraVersione()` di `comandi.html`, che
+ora disegna tutt'e cinque i pulsanti.
 
 ### ⚠️ Ta Firi? nativo: il punteggio sta nella RPC, e il promemoria si scrive da qui
 
@@ -3171,21 +3219,26 @@ Due corollari, entrambi già in codice e da non disfare:
   `access_token`, ormai scaduto o già speso, e lo rimetterebbe al posto di una sessione buona.
   `gestisciDeepLink` azzera `intent.data` appena l'ha letto.
 
-### ⚠️ Il marchio vive in quattro posti, e vanno cambiati insieme
+### ⚠️ Il marchio vive in cinque posti, e vanno cambiati insieme
 
 Il logo di AppSphere sono **cinque cerchi** — arancio, rosso, verde e viola che si toccano a due a
-due, e il blu al centro sopra a tutti — e sta scritto in quattro file:
+due, e il blu al centro sopra a tutti — e sta scritto in cinque file:
 
 | Dove | File |
 |---|---|
 | Icone di lancio dei due APK AppSphere | `app/…/ic_launcher_foreground.xml` e `appsphere-native/…/ic_launcher_foreground.xml` (fondo bianco per il WebView, nero per il nativo: è il segno che distingue le due app sul telefono) |
 | Icona di lancio di Smart Blocker (**solo** flavor `salvatore`) | `smartblocker/src/salvatore/res/drawable/ic_launcher_foreground.xml` — gli stessi cinque cerchi su fondo nero, **più il lucchetto** |
+| Icona di lancio di SOS | `sos/src/main/res/drawable/ic_launcher_foreground.xml` — gli stessi cinque cerchi su fondo nero, **più il badge rosso `SOS`** |
 | Tutto il nativo (barra, login, biometria) | `appsphere-native/…/core/Logo.kt` — `LogoAppSphere`, disegnata su `Canvas` |
 | Barra in alto delle pagine | l'SVG in linea dentro `#garsal-top-bar` (e `#user-bar` / `.login-top-bar-icon` in `index.html`) |
 
 ⚠️ **È già successo che divergessero**: le icone di lancio erano passate al marchio nuovo e le
 barre mostravano ancora i cerchi olimpici — cioè il logo di due generazioni prima. Cambiando il
-marchio si toccano tutti e quattro.
+marchio si toccano tutti e cinque.
+
+⚠️ **Tre APK portano lo stesso disegno e si distinguono per quel che ci sta sopra o sotto**: il
+fondo (bianco / nero) fra i due AppSphere, il lucchetto per Smart Blocker, il badge `SOS` per SOS.
+È il segno che li distingue in un cassetto delle app, dove i nomi stanno scritti piccoli.
 
 ⚠️ **Nella barra il marchio sta su un disco bianco**, e non è decorazione: la barra è `#0081C8` e
 il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno

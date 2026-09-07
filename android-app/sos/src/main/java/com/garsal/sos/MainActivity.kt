@@ -345,6 +345,10 @@ class MainActivity : AppCompatActivity() {
             }.start()
         }
         voce("🛡️  Permesso «sopra altre app»") { chiediPermessoOverlay() }
+        // Il nome dell'APK pubblicato è fisso (`Sos-latest.apk`), quindi da
+        // fuori una build vale l'altra: senza questa voce non c'è nessun posto
+        // in cui sapere *prima* di scaricare se c'è davvero qualcosa di nuovo.
+        voce("📱  Versione app") { mostraDialogoAggiornamento(this@MainActivity) }
         voce("🔌  Scollega questo telefono") { confermaScollega() }
 
         dlg.show()
