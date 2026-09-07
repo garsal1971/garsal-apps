@@ -97,8 +97,11 @@ class MainActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         })
         titleCol.addView(TextView(this).apply {
-            text = if (Config.IS_NOTIFY_ONLY) "v1.5.1 · profilo: ${Config.PROFILE}"
-                   else "v1.5.1 · PIN: ${Config.PIN}"
+            // ⚠️ La versione si legge da BuildConfig e non si riscrive a mano:
+            // scritta due volte, prima o poi una delle due resta indietro — e
+            // quella che si legge a schermo è proprio quella sbagliata.
+            text = if (Config.IS_NOTIFY_ONLY) "v${BuildConfig.VERSION_NAME} · profilo: ${Config.PROFILE}"
+                   else "v${BuildConfig.VERSION_NAME} · PIN: ${Config.PIN}"
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         })
@@ -121,11 +124,16 @@ class MainActivity : AppCompatActivity() {
             popup.menu.add(0, 1, 0, "🏠 Home")
             popup.menu.add(0, 2, 1, "⚙️ Impostazioni")
             popup.menu.add(0, 3, 2, "📋 Log")
+            // Non è una sezione della pagina come le altre tre: è un dialogo, e
+            // sta nel menu perché la domanda «ce n'è una più nuova?» ci si fa
+            // una volta ogni tanto e non merita un pulsante fisso a schermo.
+            popup.menu.add(0, 4, 3, "📱 Versione app")
             popup.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     1 -> showSection(mainContainer)
                     2 -> showSection(settingsContainer)
                     3 -> showSection(logContainer)
+                    4 -> mostraDialogoAggiornamento(this@MainActivity)
                 }
                 true
             }

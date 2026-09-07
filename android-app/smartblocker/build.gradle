@@ -11,8 +11,8 @@ android {
         applicationId "com.garsal.smartblocker"
         minSdk 26
         targetSdk 36
-        versionCode 36
-        versionName "1.5.1"
+        versionCode 37
+        versionName "1.6.0"
     }
 
     buildFeatures {
@@ -37,6 +37,12 @@ android {
             buildConfigField "String", "PROFILE", '"salvatore"'
             buildConfigField "String", "FIXED_DEVICE_TOKEN", '""'
             buildConfigField "String", "ONLY_APP", '""'
+            // Il nome della scheda `-latest.json` pubblicata dal workflow accanto
+            // all'APK: due flavor, due pacchetti, due schede. Sta qui e non in una
+            // costante perché è l'unica cosa che cambia fra i due dentro
+            // `Aggiornamento.kt` — un `if (PROFILE == …)` sarebbe una terza
+            // differenza da tenere allineata a mano.
+            buildConfigField "String", "RELEASE_BASE", '"SmartBlocker-latest"'
         }
         teresa {
             dimension "profilo"
@@ -44,6 +50,7 @@ android {
             buildConfigField "String", "PROFILE", '"teresa"'
             buildConfigField "String", "FIXED_DEVICE_TOKEN", '"teresa-smartblock"'
             buildConfigField "String", "ONLY_APP", '"cost_analysis"'
+            buildConfigField "String", "RELEASE_BASE", '"SmartBlockerTeresa-latest"'
         }
     }
 

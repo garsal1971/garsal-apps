@@ -2043,6 +2043,58 @@ JSON (`notifications: [{who, outcome}]`) e nei log della function per ogni desti
 Sul profilo `teresa` nessuna schermata chiede mai il PIN (`Prefs.isInfoOnlyBlock` restituisce sempre
 `true`): il PIN è di Salvatore e su quel telefono un blocco rosso sarebbe insbloccabile.
 
+### ⚠️ L'icona è del solo profilo `salvatore`, ed è la quarta copia del marchio
+
+Dalla v1.6.0 Smart Blocker porta il **marchio AppSphere col lucchetto**: i cinque cerchi su fondo
+nero, com'è l'APK nativa, con un lucchetto argento sovrapposto in alto a destra. Vive in
+`src/salvatore/res/` — `drawable/ic_launcher_foreground.xml`, `mipmap-anydpi-v26/ic_launcher.xml`
+(e `_round`) e il fondo in `values/ic_launcher_colors.xml`.
+
+⚠️ **Il flavor `teresa` NON la prende**, e non è una dimenticanza: quell'APK è *Revolut Teresa*,
+che di blocchi non ne fa nessuno — un lucchetto lì direbbe una cosa falsa. Resta con l'icona di
+prima (i PNG di `main/res/mipmap-*`), che nessun altro usa più: `minSdk` è 26, quindi dove c'è
+l'adattiva i PNG non li legge nessuno.
+
+⚠️ **I cinque cerchi sono copiati IDENTICI** da `appsphere-native/…/ic_launcher_foreground.xml`,
+coordinate e colori compresi: è la **quarta** copia del marchio (vedi *Il marchio vive in tre
+posti*, che ora ne conta quattro) e va cambiata insieme alle altre. Quel che distingue l'app nel
+cassetto è il lucchetto, non un disegno diverso.
+
+⚠️ **Il lucchetto non sporge dall'angolo come nella foto di riferimento**: la tela adattiva
+garantisce solo il **cerchio da 36 dp di raggio**, e il punto peggiore del disegno — l'angolo
+alto-destro dell'arco, (78, 28) — cade a 35,4 dp dal centro. Sporgendo, la maschera tonda lo
+taglierebbe, e **non si vedrebbe finché non lo si prova su un launcher che la usa**. Per rientrare
+copre quasi tutto il cerchio rosso e sfiora il blu: è il prezzo, ed è visibile.
+
+⚠️ **Il colore di fondo si chiama `sb_icon_bg` e non `ic_launcher_background`**: in
+`main/res/drawable` esiste già un drawable con quel nome (il viola dell'icona vecchia, che
+`teresa` continua a usare), e due risorse omonime di tipo diverso sono un modo di sbagliare
+riferimento senza accorgersene.
+
+### ⚠️ ☰ → 📱 Versione app: il terzo giro identico, e due schede perché due APK
+
+Dalla v1.6.0 il ☰ ha una quarta voce, **📱 Versione app**: dice quale versione è installata, quale
+è pubblicata, e apre il download nel browser di sistema. `Aggiornamento.kt` è il **gemello riga per
+riga** di quello dell'APK WebView (`com.garsalapps`) e di `core/Aggiornamento.kt` del nativo —
+stessa scheda `-latest.json`, stesse sette chiavi, stesso dialogo. Serve alla stessa domanda: il
+nome dell'APK è fisso (`-latest.apk`), quindi da fuori una build vale l'altra, e scaricare quella
+di ieri è indistinguibile da un aggiornamento riuscito.
+
+⚠️ **Due flavor, due schede**: `build-smartblocker.yml` pubblica `SmartBlocker-latest.json` **e**
+`SmartBlockerTeresa-latest.json`, e quale leggere lo dice `BuildConfig.RELEASE_BASE` — la quarta
+differenza che passa da `Config`/`BuildConfig` invece che da un `if (PROFILE == …)` sparso nel
+codice. I due APK hanno `applicationId` diversi: con una scheda sola, il telefono di Teresa si
+vedrebbe offrire un pacchetto che **non si installa sopra al suo**.
+
+⚠️ **Le schede si aggiornano solo insieme agli APK**: `builtAt` cambia a ogni run, e commetterle
+da sole annuncerebbe una build nuova per un pacchetto identico. È la stessa guardia di
+`build-appsphere-native.yml`, con la differenza che qui i file da confrontare sono due.
+
+⚠️ **La versione nell'intestazione si legge da `BuildConfig.VERSION_NAME`** e non si riscrive più a
+mano in `MainActivity`: scritta due volte, prima o poi una delle due resta indietro — e quella che
+si legge a schermo è proprio quella sbagliata. La regola del versioning per le app Android resta
+quella (bump di `versionName` e `versionCode` in `build.gradle`), meno il terzo posto.
+
 ---
 
 ## SOS — il bottone rosso e il countdown che blocca il telefono
@@ -2290,8 +2342,12 @@ differenze sono solo di forma — lì Compose e `BuildConfig`, qui un `AlertDial
 versione letta dal **pacchetto installato** (`packageManager.getPackageInfo`), che è quella vera e
 non quella che il codice credeva di essere. La voce di menù compare **solo dentro l'APK**: il
 launcher la mostra se `window.AndroidBridge.checkUpdate` esiste, quindi resta nascosta sul PC e
-negli APK precedenti a questo ponte. Cambiando la forma della scheda in un workflow, cambiala
-anche nell'altro e in `mostraVersione()` di `comandi.html`, che ora disegna tutt'e due i pulsanti.
+negli APK precedenti a questo ponte.
+
+⚠️ **E da Smart Blocker, che fa tre** (v1.6.0): `build-smartblocker.yml` pubblica **due** schede —
+una per flavor, perché sono due APK con `applicationId` diversi — e la voce sta nel suo ☰ come
+nell'APK WebView. Cambiando la forma della scheda in un workflow, cambiala **negli altri due** e in
+`mostraVersione()` di `comandi.html`, che ora disegna tutt'e quattro i pulsanti.
 
 ### ⚠️ Ta Firi? nativo: il punteggio sta nella RPC, e il promemoria si scrive da qui
 
@@ -3115,20 +3171,21 @@ Due corollari, entrambi già in codice e da non disfare:
   `access_token`, ormai scaduto o già speso, e lo rimetterebbe al posto di una sessione buona.
   `gestisciDeepLink` azzera `intent.data` appena l'ha letto.
 
-### ⚠️ Il marchio vive in tre posti, e vanno cambiati insieme
+### ⚠️ Il marchio vive in quattro posti, e vanno cambiati insieme
 
 Il logo di AppSphere sono **cinque cerchi** — arancio, rosso, verde e viola che si toccano a due a
-due, e il blu al centro sopra a tutti — e sta scritto in tre file:
+due, e il blu al centro sopra a tutti — e sta scritto in quattro file:
 
 | Dove | File |
 |---|---|
-| Icone di lancio dei due APK | `app/…/ic_launcher_foreground.xml` e `appsphere-native/…/ic_launcher_foreground.xml` (fondo bianco per il WebView, nero per il nativo: è il segno che distingue le due app sul telefono) |
+| Icone di lancio dei due APK AppSphere | `app/…/ic_launcher_foreground.xml` e `appsphere-native/…/ic_launcher_foreground.xml` (fondo bianco per il WebView, nero per il nativo: è il segno che distingue le due app sul telefono) |
+| Icona di lancio di Smart Blocker (**solo** flavor `salvatore`) | `smartblocker/src/salvatore/res/drawable/ic_launcher_foreground.xml` — gli stessi cinque cerchi su fondo nero, **più il lucchetto** |
 | Tutto il nativo (barra, login, biometria) | `appsphere-native/…/core/Logo.kt` — `LogoAppSphere`, disegnata su `Canvas` |
 | Barra in alto delle pagine | l'SVG in linea dentro `#garsal-top-bar` (e `#user-bar` / `.login-top-bar-icon` in `index.html`) |
 
 ⚠️ **È già successo che divergessero**: le icone di lancio erano passate al marchio nuovo e le
 barre mostravano ancora i cerchi olimpici — cioè il logo di due generazioni prima. Cambiando il
-marchio si toccano tutti e tre.
+marchio si toccano tutti e quattro.
 
 ⚠️ **Nella barra il marchio sta su un disco bianco**, e non è decorazione: la barra è `#0081C8` e
 il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno
