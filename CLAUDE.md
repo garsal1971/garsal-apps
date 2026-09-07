@@ -2185,6 +2185,13 @@ stesso dialogo.
 ⚠️ **Qui l'APK è uno solo**, quindi il nome della scheda è una costante e non un `BuildConfig`:
 in Smart Blocker sono due perché sono due pacchetti con `applicationId` diversi.
 
+⚠️ **Il `TextView` del dialogo NON fissa un colore, ed è la ragione per cui il gemello funziona
+in tutt'e due le app**: `Theme.Sos` è scuro e `Theme.SmartBlocker` è
+`Theme.AppCompat.Light`, quindi lasciando decidere al tema il testo si legge di qua e di là.
+Scrivendoci `Color.WHITE` per «uniformarlo» al resto di SOS, in Smart Blocker sparirebbe sul
+bianco — e viceversa. È l'unico punto dei quattro `Aggiornamento.kt` dove *non* mettere una
+costante è la scelta.
+
 ⚠️ **La versione non si scrive anche nel riepilogo delle Impostazioni**: la dice il dialogo, e
 due posti che mostrano la stessa cifra sono due cifre che divergono il giorno che una delle due
 resta indietro.
