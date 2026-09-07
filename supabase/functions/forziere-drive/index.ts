@@ -27,10 +27,19 @@
 // `mkdir`, `rmdir` e `move`; `upload-url`, `put`, `list` e `delete` accettano ora una
 // cartella di destinazione.
 //
+// ⚠️ DA v3: LA CARTELLA SI CHIAMA «rooms» E STA DENTRO «AppSphere». Prima era
+// «Forziere AppSphere» nella radice del Drive, accanto a «AppSphere_backups»: due
+// cartelle sciolte per la stessa suite, e il nome diceva a chi guarda l'elenco che lì
+// c'è un forziere — che è metà del lavoro buttato, come la bolla riservata in home.
+// ⚠️ Il rename su Drive e questo cambio vanno INSIEME: la cartella si cerca per nome,
+// quindi il codice vecchio su una cartella rinominata ne creerebbe una nuova e vuota.
+//
 // Secrets: GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN,
-//          e FORZIERE_EMAIL (facoltativo). ⚠️ NON usa GDRIVE_FOLDER_ID: la cartella del
-//          forziere se la crea da sé e non è quella dei backup.
-// v2 — 2026-09-05
+//          GDRIVE_APPSPHERE_FOLDER_ID e FORZIERE_EMAIL (facoltativi gli ultimi due).
+//          ⚠️ NON usa GDRIVE_FOLDER_ID: quella è la cartella dei backup — oggi
+//          «AppSphere/backups», sorella di questa — e mescolarle vorrebbe dire che una
+//          rotazione sbagliata cancella il forziere.
+// v3 — 2026-09-07
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +52,10 @@ const EMAIL_OK = (Deno.env.get('FORZIERE_EMAIL') ?? 'garsal1971@gmail.com').toLo
 
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
-const NOME_CARTELLA = 'Forziere AppSphere';
+const NOME_CARTELLA = 'rooms';
+// La cartella «AppSphere» che tiene insieme forziere e backup. Facoltativa: se il secret
+// non c'è, «rooms» nasce nella radice del Drive e tutto il resto funziona uguale.
+const PADRE = Deno.env.get('GDRIVE_APPSPHERE_FOLDER_ID') ?? '';
 const MIME_CARTELLA = 'application/vnd.google-apps.folder';
 
 function risposta(corpo: unknown, stato = 200) {
@@ -104,21 +116,34 @@ async function chiChiama(req: Request): Promise<string | null> {
 // che ha creato lei, quindi cercarla per nome non può pescare una cartella altrui.
 // ⚠️ Non è la cartella dei backup: quella contiene dump del database in chiaro-gzip, e
 // mescolare le due cose vorrebbe dire che una rotazione sbagliata cancella il forziere.
+//
+// ⚠️ SI CERCA PER NOME E BASTA, anche col padre configurato: fra i risultati si PREFERISCE
+// quello dentro «AppSphere», ma non lo si pretende. Pretendendolo, il giorno in cui il
+// segreto arriva prima dello spostamento della cartella la ricerca non troverebbe niente e
+// nascerebbe un secondo «rooms» vuoto — cioè il forziere sparito dall'app proprio mentre lo
+// si stava riordinando. Il padre decide invece **dove nasce** una cartella nuova.
 async function cartella(token: string): Promise<string> {
   const q = new URLSearchParams({
     q: `name = '${NOME_CARTELLA}' and mimeType = '${MIME_CARTELLA}' and trashed = false`,
-    fields: 'files(id,name)',
+    fields: 'files(id,name,parents)',
     pageSize: '10',
   });
   const r = await fetch(`${DRIVE}/files?${q}`, { headers: { Authorization: `Bearer ${token}` } });
   if (r.ok) {
     const d = await r.json();
-    if (d.files?.length) return d.files[0].id;
+    const trovate: Array<{ id: string; parents?: string[] }> = d.files ?? [];
+    const dentro = PADRE ? trovate.find((f) => (f.parents ?? []).includes(PADRE)) : null;
+    if (dentro) return dentro.id;
+    if (trovate.length) return trovate[0].id;
   }
   const c = await fetch(`${DRIVE}/files?fields=id`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: NOME_CARTELLA, mimeType: MIME_CARTELLA }),
+    body: JSON.stringify({
+      name: NOME_CARTELLA,
+      mimeType: MIME_CARTELLA,
+      ...(PADRE ? { parents: [PADRE] } : {}),
+    }),
   });
   if (!c.ok) throw new Error(`Drive mkdir: HTTP ${c.status} — ${(await c.text()).slice(0, 200)}`);
   return (await c.json()).id;

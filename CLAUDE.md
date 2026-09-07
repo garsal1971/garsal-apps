@@ -1159,20 +1159,39 @@ sbagliare un dettaglio e non si apre più niente, e quei dettagli non stanno in 
 Il file si porta dentro algoritmo, sale e giri, e il programma li legge da sé. Una prima
 versione del progetto aveva quella ricetta ed è stata **ritirata prima di scrivere una riga**.
 
-**Gli oggetti su Drive**, nella cartella `Forziere AppSphere` (che la Edge Function si crea
+**Gli oggetti su Drive**, nella cartella `AppSphere/rooms` (che la Edge Function si crea
 da sé, e **non** è quella dei backup — una rotazione sbagliata cancellerebbe il forziere):
 
 ```
-Forziere AppSphere/
-├─ indice.gpg          la chiave dell'indice        (24 parole)
-├─ scorciatoia.gpg     le 24 parole                 (passphrase — l'eccezione)
-├─ scomparti.gpg       quale cartella è quale scomparto   (24 parole)
-├─ contenuto.gpg       i file che non stanno in nessuno scomparto   (24 parole)
-├─ <uuid>.gpg          …e quei file
-└─ <uuid-cartella>/    una per scomparto, nome uuid
-   ├─ contenuto.gpg    i file di questo scomparto   (24 parole)
-   └─ <uuid>.gpg
+AppSphere/                una cartella sola per tutta la suite
+├─ backups/               il dump settimanale e la relazione (`GDRIVE_FOLDER_ID`)
+└─ rooms/                 il forziere
+   ├─ indice.gpg          la chiave dell'indice        (24 parole)
+   ├─ scorciatoia.gpg     le 24 parole                 (passphrase — l'eccezione)
+   ├─ scomparti.gpg       quale cartella è quale scomparto   (24 parole)
+   ├─ contenuto.gpg       i file che non stanno in nessuno scomparto   (24 parole)
+   ├─ <uuid>.gpg          …e quei file
+   └─ <uuid-cartella>/    una per scomparto, nome uuid
+      ├─ contenuto.gpg    i file di questo scomparto   (24 parole)
+      └─ <uuid>.gpg
 ```
+
+⚠️ **La cartella si chiama `rooms` e non «Forziere»**, ed è la stessa ragione per cui la bolla
+è riservata in home: un nome che annuncia un forziere a chi scorre l'elenco del Drive è metà
+del lavoro buttato — dentro i nomi sono già tutti uuid e i file tutti cifrati. Fino al
+6 settembre 2026 erano due cartelle sciolte nella radice, `Forziere AppSphere` e
+`AppSphere_backups`.
+
+⚠️ **Il nome si cerca su Drive, quindi rinominare la cartella e cambiare `NOME_CARTELLA` in
+`forziere-drive` sono la STESSA modifica**: fatta una sola delle due, la Edge Function non
+trova più niente e **crea una cartella nuova e vuota** — il forziere sparisce dall'app senza
+nessun errore, mentre su Drive è tutto ancora lì. L'ordine è: prima il deploy, poi il rename.
+
+⚠️ **`GDRIVE_APPSPHERE_FOLDER_ID` è FACOLTATIVO e dice solo DOVE NASCE una cartella nuova**:
+la ricerca resta per nome e fra i risultati *preferisce* quello dentro `AppSphere` senza
+pretenderlo. Pretendendolo, il segreto messo prima dello spostamento farebbe nascere un
+secondo `rooms` vuoto proprio nel momento in cui si sta riordinando. Senza il segreto,
+`rooms` nasce nella radice e tutto il resto funziona uguale.
 
 | Oggetto | Cos'è | Chiuso con |
 |---|---|---|
@@ -4174,7 +4193,7 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   ne vanno anche i file di righe perdute, che il database non nominerebbe affatto. È
   l'opposto di 📁 Riordina il Drive, che parte dal database perché lì la verità è quella.
   ⚠️ Le cartelle si tolgono **dopo** i file, o `rmdir` le rifiuta; e la cartella
-  «Forziere AppSphere» **resta, vuota** — `rmdir` si rifiuta sulla radice per costruzione, e
+  «AppSphere/rooms» **resta, vuota** — `rmdir` si rifiuta sulla radice per costruzione, e
   il forziere successivo la ritrova per nome.
 - ⚠️ **F12 non si disabilita, e non servirebbe.** Da una pagina web non si può, e provarci copre
   solo un tasto: restano il menù del browser, le altre scorciatoie, gli strumenti già aperti,
@@ -4809,9 +4828,14 @@ fisico ha la precedenza — **né su un ramo a parte**, che chiunque apra la pag
 lo stesso. Un ramo `backups` era stato scritto e ritirato prima di girare una sola volta: è la
 soluzione che sembra prudente e non lo è.
 
-Dump e relazione salgono quindi su **Google Drive** (`scripts/backup-drive.py`), in una cartella
-dell'account di Salvatore. ⚠️ **Senza i segreti di Drive il job si ferma e non c'è nessun
-ripiego**: lasciarli «per intanto» nel repo sarebbe esattamente la cosa che questo passo esiste
+Dump e relazione salgono quindi su **Google Drive** (`scripts/backup-drive.py`), in
+`AppSphere/backups` sull'account di Salvatore — sorella di `AppSphere/rooms`, che è il
+Forziere. ⚠️ **Le due restano due cartelle e non si mescolano**: qui ci sono dump del
+database in chiaro-gzip e c'è una **rotazione che cancella**, e un forziere finito sotto
+quella rotazione sparirebbe. La cartella si punta **per id** (`GDRIVE_FOLDER_ID`), quindi
+rinominarla o spostarla su Drive non tocca niente — il forziere invece si cerca per nome, e
+lì rename e codice vanno insieme. ⚠️ **Senza i segreti di Drive il job si ferma e non c'è
+nessun ripiego**: lasciarli «per intanto» nel repo sarebbe esattamente la cosa che questo passo esiste
 per impedire.
 
 ⚠️ **Un refresh token, non un account di servizio.** Un service account non ha spazio proprio su
@@ -4919,7 +4943,8 @@ quello che la home mostra. Vale la stessa regola — non tutti i numeri di `scor
 | `GDRIVE_CLIENT_ID` | ✔ | ✔ | Client OAuth di Google Cloud |
 | `GDRIVE_CLIENT_SECRET` | ✔ | ✔ | idem |
 | `GDRIVE_REFRESH_TOKEN` | ✔ | ✔ | Caricare e leggere **come Salvatore** |
-| `GDRIVE_FOLDER_ID` | ✔ | ✔ | La cartella dei backup (dall'indirizzo di Drive) |
+| `GDRIVE_FOLDER_ID` | ✔ | ✔ | La cartella dei backup, cioè `AppSphere/backups` (dall'indirizzo di Drive) |
+| `GDRIVE_APPSPHERE_FOLDER_ID` | — | ✔ | La cartella `AppSphere` che le tiene insieme. **Solo Supabase e facoltativo**: lo legge `forziere-drive` per sapere dove nasce una cartella nuova |
 
 ⚠️ **Gli stessi quattro valori vanno in tutt'e due i posti**: il workflow carica, la Edge Function
 legge. Se divergono, i backup si scrivono in una cartella e la pagina ne guarda un'altra — e non
