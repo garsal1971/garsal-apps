@@ -83,8 +83,36 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           VERSION=$(grep versionName android-app/smartblocker/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          VERSION_CODE=$(grep versionCode android-app/smartblocker/build.gradle | grep -o '[0-9]\+' | head -1)
           cp android-app/smartblocker/build/outputs/apk/salvatore/release/smartblocker-salvatore-release.apk /tmp/SmartBlocker-latest.apk
           cp android-app/smartblocker/build/outputs/apk/teresa/release/smartblocker-teresa-release.apk     /tmp/SmartBlockerTeresa-latest.apk
+
+          # ── La scheda della build, una per APK ─────────────────────────────
+          # Il nome del pacchetto è fisso (`-latest.apk`), quindi da fuori una
+          # build vale l'altra: senza questa scheda né il ☰ → 📱 Versione app
+          # dentro l'APK né il pannello di comandi.html possono dire *quale*
+          # versione si sta per scaricare. Due flavor, due APK con
+          # applicationId diversi, quindi due schede — una sola offrirebbe al
+          # telefono di Teresa un pacchetto che non si installa sopra al suo.
+          # ⚠️ Stesse sette chiavi delle schede di AppSphere: le leggono
+          # `Aggiornamento.kt` e `mostraVersione()` in comandi.html.
+          for prof in "SmartBlocker-latest:Smart Blocker" "SmartBlockerTeresa-latest:Revolut Teresa"; do
+            BASE="${prof%%:*}"; APPNAME="${prof#*:}"
+            BYTES=$(stat -c%s "/tmp/$BASE.apk")
+            SHA=$(sha256sum "/tmp/$BASE.apk" | cut -d' ' -f1)
+            cat > "/tmp/$BASE.json" <<EOF
+          {
+            "app": "$APPNAME",
+            "version": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "$GITHUB_SHA",
+            "bytes": $BYTES,
+            "sha256": "$SHA"
+          }
+          EOF
+            cat "/tmp/$BASE.json"
+          done
 
           # ⚠️ Il push su master va rifatto se master si muove sotto i piedi.
           # Le build Android della repo scattano insieme (toccare settings.gradle o
@@ -101,11 +129,21 @@ jobs:
             cp /tmp/SmartBlocker-latest.apk       releases/SmartBlocker-latest.apk
             cp /tmp/SmartBlockerTeresa-latest.apk releases/SmartBlockerTeresa-latest.apk
 
+            # ⚠️ Le schede si aggiornano solo se si aggiornano gli APK:
+            # `builtAt` cambia a ogni run, e commetterle da sole vorrebbe dire
+            # annunciare una build nuova per pacchetti identici a quelli di
+            # prima — cioè far riscaricare per niente.
             git add releases/SmartBlocker-latest.apk releases/SmartBlockerTeresa-latest.apk
-            if git diff --staged --quiet; then
+            if git diff --staged --quiet \
+               && [ -f releases/SmartBlocker-latest.json ] \
+               && [ -f releases/SmartBlockerTeresa-latest.json ]; then
               echo "APK non cambiati, skip commit"
               exit 0
             fi
+
+            cp /tmp/SmartBlocker-latest.json       releases/SmartBlocker-latest.json
+            cp /tmp/SmartBlockerTeresa-latest.json releases/SmartBlockerTeresa-latest.json
+            git add releases/SmartBlocker-latest.json releases/SmartBlockerTeresa-latest.json
 
             git commit -m "chore: aggiorna APK SmartBlocker v${VERSION} [skip actions]"
             if git push origin master; then

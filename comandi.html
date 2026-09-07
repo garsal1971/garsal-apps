@@ -269,9 +269,9 @@ body {
       <div>
         <div class="apk-panel-label">🔐 Android APK</div>
         <div class="apk-title">Smart Blocker</div>
-        <div class="apk-sub">Blocco schedulato 08:00 · 22:00</div>
+        <div class="apk-sub" id="sbSub">Blocco schedulato 08:00 · 22:00</div>
       </div>
-      <a class="apk-btn-blocker" href="/releases/SmartBlocker-latest.apk" download="SmartBlocker.apk">
+      <a class="apk-btn-blocker" id="sbBtn" href="/releases/SmartBlocker-latest.apk" download="SmartBlocker.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -280,9 +280,9 @@ body {
       <div>
         <div class="apk-panel-label">💳 Android APK</div>
         <div class="apk-title">Revolut Teresa</div>
-        <div class="apk-sub">Solo pagamenti con la carta di Teresa</div>
+        <div class="apk-sub" id="stSub">Solo pagamenti con la carta di Teresa</div>
       </div>
-      <a class="apk-btn-blocker" href="/releases/SmartBlockerTeresa-latest.apk" download="RevolutTeresa.apk">
+      <a class="apk-btn-blocker" id="stBtn" href="/releases/SmartBlockerTeresa-latest.apk" download="RevolutTeresa.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -491,6 +491,11 @@ async function mostraVersione(idSub, idBtn, nomeFile, coda) {
 
 mostraVersione('anSub', 'anBtn', 'AppSphereNative-latest', 'Kotlin/Compose · si affianca a AppSfera Web');
 mostraVersione('gaSub', 'gaBtn', 'GarsalApps-latest', 'WebView · dentro l\'app: ☰ → 📱 Versione app');
+// Due flavor dello stesso codice, due APK con applicationId diversi: quindi due
+// schede distinte e non una sola letta due volte — il pacchetto di Teresa non si
+// installa sopra a quello di Salvatore, e viceversa.
+mostraVersione('sbSub', 'sbBtn', 'SmartBlocker-latest', 'Blocco schedulato 08:00 · 22:00 · dentro l\'app: ☰ → 📱 Versione app');
+mostraVersione('stSub', 'stBtn', 'SmartBlockerTeresa-latest', 'Solo pagamenti con la carta di Teresa · dentro l\'app: ☰ → 📱 Versione app');
 
 function copyCode(blockId, btn) {
   var pre = document.getElementById(blockId).querySelector('pre');
