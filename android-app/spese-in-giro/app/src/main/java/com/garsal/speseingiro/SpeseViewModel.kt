@@ -167,6 +167,18 @@ class SpeseViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /* ── le categorie del viaggio ───────────────────────────────────────── */
+
+    fun salvaCategoria(id: String?, emoji: String, nome: String) =
+        agisci(if (id == null) "Categoria aggiunta" else "Categoria aggiornata") {
+            Api.salvaCategoria(it, id, emoji, nome)
+        }
+
+    /** ⚠️ Il rifiuto («è usata in N voci») arriva dal server e si mostra com'è:
+     *  è l'unica risposta che sa quante voci la citano davvero. */
+    fun eliminaCategoria(id: String) =
+        agisci("Categoria tolta") { Api.eliminaCategoria(it, id) }
+
     fun conferma(voceId: String) = agisci { Api.conferma(it, voceId) }
     fun elimina(voceId: String) = agisci { Api.elimina(it, voceId) }
     fun chiediCancellazione(voceId: String, motivo: String) =
