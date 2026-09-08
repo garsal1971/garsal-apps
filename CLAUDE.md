@@ -1351,6 +1351,16 @@ nessun errore.
 un totale più basso senza niente che spieghi perché — ed è la stessa scelta di `excluded` nelle
 🛡️ Possibili soluzioni e delle righe `missed` di Abituati.
 
+⚠️ **«Speso in tutto» ha due misure accanto, come il saldo** (`totale_viaggio` /
+`totale_atteso`, `20260908120000_vg_totale_atteso.sql`): il primo conta le sole voci
+**confermate**, il secondo comprende quelle in attesa. Con un viaggio ancora tutto da confermare
+il primo vale zero — vero, e illeggibile sotto un «ti dovrebbe 314,61 €» nella riga sopra: nello
+stesso riquadro convivevano due misure diverse senza che si vedesse. La seconda cifra **compare
+solo quando differisce**, o ripeterebbe la prima a ogni viaggio già confermato. ⚠️ Nell'APK
+`totale_atteso` **assente ripiega sul totale confermato e non su zero** (`statoDa` in `Model.kt`):
+contro un server che non manda ancora quella chiave, uno zero scriverebbe «col non confermato
+0,00 €», che è il falso — è la stessa scelta di `amount` NULL in Finanza.
+
 ⚠️ **Il SALDO si calcola in `vg_saldo`, non nei due telefoni**: è il numero per cui l'app esiste, e
 due implementazioni della stessa divisione sono due debiti diversi il giorno che un telefono si
 aggiorna e l'altro no. Contano le sole voci **confermate**; `vg_stato` restituisce accanto anche il

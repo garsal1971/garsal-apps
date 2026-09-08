@@ -85,6 +85,10 @@ data class StatoViaggio(
     val saldo: Double,
     val saldoAtteso: Double,
     val totaleViaggio: Double,
+    /** Lo stesso totale comprese le voci ancora in attesa — il gemello di
+     *  `saldoAtteso`, e per la stessa ragione: le due misure stanno accanto e
+     *  si dichiarano. */
+    val totaleAtteso: Double,
     val daConfermare: Int,
 )
 
@@ -156,6 +160,12 @@ fun statoDa(o: JSONObject): StatoViaggio? {
         saldo = o.numeroONull("saldo") ?: 0.0,
         saldoAtteso = o.numeroONull("saldo_atteso") ?: 0.0,
         totaleViaggio = o.numeroONull("totale_viaggio") ?: 0.0,
+        // ⚠️ Chiave assente ≠ zero: contro un server che non la manda ancora
+        // (`vg_stato` prima della migration del totale atteso) vale il totale
+        // confermato, così le due misure coincidono e la seconda non compare.
+        // Uno zero direbbe «col non confermato 0,00 €», che è il falso.
+        totaleAtteso = o.numeroONull("totale_atteso")
+            ?: (o.numeroONull("totale_viaggio") ?: 0.0),
         daConfermare = o.optInt("da_confermare", 0),
     )
 }
