@@ -45,14 +45,38 @@ object Rilascio {
 
     data class Scheda(val version: String, val versionCode: Int, val bytes: Long, val sha256: String)
 
-    suspend fun scheda(): Scheda? = withContext(Dispatchers.IO) {
+    /** ⚠️ Torna un `Result` e non un `Scheda?`: il **perché** non si è potuta
+     *  leggere è quel che serve a chi guarda il dialogo — «non raggiungibile»
+     *  e «l'ho letta e dice un'altra cosa» sono due guasti diversi, e un
+     *  `getOrNull()` li schiaccia tutt'e due in un silenzio. */
+    suspend fun scheda(): Result<Scheda> = withContext(Dispatchers.IO) {
         runCatching {
             // `?t=` per la stessa ragione del `?v=`: senza, una scheda in cache
             // racconterebbe la build di ieri.
             val o = JSONObject(URL("$SITO/releases/$BASE.json?t=${System.currentTimeMillis()}").readText())
             Scheda(o.optString("version"), o.optInt("versionCode"), o.optLong("bytes"), o.optString("sha256"))
-        }.getOrNull()
+        }
     }
+
+    /**
+     * Apre un indirizzo nel **browser di sistema**: è l'unico posto dove il
+     * file finisce fra gli scaricamenti e dove il gestore pacchetti lo può
+     * installare sopra a questo.
+     *
+     * ⚠️ `CATEGORY_BROWSABLE` e il try/catch non sono prudenza generica, sono
+     * il gemello di `apriNelBrowser` in SOS: senza la categoria l'intent può
+     * non agganciare nessun browser, e senza il catch quel caso non è un
+     * download mancato ma **l'app che si chiude in faccia**.
+     */
+    fun apriNelBrowser(ctx: Context, url: String): Boolean = runCatching {
+        ctx.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+        true
+    }.getOrDefault(false)
 
     /** La versione **installata**, letta dal pacchetto e non da BuildConfig: è
      *  quella vera, non quella che il codice credeva di essere.
@@ -78,12 +102,22 @@ fun DialogoAggiornamento(onChiudi: () -> Unit) {
     var stato by remember { mutableStateOf("Controllo cosa c'è pubblicato…") }
 
     LaunchedEffect(Unit) {
-        val s = Rilascio.scheda()
+        val esito = Rilascio.scheda()
+        val s = esito.getOrNull()
         scheda = s
         stato = when {
-            s == null -> "Non sono riuscito a leggere la scheda della build: senza, non posso dire se c'è qualcosa di nuovo."
-            s.versionCode > codice -> "C'è la v${s.version} (build ${s.versionCode}), ${"%.1f".format(s.bytes / 1048576.0)} MB."
-            else -> "Sei aggiornato: pubblicata la v${s.version} (build ${s.versionCode})."
+            s == null ->
+                "Versione pubblicata non leggibile: " +
+                    (esito.exceptionOrNull()?.message ?: "non raggiungibile") +
+                    "\nIl pulsante qui sotto scarica lo stesso."
+            s.versionCode > codice ->
+                "C'è la v${s.version} (build ${s.versionCode}), " +
+                    "${"%.1f".format(s.bytes / 1048576.0)} MB."
+            s.versionCode == codice -> "Sei aggiornato: pubblicata la v${s.version} (build ${s.versionCode})."
+            // Capita provando una build fatta a mano prima che il workflow
+            // pubblichi la sua: dirlo è meglio che far scaricare all'indietro
+            // senza spiegare perché.
+            else -> "Pubblicata la v${s.version} (build ${s.versionCode}), più vecchia di questa."
         }
     }
 
@@ -92,23 +126,30 @@ fun DialogoAggiornamento(onChiudi: () -> Unit) {
         title = { Text("📱 Versione app") },
         text = {
             Text(
-                "Installata: v$nome (build $codice)\n\n$stato",
+                "Installata: v$nome (build $codice)\n\n$stato\n\n" +
+                    "Si scarica dal browser: a fine download tocca il file per " +
+                    "installarlo sopra a questo.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         },
         confirmButton = {
+            // ⚠️ Il pulsante c'è SEMPRE, anche senza scheda: la versione nel
+            // link è allora quella installata. Legandolo alla scheda — com'era
+            // fino alla v1.0.2 — una rete lenta o un 404 sulla scheda toglievano
+            // di mezzo **il download**, cioè la sola cosa per cui questo dialogo
+            // esiste, e senza che niente dicesse perché.
             val s = scheda
-            if (s != null) {
-                TextButton(onClick = {
-                    // Il browser di sistema: è l'unico posto dove l'utente
-                    // ritrova il file fra i suoi scaricamenti e dove il gestore
-                    // pacchetti lo può installare sopra a questo.
-                    ctx.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(Rilascio.apk(s.version)))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                    onChiudi()
-                }) { Text(if (s.versionCode > codice) "⬇ Scarica la v${s.version}" else "⬇ Riscarica") }
+            TextButton(onClick = {
+                if (Rilascio.apriNelBrowser(ctx, Rilascio.apk(s?.version ?: nome))) onChiudi()
+                else stato = "Non ho trovato un browser da aprire su questo telefono."
+            }) {
+                Text(
+                    when {
+                        s == null -> "⬇ Scarica l'APK"
+                        s.versionCode > codice -> "⬇ Scarica la v${s.version}"
+                        else -> "⬇ Riscarica"
+                    }
+                )
             }
         },
         dismissButton = { TextButton(onClick = onChiudi) { Text("Chiudi") } },
