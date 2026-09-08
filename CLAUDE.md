@@ -1319,7 +1319,7 @@ codice lo risolve, ha l'EXECUTE revocato ai client.
 resterebbe agganciato a una riga che non esiste più. È la stessa scelta delle misure di un diario
 in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo in un ordine.
 
-### Tandem — viaggio in bici (`vg_*`)
+### Spese in giro — viaggio in bici (`vg_*`)
 | Table | Purpose |
 |---|---|
 | `vg_viaggi` | Un giro in bici: nome, date, valuta e il **codice di invito** (unico) |
@@ -1386,7 +1386,7 @@ service role va poi rinominato esplicitamente nelle due GRANT della Edge Functio
 revoca porta via anche la sua.
 
 ⚠️ **Le foto stanno nel bucket privato `vg-scontrini`, in una cartella per viaggio**, e non le
-tocca nessun client: le scrive e le firma la Edge Function `tandem-foto`. Il bucket lo crea la
+tocca nessun client: le scrive e le firma la Edge Function `spese-in-giro-foto`. Il bucket lo crea la
 migration, ma **se quell'INSERT non passa la migration non muore**: lo crea al primo caricamento la
 Edge Function (`assicuraBucket`) — un deploy fermo su una riga di storage si porterebbe dietro
 tutto il resto.
@@ -1645,7 +1645,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `notification-action` | manuale (da `telegram-webhook` e dall'APK nativo) | Che cosa fa un pulsante di un promemoria: ✅ Fatto, ⏸ rinvia, ❌ annulla. **L'unica implementazione**, chiamata sia dal bot sia dal telefono |
 | `forziere-drive` | manuale (da `forziere.html`) | Il ponte col Drive del Forziere: crea la cartella (e una sottocartella per scomparto, con `mkdir`/`rmdir`/`move`), apre i caricamenti, restituisce e cancella i file. ⚠️ **Non vede mai niente in chiaro** — tutto quel che le passa davanti è già cifrato con OpenPGP dalle 24 parole, che qui non arrivano né adesso né mai. Il caricamento **non passa di qui**: `upload-url` chiede a Google un indirizzo ripristinabile e i byte vanno dal browser a Google diretti (con ripiego su `put` per i file piccoli, se quella strada è bloccata). Lo scaricamento passa — Drive non ha indirizzi firmati — ma **in flusso** |
 | `al-food-search` | manuale (da `calorie.html`) | **Legge e basta**: cerca un alimento per nome o per codice a barre nelle banche dati pubbliche e lo restituisce **già normalizzato**. Fonti in ordine: Open Food Facts Search-a-licious, la vecchia `/cgi/search.pl` come ripiego, e USDA FoodData Central se c'è il secret `USDA_API_KEY`. Ogni fonte torna col suo esito (HTTP, tempo, errore) |
-| `tandem-foto` | manuale (dall'APK Tandem) | Gli scontrini di Tandem: carica una foto, ne firma l'URL per un'ora e la cancella. ⚠️ È il **solo** ponte fra un'APK senza login e lo Storage: risolve il token del telefono con `vg_viaggio_del_token` (eseguibile dal solo service role) e scrive dentro la cartella di **quel** viaggio, `<viaggio_id>/…`. Per leggere si passa l'id della **voce**, mai il percorso: dove sta quella foto lo dice il database |
+| `spese-in-giro-foto` | manuale (dall'APK Spese in giro) | Gli scontrini di «Spese in giro»: carica una foto, ne firma l'URL per un'ora e la cancella. ⚠️ È il **solo** ponte fra un'APK senza login e lo Storage: risolve il token del telefono con `vg_viaggio_del_token` (eseguibile dal solo service role) e scrive dentro la cartella di **quel** viaggio, `<viaggio_id>/…`. Per leggere si passa l'id della **voce**, mai il percorso: dove sta quella foto lo dice il database |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Un prezzo può essere insieme plausibile e sbagliato
@@ -2328,13 +2328,29 @@ su fondo scuro «più scuro» vuol dire «meno leggibile», non «meno important
 
 ---
 
-## Tandem — le spese di un viaggio in bici, divise in due
+## Spese in giro — le spese di un viaggio in bici, divise in due
 
-`android-app/tandem/` è un **progetto Gradle standalone** (come `appsphere-native/`,
+`android-app/spese-in-giro/` è un **progetto Gradle standalone** (come `appsphere-native/`,
 `situazione-rosa/` e `pressure-tracker/`, e non un modulo di `android-app/`), `applicationId`
-`com.garsal.tandem`, APK `releases/Tandem-latest.apk`. Kotlin + Compose, Material 3, ML Kit per
+`com.garsal.speseingiro`, APK `releases/SpeseInGiro-latest.apk`. Kotlin + Compose, Material 3, ML Kit per
 l'OCR. **Non ha un gemello web**: `spese-viaggio.html` è un'altra cosa — una nota spese statica —
 e non c'entra.
+
+⚠️ **Si chiamava «Tandem» per mezza giornata, l'8 settembre 2026**, e la rinomina è stata
+completa — pacchetto, cartella, APK, Edge Function — perché è arrivata **prima che l'APK fosse
+installato da qualcuno**: dopo non si sarebbe più potuto, e sarebbe rimasto il compromesso di
+*AppSfera Web*, che il nome nel cassetto ce l'ha nuovo e `applicationId` vecchio. Due cose portano
+ancora il nome di allora, e non è una svista:
+
+- le tabelle restano **`vg_*`** (da *viaggi*), che non nominava Tandem nemmeno prima;
+- la **migration `20260908100000_vg_tandem_viaggio_bici.sql`** conserva il nome nel titolo e nei
+  commenti. Una migration già applicata è **storia e non si riscrive**: rimaneggiarla non
+  cambierebbe niente sul database — `db push` la salta perché la versione risulta già applicata —
+  e in cambio farebbe divergere quel che c'è in produzione da quel che si legge nel file.
+
+⚠️ **La vecchia Edge Function `tandem-foto` resta deployata su Supabase e non la chiama più
+nessuno**: il workflow deploya le funzioni toccate dal commit, non cancella quelle sparite dal
+repo. Si toglie a mano dalla dashboard; finché c'è non fa danni — vuole comunque un token valido.
 
 ⚠️ **È l'unica app della repo che sta fuori dalla suite, e lo è in tutti i sensi**: nessuna riga in
 `cm_apps` (quindi nessuna bolla in home, né web né nativa), nessun punteggio, nessun login Google,
@@ -2661,7 +2677,8 @@ nell'APK WebView.
 ⚠️ **E da SOS, che fa quattro** (v1.1.0): `build-sos.yml` pubblica `Sos-latest.json` e la voce sta
 nel suo dialogo **⚙️ Impostazioni**, che è il menù che quell'app ha.
 
-⚠️ **E da Tandem, che fa cinque** (v1.0.0): `build-tandem.yml` pubblica `Tandem-latest.json` e la
+⚠️ **E da «Spese in giro», che fa cinque** (v1.0.0): `build-spese-in-giro.yml` pubblica
+`SpeseInGiro-latest.json` e la
 voce sta in **⚙️ Impostazioni → 📱 Versione app**. Qui il gemello è in **Compose** e non un
 `AlertDialog` di AppCompat — la scheda, le sette chiavi e il giro sono gli stessi, cambia solo con
 che cosa è disegnato il dialogo. Cambiando la forma della scheda in un workflow, cambiala
@@ -3511,12 +3528,12 @@ marchio si toccano tutti e cinque.
 fondo (bianco / nero) fra i due AppSphere, il lucchetto per Smart Blocker, il badge `SOS` per SOS.
 È il segno che li distingue in un cassetto delle app, dove i nomi stanno scritti piccoli.
 
-⚠️ **Tandem NON lo porta, ed è l'unica APK della repo a non portarlo**: la sua icona è una
-bicicletta (`android-app/tandem/…/ic_launcher_foreground.xml`). Non è una dimenticanza — quella
+⚠️ **«Spese in giro» NON lo porta, ed è l'unica APK della repo a non portarlo**: la sua icona è una
+bicicletta (`android-app/spese-in-giro/…/ic_launcher_foreground.xml`). Non è una dimenticanza — quella
 non è un'app della suite: non ha una bolla in `cm_apps`, non fa il login Google, non legge nessuna
 tabella delle altre e i suoi dati non appartengono a un account. Mettere lì il marchio direbbe il
 falso proprio nel posto dove il marchio serve a dire di che famiglia è un'app. Il giorno che
-l'icona di Tandem cambia, **non** si tocca nient'altro; e cambiando il marchio, Tandem resta com'è.
+la sua icona cambia, **non** si tocca nient'altro; e cambiando il marchio, lei resta com'è.
 
 ⚠️ **Nella barra il marchio sta su un disco bianco**, e non è decorazione: la barra è `#0081C8` e
 il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno
