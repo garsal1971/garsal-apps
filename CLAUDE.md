@@ -2691,6 +2691,18 @@ che cosa è disegnato il dialogo. Cambiando la forma della scheda in un workflow
 **negli altri quattro** e in `mostraVersione()` di `comandi.html`, che ora disegna tutt'e sei i
 pulsanti.
 
+⚠️ **Il pulsante di download c'è SEMPRE, anche quando la scheda non si legge** (v1.0.3): la
+versione nel link è allora quella installata. Fino alla v1.0.2 il pulsante era legato alla
+scheda — `if (scheda != null)` — quindi una rete lenta, un 404 o un JSON storto **toglievano di
+mezzo il download**, cioè la sola cosa per cui quel dialogo esiste, e per giunta in silenzio,
+perché `getOrNull()` si mangiava anche il motivo. Ora `Rilascio.scheda()` torna un `Result` e il
+dialogo scrive *perché* non l'ha letta, come fa SOS da sempre.
+
+⚠️ **`CATEGORY_BROWSABLE` e il try/catch attorno a `startActivity` non sono prudenza generica**:
+sono il gemello di `apriNelBrowser` in SOS. Senza la categoria l'intent può non agganciare nessun
+browser, e senza il catch quel caso non è un download mancato ma **l'app che si chiude in
+faccia**. Non trovando nessun browser il dialogo lo dice e resta aperto.
+
 ### ⚠️ Ta Firi? nativo: il punteggio sta nella RPC, e il promemoria si scrive da qui
 
 `tafiri/` porta in nativo le due voci della sidebar del web, che qui sono due schede —
