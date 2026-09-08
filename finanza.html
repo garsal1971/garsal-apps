@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.19.2</title>
+  <title>GarsalFinanza v1.20.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -171,6 +171,19 @@
                 font-weight: 400; text-transform: none; letter-spacing: 0; line-height: 1.35;
                 color: var(--c-muted); }
     .cov-desc-vuota { font-style: italic; opacity: .7; }
+    /* Il 🎯 dell'intestazione: più grande dei due ✎ che gli stanno sopra, perché risponde a una
+       domanda e non cambia un parametro. Va a capo da sé come la descrizione, e il testo non è
+       maiuscolo — l'intestazione lo è, e una scritta di sei parole in maiuscolo non si legge. */
+    .cov-zero { display: block; width: 100%; margin-top: 6px; padding: 7px 10px;
+                font: 600 .82rem/1.2 var(--font-sans); text-transform: none; letter-spacing: 0;
+                color: #fff; background: var(--c-primary); border: 0; border-radius: 7px;
+                cursor: pointer; text-align: center; white-space: normal; }
+    .cov-zero:hover { filter: brightness(1.08); }
+    /* Il commento del 🎯: verde quando la scopertura si è annullata, ambra quando il cursore non
+       arriva a tanto — perché quel caso è una risposta diversa, non un dettaglio. */
+    .cov-zero-nota { font-size: .84rem; background: #ecfdf5; border-left: 3px solid #059669;
+                     padding: 8px 10px; border-radius: 0 6px 6px 0; }
+    .cov-zero-nota-no { background: #fffbeb; border-left-color: #d97706; }
     .cov-tot { border-top: 2px solid var(--c-border); padding-top: 12px; margin-top: 4px; }
     /* Una voce esclusa dal conto resta a schermo: sbiadita e con gli importi barrati. Sparire
        sarebbe il modo peggiore di toglierla — un totale più basso senza niente che dica perché. */
@@ -617,7 +630,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.19.2';
+const APP_VERSION = 'v1.20.0';
 const APP_BUILD   = '2026-09-07T12:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
@@ -652,6 +665,7 @@ const S = {
   // tre chiavi del piano. I mesi di spostamento invece stanno qui e basta: vedi `coverageOggi`.
   rivalutazione: null,
   covMesi: 0,
+  covZeroNota: null,   // il commento del 🎯, mostrato una volta sola e poi consumato
   funds: [], fundContributions: [], fundParticipants: [], foiIndex: [],
   // Censimento delle banche e dei broker, e i conti che ne sono nati.
   institutions: [],
@@ -4537,6 +4551,81 @@ function coverageScopertura(scenario) {
            capitale: cap.total, capitaleMancanti: cap.mancanti };
 }
 
+/* ── 🎯 «Scopertura a zero»: il mese in cui quel piano si regge da sé ──────
+   Il bottone nell'intestazione di una colonna sposta la ⏳ macchina del tempo al mese in cui la
+   **scopertura di quel piano** si annulla: aspettando, i flussi del fabbisogno si accorciano da
+   soli e a un certo punto quel che c'è basta. È la domanda «e allora quando potrei?», che la
+   barra risponde già ma solo a forza di trascinarla.
+
+   ⚠️ **Non c'è sulla 🌿 Uscita naturale**: quella colonna è il METRO e non un piano — risponde a
+   «uscendo cinque anni prima dell'anticipata, senza aver trattato niente, quanto servirebbe?» —
+   e un pulsante che la porta a zero suggerirebbe di aspettare per un piano che nessuno sta
+   facendo.
+
+   ⚠️ **Il mese si cerca, non si calcola in forma chiusa**: fra la scopertura e i mesi ci stanno
+   in mezzo il piano di ammortamento del mutuo, i flussi troncati all'anno parziale e la
+   rivalutazione composta — invertire tutto questo sarebbe una seconda implementazione di
+   `coverageScopertura`, cioè due risposte diverse alla stessa domanda il giorno che una cambia.
+   Si valuta la funzione vera e basta.
+
+   ⚠️ **La ricerca è in due passate, e non è ottimizzazione prematura**: ogni valutazione rifà
+   l'intero conto — portafogli, mutui, asset, accordo — e sui vent'anni del cursore sarebbero
+   240 giri, cioè la pagina ferma per secondi. Si scorre prima **di anno in anno** per trovare i
+   dodici mesi in cui la scopertura si annulla, poi mese per mese dentro quell'anno: una
+   quarantina di valutazioni invece di 240.
+
+   ⚠️ **Vince il PRIMO mese in cui la scopertura è coperta**, non quello in cui è più vicina a
+   zero: la domanda è «da quando basta», e un mese più in là con un avanzo maggiore risponderebbe
+   a un'altra. Se non si annulla mai entro il cursore si va al mese che ci va **più vicino** e la
+   pagina lo dice (`S.covZeroNota`), invece di non fare niente al tocco. */
+function coverageScoperturaA(key, mesi) {
+  const prima = S.covMesi;
+  S.covMesi = mesi;
+  try {
+    const sc = coverageScenarios().find(s => s.key === key);
+    if (!sc || !sc.date) return null;
+    const v = coverageScopertura(sc).scopertura;
+    return Number.isFinite(v) ? v : null;
+  } finally { S.covMesi = prima; }   // la lente torna sempre dov'era, anche se qualcosa solleva
+}
+function coverageMeseZero(key) {
+  const max = coverageMesiMax();
+  let best = null;                               // il mese col |scopertura| più piccolo visto
+  const prova = m => {
+    const v = coverageScoperturaA(key, m);
+    if (v == null) return null;
+    if (!best || Math.abs(v) < Math.abs(best.val)) best = { mesi: m, val: v };
+    return v;
+  };
+  let da = 0, a = Math.min(12, max);
+  for (let m = 0; m <= max; m += 12) {
+    const v = prova(m);
+    if (v != null && v <= 0) { da = Math.max(0, m - 12); a = m; break; }
+    da = m; a = Math.min(max, m + 12);
+  }
+  for (let m = da; m <= a; m++) {
+    const v = prova(m);
+    if (v != null && v <= 0) return { mesi: m, val: v, zero: true };
+  }
+  // Nessun mese la copre: si affina attorno al più vicino, o il «più vicino» sarebbe il più
+  // vicino **fra quelli guardati** — cioè un multiplo di dodici, che è un'altra cosa.
+  if (best) for (let m = Math.max(0, best.mesi - 12); m <= Math.min(max, best.mesi + 12); m++) prova(m);
+  return best ? { ...best, zero: false } : null;
+}
+function vaiAScoperturaZero(key) {
+  const sc = coverageScenarios().find(s => s.key === key);
+  const r  = coverageMeseZero(key);
+  if (!r) { alert('Manca la data di questo piano: compila la simulazione in 🏛️ Simulazione INPS.'); return; }
+  S.covMesi = r.mesi;
+  // ⚠️ La nota si mostra UNA volta e poi si consuma: descrive il tocco appena fatto, e lasciata lì
+  // resterebbe a commentare una barra che nel frattempo si è spostata a mano.
+  S.covZeroNota = { zero: r.zero, testo: r.zero
+    ? `🎯 ${sc.icon} ${sc.label}: da ${coverageMeseTesto(r.mesi)} la scopertura di questo piano è coperta.`
+    : `🎯 ${sc.icon} ${sc.label}: entro il cursore la scopertura non si annulla mai — il mese più `
+      + `vicino è ${coverageMeseTesto(r.mesi)}, dove ne restano scoperti ${fmtEUR(r.val)}.` };
+  renderCoperture();
+}
+
 /* ── 💼 Redditi da lavoro — il riquadro che sta FUORI dai conti ────────────
    Quanto si continuerebbe a guadagnare lavorando fino a ciascuna delle quattro date: il netto
    di un anno per gli anni che mancano, con gli anni di scivolo contati all'80 %.
@@ -4706,6 +4795,8 @@ function renderCoverageRiepilogo(scen) {
   // La riga dell'accordo: l'etichetta della fonte è la stessa per tutte le colonne (il reddito da
   // cui viene), gli anni no — quelli si scrivono nella cella, che è dove cambiano.
   const accFonte = conti.map(c => c.accordo).find(Boolean);
+  // Si legge e si azzera: commenta il tocco appena fatto, non la barra di adesso.
+  const nota = S.covZeroNota; S.covZeroNota = null;
   return `
     <div class="card">
       <div class="card-header-row">
@@ -4713,13 +4804,14 @@ function renderCoverageRiepilogo(scen) {
         <span class="text-muted text-sm">${coverageMesi()
           ? `Tutto al ${coverageMeseTesto(coverageMesi())}` : 'Le dotazioni sono quelle di oggi'}</span>
       </div>
+      ${nota ? `<p class="cov-zero-nota${nota.zero ? '' : ' cov-zero-nota-no'} mb-12">${nota.testo}</p>` : ''}
       ${senzaData.length ? `<p class="text-muted text-sm mb-12">⚠️ ${senzaData.map(s => s.label).join(' e ')}: manca la data. Compila la simulazione in 🏛️ Simulazione INPS — un fabbisogno contato su un orizzonte inventato non direbbe niente.</p>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th></th>
           ${scen.map(s => `<th class="text-right ${colCls(s)}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
             ${s.passato ? '<div class="cov-desc text-sm">già passata</div>' : ''}
-            ${renderUscitaNota(s)}${renderScenarioNota(s)}</th>`).join('')}
+            ${renderUscitaNota(s)}${renderScenarioNota(s)}${renderZeroBtn(s)}</th>`).join('')}
         </tr></thead>
         <tbody>
           <tr>
@@ -4777,6 +4869,20 @@ function renderCoverageRiepilogo(scen) {
 function scenarioNota(key) {
   const v = (S.scenariNote || {})[key];
   return (typeof v === 'string' && v.trim()) ? v.trim() : '';
+}
+/* Il 🎯 che porta la ⏳ macchina del tempo dove la scopertura di questa colonna si annulla.
+   ⚠️ È **più grande** dei due ✎ che gli stanno sopra, e non è vezzo: quelli cambiano un
+   parametro del piano, questo risponde alla domanda per cui la pagina esiste — «e allora
+   quando?». Un'icona della stessa taglia lo farebbe sembrare un terzo ✎.
+   ⚠️ **Non c'è sulla 🌿 Uscita naturale** (il metro, non un piano) né su una colonna senza data:
+   là non c'è nessun orizzonte su cui cercare, e un pulsante che risponde «non si può» solo dopo
+   essere stato premuto è un pulsante che non va messo. */
+function renderZeroBtn(sc) {
+  if (sc.key === 'naturale' || !sc.date) return '';
+  return `<div class="cov-desc text-sm">
+      <button class="cov-zero" data-action="cov-zero" data-key="${sc.key}"
+              title="Porta la ⏳ macchina del tempo al mese in cui la scopertura di questo piano si annulla">🎯 Scopertura a zero</button>
+    </div>`;
 }
 function renderScenarioNota(sc) {
   const testo = scenarioNota(sc.key);
@@ -8309,6 +8415,7 @@ document.addEventListener('click', async e => {
         : coverageMesi() + parseInt(t.dataset.delta, 10);
       renderCoperture();
       break;
+    case 'cov-zero':              vaiAScoperturaZero(t.dataset.key); break;
     case 'edit-uscita':           openUscitaModal(); break;
     case 'edit-accordo':          openAccordoModal(); break;
     case 'edit-scenario-nota':    openScenarioNotaModal(t.dataset.key); break;

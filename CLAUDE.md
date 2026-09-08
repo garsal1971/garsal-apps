@@ -446,6 +446,43 @@ invece è un'ipotesi come le durate dell'uscita, e sta in `cm_settings` chiave
 ⚠️ **Non è la colonna `revaluation_pct`** di `fnz_coverage_items`, che resta inutilizzata: quella
 era una percentuale per voce, questa è una sola per tutta la pagina.
 
+### 🎯 «Scopertura a zero» — il bottone che muove la barra al posto tuo
+
+Nell'**intestazione di ogni colonna** del riepilogo, sotto i due ✎, c'è un pulsante **più grande
+di loro**: porta la ⏳ macchina del tempo al mese in cui la **scopertura di quel piano** si
+annulla. È la domanda «e allora quando potrei?», a cui la barra risponde già ma solo a forza di
+trascinarla.
+
+⚠️ **Non c'è sulla 🌿 Uscita naturale**: quella colonna è il **metro** e non un piano, e un
+pulsante che la porta a zero inviterebbe ad aspettare per un piano che nessuno sta facendo. Non
+c'è nemmeno su una colonna **senza data**: là non c'è nessun orizzonte su cui cercare, e un
+pulsante che risponde «non si può» dopo essere stato premuto è un pulsante che non si mette.
+
+⚠️ **È più grande dei ✎ e non è un vezzo**: quelli cambiano un parametro del piano, questo
+risponde alla domanda per cui la pagina esiste. Alla stessa taglia sarebbe un terzo ✎.
+
+⚠️ **Il mese si CERCA valutando `coverageScopertura`, non si ricava con una formula**: fra la
+scopertura e i mesi ci stanno il piano di ammortamento del mutuo, i flussi troncati all'anno
+parziale e la rivalutazione composta — invertirli sarebbe una seconda implementazione della
+scopertura, cioè due risposte diverse alla stessa domanda il giorno che una cambia.
+
+⚠️ **La ricerca è in DUE passate** (`coverageMeseZero`): di anno in anno per trovare i dodici mesi
+buoni, poi mese per mese lì dentro. Ogni valutazione rifà l'intero conto — portafogli, mutui,
+asset, accordo — e i vent'anni del cursore a passo di mese sarebbero 241 giri, cioè la pagina
+ferma per secondi; così sono fra le 2 e le 53. ⚠️ `coverageScoperturaA` sposta `S.covMesi` per
+leggere e lo **rimette in un `finally`**: è la lente della pagina, e lasciarla spostata da una
+ricerca farebbe leggere numeri proiettati credendoli quelli di oggi.
+
+⚠️ **Vince il PRIMO mese in cui la scopertura è coperta**, non quello in cui è più vicina a zero:
+la domanda è «da quando basta». Quando non si annulla mai entro il cursore si va al mese che ci
+va più vicino — e lì la ricerca **affina attorno al migliore** (± 12 mesi), o il «più vicino»
+sarebbe il più vicino *fra i multipli di dodici guardati*, che è un'altra cosa.
+
+⚠️ **La nota sotto il titolo si mostra una volta e si consuma** (`S.covZeroNota`, letta e azzerata
+da `renderCoverageRiepilogo`): commenta il tocco appena fatto, e lasciata lì parlerebbe di una
+barra che intanto si è spostata a mano. È verde quando la scopertura si è annullata e ambra
+quando il cursore non ci arriva — sono due risposte diverse, non un dettaglio.
+
 ⚠️ **Una colonna la cui data è già passata resta a schermo, sbiadita** (`.cov-past`, badge *già
 passata*): i suoi flussi valgono zero — zero anni davanti, per il `Math.max(0, …)` di
 `anniFinoA` — e i capitali restano scritti. Sparire sarebbe il modo peggiore di dirlo: un piano
