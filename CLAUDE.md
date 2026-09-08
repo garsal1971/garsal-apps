@@ -2458,7 +2458,13 @@ voce di cui parla, così resta leggibile anche quando quella voce non c'è più 
   `core/PulsantiTendine.kt` di appsphere-native e non importate: sono due progetti Gradle separati,
   che non condividono sorgenti — è la stessa duplicazione dichiarata di `ForziereBiometria` /
   `ForziereKeystore`. Se la regola cambia là, va cambiata anche qui;
-- **una scelta fra poche opzioni è sempre una tendina**, mai una fila di pillole;
+- **una scelta fra poche opzioni è sempre una tendina**, mai una fila di pillole — e la
+  tendina passa da `ExposedDropdownMenuBox` con la sua ▾, non da un campo disabilitato con un
+  `clickable` appeso al modifier. ⚠️ Fino alla v1.0.1 era così, e i due difetti si sommavano:
+  senza freccia «l'ha pagata» si leggeva come un dato scritto invece che come una scelta, e
+  l'apertura dipendeva da un tocco su un campo spento. La ▾ compare **solo con più di
+  un'opzione**: da soli nel viaggio le due tendine hanno una voce sola, e il form lo dice col
+  codice da dettare invece di lasciar credere che la scelta sia negata;
 - **l'indietro di Android riporta alla home** e non fa uscire dall'app buttando via quel che si
   stava scrivendo (`BackHandler`): è la stessa regola della `guardiaIndietroPopup` delle pagine web;
 - **il FAB è uno solo per le due strade** (spesa / restituzione), con un menù ancorato: due FAB
