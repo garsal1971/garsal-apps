@@ -1325,6 +1325,7 @@ in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo 
 | `vg_viaggi` | Un giro in bici: nome, date, valuta e il **codice di invito** (unico) |
 | `vg_partecipanti` | I due telefoni, uno per persona: `nome` e `token`, che **è** la credenziale |
 | `vg_voci` | Spese e restituzioni: importo, `da_id` (chi ha messo i soldi), `per_chi`, `beneficiario_id`, `scontrino_path` e lo `stato` |
+| `vg_categorie` | Le categorie di spesa di **quel** viaggio: `chiave` (quella scritta nelle voci), `emoji`, `nome`, `posizione` |
 | `vg_log` | Il registro: ogni creazione, correzione, conferma, richiesta e cancellazione |
 
 ⚠️ **Nessuna di queste tabelle ha `user_id`, e non è una dimenticanza**: il viaggio non appartiene
@@ -1337,6 +1338,63 @@ un passo più in là: là il token indirizza a un utente vero, qui non c'è ness
 `trg_vg_partecipanti_max_due`) e non nella sola RPC: tutta l'app — il saldo, «l'altro», la
 conferma — è scritta su due persone, e una terza riga renderebbe ambiguo ogni «l'altro» senza dare
 nessun errore.
+
+### 🏷️ Le categorie sono del VIAGGIO, e stanno nel database
+
+Fino alla v1.0.4 erano un elenco fisso in Kotlin (`CATEGORIE` in `Model.kt`), come
+`COVERAGE_ITEMS` e `INCOME_SECTIONS` in Finanza. Dalla v1.0.5 vivono in `vg_categorie` e si
+gestiscono da ⚙️ Impostazioni: se ne aggiunge una, si cambia la descrizione a una che c'è, e si
+toglie una che nessuna voce usa.
+
+⚠️ **Nel database e non nelle preferenze del telefono**, ed è la ragione per cui la tabella
+esiste: le voci sono **condivise fra i due telefoni**, quindi una categoria inventata da uno e
+tenuta in locale, sull'altro comparirebbe come chiave grezza («pedaggi» invece di
+«🛣️ Pedaggi») — e il controllo «non usata» guarderebbe le sole voci che quel telefono ha già
+scaricato. È la stessa ragione per cui il saldo si calcola in `vg_saldo` e non in Kotlin.
+
+⚠️ **`chiave` è quel che sta scritto nella voce, `nome` è quel che si legge, e la chiave NON si
+cambia mai.** È il perno per cui rinominare una categoria tocca una riga sola e tutte le voci si
+rileggono col nome nuovo; seguendo il nome, ogni voce già segnata resterebbe agganciata a
+qualcosa che non esiste più. È la stessa scelta delle opzioni di una combo in Memo, che
+archiviano l'**id** e mai l'etichetta. Il form quel campo non lo mostra affatto: un campo che
+non si può cambiare è un campo che non si mette. La chiave si ricava dal nome una volta sola
+(`vg_chiave`, accenti traslitterati) e si differenzia con un `_2` se è già presa.
+
+⚠️ **`vg_voci.categoria` resta testo libero e senza chiave esterna**: una voce non deve poter
+sparire, né rifiutarsi di salvarsi, perché qualcuno ha tolto una categoria. Una chiave che non
+ha più la sua riga si mostra com'è scritta — la *misura tolta* dei diari di Memo
+(`categoriaDi(chiave, elenco)`), e sul form di una voce che c'è già **resta la sua**: prendendo
+la prima dell'elenco, correggere l'importo cambierebbe di nascosto la categoria.
+
+⚠️ **Si toglie solo una che nessuna voce usa, e le CANCELLATE contano.** Una voce cancellata
+resta a schermo, barrata, e continua a mostrare la sua categoria: toglierla lascerebbe una
+chiave grezza in una riga che nessuno può più correggere. Quando gli usi sono tutti di voci
+cancellate il messaggio lo dice invece di suggerire un rimedio che non esiste — «cambia
+categoria a quelle» manderebbe a cercare un pulsante che su una voce cancellata non c'è.
+⚠️ **L'ultima non si toglie**: senza nessuna categoria il form di una spesa non avrebbe niente
+da scegliere — sarebbe rotto, non vuoto.
+
+⚠️ **Il conteggio degli usi lo fa il server** e arriva dentro `vg_stato` (`categorie[].usi`):
+i due telefoni vedono le stesse voci ma non nello stesso momento, e senza quel numero l'app
+offrirebbe un 🗑 che risponde «non si può» solo dopo essere stato premuto. Chi **decide** resta
+`vg_categoria_elimina`; il numero in pagina è un'anticipazione, non la regola.
+
+⚠️ **Le sette di partenza sono scritte in due posti** — `vg_categorie_semina` nel database e
+`CATEGORIE_DI_PARTENZA` in `Model.kt` — e vanno tenute uguali chiave per chiave. In Kotlin sono
+un **ripiego** per un `vg_stato` che non le mandi ancora: un elenco vuoto lascerebbe il form di
+una spesa senza niente da scegliere, ed è la stessa scelta di `totale_atteso` assente che vale
+il totale confermato. Non hanno `id`, quindi da lì non si gestiscono — è quello che sono.
+
+⚠️ La semina non riguarda solo le sette: prende anche **ogni categoria che le voci di quel
+viaggio usano già** e che non è fra loro. `vg_voci.categoria` è testo libero, e una chiave senza
+la sua riga sarebbe l'unica categoria ingestibile proprio nella schermata che le gestisce.
+
+⚠️ **`vg_crea` semina, `vg_entra` no**: un viaggio nasce con le sue sette, e chi entra entra in
+un viaggio che ce le ha già. I viaggi nati prima della migration sono stati seminati da lei.
+
+⚠️ **Il registro le nomina** (`categoria_creata`, `categoria_cambiata`, `categoria_tolta`): sono
+del viaggio, quindi chi ne cambia una la cambia **anche all'altro telefono**, e il registro è il
+posto dove quel cambiamento si vede.
 
 ⚠️ **`vg_voci.stato` è il cuore dell'app**, e i quattro valori sono quattro momenti diversi:
 
@@ -2403,6 +2461,11 @@ Restano tutt'e due modificabili: una spesa la può aver fatta l'altro, e non tut
 ⚠️ **Una spesa «solo per chi l'ha pagata» resta nel registro e vale zero nel saldo.** Non è un caso
 inutile: è il modo di tenere il conto di quanto è costato il viaggio senza che una cosa personale
 finisca nel debito dell'altro.
+
+⚠️ **La categoria si sceglie fra quelle del viaggio, che si gestiscono da ⚙️ Impostazioni** (v1.0.5):
+si aggiunge, si rinomina e si toglie quel che non serve. Vivono in `vg_categorie` e non in Kotlin —
+le regole che contano (chiave che non cambia, cancellazione solo se non usata) stanno nello schema
+`vg_*`.
 
 ### Il giro delle conferme
 

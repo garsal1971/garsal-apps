@@ -126,6 +126,27 @@ object Api {
         }
     )
 
+    /* ── categorie ──────────────────────────────────────────────────────── */
+
+    /** Aggiunge una categoria (`id` nullo) o ne cambia emoji e nome.
+     *  ⚠️ La **chiave** non si manda e non si cambia: è quella scritta nelle
+     *  voci già segnate, e seguirebbe il nome lasciandole tutte agganciate a
+     *  una categoria che non esiste più. */
+    suspend fun salvaCategoria(token: String, id: String?, emoji: String, nome: String) = rpc(
+        "vg_categoria_salva",
+        JSONObject().apply {
+            put("p_token", token)
+            put("p_id", id ?: JSONObject.NULL)
+            put("p_emoji", emoji)
+            put("p_nome", nome)
+        }
+    )
+
+    /** Toglie una categoria che nessuna voce usa. Chi decide se è usata è il
+     *  server, che le voci le ha tutte: questo telefono no. */
+    suspend fun eliminaCategoria(token: String, id: String) =
+        rpc("vg_categoria_elimina", JSONObject().apply { put("p_token", token); put("p_id", id) })
+
     suspend fun conferma(token: String, voceId: String) =
         rpc("vg_voce_conferma", JSONObject().apply { put("p_token", token); put("p_voce_id", voceId) })
 

@@ -60,6 +60,12 @@ private fun RigaRegistro(r: RigaLog) {
         "cancellazione_chiesta" -> "❓" to "ha chiesto di cancellare"
         "cancellazione_approvata" -> "🚫" to "ha approvato la cancellazione di"
         "cancellazione_rifiutata" -> "↩️" to "ha rifiutato la cancellazione di"
+        // Le categorie sono del viaggio, quindi le cambia per tutti e due: chi
+        // ne aggiunge una la fa comparire anche sull'altro telefono, e il
+        // registro è il posto dove quel cambiamento si vede.
+        "categoria_creata" -> "🏷️" to "ha aggiunto una categoria"
+        "categoria_cambiata" -> "✏️" to "ha rinominato una categoria"
+        "categoria_tolta" -> "🗑" to "ha tolto una categoria"
         // Un'azione che questa versione dell'app non conosce si mostra com'è
         // scritta: sparire sarebbe il modo peggiore di dire che c'è.
         else -> "•" to r.azione.replace('_', ' ')

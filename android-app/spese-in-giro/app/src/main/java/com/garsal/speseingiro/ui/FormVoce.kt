@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.garsal.speseingiro.CATEGORIE
 import com.garsal.speseingiro.Categoria
 import com.garsal.speseingiro.Foto
 import com.garsal.speseingiro.Ocr
@@ -89,7 +88,18 @@ fun SchermataVoce(
     var importo by remember { mutableStateOf(esistente?.importo?.let { String.format(Locale.ITALY, "%.2f", it) } ?: "") }
     var data by remember { mutableStateOf(esistente?.data?.take(10) ?: oggiIso()) }
     var descrizione by remember { mutableStateOf(esistente?.descrizione ?: "") }
-    var categoria by remember { mutableStateOf(categoriaDi(esistente?.categoria ?: "cibo")) }
+    // ⚠️ Su una voce che c'è già si riparte dalla **sua** categoria anche se
+    // nel frattempo è stata tolta dall'elenco: `categoriaDi` la restituisce
+    // com'è scritta, e salvando la correzione resta quella. Prendendo la prima
+    // dell'elenco, correggere l'importo cambierebbe di nascosto la categoria.
+    var categoria by remember {
+        mutableStateOf(
+            if (esistente != null) categoriaDi(esistente.categoria, stato.categorie)
+            else stato.categorie.firstOrNull { it.chiave == "cibo" }
+                ?: stato.categorie.firstOrNull()
+                ?: categoriaDi("varie", stato.categorie)
+        )
+    }
     var da by remember { mutableStateOf(persone.firstOrNull { it.id == esistente?.daId } ?: stato.io) }
     var perTuttiEDue by remember { mutableStateOf(esistente?.perChi?.let { it == "entrambi" } ?: true) }
     var beneficiario by remember {
@@ -163,9 +173,15 @@ fun SchermataVoce(
             )
 
             if (spesa) {
+                // Una categoria non più in elenco resta fra le opzioni finché
+                // quella voce la porta: un valore che la tendina non contiene
+                // si legge come una scelta sparita.
+                val opzioniCat = stato.categorie.let { elenco ->
+                    if (elenco.any { it.chiave == categoria.chiave }) elenco else elenco + categoria
+                }
                 Tendina(
-                    etichetta = "Categoria", valore = categoria, opzioni = CATEGORIE,
-                    testo = { c: Categoria -> "${c.emoji}  ${c.nome}" },
+                    etichetta = "Categoria", valore = categoria, opzioni = opzioniCat,
+                    testo = { c: Categoria -> c.etichetta },
                     modifier = Modifier.fillMaxWidth(),
                 ) { categoria = it }
             }
@@ -256,7 +272,7 @@ fun SchermataVoce(
                 onClick = {
                     val v = importoDa(importo) ?: return@Button
                     onSalva(
-                        v, data, descrizione.trim(), categoria.id, da.id,
+                        v, data, descrizione.trim(), categoria.chiave, da.id,
                         if (spesa) (if (perTuttiEDue) "entrambi" else "uno") else null,
                         if (spesa && !perTuttiEDue) beneficiario.id else null,
                         foto, letto,

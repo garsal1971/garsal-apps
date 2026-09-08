@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.garsal.speseingiro.Stati
 import com.garsal.speseingiro.UiState
 import com.garsal.speseingiro.Voce
+import com.garsal.speseingiro.Categoria
 import com.garsal.speseingiro.categoriaDi
 
 /**
@@ -134,6 +135,7 @@ fun SchermataHome(
 
             items(stato.voci, key = { it.id }) { v ->
                 SchedaVoce(
+                    categorie = stato.categorie,
                     v = v,
                     ioId = stato.io.id,
                     altroNome = stato.altro?.nome ?: "l'altro",
@@ -247,6 +249,7 @@ private fun RiquadroSaldo(ui: UiState) {
 @Composable
 private fun SchedaVoce(
     v: Voce,
+    categorie: List<Categoria>,
     ioId: String,
     altroNome: String,
     onConferma: () -> Unit,
@@ -258,7 +261,7 @@ private fun SchedaVoce(
 ) {
     val mia = v.creataDa == ioId
     val cancellata = v.stato == Stati.CANCELLATA
-    val cat = categoriaDi(v.categoria)
+    val cat = categoriaDi(v.categoria, categorie)
 
     // ⚠️ Le larghezze si misurano su TUTTE le etichette che quella riga può
     // mostrare, non solo su quelle di adesso: un pulsante che compare dopo

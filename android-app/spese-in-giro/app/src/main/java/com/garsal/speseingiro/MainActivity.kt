@@ -121,6 +121,8 @@ private fun App(vm: SpeseViewModel = viewModel()) {
                     ui = ui,
                     onScegli = { vm.scegli(it.token); pagina = Pagina.HOME },
                     onNuovoViaggio = { pagina = Pagina.INGRESSO },
+                    onSalvaCategoria = vm::salvaCategoria,
+                    onEliminaCategoria = vm::eliminaCategoria,
                     onEsci = { id -> vm.esci(id); pagina = Pagina.HOME },
                     onIndietro = { pagina = Pagina.HOME },
                 )
