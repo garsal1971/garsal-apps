@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.19.0</title>
+  <title>GarsalFinanza v1.19.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -617,7 +617,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.19.0';
+const APP_VERSION = 'v1.19.1';
 const APP_BUILD   = '2026-09-07T12:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
@@ -4005,9 +4005,13 @@ const COVERAGE_ITEMS = [
     fonte: 'manuale', periodicita: 'annuo' },
   { side: 'fabbisogno', key: 'rendita_ada',   icon: '💐', label: 'Rendita per sostentamento Ada o acquisto casa',
     hint: () => '', fonte: 'manuale', periodicita: 'una_tantum' },
+  /* ⚠️ L'unica voce `detraibile`: la contribuzione volontaria è deducibile dal reddito
+     (art. 10 TUIR), quindi dal ✎ si può chiedere che si conti al netto del risparmio IRPEF
+     che produce — vedi `coverageDetrazione`. Il flag sta sulla riga (`applica_detrazione`)
+     e non qui: è una scelta, non una proprietà della voce. */
   { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
     hint: () => '',
-    fonte: 'auto', periodicita: 'annuo', auto: coveragePensioneLorda },
+    fonte: 'auto', periodicita: 'annuo', auto: coveragePensioneLorda, detraibile: true },
   /* Il margine per quello che non si è previsto. È l'ultima voce prima dell'assicurazione, e
      non è una voce di riempimento: un piano che quadra al centesimo su un orizzonte di dieci
      anni è un piano che non ha lasciato spazio a niente. Nasce `una_tantum` — un capitale
@@ -4247,6 +4251,88 @@ function coverageFinanza() {
   const tasse = stats.reduce((s, x) => s + x.taxDue, 0);
   return { value, label: `Valore quota dei portafogli al netto delle tasse${tasse > 0 ? ` (lordo ${fmtEUR(value + tasse)})` : ''}` };
 }
+/* ── La deduzione fiscale sulla contribuzione alla pensione ─────────────────
+   La contribuzione volontaria è DEDUCIBILE dal reddito (art. 10 TUIR): non abbassa l'imposta,
+   abbassa l'imponibile su cui l'imposta si calcola. Versare X costa quindi X meno l'IRPEF che
+   su quella fetta di reddito non si paga più — e quanto valga dipende dallo scaglione in cui
+   quella fetta cade, non da una percentuale fissa.
+
+   ⚠️ **Il risparmio si calcola per DIFFERENZA**, `IRPEF(reddito) − IRPEF(reddito − X)`, e non
+   moltiplicando X per l'aliquota marginale: una deduzione grossa scavalca lo scaglione, e la
+   parte che scende sotto i 50.000 € vale il 35 % e non il 43 %. Con la moltiplicazione il
+   risparmio uscirebbe più alto del vero — cioè il fabbisogno più basso del vero, che è
+   esattamente l'errore che questa pagina non deve fare.
+
+   ⚠️ **Gli scaglioni sono una costante scritta qui e non un dato**: cambiando la legge si
+   cambia questa riga. Sono quelli in vigore dal 2025 (23 % fino a 28.000 €, 35 % fino a
+   50.000 €, 43 % oltre), e la pagina li scrive accanto al numero come fa col 27 % del TFR: una
+   percentuale che sembra esatta e non lo è sarebbe peggio di una stima dichiarata.
+
+   ⚠️ **Non entrano nel conto le detrazioni da lavoro dipendente né le addizionali** regionale e
+   comunale: è il risparmio sulla sola IRPEF, non quello che si vede in busta. È lo stesso
+   caveat del «Reddito netto» calcolato in 💶 Reddito, e la cella lo dice invece di tacerlo. */
+const IRPEF_SCAGLIONI = [
+  { fino: 28000,    pct: 23 },
+  { fino: 50000,    pct: 35 },
+  { fino: Infinity, pct: 43 },
+];
+function irpefLorda(reddito) {
+  let resta = Math.max(0, reddito || 0), da = 0, imposta = 0;
+  for (const s of IRPEF_SCAGLIONI) {
+    const fetta = Math.min(resta, s.fino - da);
+    if (fetta <= 0) break;
+    imposta += fetta * s.pct / 100;
+    resta -= fetta;
+    da = s.fino;
+  }
+  return imposta;
+}
+/* Il reddito lordo su cui si calcola: 📋 Estratto conto contributivo (Previdenza), somma delle
+   retribuzioni dell'ultimo anno **pieno**.
+
+   ⚠️ «Pieno» è l'anno il cui ultimo periodo finisce il **31 dicembre**, non l'anno con 52
+   settimane utili: dal 2016 al 2020 il part-time ne ha 43 e quegli anni sono interi lo stesso —
+   un criterio sulle settimane li scarterebbe tutti.
+
+   ⚠️ E non è «l'ultimo anno in tabella», che a metà anno è mezzo: nel 2026 varrebbe 28.544 €
+   contro i 60.408 € del 2025, cioè uno scaglione più basso e un risparmio inventato. È la stessa
+   regola di «Pensione Ada» e dell'🤝 accordo con l'azienda, che prendono l'anno più recente CHE
+   CE L'HA e non l'ultimo aperto.
+
+   ⚠️ Le righe dello stesso anno **si sommano**: l'estratto conto spezza l'anno per datore di
+   lavoro e per tipo di contribuzione, e prenderne una sola conterebbe una frazione di stipendio. */
+function redditoEstrattoConto() {
+  const anni = {};
+  for (const r of (S.pensionContrib || [])) {
+    const a = parseInt(String(r.period_start || '').slice(0, 4), 10);
+    if (!Number.isFinite(a)) continue;
+    const v = anni[a] || (anni[a] = { anno: a, lordo: 0, fine: '' });
+    v.lordo += parseFloat(r.income_amount) || 0;
+    if (String(r.period_end || '') > v.fine) v.fine = String(r.period_end || '');
+  }
+  const pieni = Object.values(anni).filter(v => v.fine.slice(5) === '12-31' && v.lordo > 0);
+  return pieni.length ? pieni.reduce((a, b) => (b.anno > a.anno ? b : a)) : null;
+}
+/* Il risparmio d'imposta di una voce deducibile, in **euro di oggi** — cioè prima del fattore
+   della ⏳ macchina del tempo, perché l'IRPEF si calcola su un reddito di oggi e proiettare uno
+   solo dei due addendi darebbe un risparmio che non corrisponde a nessun anno.
+
+   ⚠️ Torna `null` quando la spunta è spenta, e un oggetto **col solo `motivo`** quando la spunta
+   è accesa ma il conto non si può fare: «non l'ho chiesto» e «l'ho chiesto e non si può» sono due
+   cose diverse, e la seconda va detta invece di lasciare la voce al lordo in silenzio. È la stessa
+   scelta di `assetTax().motivo`. */
+function coverageDetrazione(item, lordo) {
+  if (!item.detraibile || coverageRow(item)?.applica_detrazione !== true) return null;
+  const red = redditoEstrattoConto();
+  if (!red) return { motivo: 'nessun anno pieno in 📋 Estratto conto contributivo' };
+  if (lordo == null || !(lordo > 0)) return { motivo: 'la voce non ha ancora un importo' };
+  const risparmio = irpefLorda(red.lordo) - irpefLorda(red.lordo - lordo);
+  const pct = lordo > 0 ? risparmio / lordo * 100 : 0;
+  return { reddito: red.lordo, anno: red.anno, risparmio, pct, netto: lordo - risparmio, lordo,
+    label: `Reddito ${red.anno} da estratto conto ${fmtEUR(red.lordo)} · deduzione di ${fmtEUR(lordo)} `
+         + `= ${fmtEUR(risparmio)} di IRPEF in meno (${pct.toFixed(1).replace('.', ',')} % effettivo), `
+         + `quindi si contano ${fmtEUR(lordo - risparmio)} invece di ${fmtEUR(lordo)}` };
+}
 function coveragePensioneLorda() {
   const rows = (S.pensionForecast || []).filter(r => r.gross_amount != null);
   if (!rows.length) return null;
@@ -4365,14 +4451,22 @@ function coverageAuto(item, sc) {
    le voci `allaData` no, perché il loro numero è già calcolato alla data giusta (il mutuo).
    Un varco solo è la ragione per cui il totale, la scopertura, il capitale da assicurare e il
    badge «al posto di X» dicono tutti la stessa cifra: sono lo stesso `value`. */
+/* ⚠️ **La deduzione passa di qui e nient'altro la applica**, per la stessa ragione della
+   rivalutazione: totale, scopertura e capitale da assicurare devono dire la stessa cifra, e
+   sono lo stesso `value`. Si applica **prima** del fattore della ⏳ macchina del tempo — il
+   conto IRPEF si fa in euro di oggi, contro un reddito di oggi — e vale anche sull'importo
+   scritto a mano: la deducibilità è del versamento, non della fonte da cui il numero viene. */
 function coverageBase(item, sc) {
   const row     = coverageRow(item);
   const f       = item.allaData ? 1 : coverageFattore();
-  const manuale = row && row.amount != null ? parseFloat(row.amount) * f : null;
+  const manuale = row && row.amount != null ? parseFloat(row.amount) : null;
   const grezzo  = coverageAuto(item, sc);
   const auto    = grezzo ? { ...grezzo, value: grezzo.value * f } : null;
-  if (manuale != null) return { value: manuale, scrittoAMano: true, auto, row, fattore: f };
-  return { value: auto ? auto.value : null, scrittoAMano: false, auto, row, fattore: f };
+  const lordo   = manuale != null ? manuale : (grezzo ? grezzo.value : null);
+  const det     = coverageDetrazione(item, lordo);
+  const netto   = lordo == null ? null : lordo - (det?.risparmio || 0);
+  return { value: netto == null ? null : netto * f, scrittoAMano: manuale != null,
+           auto, row, fattore: f, detrazione: det };
 }
 /* ⚠️ «Esclusa» non è «assente» e non è «zero»: la voce c'è, il suo importo si vede, e si è
    scelto di non contarla in questo piano. Per questo il flag toglie la voce dai totali ma non
@@ -4494,6 +4588,14 @@ function renderCoperture() {
     S.income = [];
     loadIncome().then(() => { if (S.view === 'coperture') renderCoperture(); })
                 .catch(e => console.error('Coperture (reddito):', e));
+  }
+  // Serve alla deduzione fiscale della contribuzione: senza, la spunta accesa direbbe «nessun
+  // anno pieno» finché non si apre 📋 Previdenza — cioè un dato non ancora letto che sembra un
+  // dato mancante.
+  if (S.pensionContrib === null) {
+    S.pensionContrib = [];
+    loadPensionContributions().then(() => { if (S.view === 'coperture') renderCoperture(); })
+                              .catch(e => console.error('Coperture (estratto conto):', e));
   }
   const scen = coverageScenarios();
   setHtml('view-coperture', `
@@ -4912,6 +5014,15 @@ function renderCoverageRow(item, colonne) {
     : (base.auto ? `<span class="text-muted text-sm">${base.auto.label}</span>`
                  : (item.fonte === 'manuale' ? '' : `<span class="text-muted text-sm">${item.fonte === 'asset' ? 'Nessun asset collegato' : 'Dato non disponibile in Finanza'}</span>`));
   const esclusa = coverageEsclusa(item);
+  /* ⚠️ Un numero che non si può rifare a mente è un numero di cui non ci si fida: la riga scrive
+     il reddito da cui viene, l'IRPEF risparmiata e la cifra che entra nel conto. E quando la
+     deduzione è stata chiesta ma non si può calcolare **lo dice**, invece di lasciare la voce al
+     lordo in silenzio — un fabbisogno più alto del previsto senza niente che spieghi perché. */
+  const det  = base.detrazione;
+  const detHtml = !det ? ''
+    : det.risparmio != null
+      ? `<div class="text-sm"><span class="badge" style="background:#dcfce7;color:#166534">deduzione applicata</span> <span class="text-muted">${det.label}</span></div>`
+      : `<div class="text-muted text-sm">⚠️ Deduzione chiesta ma non calcolabile: ${det.motivo}. La voce resta al lordo.</div>`;
   return `
     <div class="cov-item${esclusa ? ' cov-off' : ''}">
       <div class="hstack gap-4" style="flex-wrap:wrap">
@@ -4928,6 +5039,7 @@ function renderCoverageRow(item, colonne) {
       ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
       ${notaTempo(item, base)}
       ${fonte ? `<div>${fonte}</div>` : ''}
+      ${detHtml}
       ${note ? `<div class="text-muted text-sm">📝 ${esc(note)}</div>` : ''}
       ${renderCoverageVals(colonne, colonne.map(c => coverageValoreA(item, c)))}
     </div>`;
@@ -4974,6 +5086,19 @@ function openCoverageModal(side, key) {
                value="${row?.amount ?? ''}" />
         ${auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(auto.value)}</strong> (${auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
       </div>
+      ${item.detraibile ? `
+      <div class="form-group">
+        <label class="form-label">Deducibilità</label>
+        <label class="text-sm" style="display:block;margin-top:10px">
+          <input type="checkbox" name="applica_detrazione" ${row?.applica_detrazione ? 'checked' : ''} />
+          Applica la deduzione fiscale
+        </label>
+        <p class="text-muted text-sm" style="margin-top:6px">${(() => {
+          const red = redditoEstrattoConto();
+          if (!red) return 'La contribuzione volontaria è deducibile dal reddito (art. 10 TUIR), ma in 📋 Estratto conto contributivo non c\'è ancora un anno pieno da cui leggerlo: senza reddito il risparmio non si può calcolare.';
+          return `La contribuzione volontaria è deducibile dal reddito (art. 10 TUIR): la voce si conterà al netto dell'IRPEF risparmiata, calcolata sul reddito ${red.anno} di ${fmtEUR(red.lordo)} letto da 📋 Estratto conto contributivo. Scaglioni ${IRPEF_SCAGLIONI.map(x => `${x.pct} %`).join(' · ')} — non toglie addizionali né detrazioni da lavoro dipendente.`;
+        })()}</p>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">Nota</label>
         <textarea name="note" class="form-input" rows="2" placeholder="Opzionale">${esc(row?.note || '')}</textarea>
@@ -4990,6 +5115,10 @@ function openCoverageModal(side, key) {
     };
     if (item.fonte === 'asset')   campi.linked_other_asset_id = data.linked_other_asset_id || null;
     if ('periodicity' in data) campi.periodicity = data.periodicity;
+    // ⚠️ Una casella non spuntata non compare affatto in FormData: la si legge dal fatto che il
+    // form la mostrava (`item.detraibile`) e non dalla sua presenza nei dati, o spegnerla non
+    // salverebbe mai il `false`.
+    if (item.detraibile) campi.applica_detrazione = data.applica_detrazione === 'on';
     await saveCoverage(item, campi);
     closeModal();
     render();
@@ -5012,6 +5141,9 @@ async function saveCoverage(item, fields) {
     // Senza questa riga il ✎ rimetterebbe nel conto una voce che si era tolta: l'upsert
     // riscrive la riga intera, e quello che non si nomina tornerebbe al DEFAULT.
     excluded: tieni('excluded', false),
+    // Stessa ragione di `excluded`: l'upsert riscrive la riga intera, e quello che non si nomina
+    // torna al DEFAULT — il ☑️/🚫 toglierebbe da sé una deduzione appena chiesta.
+    applica_detrazione: tieni('applica_detrazione', false),
     updated_at: new Date().toISOString(),
   }, 'user_id,side,item_key');
   await loadCoverage();

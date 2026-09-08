@@ -484,6 +484,47 @@ silenzio. È la stessa scelta di `fnz_income`.
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
 | `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
 
+⚠️ **🏛️ Contribuzione alla pensione è l'unica voce DEDUCIBILE**, e la spunta lo dice.
+`applica_detrazione` (`20260908160000_...`) sta sulla riga come `excluded`, per la stessa ragione:
+è una proprietà di quella voce, non una preferenza di lettura. Accesa, la voce si conta al **netto
+dell'IRPEF risparmiata** — la contribuzione volontaria abbassa l'imponibile (art. 10 TUIR), quindi
+versare X costa meno di X.
+
+| Cosa | Da dove |
+|---|---|
+| Reddito lordo | 📋 **Estratto conto contributivo**, somma degli `income_amount` dell'ultimo anno **pieno** |
+| Risparmio | `IRPEF(reddito) − IRPEF(reddito − X)`, scaglioni `IRPEF_SCAGLIONI` (23 % ≤ 28k · 35 % ≤ 50k · 43 % oltre) |
+
+⚠️ **Il risparmio si calcola per DIFFERENZA e non moltiplicando per l'aliquota marginale**: una
+deduzione grossa scavalca lo scaglione, e la parte che scende sotto i 50.000 € vale il 35 % e non
+il 43 %. Con la moltiplicazione il risparmio uscirebbe più alto del vero — cioè il **fabbisogno più
+basso del vero**, che è l'errore che questa pagina non deve fare. Sul reddito 2025 di 60.408 €:
+10.000 € deducono al 43 % pieno, 20.000 € al 39,2 %, 35.000 € al 36,5 %.
+
+⚠️ **«Anno pieno» è l'anno il cui ultimo periodo finisce il 31 dicembre**, non l'anno con 52
+settimane utili: dal 2016 al 2020 il part-time ne ha 43 e quegli anni sono interi lo stesso. E non
+è «l'ultimo anno in tabella», che a metà anno è mezzo — il 2026 vale 28.544 € contro i 60.408 € del
+2025, cioè uno scaglione più basso e un risparmio inventato. È la stessa regola di «Pensione Ada» e
+dell'🤝 accordo con l'azienda. Le righe dello stesso anno **si sommano**: l'estratto conto spezza
+l'anno per datore di lavoro e per tipo di contribuzione.
+
+⚠️ **La deduzione passa da `coverageBase`, lo stesso varco della rivalutazione**, e si applica
+**prima** del fattore della ⏳ macchina del tempo: l'IRPEF si conta in euro di oggi contro un
+reddito di oggi. Vale anche sull'importo **scritto a mano** — la deducibilità è del versamento, non
+della fonte da cui il numero viene — e `saveCoverage` deve nominarla nell'upsert
+(`tieni('applica_detrazione', false)`), o il ☑️/🚫 toglierebbe da sé una deduzione appena chiesta.
+
+⚠️ **Gli scaglioni sono una costante scritta in `finanza.html`, non un dato**: cambiando la legge
+si cambia quella riga. Sono quelli in vigore dal 2025, e la pagina li scrive accanto al numero come
+fa col 27 % del TFR. ⚠️ **Non toglie le addizionali** regionale e comunale né le detrazioni da
+lavoro dipendente: è il risparmio sulla sola IRPEF, ed è lo stesso caveat del «Reddito netto»
+calcolato in 💶 Reddito.
+
+⚠️ **Spunta accesa e conto impossibile non è «al lordo in silenzio»**: senza un anno pieno in
+estratto conto, o senza un importo, la riga lo **dice** e la voce resta al lordo — è la stessa
+scelta di `assetTax().motivo`, e `coverageDetrazione` torna un oggetto col solo `motivo` invece di
+`null`, perché «non l'ho chiesto» e «l'ho chiesto e non si può» sono due cose diverse.
+
 ⚠️ **«Pensione Ada» è `auto` e non `asset`**: si legge da 💶 Reddito, riquadro *Redditi*, riga
 **Pensione INPS** dell'anno più recente **che ce l'ha** — non dell'ultimo anno in tabella, o un
 anno appena aperto e ancora da compilare azzererebbe la voce in silenzio.
