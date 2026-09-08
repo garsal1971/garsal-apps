@@ -60,8 +60,15 @@ private fun importoDa(testo: String): Double? =
  * ⚠️ **Chi ha pagato** parte dal proprietario del telefono e **per chi** da
  * «tutti e due»: sono i due casi di gran lunga più frequenti, e ogni tocco
  * risparmiato davanti a una cassa è una spesa che si segna invece di
- * rimandarla. Restano tutt'e due modificabili — una spesa la può aver fatta
- * l'altro, e non tutto quel che si compra è di tutt'e due.
+ * rimandarla. Ma sono **default, non valori fissi**: «l'ha pagata» offre
+ * chiunque sia nel viaggio, e «per chi» offre *per tutti e due* più ciascuno
+ * per suo conto — una spesa la può aver fatta l'altro, e non tutto quel che si
+ * compra è di tutt'e due.
+ *
+ * ⚠️ **Finché si è da soli le due tendine hanno una voce sola**, e non è un
+ * difetto del form: nel viaggio c'è una persona. Lo si dice lì accanto col
+ * codice da dettare — una tendina che non si apre, senza una riga che spieghi
+ * perché, si legge come una scelta negata.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -177,7 +184,8 @@ fun SchermataVoce(
                     opzioni = listOf("entrambi") + persone.map { it.id },
                     testo = { v: String ->
                         if (v == "entrambi") "Per tutti e due"
-                        else "Solo per " + (persone.firstOrNull { it.id == v }?.nome ?: "?")
+                        else "Solo per " + (persone.firstOrNull { it.id == v }
+                            ?.let { p -> if (p.id == stato.io.id) "te" else p.nome } ?: "?")
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) { scelto ->
@@ -187,6 +195,16 @@ fun SchermataVoce(
             } else {
                 Text(
                     "Va all'altro: in un viaggio in due «a chi» non è una domanda.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (stato.altro == null) {
+                Text(
+                    "Sei ancora da solo nel viaggio, quindi qui c'è solo il tuo nome: " +
+                        "detta il codice ${stato.viaggio.codice} all'altro e le due scelte " +
+                        "si aprono da sé.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -1,9 +1,7 @@
 package com.garsal.speseingiro.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,9 +12,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -78,8 +79,20 @@ fun larghezzaPulsanti(vararg etichette: String, stile: TextStyle = MaterialTheme
     return with(densita) { px.toDp() } + 40.dp
 }
 
-/** Una scelta fra poche opzioni fisse è **sempre** una tendina, mai una fila di
- *  pillole che va a capo o si accorcia. */
+/**
+ * Una scelta fra poche opzioni fisse è **sempre** una tendina, mai una fila di
+ * pillole che va a capo o si accorcia.
+ *
+ * ⚠️ **Passa da `ExposedDropdownMenuBox`, e non è un dettaglio di stile.** Fino
+ * alla v1.0.1 era un `OutlinedTextField(enabled = false)` con un `clickable`
+ * appeso al modifier: due difetti che si sommavano — il campo **non portava
+ * nessuna freccia**, quindi non si leggeva affatto come una cosa da toccare (e
+ * «chi ha pagato» sembrava un dato scritto, non una scelta), e l'apertura
+ * dipendeva da un clic su un campo disabilitato, che è il modo più fragile di
+ * chiedere un tocco. Qui l'ancora è `menuAnchor`, cioè il gesto che Material 3
+ * garantisce, e la ▾ dice da sé che c'è dell'altro sotto.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> Tendina(
     etichetta: String,
@@ -91,38 +104,38 @@ fun <T> Tendina(
     onScelta: (T) -> Unit,
 ) {
     var aperta by remember { mutableStateOf(false) }
-    Box(modifier) {
+    val apribile = abilitata && opzioni.size > 1
+    ExposedDropdownMenuBox(
+        expanded = aperta && apribile,
+        onExpandedChange = { if (apribile) aperta = !aperta },
+        modifier = modifier,
+    ) {
         OutlinedTextField(
             value = testo(valore),
             onValueChange = {},
             readOnly = true,
-            enabled = false,
+            enabled = abilitata,
             label = { Text(etichetta) },
+            // ⚠️ La freccia c'è **solo se c'è davvero qualcosa da scegliere**: con
+            // una voce sola sarebbe un invito a un menù che si apre su sé stesso.
+            trailingIcon = {
+                if (apribile) ExposedDropdownMenuDefaults.TrailingIcon(expanded = aperta)
+            },
             modifier = Modifier
-                .fillMaxWidth()
-                .clickableSeAbilitata(abilitata) { aperta = true },
-            colors = coloriTendina(),
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = apribile)
+                .fillMaxWidth(),
         )
-        DropdownMenu(expanded = aperta, onDismissRequest = { aperta = false }) {
+        ExposedDropdownMenu(expanded = aperta && apribile, onDismissRequest = { aperta = false }) {
             opzioni.forEach { o ->
                 DropdownMenuItem(
                     text = { Text(testo(o)) },
                     onClick = { onScelta(o); aperta = false },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                 )
             }
         }
     }
 }
-
-@Composable
-private fun coloriTendina() = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-    disabledBorderColor = MaterialTheme.colorScheme.outline,
-    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-)
-
-private fun Modifier.clickableSeAbilitata(abilitata: Boolean, onClick: () -> Unit): Modifier =
-    if (abilitata) this.clickable(onClick = onClick) else this
 
 /** Un'etichetta di stato: colore + parola, mai il colore da solo. */
 @Composable
