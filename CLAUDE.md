@@ -1319,6 +1319,78 @@ codice lo risolve, ha l'EXECUTE revocato ai client.
 resterebbe agganciato a una riga che non esiste più. È la stessa scelta delle misure di un diario
 in Memo. Le **frasi** invece si riscrivono da capo: nessuno le cita, sono testo in un ordine.
 
+### Tandem — viaggio in bici (`vg_*`)
+| Table | Purpose |
+|---|---|
+| `vg_viaggi` | Un giro in bici: nome, date, valuta e il **codice di invito** (unico) |
+| `vg_partecipanti` | I due telefoni, uno per persona: `nome` e `token`, che **è** la credenziale |
+| `vg_voci` | Spese e restituzioni: importo, `da_id` (chi ha messo i soldi), `per_chi`, `beneficiario_id`, `scontrino_path` e lo `stato` |
+| `vg_log` | Il registro: ogni creazione, correzione, conferma, richiesta e cancellazione |
+
+⚠️ **Nessuna di queste tabelle ha `user_id`, e non è una dimenticanza**: il viaggio non appartiene
+a un account Supabase ma a un **codice**. La RLS resta accesa e **senza policy** — da PostgREST con
+la anon key non si legge e non si scrive niente — e tutto passa dalle funzioni `SECURITY DEFINER`,
+che riconoscono chi chiama dal token del suo telefono. È la stessa scelta di `sos_devices`, portata
+un passo più in là: là il token indirizza a un utente vero, qui non c'è nessun utente dietro.
+
+⚠️ **Due partecipanti e non più di due**, e il vincolo sta sulla tabella (trigger
+`trg_vg_partecipanti_max_due`) e non nella sola RPC: tutta l'app — il saldo, «l'altro», la
+conferma — è scritta su due persone, e una terza riga renderebbe ambiguo ogni «l'altro» senza dare
+nessun errore.
+
+⚠️ **`vg_voci.stato` è il cuore dell'app**, e i quattro valori sono quattro momenti diversi:
+
+| `stato` | Chi può fare cosa |
+|---|---|
+| `in_attesa` | **Solo chi l'ha scritta** la corregge o la toglie; la conferma la dà **solo l'altro** |
+| `confermata` | Non si modifica più. Per toglierla si **chiede** |
+| `cancellazione_richiesta` | Decide **l'altro**: approva o rifiuta (e allora torna `confermata`) |
+| `cancellata` | Fuori dal saldo, ma **resta a schermo**, barrata |
+
+⚠️ **Una voce cancellata non sparisce dalla tabella.** Sparire sarebbe il modo peggiore di dirlo —
+un totale più basso senza niente che spieghi perché — ed è la stessa scelta di `excluded` nelle
+🛡️ Possibili soluzioni e delle righe `missed` di Abituati.
+
+⚠️ **Il SALDO si calcola in `vg_saldo`, non nei due telefoni**: è il numero per cui l'app esiste, e
+due implementazioni della stessa divisione sono due debiti diversi il giorno che un telefono si
+aggiorna e l'altro no. Contano le sole voci **confermate**; `vg_stato` restituisce accanto anche il
+saldo che comprende quelle in attesa (`saldo_atteso`), dichiarato come tale — un debito che si
+muove prima che l'altro abbia detto sì è una proposta, ma nasconderla farebbe sembrare fermo un
+conto che sta per cambiare.
+
+⚠️ **`per_chi` sta sulla spesa e non sulla restituzione**: con due partecipanti «a chi restituisco»
+ha una risposta sola, e una colonna che può avere un valore solo è un valore che prima o poi
+contraddice l'altro. Il CHECK `vg_voci_per_chi_ok` lo impone. Una spesa `per_chi = 'uno'` con
+`beneficiario_id = da_id` è la spesa personale: resta nel registro del viaggio e **vale zero** nel
+saldo.
+
+⚠️ **`vg_entra` fa entrare _e_ rientrare**: se il viaggio ha già due partecipanti e il nome è
+quello di uno dei due, si riceve un token nuovo per quella stessa persona. È la via per il telefono
+cambiato o l'app reinstallata — senza, quel viaggio resterebbe chiuso per sempre, perché il token
+sta solo nelle preferenze di quel telefono e non c'è nessun account da cui recuperarlo. Il prezzo è
+dichiarato: **il codice è il segreto condiviso**, quindi chi ce l'ha può presentarsi come uno dei
+due.
+
+⚠️ Le RPC dell'APK sono eseguibili dalla **anon key** — il controllo è il token, non il ruolo —
+mentre `vg_chi`, `vg_altro`, `vg_saldo`, `vg_scrivi_log` e le due della Edge Function
+(`vg_viaggio_del_token`, `vg_scontrino_del_token`) hanno l'EXECUTE **revocato**: restituiscono
+righe di `vg_partecipanti` (token compreso) o servono a chi ha già il service role.
+
+⚠️ **La revoca è a `PUBLIC`, non ad `anon, authenticated`**, ed è la differenza fra chiuso e
+aperto: in PostgreSQL l'EXECUTE di una funzione nasce concesso a PUBLIC e i due ruoli lo ereditano
+da lì — togliendolo a loro soltanto, la funzione resta eseguibile e la revoca *sembra* fatta.
+Qui non è teoria: `vg_altro` restituisce la riga dell'altro partecipante **col suo token**, e chi
+conosce l'id del viaggio (lo conosce ognuno dei due) potrebbe prenderselo e **confermarsi da solo
+le proprie voci** — cioè esattamente la cosa che l'app esiste per impedire. Revocato a PUBLIC, il
+service role va poi rinominato esplicitamente nelle due GRANT della Edge Function, perché quella
+revoca porta via anche la sua.
+
+⚠️ **Le foto stanno nel bucket privato `vg-scontrini`, in una cartella per viaggio**, e non le
+tocca nessun client: le scrive e le firma la Edge Function `tandem-foto`. Il bucket lo crea la
+migration, ma **se quell'INSERT non passa la migration non muore**: lo crea al primo caricamento la
+Edge Function (`assicuraBucket`) — un deploy fermo su una riga di storage si porterebbe dietro
+tutto il resto.
+
 ### Obiettivi (`ob_`)
 | Table | Purpose |
 |---|---|
@@ -1573,6 +1645,7 @@ role key letta dal vault (vedi `20260724320000_ca_revolut_auto_categorize_cron.s
 | `notification-action` | manuale (da `telegram-webhook` e dall'APK nativo) | Che cosa fa un pulsante di un promemoria: ✅ Fatto, ⏸ rinvia, ❌ annulla. **L'unica implementazione**, chiamata sia dal bot sia dal telefono |
 | `forziere-drive` | manuale (da `forziere.html`) | Il ponte col Drive del Forziere: crea la cartella (e una sottocartella per scomparto, con `mkdir`/`rmdir`/`move`), apre i caricamenti, restituisce e cancella i file. ⚠️ **Non vede mai niente in chiaro** — tutto quel che le passa davanti è già cifrato con OpenPGP dalle 24 parole, che qui non arrivano né adesso né mai. Il caricamento **non passa di qui**: `upload-url` chiede a Google un indirizzo ripristinabile e i byte vanno dal browser a Google diretti (con ripiego su `put` per i file piccoli, se quella strada è bloccata). Lo scaricamento passa — Drive non ha indirizzi firmati — ma **in flusso** |
 | `al-food-search` | manuale (da `calorie.html`) | **Legge e basta**: cerca un alimento per nome o per codice a barre nelle banche dati pubbliche e lo restituisce **già normalizzato**. Fonti in ordine: Open Food Facts Search-a-licious, la vecchia `/cgi/search.pl` come ripiego, e USDA FoodData Central se c'è il secret `USDA_API_KEY`. Ogni fonte torna col suo esito (HTTP, tempo, errore) |
+| `tandem-foto` | manuale (dall'APK Tandem) | Gli scontrini di Tandem: carica una foto, ne firma l'URL per un'ora e la cancella. ⚠️ È il **solo** ponte fra un'APK senza login e lo Storage: risolve il token del telefono con `vg_viaggio_del_token` (eseguibile dal solo service role) e scrive dentro la cartella di **quel** viaggio, `<viaggio_id>/…`. Per leggere si passa l'id della **voce**, mai il percorso: dove sta quella foto lo dice il database |
 | `save-snapshot` | `fnz-save-snapshot`, 21:00 UTC | Chiama `get-prices`, poi calcola e salva lo snapshot del patrimonio in `fnz_dashboard_snapshots` per ogni utente che ha dati di Finanza |
 
 ### ⚠️ Un prezzo può essere insieme plausibile e sbagliato
@@ -2255,6 +2328,135 @@ su fondo scuro «più scuro» vuol dire «meno leggibile», non «meno important
 
 ---
 
+## Tandem — le spese di un viaggio in bici, divise in due
+
+`android-app/tandem/` è un **progetto Gradle standalone** (come `appsphere-native/`,
+`situazione-rosa/` e `pressure-tracker/`, e non un modulo di `android-app/`), `applicationId`
+`com.garsal.tandem`, APK `releases/Tandem-latest.apk`. Kotlin + Compose, Material 3, ML Kit per
+l'OCR. **Non ha un gemello web**: `spese-viaggio.html` è un'altra cosa — una nota spese statica —
+e non c'entra.
+
+⚠️ **È l'unica app della repo che sta fuori dalla suite, e lo è in tutti i sensi**: nessuna riga in
+`cm_apps` (quindi nessuna bolla in home, né web né nativa), nessun punteggio, nessun login Google,
+nessuna tabella condivisa, e un'**icona propria** — una bicicletta, non il marchio a cinque cerchi
+(vedi *Il marchio vive in cinque posti*). I suoi dati non appartengono a un account: appartengono a
+un **codice**.
+
+### Come si accoppiano i due telefoni
+
+Uno **apre il viaggio** e riceve un codice (`ABCD-EFGH`); l'altro **lo digita** e da lì in poi i
+due telefoni parlano con le sole RPC `vg_*`, che li riconoscono dal token ricevuto allora
+(dettagli nello schema `vg_*`). Non c'è nessuna registrazione, e non è una scorciatoia: l'app si
+apre in mezzo alla strada, spesso con poca rete e meno pazienza, e inciampare in una sessione
+scaduta o in una schermata di Google che chiede di riautenticarsi è il modo peggiore di segnare uno
+scontrino. È la stessa ragione per cui SOS non fa il login.
+
+⚠️ **Il token sta nelle preferenze di quel telefono e in nessun altro posto** (`Prefs`): non c'è un
+account da cui recuperarlo. Perso il telefono si **rientra col codice**, ed è la ragione per cui il
+codice si tiene scritto accanto al viaggio invece di buttarlo dopo l'accoppiamento. Nome del
+viaggio e nomi delle persone si tengono in locale per un'altra ragione ancora: l'elenco dei viaggi
+si deve poter aprire **senza rete**, e «viaggio 7f3a-…» a chi non ha campo non dice niente.
+
+⚠️ **Più viaggi per telefono**, uno per riga in `Prefs`, e la chiave è il **viaggio** e non il
+token: rientrando col codice il token è nuovo ma il viaggio è lo stesso, e restare in elenco due
+volte lo farebbe scegliere a caso.
+
+### Le due registrazioni
+
+| Tipo | Cosa chiede |
+|---|---|
+| 🧾 **Spesa** | quanto, quando, cos'era, categoria, **chi l'ha pagata** e **per chi vale** |
+| 💸 **Restituzione** | quanto, quando, e **chi restituisce**. «A chi» non si chiede: in un viaggio in due ha una risposta sola |
+
+⚠️ **I due default sono la funzionalità**: «l'ha pagata» parte dal proprietario del telefono e «per
+chi» da *tutti e due*. Sono i due casi di gran lunga più frequenti, e ogni tocco risparmiato davanti
+a una cassa è una spesa che si segna invece di rimandarla a stasera — cioè invece di dimenticarla.
+Restano tutt'e due modificabili: una spesa la può aver fatta l'altro, e non tutto quel che si compra
+è di tutt'e due.
+
+⚠️ **Una spesa «solo per chi l'ha pagata» resta nel registro e vale zero nel saldo.** Non è un caso
+inutile: è il modo di tenere il conto di quanto è costato il viaggio senza che una cosa personale
+finisca nel debito dell'altro.
+
+### Il giro delle conferme
+
+**Ogni voce vale quando l'altro la conferma.** Prima è una proposta: la scrive uno, e finché è
+`in_attesa` **solo lui** la corregge o la toglie. Confermata **non si modifica più**; per toglierla
+si chiede, con un motivo, e **decide l'altro**. Gli stati e chi può fare cosa stanno nello schema
+`vg_*` — e stanno **nelle RPC**, non in Kotlin: due telefoni con la stessa app che decidono per
+conto proprio chi può cancellare cosa sono due patti diversi il giorno che uno dei due si aggiorna
+e l'altro no. È la stessa regola di `task_complete` e `sos_session_finish`.
+
+⚠️ **Chi aspetta cosa sta scritto sulla scheda** («In attesa che Anna confermi», «Decidi tu»): uno
+stato che si deduce dai pulsanti che non ci sono è uno stato che nessuno capisce.
+
+### Lo scontrino, e l'importo letto
+
+Si scatta (o si pesca dalla galleria), si riduce a 1600 px di lato, **ML Kit** ci legge il testo e
+`Ocr.totale()` ne ricava una **proposta** di importo.
+
+⚠️ **Quel numero non è mai un dato**: finisce nella casella dell'importo, già modificabile, e
+**non sovrascrive mai** una cifra scritta a mano — un ripiego che prende il posto del dato esatto è
+un peggioramento silenzioso. Resta archiviato a parte in `vg_voci.scontrino_letto`, accanto
+all'importo confermato: così quando la lettura sbaglia si **vede** che ha sbagliato. Un importo
+letto da una foto e dato per buono è un debito fra due persone deciso da un OCR.
+
+⚠️ **La regola è euristica e sta in un posto solo** (`Ocr.totale`): si cercano le righe con
+`TOTALE`/`IMPORTO`, si scartano quelle con `SUBTOTALE`, `IVA`, `RESTO`, `SCONTO`, e se sulla riga
+l'importo non c'è si guarda quella dopo — sugli scontrini stretti il valore va a capo sempre. Fra
+più «totale» vince il più alto; senza nessuna parola chiave resta l'importo più grande. I decimali
+sono **obbligatori** nel riconoscimento: senza, il «3» di «3 x 1,20» diventerebbe un totale.
+
+⚠️ **La foto si carica PRIMA di salvare la voce, e se il salvataggio non passa si butta**: senza,
+resterebbe nel bucket un'immagine che nessuna riga nomina — un file che nessuno sa più cos'è e che
+dall'app non si può più togliere. È lo stesso ordine dell'eliminazione nel Forziere, letto al
+contrario.
+
+⚠️ **ML Kit nella variante non incorporata** (`play-services-mlkit-text-recognition`), come in
+appsphere-native e per la stessa ragione: quella che si porta il modello dentro l'APK per tutte e
+quattro le ABI là aveva portato il pacchetto da 30 a 73 MB.
+
+⚠️ **Nessun permesso per la fotocamera nel manifest**, e non è una dimenticanza: la foto la scatta
+l'app della fotocamera (`ACTION_IMAGE_CAPTURE`) e torna in un file nostro, quindi il permesso non
+serve — ma **dichiarandolo Android lo pretenderebbe concesso a runtime** proprio per quell'Intent,
+cioè una richiesta in più davanti alla cassa per una cosa che funziona senza. Stessa ragione per
+cui non c'è `READ_MEDIA_IMAGES`: il selettore di sistema restituisce la sola foto scelta.
+
+⚠️ **L'EXIF si legge e la foto si raddrizza** prima dell'OCR: una foto verticale arriva coricata, e
+ML Kit su un testo ruotato di 90° non legge quasi niente — la si crederebbe una lettura fallita
+invece che una foto storta.
+
+### Il registro
+
+📜 **Registro** elenca tutto: chi ha segnato, corretto, confermato, chiesto e cancellato, e quando.
+⚠️ **Lo scrive il database** (`vg_scrivi_log`) a ogni operazione, non l'app: un registro tenuto dai
+due telefoni sarebbero due registri diversi. E ogni riga porta con sé **descrizione e importo** della
+voce di cui parla, così resta leggibile anche quando quella voce non c'è più — è la stessa scelta di
+`ob_action_history.action_title`.
+
+### Le cose di forma, che sono di sostanza
+
+- **le righe di pulsanti non vanno a capo**: scorrono col dito, e le larghezze si **misurano**
+  (`RigaScorrevole` + `larghezzaPulsanti` in `ui/Comuni.kt`) su **tutte** le etichette che quella
+  riga può mostrare, comprese quelle che in quel momento non si vedono. ⚠️ Sono ricalcate da
+  `core/PulsantiTendine.kt` di appsphere-native e non importate: sono due progetti Gradle separati,
+  che non condividono sorgenti — è la stessa duplicazione dichiarata di `ForziereBiometria` /
+  `ForziereKeystore`. Se la regola cambia là, va cambiata anche qui;
+- **una scelta fra poche opzioni è sempre una tendina**, mai una fila di pillole;
+- **l'indietro di Android riporta alla home** e non fa uscire dall'app buttando via quel che si
+  stava scrivendo (`BackHandler`): è la stessa regola della `guardiaIndietroPopup` delle pagine web;
+- **il FAB è uno solo per le due strade** (spesa / restituzione), con un menù ancorato: due FAB
+  affiancati, coi caratteri di sistema grandi, non hanno spazio garantito. È la stessa scelta del
+  FAB di «Ti pisasti?»;
+- **le date si scrivono e si leggono in locale**: il DatePicker restituisce la mezzanotte **UTC**
+  del giorno scelto, e letta col fuso locale è il giorno prima — `isoDaMillis` / `millisDaIso`
+  fanno il giro nei due sensi. È lo stesso inciampo di `localDay()` in Obiettivi;
+- **«Esci dal viaggio» dice cosa NON succede**: il viaggio resta, l'altro continua a vedere tutto,
+  e col codice ci si rientra. Davanti a un viaggio intero di spese, «esci» senza spiegazioni si
+  legge come «cancella» — è la stessa scelta della conferma che elimina uno scomparto del Forziere.
+
+---
+
 ## AppSphere nativa — l'unico modulo Android che non è un WebView
 
 `android-app/appsphere-native/` è un progetto Gradle standalone (come `situazione-rosa/` e
@@ -2457,9 +2659,14 @@ una per flavor, perché sono due APK con `applicationId` diversi — e la voce s
 nell'APK WebView.
 
 ⚠️ **E da SOS, che fa quattro** (v1.1.0): `build-sos.yml` pubblica `Sos-latest.json` e la voce sta
-nel suo dialogo **⚙️ Impostazioni**, che è il menù che quell'app ha. Cambiando la forma della
-scheda in un workflow, cambiala **negli altri tre** e in `mostraVersione()` di `comandi.html`, che
-ora disegna tutt'e cinque i pulsanti.
+nel suo dialogo **⚙️ Impostazioni**, che è il menù che quell'app ha.
+
+⚠️ **E da Tandem, che fa cinque** (v1.0.0): `build-tandem.yml` pubblica `Tandem-latest.json` e la
+voce sta in **⚙️ Impostazioni → 📱 Versione app**. Qui il gemello è in **Compose** e non un
+`AlertDialog` di AppCompat — la scheda, le sette chiavi e il giro sono gli stessi, cambia solo con
+che cosa è disegnato il dialogo. Cambiando la forma della scheda in un workflow, cambiala
+**negli altri quattro** e in `mostraVersione()` di `comandi.html`, che ora disegna tutt'e sei i
+pulsanti.
 
 ### ⚠️ Ta Firi? nativo: il punteggio sta nella RPC, e il promemoria si scrive da qui
 
@@ -3303,6 +3510,13 @@ marchio si toccano tutti e cinque.
 ⚠️ **Tre APK portano lo stesso disegno e si distinguono per quel che ci sta sopra o sotto**: il
 fondo (bianco / nero) fra i due AppSphere, il lucchetto per Smart Blocker, il badge `SOS` per SOS.
 È il segno che li distingue in un cassetto delle app, dove i nomi stanno scritti piccoli.
+
+⚠️ **Tandem NON lo porta, ed è l'unica APK della repo a non portarlo**: la sua icona è una
+bicicletta (`android-app/tandem/…/ic_launcher_foreground.xml`). Non è una dimenticanza — quella
+non è un'app della suite: non ha una bolla in `cm_apps`, non fa il login Google, non legge nessuna
+tabella delle altre e i suoi dati non appartengono a un account. Mettere lì il marchio direbbe il
+falso proprio nel posto dove il marchio serve a dire di che famiglia è un'app. Il giorno che
+l'icona di Tandem cambia, **non** si tocca nient'altro; e cambiando il marchio, Tandem resta com'è.
 
 ⚠️ **Nella barra il marchio sta su un disco bianco**, e non è decorazione: la barra è `#0081C8` e
 il cerchio centrale del marchio è `#067BC0`, quindi senza fondo il pezzo che regge il disegno
