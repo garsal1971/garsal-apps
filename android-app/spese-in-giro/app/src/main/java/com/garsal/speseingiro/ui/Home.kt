@@ -226,9 +226,17 @@ private fun RiquadroSaldo(ui: UiState) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            // ⚠️ Il gemello della riga del saldo, e per la stessa ragione: due
+            // misure accanto, ciascuna etichettata per quel che è. «Speso in
+            // tutto 0,00 €» era corretto — conta le sole voci confermate — ma
+            // sotto un «ti dovrebbe 314,61 €» si legge come un errore, perché
+            // nello stesso riquadro convivevano due misure diverse senza che
+            // si vedesse.
             Text(
                 "Speso in tutto ${euro(s.totaleViaggio)}" +
-                    if (s.daConfermare > 0) " · ${s.daConfermare} da confermare" else "",
+                    (if (kotlin.math.abs(s.totaleAtteso - s.totaleViaggio) >= 0.005)
+                        " · ${euro(s.totaleAtteso)} col non confermato" else "") +
+                    (if (s.daConfermare > 0) " · ${s.daConfermare} da confermare" else ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
