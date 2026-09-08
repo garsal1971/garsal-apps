@@ -135,6 +135,27 @@ body {
 }
 .apk-btn-sos:hover { background: #C81E38; }
 
+/* ── PANNELLO APK TANDEM ─────────────────────────────────────────────────── */
+/* Verde salita: è il colore dell'app, che con le altre non ha niente a che
+   fare — Tandem non è una bolla di AppSphere, è un'APK a sé che si apre col
+   codice di un viaggio. */
+.apk-panel-tandem {
+  background: linear-gradient(135deg, #0F4536 0%, #0A241C 100%);
+  border: 1px solid #0F6E4F; border-radius: 10px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.apk-panel-tandem .apk-panel-label { color: #86EFAC; }
+.apk-panel-tandem .apk-title       { color: #DCFCE7; }
+.apk-panel-tandem .apk-sub         { color: #86EFAC; }
+.apk-btn-tandem {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #0F6E4F; color: #fff; font-size: 13px; font-weight: 700;
+  padding: 9px 16px; border-radius: 7px; text-decoration: none;
+  transition: background .15s; white-space: nowrap;
+}
+.apk-btn-tandem:hover { background: #0B5239; }
+
 /* ── PANNELLO APK APPSPHERE NATIVA ───────────────────────────────────────── */
 /* Blu dei cerchi olimpici (#0081C8): è l'identità di AppSphere, e distingue
    a colpo d'occhio l'APK nativo dal verde di AppSfera Web (WebView) — i due si
@@ -294,6 +315,17 @@ body {
         <div class="apk-sub" id="soSub">Bottone rosso · countdown che blocca il telefono</div>
       </div>
       <a class="apk-btn-sos" id="soBtn" href="/releases/Sos-latest.apk" download="Sos.apk">
+        ⬇ Scarica APK
+      </a>
+    </div>
+
+    <div class="apk-panel-tandem">
+      <div>
+        <div class="apk-panel-label">🚲 Android APK</div>
+        <div class="apk-title">Tandem</div>
+        <div class="apk-sub" id="taSub">Le spese di un viaggio in bici, divise fra due</div>
+      </div>
+      <a class="apk-btn-tandem" id="taBtn" href="/releases/Tandem-latest.apk" download="Tandem.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -497,6 +529,7 @@ mostraVersione('gaSub', 'gaBtn', 'GarsalApps-latest', 'WebView · dentro l\'app:
 mostraVersione('sbSub', 'sbBtn', 'SmartBlocker-latest', 'Blocco schedulato 08:00 · 22:00 · dentro l\'app: ☰ → 📱 Versione app');
 mostraVersione('stSub', 'stBtn', 'SmartBlockerTeresa-latest', 'Solo pagamenti con la carta di Teresa · dentro l\'app: ☰ → 📱 Versione app');
 mostraVersione('soSub', 'soBtn', 'Sos-latest', 'Bottone rosso · dentro l\'app: ⚙️ → 📱 Versione app');
+mostraVersione('taSub', 'taBtn', 'Tandem-latest', 'Spese di viaggio in due · dentro l\'app: ⚙️ → 📱 Versione app');
 
 function copyCode(blockId, btn) {
   var pre = document.getElementById(blockId).querySelector('pre');
