@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.19.1</title>
+  <title>GarsalFinanza v1.19.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -617,7 +617,7 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.19.1';
+const APP_VERSION = 'v1.19.2';
 const APP_BUILD   = '2026-09-07T12:10:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
@@ -4011,7 +4011,7 @@ const COVERAGE_ITEMS = [
      e non qui: è una scelta, non una proprietà della voce. */
   { side: 'fabbisogno', key: 'pensione',      icon: '🏛️', label: 'Contribuzione alla pensione',
     hint: () => '',
-    fonte: 'auto', periodicita: 'annuo', auto: coveragePensioneLorda, detraibile: true },
+    fonte: 'auto', periodicita: 'annuo', auto: coverageContribuzionePensione, detraibile: true },
   /* Il margine per quello che non si è previsto. È l'ultima voce prima dell'assicurazione, e
      non è una voce di riempimento: un piano che quadra al centesimo su un orizzonte di dieci
      anni è un piano che non ha lasciato spazio a niente. Nasce `una_tantum` — un capitale
@@ -4333,15 +4333,38 @@ function coverageDetrazione(item, lordo) {
          + `= ${fmtEUR(risparmio)} di IRPEF in meno (${pct.toFixed(1).replace('.', ',')} % effettivo), `
          + `quindi si contano ${fmtEUR(lordo - risparmio)} invece di ${fmtEUR(lordo)}` };
 }
-function coveragePensioneLorda() {
-  const rows = (S.pensionForecast || []).filter(r => r.gross_amount != null);
-  if (!rows.length) return null;
-  // Più recente per data della simulazione: due scenari possono convivere, e quello vecchio
-  // parla di un'altra età di uscita.
-  const r  = rows.slice().sort((a, b) => (b.issued_at || '').localeCompare(a.issued_at || ''))[0];
-  const sc = PENSION_SCENARIOS.find(s => s.key === r.scenario);
-  return { value: parseFloat(r.gross_amount),
-    label: `${sc ? sc.label : r.scenario}${r.issued_at ? ` · simulazione del ${fmtDate(r.issued_at)}` : ''}` };
+/* ── 🏛️ Contribuzione alla pensione: quanto costa un anno di contributi ─────
+   Continuare a versare da sé costa l'**aliquota contributiva sulla retribuzione**, non la
+   pensione che se ne ricava: si prende il lordo dell'ultimo anno pieno di 📋 Estratto conto
+   contributivo e se ne conta il 33 %. Il totale della colonna è poi quell'importo per gli anni
+   che mancano alla sua data, come ogni flusso (`periodicita: 'annuo'`).
+
+   ⚠️ **Fino alla v1.19.1 la voce leggeva l'importo LORDO DELLA PENSIONE** dell'ultima simulazione
+   INPS (`fnz_pension_forecast.gross_amount`): è la pensione che si incasserebbe, non il contributo
+   che si versa — due grandezze diverse, e nessuna ragione perché coincidano. La vecchia
+   `coveragePensioneLorda` non la chiama più nessuno ed è stata tolta.
+
+   ⚠️ **I lordo dell'anno si SOMMANO**: l'estratto conto spezza l'anno per datore di lavoro e per
+   tipo di contribuzione — il 2015 e il 2022 hanno due righe a testa — e prenderne una sola
+   conterebbe una frazione di stipendio.
+
+   ⚠️ **Il reddito è quello di `redditoEstrattoConto()`, lo stesso che legge la deduzione**: due
+   letture separate sarebbero due redditi diversi il giorno che una delle due cambia — e la
+   deduzione si calcola proprio su questo importo. Da lì viene anche la regola dell'anno: l'ultimo
+   **pieno** (il cui ultimo periodo finisce il 31 dicembre), non l'ultimo aperto, che a metà anno
+   è mezzo.
+
+   ⚠️ **Il 33 % è una costante scritta qui** (`ALIQUOTA_CONTRIBUTIVA`), come gli scaglioni IRPEF:
+   è l'aliquota IVS del lavoro dipendente, e la pagina la scrive accanto al numero invece di farla
+   sembrare una legge di natura. */
+const ALIQUOTA_CONTRIBUTIVA = 33;
+function coverageContribuzionePensione() {
+  const red = redditoEstrattoConto();
+  if (!red) return null;
+  const annuo = red.lordo * ALIQUOTA_CONTRIBUTIVA / 100;
+  return { value: annuo,
+    label: `Estratto conto ${red.anno} · lordo ${fmtEUR(red.lordo)} × ${ALIQUOTA_CONTRIBUTIVA} % `
+         + `di aliquota contributiva = ${fmtEUR(annuo)} all'anno` };
 }
 /* ⚠️ Si legge da 💶 Reddito → riquadro Redditi, riga «Pensione INPS» dell'anno più recente che
    ce l'ha — non dall'ultimo anno in tabella: un anno appena aperto e ancora da compilare

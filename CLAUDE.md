@@ -480,9 +480,27 @@ silenzio. È la stessa scelta di `fnz_income`.
 | `fonte` | Da dove viene il numero |
 |---|---|
 | `manuale` | Lo scrive l'utente e basta (università, costo della vita, rendita per Ada, varie ed eventuali) |
-| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), importo lordo dell'ultima simulazione INPS, Pensione INPS da 💶 Reddito |
+| `auto` | Si legge **dal vivo** dai dati di Finanza: debito residuo dei mutui (`computeLoanValue`), valore quota dei portafogli **al netto delle tasse** (`portfolioStats`), contribuzione alla pensione (33 % del lordo di 📋 Estratto conto), Pensione INPS da 💶 Reddito |
 | `asset` | Come `auto`, ma la riga di `fnz_other_assets` la sceglie l'utente in tendina (TFR, Casa Rosa, Casa Mia) |
 | `calcolata` | Non si scrive e non si archivia: è la **scopertura** dello scenario. Vale per la sola assicurazione |
+
+⚠️ **🏛️ Contribuzione alla pensione è il 33 % del lordo, non l'importo della pensione**
+(v1.19.2). `coverageContribuzionePensione()` prende il **lordo dell'ultimo anno pieno** di
+📋 Estratto conto contributivo — lo stesso `redditoEstrattoConto()` che legge la deduzione, quindi
+un reddito solo e non due — e ne conta il **33 %** (`ALIQUOTA_CONTRIBUTIVA`, l'aliquota IVS del
+lavoro dipendente). Essendo `periodicita: 'annuo'`, la colonna vale poi *quell'importo × gli anni
+che mancano alla sua data*. Oggi: 2025 = 60.408 € → **19.934,64 € all'anno**.
+
+⚠️ **Fino alla v1.19.1 leggeva `fnz_pension_forecast.gross_amount`**, cioè l'importo lordo
+dell'ultima simulazione INPS: è la pensione che si **incassa**, non il contributo che si **versa**
+— due grandezze diverse, e nessuna ragione perché coincidano. `coveragePensioneLorda` è stata
+tolta; la simulazione INPS resta quello per cui esiste, cioè le **date** dei due scenari
+(`coverageDateScenari`).
+
+⚠️ **I lordo dell'anno si sommano**: l'estratto conto spezza l'anno per datore di lavoro e per
+tipo di contribuzione — il 2015 e il 2022 hanno due righe a testa — e prenderne una sola conterebbe
+una frazione di stipendio. ⚠️ Il **33 % è una costante scritta in `finanza.html`**, come gli
+scaglioni IRPEF, e la riga la scrive accanto al numero.
 
 ⚠️ **🏛️ Contribuzione alla pensione è l'unica voce DEDUCIBILE**, e la spunta lo dice.
 `applica_detrazione` (`20260908160000_...`) sta sulla riga come `excluded`, per la stessa ragione:
