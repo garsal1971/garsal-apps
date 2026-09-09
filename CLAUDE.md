@@ -497,6 +497,16 @@ pulsante che risponde «non si può» dopo essere stato premuto è un pulsante c
 ⚠️ **È più grande dei ✎ e non è un vezzo**: quelli cambiano un parametro del piano, questo
 risponde alla domanda per cui la pagina esiste. Alla stessa taglia sarebbe un terzo ✎.
 
+⚠️ **Su una colonna già coperta è SPENTO, non tolto** (v1.21.2): con la scopertura ≤ 0 la domanda
+«e allora quando?» ha già risposta «adesso», e premendolo la barra resterebbe dov'è con una nota
+che annuncia di non aver spostato niente. Farlo sparire lascerebbe però un'intestazione diversa
+dalle altre senza dire perché — così resta grigio, col `title` che lo spiega, come una voce
+esclusa che resta a schermo sbiadita. ⚠️ **Segue la cella e non un secondo conto**: legge la
+stessa `scopertura` che il riepilogo scrive due righe sotto (`renderZeroBtn(s, conti[k].scopertura)`),
+quindi si spegne esattamente quando quella cella diventa verde — **anche a barra mossa**, che è
+quel che si sta guardando. Un criterio suo — le voci ancora da compilare, per dire — lo
+accenderebbe e spegnerebbe per una ragione che in quella colonna non si vede.
+
 ⚠️ **Il mese si CERCA valutando `coverageScopertura`, non si ricava con una formula**: fra la
 scopertura e i mesi ci stanno il piano di ammortamento del mutuo, i flussi troncati all'anno
 parziale e la rivalutazione composta — invertirli sarebbe una seconda implementazione della
