@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.21.1</title>
+  <title>GarsalFinanza v1.21.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -178,7 +178,12 @@
                 font: 600 .82rem/1.2 var(--font-sans); text-transform: none; letter-spacing: 0;
                 color: #fff; background: var(--c-primary); border: 0; border-radius: 7px;
                 cursor: pointer; text-align: center; white-space: normal; }
-    .cov-zero:hover { filter: brightness(1.08); }
+    .cov-zero:hover:not(:disabled) { filter: brightness(1.08); }
+    /* ⚠️ Spento e non tolto: su una colonna già coperta il pulsante non ha niente da cercare, ma
+       farlo sparire lascerebbe un'intestazione diversa dalle altre senza dire perché — e la
+       ragione (la cella verde due righe sotto) si legge solo se il pulsante è ancora lì a
+       dirla nel suo title. È la stessa scelta di una voce esclusa che resta a schermo sbiadita. */
+    .cov-zero:disabled { background: var(--c-border); color: var(--c-muted); cursor: default; }
     /* Il commento del 🎯: verde quando la scopertura si è annullata, ambra quando il cursore non
        arriva a tanto — perché quel caso è una risposta diversa, non un dettaglio. */
     .cov-zero-nota { font-size: .84rem; background: #ecfdf5; border-left: 3px solid #059669;
@@ -630,8 +635,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.21.1';
-const APP_BUILD   = '2026-09-09T11:05:00Z';
+const APP_VERSION = 'v1.21.2';
+const APP_BUILD   = '2026-09-09T11:40:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -4878,9 +4883,9 @@ function renderCoverageRiepilogo(scen) {
       <div class="table-wrap"><table class="table">
         <thead><tr>
           <th></th>
-          ${scen.map(s => `<th class="text-right ${colCls(s)}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
+          ${scen.map((s, k) => `<th class="text-right ${colCls(s)}">${s.icon} ${s.anno}<br><span class="text-muted">${s.breve}</span>
             ${s.passato ? '<div class="cov-desc text-sm">già passata</div>' : ''}
-            ${renderUscitaNota(s)}${renderScenarioNota(s)}${renderZeroBtn(s)}</th>`).join('')}
+            ${renderUscitaNota(s)}${renderScenarioNota(s)}${renderZeroBtn(s, conti[k].scopertura)}</th>`).join('')}
         </tr></thead>
         <tbody>
           <tr>
@@ -4945,12 +4950,23 @@ function scenarioNota(key) {
    quando?». Un'icona della stessa taglia lo farebbe sembrare un terzo ✎.
    ⚠️ **Non c'è sulla 🌿 Uscita naturale** (il metro, non un piano) né su una colonna senza data:
    là non c'è nessun orizzonte su cui cercare, e un pulsante che risponde «non si può» solo dopo
-   essere stato premuto è un pulsante che non va messo. */
-function renderZeroBtn(sc) {
+   essere stato premuto è un pulsante che non va messo.
+   ⚠️ **È SPENTO dove la scopertura è già coperta** (≤ 0): la domanda «e allora quando?» ha già
+   risposta «adesso», e premendolo la barra resterebbe dov'è con una nota che annuncia di non
+   aver spostato niente. Spento e non tolto, per la ragione scritta accanto al suo CSS.
+   ⚠️ **Segue la cella, non un secondo conto**: guarda la stessa `scopertura` che la riga del
+   riepilogo scrive due righe sotto, quindi si spegne esattamente quando quella cella diventa
+   verde — anche a barra mossa, che è quel che si sta guardando. Un criterio suo (contare le
+   voci ancora da compilare, per esempio) accenderebbe e spegnerebbe il pulsante per una ragione
+   che in quella colonna non si vede. */
+function renderZeroBtn(sc, scop) {
   if (sc.key === 'naturale' || !sc.date) return '';
+  const coperta = scop != null && scop <= 0;
   return `<div class="cov-desc text-sm">
-      <button class="cov-zero" data-action="cov-zero" data-key="${sc.key}"
-              title="Porta la ⏳ macchina del tempo al mese in cui la scopertura di questo piano si annulla">🎯 Scopertura a zero</button>
+      <button class="cov-zero" data-action="cov-zero" data-key="${sc.key}"${coperta ? ' disabled' : ''}
+              title="${coperta
+                ? 'Questo piano è già coperto: non c\'è nessun mese da cercare.'
+                : 'Porta la ⏳ macchina del tempo al mese in cui la scopertura di questo piano si annulla'}">🎯 Scopertura a zero</button>
     </div>`;
 }
 function renderScenarioNota(sc) {
