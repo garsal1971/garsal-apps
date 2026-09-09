@@ -66,7 +66,8 @@ garsal-apps/
 ├── tasks.html           # Tasks v19.17.12 — task management
 ├── habit-tracker.html   # Habit Stack Tracker — habit tracking with gamification
 ├── events-log.html      # Events Log v2.0 — event/activity logging
-├── weight-quest.html    # Weight Quest v2.4.1 — weight tracking with charts
+├── weight-quest.html    # Peso e Calorie v4.0.0 — peso, obiettivi e diario alimentare
+├── calorie.html         # rimando a weight-quest.html#diario (era il diario alimentare)
 └── netlify.toml         # Netlify deployment config
 ```
 
@@ -1125,8 +1126,13 @@ oggi ≤ «finale») e azzera il deficit senza dire niente. Con meno di due si u
 restano`. Su un piano a due velocità (3 kg nel primo mese, 1 kg nei due dopo) dava 322 kcal nel
 tratto che ne chiedeva 770: il ritmo del piano non si sentiva affatto.
 
-⚠️ `pesoPianoAl()` è la copia di `getInterpolatedTarget()` di `weight-quest.html`: **se cambia
-là va cambiata anche qui**, o le due pagine daranno due traguardi diversi per lo stesso giorno.
+⚠️ `pesoPianoAl(giorno, traguardi)` è **l'unica copia** di questa interpolazione, e
+`getInterpolatedTarget()` della metà «peso» la chiama. Fino all'unione delle due pagine erano due
+implementazioni della stessa formula — una per file — che andavano cambiate insieme: bastava
+toccarne una perché il diario alimentare e la tabella delle pesate dessero due traguardi diversi
+per lo stesso giorno. ⚠️ I traguardi si **passano** invece di leggerli da `S`: le due metà ne
+guardano due elenchi diversi, e non è una svista — il diario parla sempre dell'obiettivo attivo,
+la tabella delle pesate anche di uno già chiuso, perché la sua tendina lo permette.
 
 ⚠️ **Il target non ha pavimenti: è quello che il piano richiede, per basso che sia** — anche
 negativo, che è il modo più chiaro di dire che in quei giorni quel peso non ci si arriva nemmeno
@@ -3339,9 +3345,10 @@ solo su richiesta esplicita, il saldo spalmato su **tutti** i giorni che restano
 righe che non entra nel saldo, e da **oggi** solo lo sforo — perché un diario a metà non è un
 digiuno.
 
-⚠️ **Una duplicazione che la pagina ha e qui no**: `pesoPianoAl()` è la copia di
-`getInterpolatedTarget()` di `weight-quest.html`, e in nativo quella funzione esiste già
-(`PesoRegole.targetInterpolato`) — si chiama quella. Per la stessa ragione l'obiettivo attivo si
+⚠️ **Il nativo è ancora in due moduli**, `calorie/` e `peso/`, mentre sul web sono una pagina
+sola dal 9 settembre 2026: il target interpolato lo dà `PesoRegole.targetInterpolato`, che è già
+l'unico posto di qua — quindi la regola è una per implementazione, ma le implementazioni restano
+due e vanno cambiate insieme. Per la stessa ragione l'obiettivo attivo si
 decodifica con `Obiettivo.da` del modulo `peso`, che è già l'unico posto in cui `ps_objectives` e
 le sue milestone si leggono.
 
@@ -4228,7 +4235,75 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   lo diventa anche fallendo, e un piano fallito che riempie la barra direbbe il contrario di quel
   che è successo.
 
-### `weight-quest.html` — Weight Quest
+### `weight-quest.html` — Peso e Calorie
+
+⚠️ **Dal 9 settembre 2026 questo file è DUE app**: «Ti pisasti?» (il peso) e il diario
+alimentare, che stava in `calorie.html`. Erano due pagine che parlavano dello stesso obiettivo —
+la seconda leggeva `ps_objectives` scritto dalla prima — e la formula che interpola il peso di
+piano fra due traguardi esisteva in due copie, con l'avviso di cambiarle insieme. Adesso ce n'è
+una.
+
+| | com'era | com'è |
+|---|---|---|
+| file | `weight-quest.html` + `calorie.html` | `weight-quest.html`; `calorie.html` è il rimando |
+| viste | 3 + 4, due barre, due router | **7**, una barra sola, `navigate()` |
+| versione | v3.7.3 + v1.18.0 | **v4.0.0**, una |
+| peso di piano | `getInterpolatedTarget()` + `pesoPianoAl()` | `pesoPianoAl(giorno, traguardi)` |
+| toast | `.wq-toast` + `#toast` | `showToast(msg, durata)` |
+| sessione | due letture di `sb_token`, due `BroadcastChannel` | una, in `showMain()` |
+| Supabase | `CONFIG` con `_IS_DEV` + due costanti fisse sulla produzione | `CONFIG`, per tutt'e due |
+
+⚠️ **Il nome del file NON è cambiato**, e non è pigrizia: lo nominano `cm_apps.html_file`,
+`PortedApps.kt` dell'APK nativa (che su quella chiave decide quale schermata aprire),
+`manifest.json` e i segnalibri. Rinominarlo avrebbe voluto dire toccare tutti quelli **e** i
+telefoni già installati, per un guadagno di sola forma.
+
+⚠️ **I due `<script>` restano due e in quest'ordine**: prima la metà «peso», che crea il client
+Supabase e legge il token, poi la metà «calorie», che da `showMain()` viene avviata. Al
+contrario, la seconda chiederebbe una sessione che nessuno ha ancora letto. In fondo al secondo
+c'è `avvia()`, l'unico avvio della pagina.
+
+⚠️ **Anche il CSS resta in due blocchi.** Il primo è lo shell (barra, viste, form, tabelle) e
+governa la pagina; il secondo è quel che «peso» si portava dietro, **non riscritto** — rifarne
+l'aspetto sarebbe stata un'altra modifica mescolata a questa, e nessuna delle due si sarebbe
+potuta verificare da sola. Le tre viste che vengono di là portano la classe `.wq`, che tiene il
+carattere di sistema su cui erano state disegnate.
+
+⚠️ **I tre nomi di classe che si scontravano sono stati RINOMINATI, non scopati sotto un
+antenato**: `.card`, `.btn`, `.btn-primary` esistevano in tutt'e due e da «peso» sono diventati
+`.wq-card`, `.wq-btn`, `.wq-btn-primary` (più `.wq-btn-secondary`, per non lasciare un prefisso a
+metà). Scrivendo `.wq .card` sarebbero passate le proprietà che «peso» non riscrive — `display:
+inline-flex`, `gap`, `border-radius` — quindi un pulsante largo tutto sarebbe diventato
+inline-flex col testo spostato a sinistra: un difetto che si vede su qualche pulsante e che
+nessun controllo automatico segnala.
+
+⚠️ **Le sette viste hanno un nome leggibile dall'ancora** (`#diario`, `#peso`, …), letto una
+volta all'avvio da `vistaDallAncora()`. Serve a `calorie.html`, che rimanda a
+`weight-quest.html#diario` — chi apriva «Calorie» voleva segnare quel che ha mangiato, non
+pesarsi. ⚠️ L'ancora **non si riscrive** a ogni `navigate()`: scrivendola, ogni cambio di scheda
+lascerebbe una voce in cronologia e l'indietro di Android girerebbe fra le sette viste invece di
+uscire dalla pagina — che è quel che `guardiaIndietroPopup` dà per scontato.
+
+⚠️ **Si apre su ⚖️ Peso e non sulla dashboard delle calorie**: l'app si apre col telefono in mano
+appena scesi dalla bilancia. Le quattro viste del diario **non si disegnano finché i loro dati non
+sono arrivati** (`S.pronto`): i due caricamenti corrono in parallelo, e `renderDiario()` su un
+profilo ancora nullo non darebbe una pagina a metà, darebbe un'eccezione — quindi si dice che si
+sta aspettando.
+
+⚠️ **Il profilo incompleto ora si DICE e basta.** Fino all'unione il diario saltava d'ufficio su
+Impostazioni quando mancavano data di nascita, altezza o sesso: aveva senso in una pagina che era
+solo il diario, non in una che si apre sulla pesata. Resta il toast, che dice dove si compila.
+
+⚠️ **La guardia dell'indietro adesso copre anche i sette popup della metà «peso»**, che non ne
+aveva affatto: là dentro l'indietro di Android usciva dalla pagina. Riconoscere «aperto» dallo
+stile calcolato invece che dalla classe serve proprio a questo — quelli si aprono scrivendo
+`style.display`, quelli del diario togliendo una classe.
+
+⚠️ **Chart.js sta nel `<head>`** (lo vuole subito la vista che si apre per prima) e
+`ensureChartLibs()` lo **salta se `Chart` c'è già**, caricando solo Hammer e il plugin zoom: due
+copie della libreria vorrebbero dire che il plugin si registra sull'una e i grafici nascono
+sull'altra.
+
 - Chart.js weight graph centred on today (30-day window, scrollable)
 - Google Fit integration via OAuth token
 - Minimal inline Supabase client (no CDN); milestone and objective tracking
@@ -4279,9 +4354,22 @@ la tabella per tipo, che è anche il rimedio dovuto al giallo, sotto il rapporto
   per sbaglio non deve costare un cannolo. ⚠️ Stesso pulsante nell'app nativa, sulla stessa riga
   del database.
 
-### `calorie.html` — Calorie
-- Il **diario alimentare** e il target di calorie che ne discende. Si apre dalla voce 🍽️ **Calorie**
-  nella barra di `weight-quest.html` (in tutt'e due le barre: quella a icone e quella laterale).
+### `calorie.html` — la pagina di rimando
+
+⚠️ **Non è più un'app**: dal 9 settembre 2026 il diario alimentare vive dentro
+`weight-quest.html` (vedi la sezione qui sopra) e questo file è il rimando a
+`weight-quest.html#diario`. Tutto quel che si legge qui sotto descrive le **quattro viste del
+diario dentro l'app unita**, non un file a sé.
+
+⚠️ **Il file resta, e non è una dimenticanza**: lo nominano la riga di `cm_apps` che disegna la
+bolla, `PortedApps.kt` dell'APK nativa, i collegamenti scritti in `index.html` e in `memo.html`,
+e i segnalibri. Cancellandolo finirebbero tutti su un 404, e la bolla sparirebbe senza dire
+perché. Il rimando usa `location.replace` e non `href` — con `href` l'indietro tornerebbe qui e
+il rimando ripartirebbe da capo, cioè un indietro che non torna indietro — e porta con sé
+l'ancora, con `#diario` come ripiego.
+
+- Il **diario alimentare** e il target di calorie che ne discende. È la vista 📓 **Diario**
+  dell'app unita, insieme a 📊 Dashboard, 🍎 Alimenti e ⚙️ Impostazioni.
 - **Non decide niente sull'obiettivo**: quello sta in «Ti pisasti?» e qui si legge — nessun numero
   da riscrivere di qua, i traguardi si spostano di là. Senza obiettivo attivo il target è il
   semplice **mantenimento**, e la pagina lo dice invece di far finta che ci sia un piano.
@@ -5653,7 +5741,7 @@ che non fa niente per governarlo, dentro un popup **esce dalla pagina**: la WebV
 in cronologia e torna ad AppSphere, buttando via quel che si stava scrivendo.
 
 Il rimedio è il blocco `guardiaIndietroPopup`, **identico in tutte e dieci le app** che hanno dei
-popup (`index`, `calorie`, `finanza`, `obiettivi`, `casarosa`, `conto-risparmio-teresa`,
+popup (`index`, `weight-quest`, `finanza`, `obiettivi`, `casarosa`, `conto-risparmio-teresa`,
 `conto-spese-teresa`, `spese-ada`, `spese-personali`, `youtube-player`) — in fondo al loro script,
 e l'unica cosa che cambia è l'elenco dei popup. ⚠️ **Se lo correggi in una, portalo nelle altre**:
 è la stessa duplicazione voluta dello snapshot del patrimonio e della vista Spese Famiglia.
