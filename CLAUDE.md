@@ -3310,6 +3310,21 @@ quello che rende vera la frase «una regola sola».
 
 ### ⚠️ Calorie nativo: due pagine, e il conto è quello della pagina
 
+⚠️ **Dal 9 settembre 2026 Calorie NON ha più una bolla in home**: peso e calorie sono un'app sola
+— sul web una pagina sola (`weight-quest.html`, sette viste) — e qui si arriva dal 🍽️ nella barra
+di «Ti pisasti?» (`PesoScreen`, parametro `onApriCalorie`). `Route.CALORIE` resta e `CalorieScreen`
+non è cambiata; a sparire è la voce `calorie.html` in `PortedApps.perHtmlFile`, insieme alla riga
+spenta in `cm_apps`.
+
+⚠️ **È la stessa distanza che hanno sul web**, dove ⚖️ Peso e 📓 Diario sono due voci della stessa
+barra: un tocco, di là come di qua. Senza quell'icona le schermate di `calorie/` sarebbero rimaste
+scritte e irraggiungibili — la bolla era la loro unica via d'accesso.
+
+⚠️ **Le due implementazioni restano due**: qui `calorie/` e `peso/` sono due moduli, e il target
+interpolato lo dà `PesoRegole.targetInterpolato` (già l'unico posto di qua). Sul web invece la
+formula è tornata **una sola** con l'unione dei due file, quindi la regola da tenere allineata è
+fra web e nativo, non più anche fra due file web.
+
 `calorie/` porta in nativo le due schermate che si aprono **col telefono in mano**:
 📊 **Dashboard** — le cinque sezioni della pagina nello stesso ordine (⚖️ le pesate, 🔥 le calorie
 di oggi, 📐 le calorie per tratto, 📈 come sta andando, e il giorno per giorno dell'intera dieta) —
@@ -4624,11 +4639,22 @@ l'ancora, con `#diario` come ripiego.
 - Nel grafico un giorno **senza colonna è un giorno non segnato, non un giorno a zero**, e per la
   stessa ragione il saldo del periodo somma i soli giorni segnati: contarci i giorni saltati come
   digiuni darebbe un deficit enorme e falso.
-- Ha una **bolla in AppSphere** (`20260826120000_calorie_app_bolla.sql`, ambra `#d97706`). Il suo
+- ⚠️ **La sua bolla è SPENTA dal 9 settembre 2026** (`20260909100000_peso_calorie_una_bolla.sql`):
+  peso e calorie sono un'app sola, quindi in home c'è **una** bolla — quella di
+  `weight-quest.html`, che porta i punti — e non due porte sulla stessa stanza. La riga di
+  `cm_apps` si **spegne** (`active = false`) e non si cancella: una DELETE porterebbe via anche la
+  sua `score_query`, che è l'unico posto in cui la striscia è scritta. ⚠️ Le due `score_query`
+  **non si sommano**: una dà punti veri e l'altra un conteggio, e sommarle darebbe un saldo che
+  nessuno può rifare a mano. ⚠️ Spegnere la riga e togliere la voce da `PortedApps.perHtmlFile`
+  sono la **stessa modifica**: nel nativo la seconda bolla apriva `CalorieScreen`, che ora si
+  raggiunge dal 🍽️ nella barra di «Ti pisasti?». Quel che segue descrive la bolla com'era.
+- Aveva una **bolla in AppSphere** (`20260826120000_calorie_app_bolla.sql`, ambra `#d97706`). Il suo
   numero è la **striscia di giorni di fila chiusi dentro il target**, e ⚠️ **non è un punteggio**:
   sta in `APP_SENZA_PUNTI` / `AppSenzaPunti`, quindi non si scrive sotto il nome e non entra nel
   totale che paga i premi — un giorno sforato che *abbassasse* il saldo spendibile sarebbe un
-  premio che va e viene da sé. Dimensiona però la bolla, che è il punto: cresce finché il diario
+  premio che va e viene da sé. ⚠️ `calorie.html` **resta nei tre elenchi** anche adesso che la
+  riga è spenta: se un giorno tornasse accesa la risposta dev'essere ancora questa, e un elenco
+  che dimentica il caso spento è un totale sbagliato che nessuno vede. Dimensiona però la bolla, che è il punto: cresce finché il diario
   regge e si sgonfia al primo sforo. **Non «le calorie che restano oggi»**: `sizeOf()` normalizza
   sul punteggio più alto fra tutte le app, e un numero sulle migliaia schiaccerebbe ogni altra
   bolla al minimo di 6 cm². La striscia **si ferma a ieri** — alle nove del mattino si è dentro

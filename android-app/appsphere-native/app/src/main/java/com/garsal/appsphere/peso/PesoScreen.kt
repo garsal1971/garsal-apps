@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -91,6 +92,7 @@ private enum class Vista(val etichetta: String) {
 @Composable
 fun PesoScreen(
     onIndietro: () -> Unit,
+    onApriCalorie: () -> Unit,
     vm: PesoViewModel = viewModel(),
 ) {
     val stato by vm.state.collectAsStateWithLifecycle()
@@ -157,6 +159,28 @@ fun PesoScreen(
             GarsalTopBar(
                 titolo = "Ti pisasti?",
                 onIndietro = onIndietro,
+                azioni = {
+                    /* 🍽️ Il diario alimentare è a un tocco da qui, e da nessun'altra
+                       parte. Dal 9 settembre 2026 in home c'è UNA bolla per tutt'e due —
+                       sul web sono la stessa pagina (`weight-quest.html`, sette viste) —
+                       quindi senza questa icona le schermate di `calorie/` resterebbero
+                       scritte e irraggiungibili.
+
+                       ⚠️ È la stessa distanza che hanno sul web, dove ⚖️ Peso e 📓 Diario
+                       sono due voci della stessa barra: il gesto è uno, di là come di qua.
+
+                       ⚠️ L'icona segue `fontScale` con un tetto, come in home e nel Piano
+                       quotidiano: in `dp` fisse, accanto a un titolo ingrandito,
+                       sembrerebbe rimpicciolita e sarebbe difficile da centrare col dito. */
+                    val scalaIcone = LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
+                    Text(
+                        text = "🍽️",
+                        fontSize = 20.sp * scalaIcone,
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .clickable(onClick = onApriCalorie),
+                    )
+                },
             )
         },
         floatingActionButton = {

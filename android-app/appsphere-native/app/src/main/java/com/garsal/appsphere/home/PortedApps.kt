@@ -69,6 +69,11 @@ object AppSenzaPunti {
 
     private val file = setOf(
         "spuntiamola.html",
+        // ⚠️ `calorie.html` resta in elenco anche adesso che la sua riga di
+        // `cm_apps` è spenta e non ha più una bolla: la striscia di giorni
+        // dentro il target non è un punteggio, e se un giorno quella riga
+        // tornasse accesa la risposta dev'essere ancora questa. Un elenco che
+        // dimentica il caso spento è un totale sbagliato che nessuno vede.
         "calorie.html",
         "obiettivi.html",
         "memo.html",
@@ -134,12 +139,17 @@ object PortedApps {
             descrizioneDiRipiego = "Schede e appunti",
             coloreDiRipiego = "#2563EB",
         ),
-        "calorie.html" to AppPortata(
-            route = Route.CALORIE,
-            titoloDiRipiego = "Calorie",
-            descrizioneDiRipiego = "Diario alimentare",
-            coloreDiRipiego = "#D97706",
-        ),
+        // ⚠️ `calorie.html` NON è più qui, e `Route.CALORIE` invece resta.
+        // Dal 9 settembre 2026 il peso e il diario alimentare sono un'app sola —
+        // sul web una pagina sola, `weight-quest.html` con sette viste — quindi
+        // in home c'è una bolla e non due. Al diario si arriva dal 🍽️ nella
+        // barra di «Ti pisasti?», che è la stessa distanza che ha di là, dove
+        // ⚖️ Peso e 📓 Diario sono due voci della stessa barra.
+        //
+        // Toglierlo di qui e spegnere la riga in `cm_apps` sono la STESSA
+        // modifica e vanno insieme: la riga spenta non arriva più a questo
+        // registro, quindi lasciarcelo sarebbe una voce inerte che torna a
+        // disegnare una seconda bolla il giorno che qualcuno riaccende la riga.
         // ⚠️ La bolla di Forziere ha `riservato = true` in `cm_apps`, quindi si
         // vede **solo in modalità nascosta** — come Finanza, e per la stessa
         // ragione: un forziere annunciato in home a chiunque guardi lo schermo
@@ -153,8 +163,8 @@ object PortedApps {
         ),
         "weight-quest.html" to AppPortata(
             route = Route.PESO,
-            titoloDiRipiego = "Ti pisasti?",
-            descrizioneDiRipiego = "Il peso, giorno per giorno",
+            titoloDiRipiego = "Peso e Calorie",
+            descrizioneDiRipiego = "Il peso e il diario alimentare",
             coloreDiRipiego = "#00B894",
         ),
     )
