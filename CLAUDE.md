@@ -421,12 +421,47 @@ della pagina direbbe qualcosa di diverso dal giorno prima senza che nessuno l'ab
 | Cosa | Alla data scelta |
 |---|---|
 | 🏠 Estinzione mutuo | **si ricalcola** col piano di ammortamento (`computeLoanValue(l, data)`) |
+| 🎓 Università di Ada | si **consuma**: resta la quota dei mesi ancora da fare, e quella si rivaluta |
 | Tutto il resto — fabbisogno **e** dotazioni | si **rivaluta** di `(1+r)^anni` |
 
 ⚠️ **Il mutuo si ricalcola e non si rivaluta**, ed è l'unica eccezione: il piano di ammortamento
 sa già quanto sarà il residuo quel mese, e moltiplicarlo anche per l'inflazione lo conterebbe due
 volte in senso opposto — un debito che scende non è un costo che sale. Lo dice `allaData: true`
 sulla voce in `COVERAGE_ITEMS`, ed è l'unica che ce l'ha.
+
+### ⏳ 🎓 L'università di Ada si consuma coi mesi (v1.21.0)
+
+È l'unica voce che porta un **periodo** — `periodo: () => adaUniversita()`, cioè **settembre 2029
+→ settembre 2036, 84 mesi** — e l'importo scritto nel form è il **totale di quei sette anni**.
+Spostando la ⏳ macchina del tempo dentro quel periodo, i mesi già passati **sono già stati
+spesi**: quel che resta da coprire è la sola coda, `coverageResiduo(item).frazione`. Fino al 2029
+vale intero (e quindi **a barra ferma la pagina mostra esattamente i numeri di prima**), a
+settembre 2032 vale 48/84, a corso finito vale **zero** — non `null`: quel fabbisogno non c'è più,
+non è un dato che manca. Senza, osservando dal 2033 la pagina chiederebbe di coprire
+un'università già fatta per metà.
+
+⚠️ **Passa da `coverageBase`, lo stesso varco della rivalutazione e della deduzione**: totale,
+scopertura, capitale da assicurare e badge «al posto di X» devono dire tutti quella cifra lì —
+sono lo stesso `value`. E **si moltiplica** per il fattore della barra invece di sostituirlo: quel
+che resta da spendere è pur sempre in euro di allora.
+
+⚠️ **Il form continua a chiedere il totale**, e lo dice: scrivendoci a mano il residuo lo si
+conterebbe due volte, e l'importo in archivio smetterebbe di voler dire quello che vuol dire. È la
+stessa ragione per cui la casella mostra `row.amount` grezzo e il «Finanza dice X» non è
+proiettato.
+
+⚠️ **Si conta a MESI e non ad anni accademici** (`mesiFra`): la barra si muove di mese, e una voce
+che resta ferma per undici mesi su dodici si legge come una voce che non risponde. **Il mese
+parziale entra per la sua frazione**, come l'ultimo anno di `sommaFlusso`: fermarsi al mese intero
+farebbe valere zero una voce a tre settimane dalla fine.
+
+⚠️ **Solo su un `una_tantum`**: messa `annuo` dal ✎ l'importo è un flusso, che `sommaFlusso` già
+moltiplica per gli anni — applicare anche la frazione lo conterebbe due volte in senso opposto.
+
+⚠️ **La riga lo scrive** (`notaResiduo`): *già cominciata: restano 48 mesi su 84 (57 %
+dell'importo)*. Un fabbisogno che cala senza che niente spieghi perché è indistinguibile da un
+conto sbagliato. La nota **non compare sotto il mezzo mese consumato**: arrotondata direbbe «84
+mesi su 84 (100 %)», cioè un avviso che annuncia di non aver tolto niente.
 
 ⚠️ **La rivalutazione passa da UN varco solo, `coverageBase()`**, e da nessun'altra parte: è la
 ragione per cui totale, scopertura, capitale da assicurare e il badge «al posto di X» dicono
@@ -746,8 +781,9 @@ vero cambia sotto. Le voci senza valore si **contano accanto al totale** invece 
 
 **Quando comincia l'università di Ada si ricava, non si scrive**: `ADA_SCUOLA` dice classe e anno
 scolastico in corso (3ª superiore nel 2026/27) e `adaUniversita()` ne ricava inizio (settembre
-2029), fine e anni che mancano. Scritto a mano, fra due anni direbbe ancora 2029 senza che niente
-lo segnali.
+2029), fine, anni che mancano e le **due date in ISO** (`da`/`a`) su cui la ⏳ macchina del tempo
+conta i mesi già spesi. Scritto a mano, fra due anni direbbe ancora 2029 senza che niente lo
+segnali.
 
 I due 💬 (università di Ada, assicurazione) aprono un popup col **prompt già scritto** da
 incollare in una chat con l'IA. Quello dell'assicurazione ci mette dentro i numeri che la pagina
