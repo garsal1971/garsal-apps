@@ -422,6 +422,7 @@ della pagina direbbe qualcosa di diverso dal giorno prima senza che nessuno l'ab
 |---|---|
 | 🏠 Estinzione mutuo | **si ricalcola** col piano di ammortamento (`computeLoanValue(l, data)`) |
 | 🎓 Università di Ada | si **consuma**: resta la quota dei mesi ancora da fare, e quella si rivaluta |
+| 👛 Pensione Ada (dotazione) | si **accorcia**: importo annuo × i mesi che restano fino a settembre 2034 |
 | Tutto il resto — fabbisogno **e** dotazioni | si **rivaluta** di `(1+r)^anni` |
 
 ⚠️ **Il mutuo si ricalcola e non si rivaluta**, ed è l'unica eccezione: il piano di ammortamento
@@ -626,8 +627,15 @@ un figlio studente. Sono due durate diverse in `ADA_SCUOLA` e non è una svista:
 mentre `anniCorsoRegolare` (3+2) è la durata legale del corso, che decide fino a quando la
 pensione si incassa (inizio 2029 + 5 = **2034**). Usarne una sola sbaglierebbe per eccesso l'una o
 per difetto l'altra. La fine si **ricava** e non si scrive: un 2034 messo a mano fra due anni
-direbbe ancora 2034. Il conto è in anni interi (`2034 − anno in corso`) così si rifà a mente, e a
-corso finito la voce vale zero — che è quello che sarà.
+direbbe ancora 2034. A corso finito la voce vale zero — che è quello che sarà.
+
+⚠️ **Il conto è a MESI e non ad anni interi** (v1.21.1, `mesiFra(coverageOggi(), aCorsoRegolare)`,
+lo stesso metro della 🎓 università): fino alla v1.21.0 era `2034 − anno in corso`, che si rifà a
+mente ma lasciava la voce **ferma per undici mesi su dodici** — una dotazione che non risponde alla
+⏳ barra accanto a un fabbisogno che risponde, e la scopertura si muoveva a scalini annuali. Il
+mese parziale entra per la sua frazione, e l'etichetta scrive i mesi che restano (`mesiTxt`), che è
+il modo di rifare il conto a mente adesso. ⚠️ Ne discende che `coverageAnno()` **non esiste più**:
+la data di osservazione si legge in un modo solo.
 
 ⚠️ **Il fabbisogno ha quattro colonne, le 🧰 Dotazioni UNA SOLA** (v1.18.0): quello che servirà
 dipende da quando si smette di lavorare, quello con cui ci si arriva no. La colonna si etichetta
