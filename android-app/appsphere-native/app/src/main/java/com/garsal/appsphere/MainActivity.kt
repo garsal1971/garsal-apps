@@ -331,8 +331,15 @@ private fun Navigazione() {
         composable(Route.TA_FIRI) {
             TaFiriScreen(onIndietro = { nav.popBackStack() })
         }
+        // ⚠️ La bolla è UNA per il peso e le calorie, come sul web, dove sono
+        // una pagina sola: il diario alimentare si apre dal 🍽️ nella barra di
+        // «Ti pisasti?». Senza quel passaggio le schermate di `calorie/`
+        // resterebbero scritte e irraggiungibili.
         composable(Route.PESO) {
-            PesoScreen(onIndietro = { nav.popBackStack() })
+            PesoScreen(
+                onIndietro = { nav.popBackStack() },
+                onApriCalorie = { nav.navigate(Route.CALORIE) },
+            )
         }
         composable(Route.MEMO) {
             MemoScreen(onIndietro = { nav.popBackStack() })
