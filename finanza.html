@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.21.0</title>
+  <title>GarsalFinanza v1.21.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -630,8 +630,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.21.0';
-const APP_BUILD   = '2026-09-09T10:20:00Z';
+const APP_VERSION = 'v1.21.1';
+const APP_BUILD   = '2026-09-09T11:05:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3945,9 +3945,10 @@ function adaUniversita() {
      mesi di mantenimento sono già stati spesi (`coverageResiduo`). Il mese è settembre, che è
      quando l'anno accademico comincia — contare da gennaio regalerebbe otto mesi di spesa. */
   const gg = m => `-${String(m).padStart(2, '0')}-01`;
+  const fineCorsoRegolare = inizio + ADA_SCUOLA.anniCorsoRegolare;
   return { mancano, inizio, fine, anni: ADA_SCUOLA.anniUniversita,
            da: inizio + gg(ADA_SCUOLA.meseInizio), a: fine + gg(ADA_SCUOLA.meseInizio),
-           fineCorsoRegolare: inizio + ADA_SCUOLA.anniCorsoRegolare };
+           fineCorsoRegolare, aCorsoRegolare: fineCorsoRegolare + gg(ADA_SCUOLA.meseInizio) };
 }
 
 /* ── Lo scenario più vicino: quanti anni prima dell'anticipata si esce ──────
@@ -4165,7 +4166,6 @@ function coverageDataA(mesi) {
   return isoLocale(new Date(o.getFullYear(), m, Math.min(o.getDate(), ultimo)));
 }
 function coverageOggi() { return coverageDataA(coverageMesi()); }
-function coverageAnno() { return parseInt(coverageOggi().slice(0, 4), 10); }
 const MESI_IT = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
                  'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 function coverageMeseTesto(mesi) {
@@ -4448,17 +4448,24 @@ function coverageAccordo(sc) {
   const g = coverageAccordoAzienda(sc);
   return g ? { ...g, value: rivaluta(g.value) } : null;
 }
+/* ⚠️ Quel che resta da incassare si conta dalla DATA DI OSSERVAZIONE e **a mesi**, come la
+   🎓 università (`coverageResiduo`): spostandosi al settembre 2032 la pensione di Ada si incassa
+   per due anni ancora, non per otto. Fino alla v1.21.0 il conto era in anni interi
+   (`2034 − anno in corso`), che si rifà a mente ma lascia la voce **ferma per undici mesi su
+   dodici** — cioè una voce che non risponde alla barra, accanto a una che risponde. L'importo
+   scritto accanto lo dice in mesi, che è il modo di rifarlo a mente adesso. */
 function coveragePensioneAda() {
   const righe = (S.income || []).filter(r => r.kind === 'pensione' && r.amount != null);
   if (!righe.length) return null;
   const r     = righe.reduce((a, b) => (b.year > a.year ? b : a));
   const annuo = parseFloat(r.amount);
-  const fine  = adaUniversita().fineCorsoRegolare;
-  // ⚠️ Gli anni che restano si contano dall'anno di OSSERVAZIONE: spostandosi al 2032 la
-  // pensione di Ada si incassa per due anni ancora, non per otto.
-  const anni  = Math.max(0, fine - coverageAnno());
-  return { value: annuo * anni,
-    label: `Reddito ${r.year} · Pensione INPS ${fmtEUR(annuo)}/anno × ${anni} ann${anni === 1 ? 'o' : 'i'}, fino al ${fine} (ultimo anno di corso regolare)` };
+  const u     = adaUniversita();
+  const mesi  = Math.max(0, mesiFra(coverageOggi(), u.aCorsoRegolare));
+  const fine  = `${MESI_IT[parseInt(u.aCorsoRegolare.slice(5, 7), 10) - 1]} ${u.fineCorsoRegolare}`;
+  return { value: annuo * mesi / 12,
+    label: mesi
+      ? `Reddito ${r.year} · Pensione INPS ${fmtEUR(annuo)}/anno × ${mesiTxt(mesi)}, fino a ${fine} (fine del corso regolare)`
+      : `Reddito ${r.year} · Pensione INPS ${fmtEUR(annuo)}/anno · corso regolare concluso a ${fine}: non se ne incassa più` };
 }
 
 async function loadCoverage() {
@@ -4519,6 +4526,13 @@ function mesiFra(daISO, aISO) {
      voce varrebbe già zero. È la stessa regola dell'ultimo anno parziale di `sommaFlusso`. */
   const giorniMesePrima = new Date(a.getFullYear(), a.getMonth(), 0).getDate();
   return m - (d.getDate() - a.getDate()) / giorniMesePrima;
+}
+/* I mesi scritti a parole: arrotondati, perché «47,7 mesi» non lo dice nessuno, e con
+   «meno di un mese» sotto la mezza — uno «0 mesi» accanto a un importo che c'è ancora è la sola
+   cosa che quel numero non deve dire. */
+function mesiTxt(m) {
+  const n = Math.round(m);
+  return n >= 1 ? `${n} mes${n === 1 ? 'e' : 'i'}` : 'meno di un mese';
 }
 function coverageResiduo(item) {
   if (!item.periodo || coveragePeriodicita(item) === 'annuo') return null;
@@ -5180,14 +5194,10 @@ function notaResiduo(base) {
   // (100 %)», cioè un avviso che annuncia di non aver tolto niente.
   if (!r || r.totali - r.restanti < 0.5) return '';
   const pct = (r.frazione * 100).toFixed(0);
-  /* I mesi si scrivono arrotondati — «47,7 mesi» non lo dice nessuno — ma il conto resta quello
-     esatto: è la percentuale accanto a dire di quanto la voce si è accorciata davvero.
-     ⚠️ Sotto il mezzo mese si scrive «meno di un mese» e non «0 mesi»: quello lo dice il ramo
-     del periodo concluso, e sono due cose diverse. */
-  const n = Math.round(r.restanti);
-  const quanti = !r.restanti ? '' : n >= 1 ? `${n} mes${n === 1 ? 'e' : 'i'}` : 'meno di un mese';
+  // I mesi si scrivono arrotondati (`mesiTxt`) ma il conto resta quello esatto: è la percentuale
+  // accanto a dire di quanto la voce si è accorciata davvero.
   return r.restanti
-    ? `<div class="text-muted text-sm">⏳ già cominciata: restano ${quanti} su ${r.totali} (${pct} % dell'importo)</div>`
+    ? `<div class="text-muted text-sm">⏳ già cominciata: restano ${mesiTxt(r.restanti)} su ${r.totali} (${pct} % dell'importo)</div>`
     : `<div class="text-muted text-sm">⏳ periodo concluso: non resta niente da coprire</div>`;
 }
 function notaTempo(item, base) {
