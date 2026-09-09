@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GarsalFinanza v1.20.0</title>
+  <title>GarsalFinanza v1.21.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Darker+Grotesque:wght@700&display=swap" rel="stylesheet" />
@@ -630,8 +630,8 @@
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 /* ── Config ─────────────────────────────────────────────────── */
-const APP_VERSION = 'v1.20.0';
-const APP_BUILD   = '2026-09-07T12:10:00Z';
+const APP_VERSION = 'v1.21.0';
+const APP_BUILD   = '2026-09-09T10:20:00Z';
 const _IS_DEV     = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const SUPABASE_URL      = 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphamxtbWRzamx2emdjeGlpeXBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NTU0NjYsImV4cCI6MjA4NTUzMTQ2Nn0.ikaipwxOvIn43epayQ4mSZQkXtin3aaGEPouafwJFxU';
@@ -3936,11 +3936,17 @@ async function deletePensionContribution(id) {
    figlio studente. La prima decide il fabbisogno, la seconda fino a quando quella pensione si
    incassa: usarne una sola farebbe sbagliare per eccesso l'una o per difetto l'altra. */
 const ADA_SCUOLA = { annoScolastico: 2026, classe: 3, classiSuperiori: 5,
-                     anniUniversita: 7, anniCorsoRegolare: 5 };
+                     anniUniversita: 7, anniCorsoRegolare: 5, meseInizio: 9 };
 function adaUniversita() {
   const mancano = ADA_SCUOLA.classiSuperiori - ADA_SCUOLA.classe + 1;   // superiori che restano
   const inizio  = ADA_SCUOLA.annoScolastico + mancano;
-  return { mancano, inizio, fine: inizio + ADA_SCUOLA.anniUniversita, anni: ADA_SCUOLA.anniUniversita,
+  const fine    = inizio + ADA_SCUOLA.anniUniversita;
+  /* ⚠️ Le due date VERE, e non i soli anni: servono alla ⏳ macchina del tempo per sapere quanti
+     mesi di mantenimento sono già stati spesi (`coverageResiduo`). Il mese è settembre, che è
+     quando l'anno accademico comincia — contare da gennaio regalerebbe otto mesi di spesa. */
+  const gg = m => `-${String(m).padStart(2, '0')}-01`;
+  return { mancano, inizio, fine, anni: ADA_SCUOLA.anniUniversita,
+           da: inizio + gg(ADA_SCUOLA.meseInizio), a: fine + gg(ADA_SCUOLA.meseInizio),
            fineCorsoRegolare: inizio + ADA_SCUOLA.anniCorsoRegolare };
 }
 
@@ -4006,10 +4012,14 @@ async function loadUscita() {
 }
 
 const COVERAGE_ITEMS = [
+  /* ⚠️ L'unica voce con un PERIODO: l'importo è il totale dei sette anni, e spostando la
+     ⏳ macchina del tempo oltre settembre 2029 i mesi già passati sono già stati spesi — quel
+     che resta da coprire è la sola coda. Senza, osservando dal 2033 la pagina chiederebbe di
+     coprire un'università già fatta per metà. Vedi `coverageResiduo`. */
   { side: 'fabbisogno', key: 'universita',    icon: '🎓', label: 'Mantenimento università di Ada',
     hint: () => { const u = adaUniversita();
       return `${u.anni} anni fuori sede, da settembre ${u.inizio} a ${u.fine}: laurea e specializzazione.`; },
-    fonte: 'manuale', periodicita: 'una_tantum', prompt: 'universita' },
+    fonte: 'manuale', periodicita: 'una_tantum', periodo: () => adaUniversita(), prompt: 'universita' },
   { side: 'fabbisogno', key: 'mutuo',         icon: '🏠', label: 'Estinzione mutuo',
     hint: () => coverageMesi() ? 'Quanto servirebbe per chiudere il mutuo alla data della barra.'
                                : 'Quanto servirebbe per chiudere il mutuo oggi.',
@@ -4481,6 +4491,45 @@ function coverageAuto(item, sc) {
   }
   return null;
 }
+/* ── I mesi già spesi: una voce che ha un PERIODO si consuma da sé ────────
+   Un capitale che copre una spesa distesa nel tempo — oggi la sola 🎓 università di Ada, sette
+   anni da settembre 2029 — non vale intero da qualunque punto lo si guardi: spostando la
+   ⏳ macchina del tempo dentro quel periodo, i mesi passati sono già stati spesi e a mancare è
+   la sola coda. `coverageResiduo` dice quanta ne resta, e la frazione entra in `coverageBase`.
+
+   ⚠️ Prima dell'inizio vale 1 e non «quasi 1»: dal 2026 l'università è tutta davanti, ed è la
+   ragione per cui a barra ferma questa voce mostra esattamente il numero di prima. A corso
+   finito vale 0 — non `null`: quel fabbisogno non c'è più, e non è un dato che manca.
+
+   ⚠️ Si conta a MESI e non ad anni accademici: la barra si muove di mese, e una voce che resta
+   ferma per undici mesi su dodici si legge come una voce che non risponde.
+
+   ⚠️ Solo su un `una_tantum`. Messa `annuo` dal ✎ l'importo è un flusso, che `sommaFlusso` già
+   moltiplica per gli anni: applicare anche la frazione lo conterebbe due volte in senso opposto.
+
+   ⚠️ La frazione NON è la rivalutazione e non la sostituisce: quel che resta da spendere è pur
+   sempre in euro di allora, quindi le due si moltiplicano — 41 mesi su 84 di un importo che nel
+   frattempo è cresciuto del 2 % all'anno. */
+function mesiFra(daISO, aISO) {
+  const d = new Date(daISO + 'T00:00:00'), a = new Date(aISO + 'T00:00:00');
+  const m = (a.getFullYear() - d.getFullYear()) * 12 + (a.getMonth() - d.getMonth());
+  if (a.getDate() >= d.getDate()) return m;
+  /* ⚠️ Il mese parziale entra per la sua frazione e non si butta via: fermarsi al mese intero
+     perderebbe fino a trenta giorni di mantenimento sulla coda — a tre settimane dalla fine la
+     voce varrebbe già zero. È la stessa regola dell'ultimo anno parziale di `sommaFlusso`. */
+  const giorniMesePrima = new Date(a.getFullYear(), a.getMonth(), 0).getDate();
+  return m - (d.getDate() - a.getDate()) / giorniMesePrima;
+}
+function coverageResiduo(item) {
+  if (!item.periodo || coveragePeriodicita(item) === 'annuo') return null;
+  const p = item.periodo();
+  if (!p || !p.da || !p.a) return null;
+  const totali = mesiFra(p.da, p.a);
+  if (!(totali > 0)) return null;
+  const restanti = Math.max(0, Math.min(totali, mesiFra(coverageOggi(), p.a)));
+  return { da: p.da, a: p.a, totali, restanti, frazione: restanti / totali };
+}
+
 // L'importo scritto a mano vince sul dato di Finanza — ma si vede che è scritto a mano, e si
 // toglie col ↺: un override silenzioso resterebbe fermo mentre il dato vero cambia sotto.
 /* ⚠️ **Qui passa la rivalutazione, e da nessun'altra parte.** Ogni importo scritto in euro di
@@ -4493,17 +4542,23 @@ function coverageAuto(item, sc) {
    sono lo stesso `value`. Si applica **prima** del fattore della ⏳ macchina del tempo — il
    conto IRPEF si fa in euro di oggi, contro un reddito di oggi — e vale anche sull'importo
    scritto a mano: la deducibilità è del versamento, non della fonte da cui il numero viene. */
+/* ⚠️ **E di qui passa anche la frazione dei mesi già spesi**, per la stessa ragione: una voce
+   con un periodo (`coverageResiduo`) vale la sola coda che resta, e il totale, la scopertura e
+   il capitale da assicurare devono dire tutti quella cifra lì. Si moltiplica per il fattore
+   della barra e non lo sostituisce: quel che resta da spendere è pur sempre in euro di allora. */
 function coverageBase(item, sc) {
   const row     = coverageRow(item);
   const f       = item.allaData ? 1 : coverageFattore();
+  const res     = coverageResiduo(item);
+  const q       = res ? res.frazione : 1;
   const manuale = row && row.amount != null ? parseFloat(row.amount) : null;
   const grezzo  = coverageAuto(item, sc);
-  const auto    = grezzo ? { ...grezzo, value: grezzo.value * f } : null;
+  const auto    = grezzo ? { ...grezzo, value: grezzo.value * f * q } : null;
   const lordo   = manuale != null ? manuale : (grezzo ? grezzo.value : null);
   const det     = coverageDetrazione(item, lordo);
   const netto   = lordo == null ? null : lordo - (det?.risparmio || 0);
-  return { value: netto == null ? null : netto * f, scrittoAMano: manuale != null,
-           auto, row, fattore: f, detrazione: det };
+  return { value: netto == null ? null : netto * f * q, scrittoAMano: manuale != null,
+           auto, row, fattore: f, detrazione: det, residuo: res };
 }
 /* ⚠️ «Esclusa» non è «assente» e non è «zero»: la voce c'è, il suo importo si vede, e si è
    scelto di non contarla in questo piano. Per questo il flag toglie la voce dai totali ma non
@@ -5115,6 +5170,26 @@ function renderCoverageVals(colonne, valori, cls = 'fw-600', note = null) {
    quando la barra è mossa**: a «oggi» il fattore è 1 e una riga «rivalutato del 2 % per 0 anni»
    su ogni voce sarebbe rumore che dice che non è successo niente. Le due frasi sono diverse
    perché le due cose sono diverse: il mutuo si **ricalcola**, tutto il resto si **rivaluta**. */
+/* ⚠️ La riga scrive quanti mesi sono già passati, e non si limita a mostrare un numero più
+   basso: un fabbisogno che cala senza che niente spieghi perché è indistinguibile da un conto
+   sbagliato. Compare **solo quando la frazione morde** — a barra ferma nel 2026 l'università è
+   tutta davanti, e un «84 mesi su 84» su ogni riga smetterebbe di distinguere qualcosa. */
+function notaResiduo(base) {
+  const r = base.residuo;
+  // ⚠️ Sotto il mezzo mese consumato la nota non si scrive: arrotondata direbbe «84 mesi su 84
+  // (100 %)», cioè un avviso che annuncia di non aver tolto niente.
+  if (!r || r.totali - r.restanti < 0.5) return '';
+  const pct = (r.frazione * 100).toFixed(0);
+  /* I mesi si scrivono arrotondati — «47,7 mesi» non lo dice nessuno — ma il conto resta quello
+     esatto: è la percentuale accanto a dire di quanto la voce si è accorciata davvero.
+     ⚠️ Sotto il mezzo mese si scrive «meno di un mese» e non «0 mesi»: quello lo dice il ramo
+     del periodo concluso, e sono due cose diverse. */
+  const n = Math.round(r.restanti);
+  const quanti = !r.restanti ? '' : n >= 1 ? `${n} mes${n === 1 ? 'e' : 'i'}` : 'meno di un mese';
+  return r.restanti
+    ? `<div class="text-muted text-sm">⏳ già cominciata: restano ${quanti} su ${r.totali} (${pct} % dell'importo)</div>`
+    : `<div class="text-muted text-sm">⏳ periodo concluso: non resta niente da coprire</div>`;
+}
 function notaTempo(item, base) {
   if (!coverageMesi()) return '';
   const quando = coverageMeseTesto(coverageMesi());
@@ -5166,6 +5241,7 @@ function renderCoverageRow(item, colonne) {
       ${annuo ? `<div class="text-muted text-sm">${fmtEUR(base.value)} all'anno, in euro di ${
         coverageMesi() ? coverageMeseTesto(coverageMesi()) : 'oggi'}</div>` : ''}
       ${hint ? `<div class="text-muted text-sm">${hint}</div>` : ''}
+      ${notaResiduo(base)}
       ${notaTempo(item, base)}
       ${fonte ? `<div>${fonte}</div>` : ''}
       ${detHtml}
@@ -5214,6 +5290,19 @@ function openCoverageModal(side, key) {
                placeholder="${item.fonte === 'manuale' ? 'vuoto = dato assente' : 'vuoto = vale il dato di Finanza'}"
                value="${row?.amount ?? ''}" />
         ${auto ? `<p class="text-muted text-sm" style="margin-top:6px">Oggi Finanza dice <strong>${fmtEUR(auto.value)}</strong> (${auto.label}). Scrivendo un importo qui, vince il tuo.</p>` : ''}
+        ${(() => {
+          /* ⚠️ Qui si scrive il TOTALE del periodo, non quel che resta: la parte già spesa la
+             toglie la pagina alla data della barra (`coverageResiduo`). Scrivendo a mano il
+             residuo lo si conterebbe due volte, e l'importo in archivio smetterebbe di voler
+             dire quello che vuol dire. */
+          const r = coverageResiduo(item);
+          if (!r) return '';
+          const m = MESI_IT[parseInt(r.da.slice(5, 7), 10) - 1];
+          const coda = !(r.restanti < r.totali) ? ''
+            : r.restanti ? `: adesso ne conta ${Math.max(1, Math.round(r.restanti))} su ${r.totali}`
+                         : ': alla data della barra il periodo è concluso, quindi non ne conta nessuno';
+          return `<p class="text-muted text-sm" style="margin-top:6px">Qui va il <strong>totale del periodo</strong> — ${r.totali} mesi, da ${m} ${r.da.slice(0, 4)} a ${m} ${r.a.slice(0, 4)} — in euro di oggi. La parte già passata la toglie la pagina da sé alla data della ⏳ barra${coda}.</p>`;
+        })()}
       </div>
       ${item.detraibile ? `
       <div class="form-group">
