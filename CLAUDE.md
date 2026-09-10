@@ -1371,8 +1371,30 @@ del lavoro buttato — dentro i nomi sono già tutti uuid e i file tutti cifrati
 
 ⚠️ **Il nome si cerca su Drive, quindi rinominare la cartella e cambiare `NOME_CARTELLA` in
 `forziere-drive` sono la STESSA modifica**: fatta una sola delle due, la Edge Function non
-trova più niente e **crea una cartella nuova e vuota** — il forziere sparisce dall'app senza
-nessun errore, mentre su Drive è tutto ancora lì. L'ordine è: prima il deploy, poi il rename.
+trova più niente. L'ordine è: prima il deploy, poi il rename.
+
+⚠️ **La cartella la crea SOLO `init`, cioè la creazione del forziere** (v4, 10 settembre
+2026). Fino alla v3 la creava chiunque non la trovasse, e per la Edge Function «non trovata»
+comprendeva anche **ricerca fallita**: l'`if (r.ok)` lasciava cadere l'errore e si finiva a
+creare, quindi un 401, un 500 di Drive o una rete storta diventavano un secondo `rooms`
+vuoto. È successo il 10 settembre 2026, nel mezzo del pasticcio col client OAuth: due
+`rooms` dentro `AppSphere`, e il forziere che rispondeva ❌ *«quel file non sta nella
+cartella del forziere»* **coi documenti tutti al loro posto**. Una cartella nuova è un
+forziere nuovo: non è una cosa che si fa per ripiego. Ora una ricerca fallita alza l'errore
+vero, e ogni azione che non sia `init` dice che la cartella non c'è invece di inventarla.
+
+⚠️ **Fra più cartelle vince la PIÙ VECCHIA** (`orderBy=createdTime`), non la prima che Drive
+restituisce: l'ordine di quella risposta non è garantito, quindi «la prima» era un sorteggio
+che si rifaceva a ogni chiamata — il forziere si apriva o non si apriva a seconda del tiro,
+che è il modo peggiore in cui un difetto si presenta. Il forziere vero è sempre il primo
+nato. ⚠️ Il rimedio a un doppione resta **buttarlo dal Drive**: la funzione lo aggira e lo
+scrive nei log, non lo cancella — cancellare cartelle è precisamente il potere che questa
+funzione non deve avere.
+
+⚠️ **Il sintomo di quel giorno va riconosciuto**: «quel file non sta nella cartella del
+forziere» **non vuol dire che il file è perso**. Se lo dice, la funzione il file lo *vede*
+(altrimenti direbbe `Drive get: HTTP 404`): è la cartella a essere quella sbagliata. Prima
+di toccare qualunque cosa si contano le `rooms` su Drive.
 
 ⚠️ **`GDRIVE_APPSPHERE_FOLDER_ID` è FACOLTATIVO e dice solo DOVE NASCE una cartella nuova**:
 la ricerca resta per nome e fra i risultati *preferisce* quello dentro `AppSphere` senza

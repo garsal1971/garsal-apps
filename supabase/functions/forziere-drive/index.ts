@@ -39,7 +39,7 @@
 //          ⚠️ NON usa GDRIVE_FOLDER_ID: quella è la cartella dei backup — oggi
 //          «AppSphere/backups», sorella di questa — e mescolarle vorrebbe dire che una
 //          rotazione sbagliata cancella il forziere.
-// v3 — 2026-09-07
+// v4 — 2026-09-10
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -112,29 +112,56 @@ async function chiChiama(req: Request): Promise<string | null> {
   return (u?.email ?? '').toLowerCase() || null;
 }
 
-// La cartella se la crea da sé. Con lo scope `drive.file` l'applicazione vede soltanto ciò
+// La cartella del forziere. Con lo scope `drive.file` l'applicazione vede soltanto ciò
 // che ha creato lei, quindi cercarla per nome non può pescare una cartella altrui.
 // ⚠️ Non è la cartella dei backup: quella contiene dump del database in chiaro-gzip, e
 // mescolare le due cose vorrebbe dire che una rotazione sbagliata cancella il forziere.
 //
 // ⚠️ SI CERCA PER NOME E BASTA, anche col padre configurato: fra i risultati si PREFERISCE
 // quello dentro «AppSphere», ma non lo si pretende. Pretendendolo, il giorno in cui il
-// segreto arriva prima dello spostamento della cartella la ricerca non troverebbe niente e
-// nascerebbe un secondo «rooms» vuoto — cioè il forziere sparito dall'app proprio mentre lo
-// si stava riordinando. Il padre decide invece **dove nasce** una cartella nuova.
-async function cartella(token: string): Promise<string> {
+// segreto arriva prima dello spostamento della cartella la ricerca non troverebbe niente.
+// Il padre decide invece **dove nasce** una cartella nuova.
+//
+// ⚠️ LA CREA SOLO `init`, cioè la creazione del forziere, e per nessun altro motivo.
+// Fino al 10 settembre 2026 la creava chiunque non la trovasse — ed è successo: quel
+// giorno una ricerca andata a vuoto ha fatto nascere una SECONDA «rooms» vuota accanto a
+// quella vera, e da lì in poi il forziere rispondeva «quel file non sta nella cartella del
+// forziere» coi documenti tutti al loro posto. Una cartella nuova è un forziere nuovo:
+// non è una cosa che si fa per ripiego.
+//
+// ⚠️ UNA RICERCA FALLITA NON È UNA CARTELLA CHE NON C'È. L'`if (r.ok)` lasciava cadere
+// l'errore e si finiva a creare: un 401, un 500 di Drive o una rete storta diventavano un
+// secondo forziere invece di un messaggio. Ora l'errore vero si alza.
+//
+// ⚠️ FRA PIÙ CARTELLE VINCE LA PIÙ VECCHIA (`orderBy=createdTime`), non la prima che
+// Drive restituisce: l'ordine di quella risposta non è garantito, quindi «la prima» è un
+// sorteggio che si rifà a ogni chiamata — il forziere si apriva o non si apriva a seconda
+// del tiro. Il forziere vero è sempre il primo nato.
+async function cartella(token: string, creaSeManca = false): Promise<string> {
   const q = new URLSearchParams({
     q: `name = '${NOME_CARTELLA}' and mimeType = '${MIME_CARTELLA}' and trashed = false`,
-    fields: 'files(id,name,parents)',
+    fields: 'files(id,name,parents,createdTime)',
+    orderBy: 'createdTime',
     pageSize: '10',
   });
   const r = await fetch(`${DRIVE}/files?${q}`, { headers: { Authorization: `Bearer ${token}` } });
-  if (r.ok) {
-    const d = await r.json();
-    const trovate: Array<{ id: string; parents?: string[] }> = d.files ?? [];
-    const dentro = PADRE ? trovate.find((f) => (f.parents ?? []).includes(PADRE)) : null;
-    if (dentro) return dentro.id;
-    if (trovate.length) return trovate[0].id;
+  if (!r.ok) {
+    throw new Error(`Drive cerca la cartella: HTTP ${r.status} — ${(await r.text()).slice(0, 200)}`);
+  }
+  const d = await r.json();
+  const trovate: Array<{ id: string; parents?: string[] }> = d.files ?? [];
+  if (trovate.length > 1) {
+    console.warn(`⚠️ ${trovate.length} cartelle «${NOME_CARTELLA}» su Drive: uso la più vecchia`);
+  }
+  const dentro = PADRE ? trovate.filter((f) => (f.parents ?? []).includes(PADRE)) : [];
+  if (dentro.length) return dentro[0].id;
+  if (trovate.length) return trovate[0].id;
+
+  if (!creaSeManca) {
+    throw new Error(
+      `la cartella «${NOME_CARTELLA}» non si trova su Drive. Non ne creo una nuova: ` +
+      `sarebbe un forziere vuoto al posto del tuo`,
+    );
   }
   const c = await fetch(`${DRIVE}/files?fields=id`, {
     method: 'POST',
@@ -224,7 +251,9 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const azione = String(body.azione ?? '');
     const token = await accessoDrive();
-    const padre = await cartella(token);
+    // ⚠️ `init` è la SOLA azione che può far nascere la cartella: la chiama il pulsante
+    // che crea il forziere, e nessun altro. Ogni altra azione, se non la trova, lo dice.
+    const padre = await cartella(token, azione === 'init');
 
     // Dove sta il forziere. La pagina se lo scrive in `frz_vault.drive_folder_id`.
     if (azione === 'init') {
