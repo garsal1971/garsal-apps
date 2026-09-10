@@ -5706,10 +5706,23 @@ APK che continuasse a guardarlo non vedrebbe un errore: leggerebbe per sempre la
 4. ⚠️ **prima che `garsal.men` serva davvero il sito, gli APK nuovi non vanno installati**:
    aprirebbero un indirizzo che non risponde.
 
-⚠️ **Cloudflare Pages ha un limite di 25 MiB per file** (da verificare sui suoi doc): due APK ci
-stanno sopra — `GarsalApps` 57,5 MB e `AppSphereNative` 45,5 MB. Se il limite è confermato quei
-due vanno su **R2** (traffico in uscita gratuito) con un sottodominio suo, e `SITO` nelle app
-punta lì.
+⚠️ **Cloudflare Pages ha un limite di 25 MiB per file, ed è CONFERMATO**: il primo deploy si è
+fermato con `Error: Pages only supports files up to 25 MiB in size`. Due APK ci stanno sopra —
+`GarsalApps` 57,5 MB e `AppSphereNative` 45,5 MB — e il file troppo grosso **non fallisce da
+solo: fallisce l'intero deploy**, cioè il sito non esce affatto.
+
+⚠️ **Le APK sono quindi tutte fuori dal sito e vivono su R2**, `apk.garsal.men`. Tutte e non le
+sole due grosse: una regola «le due grosse» aspetterebbe solo il giorno in cui una terza passa i
+25 MiB, di nuovo con l'intero sito che non si pubblica. Le schede `-latest.json` restano invece
+sul sito — sono qualche centinaio di byte, e `_headers` gli dà già il `no-store` che serve perché
+non raccontino la build di ieri.
+
+⚠️ **L'esclusione la fa `scripts/build-sito.sh`**, non un'impostazione della dashboard: su Pages
+il *build command* è `bash scripts/build-sito.sh` e la *build output directory* è `dist`. Lo
+script copia la radice con `tar` — `cp -r` non sa escludere e rsync non è garantito
+sull'immagine di build — e alla fine **elenca le APK che ha lasciato fuori**, col loro peso: una
+regola che toglie file dal sito senza dire quali è una regola che un giorno toglie quello
+sbagliato.
 
 **`_headers` e `_redirects`** sono il gemello di `netlify.toml`: Cloudflare quel file non lo
 legge. ⚠️ Finché i due host convivono **vanno cambiati insieme**, o la stessa pagina viene
