@@ -29,7 +29,7 @@ import java.util.Locale
  */
 object Rilascio {
 
-    private const val SITO = "https://garsal.netlify.app"
+    private const val SITO = "https://garsal.men"
     private const val SCHEDA = "$SITO/releases/GarsalApps-latest.json"
 
     /** Il `?v=` non serve al server: impedisce al browser di riproporre il

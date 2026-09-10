@@ -5644,6 +5644,7 @@ Quando si accede da `localhost`, le app rilevano automaticamente `_IS_DEV = true
 Ogni file HTML contiene un blocco `_IS_DEV` che switcha le credenziali Supabase in base all'hostname:
 ```js
 const _IS_DEV = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)
+             || window.location.hostname.endsWith('.pages.dev')
              || (window.location.hostname.endsWith('.netlify.app')
                 && window.location.hostname.startsWith('dev--'));
 const SUPABASE_URL = _IS_DEV ? 'https://DEV_SUPABASE_PROJECT_REF.supabase.co' : 'https://jajlmmdsjlvzgcxiiypk.supabase.co';
@@ -5667,6 +5668,68 @@ const SUPABASE_KEY = _IS_DEV ? 'DEV_SUPABASE_ANON_KEY' : '<PROD_KEY>';
 dev--<nome-branch>--<sitename>.netlify.app
 ```
 Usa automaticamente Supabase dev (rilevamento hostname).
+
+### ⚠️ Il trasloco su Cloudflare e il dominio `garsal.men`
+
+Netlify è passato ai **crediti**: il piano Free dà **300 crediti al mese con tetto rigido**, e un
+**deploy di produzione ne costa 15** — cioè **20 pubblicazioni al mese**. Questa repo ne fa ~65
+(38 merge su master + 27 commit di APK, misurati su 30 giorni), quindi la dotazione finisce in
+poco più di una settimana e da lì il sito resta **congelato all'ultima build riuscita** — le
+pagine restano online, ma quello che si mette su master non esce più. È successo il 10 settembre
+2026 con la v1.6.0 del Forziere.
+
+⚠️ **Quel che costa è la pubblicazione su master, non il lavoro**: deploy preview, branch deploy
+e deploy falliti **non consumano crediti**. Banda e richieste sono briciole (1,4 e 0,1 crediti
+contro i 300 dei deploy): il peso degli APK **non c'entra**, i loro *commit* sì.
+
+**Il vincolo che decideva tutto non era Netlify: era il dominio.** `garsal.netlify.app` stava
+scritto dentro ogni APK — l'indirizzo che la WebView apre, il controllo aggiornamenti, il
+callback OAuth e gli App Links del manifest — quindi cambiare host voleva dire lasciare ogni
+telefono già installato su un indirizzo che non è più il sito. Con un dominio proprio
+(**`garsal.men`**, ~12 €/anno contro i ~108 $/anno del piano Personal) l'hosting torna una cosa
+che si cambia senza toccare le app.
+
+⚠️ **Il modo in cui si romperebbe è il peggiore**: il sito Netlify **resta online** anche a
+crediti finiti — è quello che i crediti operativi fanno — congelato alla versione vecchia. Un
+APK che continuasse a guardarlo non vedrebbe un errore: leggerebbe per sempre la vecchia scheda
+`-latest.json` e direbbe **«sei aggiornato»**.
+
+**L'ordine dei passaggi, e cosa NON sta nella repo:**
+
+1. il dominio su Cloudflare, e il sito su **Pages** collegato a questa repo;
+2. ⚠️ **Supabase → Auth → Redirect URLs**: aggiungere `garsal.men` **prima**, e togliere il
+   vecchio **dopo** che tutti i telefoni sono passati — al contrario, gli APK ancora vecchi non
+   riescono più a fare il login;
+3. gli APK nuovi si installano **a mano** (si scaricano dalla repo, dove ogni build li committa):
+   ⚠️ **non serve nessun ultimo deploy da Netlify**, che a crediti finiti non si potrebbe
+   nemmeno fare;
+4. ⚠️ **prima che `garsal.men` serva davvero il sito, gli APK nuovi non vanno installati**:
+   aprirebbero un indirizzo che non risponde.
+
+⚠️ **Cloudflare Pages ha un limite di 25 MiB per file** (da verificare sui suoi doc): due APK ci
+stanno sopra — `GarsalApps` 57,5 MB e `AppSphereNative` 45,5 MB. Se il limite è confermato quei
+due vanno su **R2** (traffico in uscita gratuito) con un sottodominio suo, e `SITO` nelle app
+punta lì.
+
+**`_headers` e `_redirects`** sono il gemello di `netlify.toml`: Cloudflare quel file non lo
+legge. ⚠️ Finché i due host convivono **vanno cambiati insieme**, o la stessa pagina viene
+servita in due modi. Una differenza voluta: il `no-store` è su `/*` e non su `/*.html`, perché
+che Cloudflare accetti un jolly a metà percorso non è verificato — e sbagliare da quella parte
+vuol dire pagine in cache, cioè la WebView ferma su una versione vecchia col login rotto. Con
+`/*` il caso peggiore è qualcosa che non va in cache: si perde velocità, non si rompe niente.
+
+⚠️ **Il riconoscimento dell'ambiente ora comprende `.pages.dev`**, ed è la modifica più
+insidiosa di tutto il trasloco: le anteprime di Pages si chiamano `<branch>.<progetto>.pages.dev`
+e con la sola regola `dev--*.netlify.app` sarebbero cadute nel ramo **produzione** — cioè si
+sarebbe provato scrivendo sui dati veri, senza che niente lo dicesse. Vale in **16 pagine**;
+`finanza.html` è l'eccezione e non è una dimenticanza — lì `_IS_DEV` è **solo un'etichetta** (il
+badge DEV/PROD) e le credenziali sono fisse sulla produzione.
+
+⚠️ **«Spese in giro» è l'app che dipende meno dal sito**: non ne carica nessuna pagina — parla
+solo con le RPC `vg_*` e con la sua Edge Function — e del sito usa il solo controllo
+aggiornamenti. Un trasloco non la ferma. Ma il **token del viaggio sta solo nelle preferenze di
+quel telefono** e non c'è nessun account da cui recuperarlo: **a viaggio in corso su quel
+telefono non si installa niente**.
 
 ### Deployment
 Netlify auto-deploys on push to `master`. Configuration in `netlify.toml`:

@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
 
-    private val APP_URL             = "https://garsal.netlify.app/"
+    private val APP_URL             = "https://garsal.men/"
     private val OAUTH_CALLBACK_SCHEME = "garsalapps"
     private val OAUTH_CALLBACK_HOST   = "oauth"
     private val PREFS_OAUTH           = "oauth_pending"
@@ -111,7 +111,7 @@ class MainActivity : AppCompatActivity() {
     // stesso giro di `getPendingImageBase64` + `clearPendingImage`.
     private var forziereParole: String = ""
     private var openMemoAfterAuth: Boolean = false  // apri memo.html invece del launcher dopo biometrica
-    private val MEMO_URL = "https://garsal.netlify.app/memo.html"
+    private val MEMO_URL = "https://garsal.men/memo.html"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -500,7 +500,7 @@ class MainActivity : AppCompatActivity() {
                                 .replace(/maximum-scale\s*=\s*[0-9.]+/gi,'maximum-scale=5.0'));}
                         })();
                     """.trimIndent(), null)
-                    if (url?.contains("garsal.netlify.app") != true) return
+                    if (url?.contains("garsal.men") != true) return
 
                     // Inietta testo OCR in memo.html se disponibile
                     val ocrText = pendingOcrText

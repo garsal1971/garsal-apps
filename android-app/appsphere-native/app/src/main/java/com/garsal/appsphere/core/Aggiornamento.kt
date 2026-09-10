@@ -57,7 +57,7 @@ fun apriNelBrowser(context: Context, url: String): Boolean = try {
  */
 object Rilascio {
 
-    private const val SITO = "https://garsal.netlify.app"
+    private const val SITO = "https://garsal.men"
     private const val SCHEDA = "$SITO/releases/AppSphereNative-latest.json"
 
     fun apk(versione: String): String = "$SITO/releases/AppSphereNative-latest.apk?v=$versione"

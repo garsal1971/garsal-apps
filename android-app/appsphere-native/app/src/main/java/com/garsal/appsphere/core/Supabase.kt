@@ -46,7 +46,7 @@ object Supabase {
      * `garsalapps://oauth`), con la sua pagina perché lo schema è diverso.
      * **Va aggiunta fra i Redirect URLs di Supabase** esattamente così.
      */
-    const val OAUTH_REDIRECT = "https://garsal.netlify.app/oauth-callback-native.html"
+    const val OAUTH_REDIRECT = "https://garsal.men/oauth-callback-native.html"
 
     /** URL del login Google, quello che si apre nel browser. */
     fun oauthUrl(): String =
