@@ -4783,6 +4783,27 @@ l'ancora, con `#diario` come ripiego.
   quando una riscrittura non passa la pagina lo dice con un avviso e un pulsante. Dettagli
   (compresi `perNome`, `rmdir` su cartella non vuota e il controllo a un livello solo) nello
   schema `frz_*`.
+- **🧹 Svuota lo scomparto** (v1.6.0, il terzo pulsante nel ✎ dello scomparto): cancella per
+  sempre i file che contiene — Drive, righe e miniature — e **lo scomparto resta**, vuoto, con
+  la sua cartella su Drive. ⚠️ È l'esatto contrario del 🗑 **Elimina** che gli sta accanto, dove
+  sparisce lo scomparto e i file si salvano in «Senza scomparto»: due esiti opposti, quindi due
+  pulsanti: uno solo che chiedesse «e i file?» metterebbe la risposta distruttiva a un clic da
+  quella prudente. ⚠️ Il 🧹 **compare solo se dentro c'è qualcosa**, e porta il numero scritto
+  sopra: a zero file non c'è niente da svuotare, e quel che si sta per perdere va letto prima di
+  premere e non nella finestra dopo.
+  ⚠️ **Costa CANCELLA _e_ la passphrase**, come la 💣 zona rossa e per la stessa ragione: il
+  forziere è già aperto, e chi trova la scrivania incustodita non deve poter buttare via trenta
+  documenti scrivendo sette lettere. Stessa verifica (`passphraseGiusta`, aprendo davvero la
+  scorciatoia) e stessa via d'uscita delle 24 parole per chi la passphrase l'ha scordata.
+  ⚠️ **La finestra dice cosa NON succede** — lo scomparto resta, gli altri non si toccano, il
+  forziere è quello di prima — o «svuota» ed «elimina» si leggono come lo stesso pulsante e si
+  preme Annulla su tutt'e due. E **l'export si offre lì dentro**, perché di quei file è l'unica
+  copia che sopravvive al pulsante: da qui l'elenco è già filtrato su quello scomparto.
+  ⚠️ **Un file per volta, prima Drive e poi la riga**, come in `elimina()`: una rete che cade
+  lascia lo scomparto svuotato a metà — quel che è andato è andato, l'elenco a schermo è già
+  quel che resta, e ripremendo si riprende invece di ricominciare. Alla fine si riscrive il solo
+  `contenuto.gpg` di quella cartella (vuoto, che è quel che adesso è vero): `scomparti.gpg` non
+  si tocca, perché nessuno scomparto è cambiato.
 - **📁 Riordina il Drive** (Impostazioni), una-tantum: crea le cartelle che mancano, porta ogni
   file dentro quella del suo scomparto e riscrive tutti gli indici. Serve ai forzieri nati prima
   della v1.3.0 e come rimedio a un'operazione fallita a metà. ⚠️ È un **pulsante** e non una
