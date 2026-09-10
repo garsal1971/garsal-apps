@@ -36,7 +36,7 @@ import java.util.Locale
  */
 object Rilascio {
 
-    private const val SITO = "https://garsal.netlify.app"
+    private const val SITO = "https://garsal.men"
 
     /** Il `?v=` non serve al server: impedisce al browser di riproporre il
      *  pacchetto già scaricato quando l'indirizzo è identico. */

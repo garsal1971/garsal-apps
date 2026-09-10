@@ -36,7 +36,7 @@ import java.net.URL
  */
 object Rilascio {
 
-    private const val SITO = "https://garsal.netlify.app"
+    private const val SITO = "https://garsal.men"
     private const val BASE = "SpeseInGiro-latest"
 
     /** Il `?v=` non serve al server: impedisce al browser di riproporre il

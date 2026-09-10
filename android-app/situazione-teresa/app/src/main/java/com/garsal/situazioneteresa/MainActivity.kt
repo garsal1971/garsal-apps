@@ -15,7 +15,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
 
     companion object {
-        private const val APP_URL = "https://garsal.netlify.app/situazione-teresa.html"
+        private const val APP_URL = "https://garsal.men/situazione-teresa.html"
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(CredentialsBridge(this), "AndroidCreds")
 
         // Se l'app è stata aperta dal link "magic link" ricevuto via email
-        // (intent-filter VIEW su garsal.netlify.app/situazione-teresa.html),
+        // (intent-filter VIEW su garsal.men/situazione-teresa.html),
         // carica quell'URL così com'è: contiene #access_token=... che la
         // pagina legge per salvare la sessione nel suo localStorage.
         // Altrimenti carica normalmente la pagina (che userà la sessione
