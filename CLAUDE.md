@@ -5717,6 +5717,39 @@ sole due grosse: una regola «le due grosse» aspetterebbe solo il giorno in cui
 sul sito — sono qualche centinaio di byte, e `_headers` gli dà già il `no-store` che serve perché
 non raccontino la build di ieri.
 
+⚠️ **Due indirizzi, e la divisione è precisa**: la **scheda** dice quale versione c'è e sta sul
+sito (`garsal.men/releases/<Nome>-latest.json`), il **pacchetto** si scarica da R2
+(`apk.garsal.men/<Nome>-latest.apk`). Nei cinque `Aggiornamento.kt` sono due costanti accanto,
+`SITO` e `APK`; in `comandi.html` la scheda si legge con `fetch('/releases/…')` e il pulsante
+punta a `apk.garsal.men`. Sul bucket i nomi sono **piatti**, senza cartelle: gli APK già
+installati chiedono quell'indirizzo lì, e un prefisso sarebbe un altro indirizzo.
+
+⚠️ **Le carica `scripts/apk-su-r2.sh`, chiamato dagli otto workflow di build**, e il passo sta
+**prima** della pubblicazione su master: il commit pubblica la scheda che ANNUNCIA quella
+versione, e annunciarla prima che il pacchetto sia scaricabile vuol dire un aggiornamento che si
+offre e poi dà 404. È lo stesso ordine di «prima Drive, poi la riga» del Forziere. In tre
+workflow (Smart Blocker, SOS, Spese in giro) la copia in `/tmp` stava *dentro* il passo di
+pubblicazione ed è stata spostata prima, o il caricamento non troverebbe nessun file.
+
+⚠️ **`--remote` in `wrangler r2 object put` non è facoltativo**: senza, wrangler scrive nella
+copia locale simulata e il comando **riesce** senza che sul bucket vero arrivi niente — cioè un
+caricamento che non si vede fallire.
+
+⚠️ **`.github/workflows/apk-su-r2.yml` è a mano e fa due mestieri**: la **semina** — il giorno
+del trasloco il bucket è vuoto e le APK già in archivio nessuno le ricompila, quindi senza un
+giro esplicito `apk.garsal.men` risponderebbe 404 su tutto — e il **rimedio**, quando il
+caricamento dentro una build fallisce e la scheda sul sito annuncia una versione che non si
+scarica. Non gira su push: rifare tutte le APK a ogni commit sarebbe ~190 MB per niente.
+
+⚠️ **I due segreti sono `CLOUDFLARE_API_TOKEN` (permesso *Workers R2 Storage: Edit*) e
+`CLOUDFLARE_ACCOUNT_ID`**, su GitHub. Senza, il passo fallisce e il run è rosso — che è quel che
+deve fare: un caricamento saltato in silenzio è una scheda che annuncia un 404.
+
+⚠️ **`finanza.html` linka `releases/GarsalFinanza-latest.apk`, che non esiste e non è mai
+esistito**: nessun workflow lo produce e non sta in `releases/`. Era già un 404 prima del
+trasloco ed è rimasto tale — non è stato puntato su R2 di proposito, perché lì quel file non c'è
+e cambiargli host direbbe che c'è.
+
 ⚠️ **L'esclusione la fa `scripts/build-sito.sh`**, non un'impostazione della dashboard: su Pages
 il *build command* è `bash scripts/build-sito.sh` e la *build output directory* è `dist`. Lo
 script copia la radice con `tar` — `cp -r` non sa escludere e rsync non è garantito

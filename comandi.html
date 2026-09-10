@@ -270,7 +270,7 @@ body {
         <div class="apk-title">AppSfera Web</div>
         <div class="apk-sub" id="gaSub">Build aggiornata automaticamente</div>
       </div>
-      <a class="apk-btn" id="gaBtn" href="/releases/GarsalApps-latest.apk" download="AppSferaWeb.apk">
+      <a class="apk-btn" id="gaBtn" href="https://apk.garsal.men/GarsalApps-latest.apk" download="AppSferaWeb.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -281,7 +281,7 @@ body {
         <div class="apk-title">AppSphere nativa</div>
         <div class="apk-sub" id="anSub">Kotlin/Compose · si affianca a AppSfera Web</div>
       </div>
-      <a class="apk-btn-native" id="anBtn" href="/releases/AppSphereNative-latest.apk" download="AppSphereNative.apk">
+      <a class="apk-btn-native" id="anBtn" href="https://apk.garsal.men/AppSphereNative-latest.apk" download="AppSphereNative.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -292,7 +292,7 @@ body {
         <div class="apk-title">Smart Blocker</div>
         <div class="apk-sub" id="sbSub">Blocco schedulato 08:00 · 22:00</div>
       </div>
-      <a class="apk-btn-blocker" id="sbBtn" href="/releases/SmartBlocker-latest.apk" download="SmartBlocker.apk">
+      <a class="apk-btn-blocker" id="sbBtn" href="https://apk.garsal.men/SmartBlocker-latest.apk" download="SmartBlocker.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -303,7 +303,7 @@ body {
         <div class="apk-title">Revolut Teresa</div>
         <div class="apk-sub" id="stSub">Solo pagamenti con la carta di Teresa</div>
       </div>
-      <a class="apk-btn-blocker" id="stBtn" href="/releases/SmartBlockerTeresa-latest.apk" download="RevolutTeresa.apk">
+      <a class="apk-btn-blocker" id="stBtn" href="https://apk.garsal.men/SmartBlockerTeresa-latest.apk" download="RevolutTeresa.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -314,7 +314,7 @@ body {
         <div class="apk-title">SOS</div>
         <div class="apk-sub" id="soSub">Bottone rosso · countdown che blocca il telefono</div>
       </div>
-      <a class="apk-btn-sos" id="soBtn" href="/releases/Sos-latest.apk" download="Sos.apk">
+      <a class="apk-btn-sos" id="soBtn" href="https://apk.garsal.men/Sos-latest.apk" download="Sos.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -325,7 +325,7 @@ body {
         <div class="apk-title">Spese in giro</div>
         <div class="apk-sub" id="sgSub">Le spese di un viaggio in bici, divise fra due</div>
       </div>
-      <a class="apk-btn-spese" id="sgBtn" href="/releases/SpeseInGiro-latest.apk" download="SpeseInGiro.apk">
+      <a class="apk-btn-spese" id="sgBtn" href="https://apk.garsal.men/SpeseInGiro-latest.apk" download="SpeseInGiro.apk">
         ⬇ Scarica APK
       </a>
     </div>
@@ -512,7 +512,10 @@ async function mostraVersione(idSub, idBtn, nomeFile, coda) {
                d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
     sub.innerHTML = '<b>v' + b.version + '</b> (build ' + b.versionCode + ')' + data +
                     ' · ' + mb + ' MB<br>' + coda;
-    btn.href = '/releases/' + nomeFile + '.apk?v=' + encodeURIComponent(b.version);
+    // ⚠️ La scheda sta sul sito, il pacchetto su R2: Cloudflare Pages rifiuta
+    // i file oltre i 25 MiB e il file troppo grosso non fallisce da solo — fallisce
+    // l'intero deploy — quindi le APK sono tutte fuori dal sito.
+    btn.href = 'https://apk.garsal.men/' + nomeFile + '.apk?v=' + encodeURIComponent(b.version);
     btn.title = 'SHA-256: ' + b.sha256;
   } catch (e) {
     // Meglio dirlo che lasciar credere che la versione mostrata sia quella

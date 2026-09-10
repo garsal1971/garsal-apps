@@ -37,11 +37,17 @@ import java.net.URL
 object Rilascio {
 
     private const val SITO = "https://garsal.men"
+    // ⚠️ DUE indirizzi, e non è un doppione: la **scheda** sta sul sito, il
+    // **pacchetto** su R2. Cloudflare Pages rifiuta i file oltre i 25 MiB e il
+    // file troppo grosso non fallisce da solo — fallisce l'intero deploy — così
+    // le APK sono tutte fuori dal sito. La scheda invece è qualche centinaio di
+    // byte e resta dov'era, col suo `no-store`.
+    private const val APK = "https://apk.garsal.men"
     private const val BASE = "SpeseInGiro-latest"
 
     /** Il `?v=` non serve al server: impedisce al browser di riproporre il
      *  pacchetto già scaricato quando l'indirizzo è identico. */
-    fun apk(versione: String): String = "$SITO/releases/$BASE.apk?v=$versione"
+    fun apk(versione: String): String = "$APK/$BASE.apk?v=$versione"
 
     data class Scheda(val version: String, val versionCode: Int, val bytes: Long, val sha256: String)
 
