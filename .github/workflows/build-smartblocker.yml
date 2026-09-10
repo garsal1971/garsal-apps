@@ -76,6 +76,24 @@ jobs:
             android-app/smartblocker/build/outputs/apk/salvatore/release/smartblocker-salvatore-release.apk
             android-app/smartblocker/build/outputs/apk/teresa/release/smartblocker-teresa-release.apk
           retention-days: 30
+      # ⚠️ La copia in /tmp stava dentro il passo di pubblicazione: da qui
+      # la legge anche il caricamento su R2, che viene prima di lui.
+      - name: Salva l'APK in /tmp
+        run: |
+          cp android-app/smartblocker/build/outputs/apk/salvatore/release/smartblocker-salvatore-release.apk /tmp/SmartBlocker-latest.apk
+          cp android-app/smartblocker/build/outputs/apk/teresa/release/smartblocker-teresa-release.apk     /tmp/SmartBlockerTeresa-latest.apk
+
+      # ⚠️ Prima su R2, poi il commit — è lo stesso ordine di «prima Drive,
+      # poi la riga» del Forziere: il commit pubblica la scheda
+      # `-latest.json`, che ANNUNCIA questa versione, e annunciarla prima che
+      # il pacchetto sia scaricabile vuol dire un aggiornamento che si offre
+      # e poi dà 404. Le APK non stanno più sul sito: Cloudflare Pages
+      # rifiuta i file oltre i 25 MiB (vedi `scripts/build-sito.sh`).
+      - name: Carica l'APK su R2 (apk.garsal.men)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/apk-su-r2.sh /tmp/SmartBlocker-latest.apk /tmp/SmartBlockerTeresa-latest.apk
 
       - name: Pubblica APK su master (scaricabile via Netlify)
         run: |
@@ -84,8 +102,6 @@ jobs:
 
           VERSION=$(grep versionName android-app/smartblocker/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
           VERSION_CODE=$(grep versionCode android-app/smartblocker/build.gradle | grep -o '[0-9]\+' | head -1)
-          cp android-app/smartblocker/build/outputs/apk/salvatore/release/smartblocker-salvatore-release.apk /tmp/SmartBlocker-latest.apk
-          cp android-app/smartblocker/build/outputs/apk/teresa/release/smartblocker-teresa-release.apk     /tmp/SmartBlockerTeresa-latest.apk
 
           # ── La scheda della build, una per APK ─────────────────────────────
           # Il nome del pacchetto è fisso (`-latest.apk`), quindi da fuori una

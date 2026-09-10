@@ -58,9 +58,15 @@ fun apriNelBrowser(context: Context, url: String): Boolean = try {
 object Rilascio {
 
     private const val SITO = "https://garsal.men"
+    // ⚠️ DUE indirizzi, e non è un doppione: la **scheda** sta sul sito, il
+    // **pacchetto** su R2. Cloudflare Pages rifiuta i file oltre i 25 MiB e il
+    // file troppo grosso non fallisce da solo — fallisce l'intero deploy — così
+    // le APK sono tutte fuori dal sito. La scheda invece è qualche centinaio di
+    // byte e resta dov'era, col suo `no-store`.
+    private const val APK = "https://apk.garsal.men"
     private const val SCHEDA = "$SITO/releases/AppSphereNative-latest.json"
 
-    fun apk(versione: String): String = "$SITO/releases/AppSphereNative-latest.apk?v=$versione"
+    fun apk(versione: String): String = "$APK/AppSphereNative-latest.apk?v=$versione"
 
     private val json = Json { ignoreUnknownKeys = true }
 

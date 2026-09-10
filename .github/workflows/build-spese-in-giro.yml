@@ -72,6 +72,23 @@ jobs:
           name: SpeseInGiro-release
           path: android-app/spese-in-giro/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
+      # ⚠️ La copia in /tmp stava dentro il passo di pubblicazione: da qui
+      # la legge anche il caricamento su R2, che viene prima di lui.
+      - name: Salva l'APK in /tmp
+        run: |
+          cp android-app/spese-in-giro/app/build/outputs/apk/release/app-release.apk /tmp/SpeseInGiro-latest.apk
+
+      # ⚠️ Prima su R2, poi il commit — è lo stesso ordine di «prima Drive,
+      # poi la riga» del Forziere: il commit pubblica la scheda
+      # `-latest.json`, che ANNUNCIA questa versione, e annunciarla prima che
+      # il pacchetto sia scaricabile vuol dire un aggiornamento che si offre
+      # e poi dà 404. Le APK non stanno più sul sito: Cloudflare Pages
+      # rifiuta i file oltre i 25 MiB (vedi `scripts/build-sito.sh`).
+      - name: Carica l'APK su R2 (apk.garsal.men)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/apk-su-r2.sh /tmp/SpeseInGiro-latest.apk
 
       # ⚠️ Il push su master va rifatto se master si muove sotto i piedi: dallo
       # stesso commit possono partire più build Android, e la prima che arriva
@@ -84,7 +101,6 @@ jobs:
 
           VERSION=$(grep versionName android-app/spese-in-giro/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
           VERSION_CODE=$(grep versionCode android-app/spese-in-giro/app/build.gradle | grep -o '[0-9]\+' | head -1)
-          cp android-app/spese-in-giro/app/build/outputs/apk/release/app-release.apk /tmp/SpeseInGiro-latest.apk
 
           # ── La scheda della build ─────────────────────────────────────────
           # Il nome del pacchetto è fisso (`SpeseInGiro-latest.apk`), quindi da fuori
