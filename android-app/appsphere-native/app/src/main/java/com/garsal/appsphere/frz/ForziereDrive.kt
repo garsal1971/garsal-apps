@@ -1,6 +1,8 @@
 package com.garsal.appsphere.frz
 
+import android.util.Log
 import com.garsal.appsphere.BuildConfig
+import com.garsal.appsphere.core.Jwt
 import com.garsal.appsphere.core.Supabase
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.Dispatchers
@@ -44,11 +46,54 @@ object ForziereDrive {
      */
     private const val RIPIEGO_MAX = 8L * 1024 * 1024
 
+    private const val TAG = "ForziereDrive"
+
+    /**
+     * ⚠️ **Questo messaggio non nomina il Drive**, ed è il punto: il 10 settembre
+     * 2026 un token scaduto si è letto come ❌ *«Drive: … serve un login valido»*
+     * e ha mandato a cercare il guasto dalla parte sbagliata. Il Drive non
+     * c'entra: non ci si è nemmeno arrivati.
+     */
+    private const val SESSIONE_SCADUTA =
+        "la sessione è scaduta: rientra in AppSphere e riapri il Forziere"
+
     private fun indirizzo() = BuildConfig.SUPABASE_URL + "/functions/v1/forziere-drive"
 
-    private fun token(): String =
-        Supabase.client().auth.currentSessionOrNull()?.accessToken
-            ?: throw IllegalStateException("sessione scaduta: rientra in AppSphere")
+    /**
+     * Il token da mandare, **vivo**.
+     *
+     * ⚠️ Fino alla v1.0.77 qui c'era `currentSessionOrNull()?.accessToken` e
+     * basta: si guardava se un token *c'era*, non se valeva ancora qualcosa. Un
+     * access token di Supabase dura **un'ora**, questo è l'unico posto dell'app
+     * che lo legge a mano — tutto il resto passa da supabase-kt, che il rinnovo
+     * se lo fa da sé — e con l'app rimasta aperta si finiva a mandare un token
+     * morto. La Edge Function rispondeva 401, e l'app scriveva il JSON grezzo.
+     *
+     * ⚠️ **Dopo un rinnovo il token si usa e non si ricontrolla**: `Jwt.vivo`
+     * guarda l'orologio del telefono, e su un telefono con l'ora sbagliata un
+     * secondo controllo direbbe «scaduto» anche su un token appena nato — cioè
+     * il Forziere chiuso per un orologio storto. Al più si rinnova una volta di
+     * troppo, che costa un viaggio di rete; a decidere se quel token vale resta
+     * il server, che è l'unico che lo sa.
+     */
+    private suspend fun token(): String {
+        val corrente = Supabase.client().auth.currentSessionOrNull()?.accessToken
+        if (corrente != null && Jwt.vivo(corrente)) return corrente
+        return rinnova() ?: throw IllegalStateException(SESSIONE_SCADUTA)
+    }
+
+    /** Rinnova la sessione e restituisce il token nuovo, o `null` se non si può. */
+    private suspend fun rinnova(): String? {
+        val auth = Supabase.client().auth
+        if (auth.currentSessionOrNull() == null) return null
+        try {
+            auth.refreshCurrentSession()
+        } catch (e: Exception) {
+            Log.w(TAG, "rinnovo della sessione fallito: ${e.message}")
+            return null
+        }
+        return auth.currentSessionOrNull()?.accessToken
+    }
 
     private fun apri(url: String, metodo: String): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
@@ -64,15 +109,52 @@ object ForziereDrive {
             buildJsonObject { put("azione", azione); dentro() }
         ).toByteArray(Charsets.UTF_8)
 
+    private fun spedisci(corpo: ByteArray, token: String): HttpURLConnection {
+        val c = apri(indirizzo(), "POST")
+        c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("Authorization", "Bearer " + token)
+        c.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
+        c.outputStream.use { it.write(corpo) }
+        return c
+    }
+
+    /**
+     * La POST alla funzione, con **un solo** nuovo tentativo sul 401.
+     *
+     * ⚠️ Il 401 arriva da due posti diversi e vale la stessa cosa: la funzione
+     * quando `chiChiama()` non riconosce l'utente, e il **cancello** di Supabase
+     * quando rifiuta il JWT prima ancora che la funzione parta
+     * (`UNAUTHORIZED_ASYMMETRIC_JWT`). In tutt'e due i casi il token non vale
+     * più — e il secondo capita anche con un `exp` che a noi sembra buonissimo,
+     * per esempio dopo un cambio delle chiavi di firma del progetto: `token()`
+     * da solo non se ne accorgerebbe mai. Un rinnovo dà un token firmato con la
+     * chiave di adesso, quindi si riprova.
+     *
+     * ⚠️ **Una volta e non in ciclo**: se il secondo giro torna 401 il problema
+     * non è il token, e riprovare vorrebbe dire tenere il Forziere fermo su una
+     * rotella invece di dire cos'è successo. Il corpo si rimanda tale e quale —
+     * è un `ByteArray` che abbiamo già in mano — e la prima connessione si
+     * chiude prima di aprire la seconda.
+     */
+    private suspend fun post(corpo: ByteArray): HttpURLConnection {
+        val primo = spedisci(corpo, token())
+        if (primo.responseCode != 401) return primo
+        primo.disconnect()
+        Log.w(TAG, "401 dalla funzione: rinnovo la sessione e riprovo una volta")
+        val fresco = rinnova() ?: throw IllegalStateException(SESSIONE_SCADUTA)
+        val secondo = spedisci(corpo, fresco)
+        if (secondo.responseCode == 401) {
+            secondo.disconnect()
+            throw IllegalStateException(SESSIONE_SCADUTA)
+        }
+        return secondo
+    }
+
     /** Una chiamata che risponde JSON. Solleva col messaggio della funzione. */
     suspend fun chiama(azione: String, dentro: JsonObjectBuilder.() -> Unit = {}): JsonObject =
         withContext(Dispatchers.IO) {
-            val c = apri(indirizzo(), "POST")
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json")
-            c.setRequestProperty("Authorization", "Bearer " + token())
-            c.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
-            c.outputStream.use { it.write(corpoDi(azione, dentro)) }
+            val c = post(corpoDi(azione, dentro))
             val codice = c.responseCode
             val risposta = (if (codice in 200..299) c.inputStream else c.errorStream)
                 ?.bufferedReader()?.use { it.readText() } ?: ""
@@ -91,20 +173,24 @@ object ForziereDrive {
      * un telefono non stanno nemmeno tutti in memoria qui.
      */
     suspend fun scarica(id: String, dest: OutputStream) = withContext(Dispatchers.IO) {
-        val c = apri(indirizzo(), "POST")
-        c.doOutput = true
-        c.setRequestProperty("Content-Type", "application/json")
-        c.setRequestProperty("Authorization", "Bearer " + token())
-        c.setRequestProperty("apikey", BuildConfig.SUPABASE_ANON_KEY)
-        c.outputStream.use { it.write(corpoDi("get") { put("id", id) }) }
+        val c = post(corpoDi("get") { put("id", id) })
         if (c.responseCode !in 200..299) {
-            val e = c.errorStream?.bufferedReader()?.use { it.readText() }?.take(200) ?: ""
+            val e = c.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
             c.disconnect()
-            throw IllegalStateException("Drive: $e")
+            throw IllegalStateException(motivo(e) ?: "Drive: " + e.take(200))
         }
         c.inputStream.use { it.copyTo(dest, 1 shl 16) }
         c.disconnect()
     }
+
+    /**
+     * ⚠️ **Il prefisso «Drive: » è nostro, non di Google**, e appiccicato a un
+     * errore che il Drive non ha mai visto manda a cercare il guasto dalla parte
+     * sbagliata — è successo il 10 settembre 2026. Quando la risposta porta il
+     * suo `error`, si scrive quello e basta.
+     */
+    private fun motivo(risposta: String): String? =
+        runCatching { testo(json.parseToJsonElement(risposta) as JsonObject, "error") }.getOrNull()
 
     /** Comodità: un oggetto piccolo (gli indici, `indice.gpg`) tutto in memoria. */
     suspend fun scaricaBytes(id: String): ByteArray {
