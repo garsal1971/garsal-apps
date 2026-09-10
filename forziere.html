@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.6.1</title>
+<title>🔐 Forziere v1.6.2</title>
 <!-- ⚠️ QUESTA PAGINA NON CARICA NIENTE DA TERZI, e non è pignoleria: mentre è aperta
      tiene in memoria le 24 parole, quindi QUALUNQUE script che gira qui dentro può
      leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
@@ -311,8 +311,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.6.1';
-var BUILD_TIME  = '2026-09-10T16:00:00Z';
+var APP_VERSION = 'v1.6.2';
+var BUILD_TIME  = '2026-09-10T19:45:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -421,6 +421,22 @@ async function esegui(q){
   }
 }
 
+// ⚠️ Un token scaduto NON è un token. Un access token di Supabase dura un'ora,
+// `sb_token` in localStorage no: senza questo controllo la pagina si apriva come se la
+// sessione ci fosse, e a scoprirlo era la prima chiamata — col messaggio del gateway
+// (`{"code":"UNAUTHORIZED_ASYMMETRIC_JWT","message":"Invalid JWT"}`) scritto in faccia
+// al posto della richiesta di rifare il login. È successo il 10 settembre 2026.
+// ⚠️ Il margine di 30 secondi non è prudenza generica: senza, si può partire con un
+// token che scade nel mezzo dello sblocco, cioè il caso peggiore — le 24 parole già
+// scritte e la chiamata che le usa che fallisce.
+// ⚠️ Un token illeggibile o senza `exp` vale scaduto: non ci si fida di ciò che non si
+// riesce a leggere.
+function tokenVivo(t){
+  var p = decodeJWT(t);
+  if (!p || !p.exp) return false;
+  return p.exp * 1000 > Date.now() + 30000;
+}
+
 function initWithToken(token){
   if (sbPronto) return;
   sbPronto = true;
@@ -465,6 +481,11 @@ _authChannel.onmessage = function(e){
     // genere di passo che una volta ci si dimentica.
     localStorage.setItem('sb_token', e.data.sbToken);
     sbAccessToken = e.data.sbToken;
+    // ⚠️ Se la pagina è ferma sulla richiesta di login — token trovato scaduto
+    // all'apertura, o sessione caduta mentre la si usava — il token nuovo la fa
+    // ripartire invece di restare solo scritto: senza, l'overlay resterebbe lì con la
+    // sessione già buona sotto, e l'unico rimedio sarebbe ricaricare a mano.
+    if (!sbPronto) initWithToken(e.data.sbToken);
   }
 };
 
@@ -635,6 +656,19 @@ async function drive(azione, corpo){
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+sbAccessToken, 'apikey':SUPABASE_KEY },
     body: JSON.stringify(Object.assign({ azione: azione }, corpo || {}))
   });
+  // ⚠️ UNA SESSIONE SCADUTA SI RICONOSCE QUI, e non si legge come un guasto del Drive.
+  // Il gateway di Supabase risponde **prima** che la funzione parta, quindi quello che
+  // torna non parla di Google affatto — ma il prefisso «Drive: » qui sotto lo faceva
+  // sembrare tale, e ci si metteva a cercare il guasto dalla parte sbagliata.
+  // `handleAuthError` c'era già e chiude il forziere riportando al login: la usavano le
+  // sole chiamate al database, e la Edge Function le passava accanto.
+  if (r.status === 401 || r.status === 403){
+    var errAuth = await r.text();
+    if (handleAuthError({ status: r.status, message: errAuth })) {
+      throw new Error('la sessione è scaduta: rientra da AppSphere');
+    }
+    throw new Error('Drive: ' + errAuth.slice(0, 200));
+  }
   if (azione === 'get'){
     if (!r.ok) throw new Error('Drive: ' + (await r.text()).slice(0,200));
     return new Uint8Array(await r.arrayBuffer());
@@ -2497,8 +2531,11 @@ console.log('%cambiente: ' + (_IS_DEV ? '🧪 Development' : '🚀 Production'),
 
 window.addEventListener('load', function(){
   var stored = localStorage.getItem('sb_token');
-  if (stored) initWithToken(stored);
-  else document.getElementById('authOverlay').classList.add('on');
+  if (stored && tokenVivo(stored)) return initWithToken(stored);
+  // Scaduto o illeggibile: si butta e si chiede il login. Tenerlo scritto vorrebbe dire
+  // riprovarci alla prossima apertura con lo stesso esito.
+  if (stored) localStorage.removeItem('sb_token');
+  document.getElementById('authOverlay').classList.add('on');
 });
 
 // ⚠️ Il tasto «indietro» di Android dentro un popup: senza questa guardia esce dalla

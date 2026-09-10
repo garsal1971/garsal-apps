@@ -4862,6 +4862,24 @@ l'ancora, con `#diario` come ripiego.
   col forziere aperto**: può leggere lo schermo. Il forziere protegge da chi ha il database, il
   Drive o un backup; per il resto valgono il blocco automatico e il blocco schermo del sistema.
   Il rischio vero della stessa famiglia era il CDN, ed è quello che si è chiuso.
+- ⚠️ **«Drive: Invalid JWT» NON è un problema di Drive** (v1.6.2, 10 settembre 2026): è
+  Supabase che rifiuta il token **prima** che la Edge Function parta
+  (`{"code":"UNAUTHORIZED_ASYMMETRIC_JWT","message":"Invalid JWT"}`, HTTP 401), e il
+  prefisso «Drive: » di `drive()` lo faceva sembrare tale — mandando a cercare il guasto
+  dalla parte sbagliata. Il forziere **non ha un suo login**: usa il token della suite,
+  che dura **un'ora** mentre `localStorage.sb_token` non scade mai. Tre cose ne
+  discendono, tutte in codice:
+  - **`drive()` riconosce 401 e 403** e li passa a `handleAuthError`, che c'era già e
+    chiude il forziere riportando al login: la usavano le sole chiamate al database, e la
+    Edge Function le passava accanto;
+  - **all'apertura il token si controlla** (`tokenVivo`, `exp` con 30 s di margine) invece
+    di fidarsi di quel che c'è in archivio: senza, la pagina si apriva come se la sessione
+    ci fosse e lo scopriva la prima chiamata. Il margine evita di partire con un token che
+    scade **nel mezzo dello sblocco**, cioè con le 24 parole già scritte;
+  - **un `TOKEN_REFRESH` che arriva a pagina ferma sul login la fa ripartire**
+    (`if (!sbPronto) initWithToken(…)`): prima il token nuovo si scriveva e basta, e
+    l'overlay restava lì con la sessione già buona sotto.
+
 - **La chiave dell'indice è una `CryptoKey` con `extractable: false`**: esiste nel browser ma da
   JavaScript non se ne leggono i byte. Le 24 parole invece devono stare in una stringa in memoria
   (servono a OpenPGP per cifrare i file nuovi) — ⚠️ e per questo il forziere si **chiude da sé**
