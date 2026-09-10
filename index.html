@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AppSphere v1.6.3</title>
+<title>AppSphere v1.6.4</title>
 <meta name="theme-color" content="#0081C8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1983,8 +1983,8 @@ const OLYMPIC = ['#0081C8','#FCB131','#1A1A1A','#00A651','#EE334E'];
 const PAD = 12;
 const GAP = 8; // minimum gap between circles
 
-const APP_VERSION = 'v1.6.3';
-const BUILD_TIME  = '2026-09-10T16:00:00Z';
+const APP_VERSION = 'v1.6.4';
+const BUILD_TIME  = '2026-09-10T17:40:00Z';
 
 // ── COOKIE helpers (per refresh_token persistente su mobile) ──────────────────
 function setCookie(name, value, days) {
@@ -2495,12 +2495,16 @@ function loginWithGoogle() {
   const redirect = isAndroidApp
     ? window.location.origin + '/oauth-callback.html'
     : window.location.href.split('#')[0].split('?')[0];
-  // Scope Google Fit rimossi (API dismesse): bloccavano il consenso OAuth.
-  const scopes = [
-    'email',
-    'profile',
-    'https://www.googleapis.com/auth/calendar.readonly',
-  ].join(' ');
+  // ⚠️ Si chiedono i due permessi NON SENSIBILI e nient'altro. Un permesso
+  // sensibile — bastava `calendar.readonly`, tolto il 10 settembre 2026 — fa
+  // comparire a ogni accesso la schermata «Google non ha verificato questa
+  // app», che si scavalca da *Avanzate* ma spaventa e resta finché Google non
+  // verifica l'app. Quel permesso **non lo leggeva nessuno**: la stringa
+  // compariva una volta sola, qui. Un permesso chiesto e mai usato costa
+  // l'avviso e non dà niente in cambio.
+  // I precedenti Google Fit erano già stati tolti (API dismesse), per la
+  // stessa ragione: bloccavano il consenso OAuth.
+  const scopes = ['email', 'profile'].join(' ');
   window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google`
     + `&redirect_to=${encodeURIComponent(redirect)}`
     + `&scopes=${encodeURIComponent(scopes)}`
