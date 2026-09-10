@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Forziere v1.5.1</title>
+<title>🔐 Forziere v1.6.0</title>
 <!-- ⚠️ QUESTA PAGINA NON CARICA NIENTE DA TERZI, e non è pignoleria: mentre è aperta
      tiene in memoria le 24 parole, quindi QUALUNQUE script che gira qui dentro può
      leggerle e spedirle senza che niente lo dica. Un `<script>` servito da un CDN è
@@ -311,8 +311,8 @@ textarea{resize:vertical;line-height:1.45}
 // ============================================================
 // FORZIERE — versione
 // ============================================================
-var APP_VERSION = 'v1.5.1';
-var BUILD_TIME  = '2026-09-07T12:00:00Z';
+var APP_VERSION = 'v1.6.0';
+var BUILD_TIME  = '2026-09-10T12:00:00Z';
 console.log('%c FORZIERE ' + APP_VERSION + ' %c build: ' + BUILD_TIME,
   'background:#1F2937;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px',
   'background:#222;color:#aaa;padding:2px 6px;border-radius:0 3px 3px 0');
@@ -1065,6 +1065,11 @@ function formBox(b){
     }).join('') + '</div>' +
     '<div class="row-btns">' +
       '<button class="btn ok" id="bxOk">Salva</button>' +
+      // ⚠️ Il 🧹 compare SOLO se dentro c'è qualcosa: a zero file non c'è niente da
+      // svuotare, e un pulsante che risponde «non si può» dopo essere stato premuto è un
+      // pulsante che non si mette. Il numero sta sul pulsante perché è quel che si sta per
+      // perdere, e va letto prima di premere e non nella finestra che viene dopo.
+      (b && contaBox(b.riga.id) ? '<button class="btn danger" id="bxSvuota">🧹 Svuota (' + contaBox(b.riga.id) + ')</button>' : '') +
       (b ? '<button class="btn danger" id="bxDel">🗑 Elimina</button>' : '') +
       '<button class="btn ghost" onclick="chiudiModale()">Annulla</button>' +
     '</div><div class="hint" id="bxStato"></div>');
@@ -1106,6 +1111,8 @@ function formBox(b){
       this.disabled = false;
     }
   });
+
+  if (b && $('bxSvuota')) $('bxSvuota').addEventListener('click', function(){ chiediSvuota(b); });
 
   if (b) $('bxDel').addEventListener('click', async function(){
     var n = contaBox(b.riga.id);
@@ -1153,6 +1160,140 @@ function formBox(b){
       this.disabled = false;
     } finally { S.occupato--; }
   });
+}
+
+// ============================================================
+// SVUOTARE UNO SCOMPARTO — i file se ne vanno, lo scomparto resta
+// ============================================================
+// ⚠️ Non è il 🗑 Elimina, ed è precisamente il suo contrario: là lo scomparto sparisce e i
+// file si salvano in «Senza scomparto», qui i file spariscono e lo scomparto resta — vuoto,
+// con la sua cartella su Drive, pronto a riempirsi di nuovo. Due gesti diversi con due esiti
+// opposti, quindi due pulsanti: uno solo che chiedesse «e i file?» metterebbe la risposta
+// distruttiva a un clic da quella prudente.
+//
+// ⚠️ Costa CANCELLA **e** la passphrase, come la 💣 zona pericolosa e per la stessa ragione:
+// il forziere è già aperto, e chi trova la scrivania incustodita non deve poter buttare via
+// trenta documenti scrivendo sette lettere. La passphrase si verifica con `passphraseGiusta`,
+// cioè aprendo davvero la scorciatoia, e le 24 parole restano una via per chi l'ha scordata.
+function chiediSvuota(b){
+  var conParole = false, parolaScritta = '';
+
+  function disegna(){
+    var lista = fileDiBox(b.riga.id);
+    var totale = lista.reduce(function(a,f){ return a + (f.meta.size || f.riga.size_bytes || 0); }, 0);
+    // L'export esporta quel che l'elenco MOSTRA, e da qui l'elenco è filtrato su questo
+    // scomparto: offrirlo altrove vorrebbe dire promettere una copia di quello che si sta
+    // per cancellare e farne un'altra.
+    var esportabile = (S.box === b.riga.id);
+
+    apriModale(
+      '<h3>🧹 Svuota ' + esc(nomeBox(b.riga.id)) + '</h3>' +
+      '<div class="avviso rosso" style="margin-top:10px"><strong>Da qui non si torna indietro.</strong> ' +
+        'Se ne vanno <strong>' + lista.length + '</strong> ' +
+        (lista.length === 1 ? 'documento' : 'documenti') + ' — ' + peso(totale) +
+        ' — da Drive e dal database, con le loro miniature.</div>' +
+      // ⚠️ Dire cosa NON succede è metà della finestra: senza, «svuota» e «elimina» si
+      // leggono come lo stesso pulsante, e si preme Annulla su tutt'e due.
+      '<div class="muted small" style="margin:12px 0 6px">Quello che <strong>non</strong> succede:</div>' +
+      '<ul class="small" style="margin:0 0 10px 18px;line-height:1.8">' +
+        '<li>lo scomparto <strong>resta</strong>, con la sua cartella su Drive: torna vuoto, non sparisce</li>' +
+        '<li>gli altri scomparti e i file fuori da questo non si toccano</li>' +
+        '<li>il forziere resta quello che è: le tue 24 parole continuano ad aprirlo</li>' +
+      '</ul>' +
+      (esportabile
+        ? '<div class="avviso blu">💾 Una copia in mano tua di questi ' + lista.length +
+          ' file la fai adesso o mai più. ' +
+          '<button class="btn small" style="margin-left:6px" id="svExport">Esporta questo scomparto</button></div>'
+        : '') +
+      '<div class="sep"></div>' +
+      '<label for="svParola">Scrivi <strong>CANCELLA</strong> per confermare</label>' +
+      // Il CANCELLA già scritto sopravvive al passaggio passphrase ↔ 24 parole, come nella
+      // zona pericolosa: farlo riscrivere sarebbe una punizione per aver cambiato idea su
+      // quale segreto usare.
+      '<input type="text" id="svParola" autocomplete="off" spellcheck="false" placeholder="CANCELLA" value="' +
+        esc(parolaScritta) + '">' +
+      '<label for="svIn" style="margin-top:10px">' + (conParole
+        ? 'Le 24 parole, tutto minuscolo e separate da uno spazio'
+        : 'La tua passphrase') + '</label>' +
+      (conParole
+        ? '<textarea id="svIn" class="mono" rows="3" spellcheck="false" autocomplete="off"></textarea>'
+        : '<input type="password" id="svIn" autocomplete="current-password">') +
+      '<div class="hint" id="svStato"></div>' +
+      '<div class="row-btns">' +
+        '<button class="btn danger" id="svOk">🧹 Svuota lo scomparto</button>' +
+        '<button class="btn ghost" id="svAlt">' +
+          (conParole ? 'Uso la passphrase' : 'Ho scordato la passphrase') + '</button>' +
+        '<button class="btn ghost" onclick="chiudiModale()">Annulla</button>' +
+      '</div>');
+
+    if (esportabile) $('svExport').addEventListener('click', function(){ chiudiModale(); $('btnExport').click(); });
+    $('svParola').addEventListener('input', function(){ parolaScritta = this.value; });
+    $('svAlt').addEventListener('click', function(){ conParole = !conParole; disegna(); });
+    (parolaScritta ? $('svIn') : $('svParola')).focus();
+
+    $('svOk').addEventListener('click', async function(){
+      if ($('svParola').value.trim() !== 'CANCELLA'){
+        $('svStato').textContent = '❌ scrivi CANCELLA, in maiuscolo';
+        $('svParola').focus();
+        return;
+      }
+      var v = $('svIn').value;
+      if (!v){ $('svStato').textContent = '❌ serve ' + (conParole ? 'le 24 parole' : 'la passphrase'); return; }
+      if (!S.parole){ $('svStato').textContent = '❌ il forziere si è chiuso'; return; }
+      this.disabled = true;
+      $('svStato').textContent = 'Controllo…';
+      var ok;
+      try { ok = conParole ? (normParole(v) === S.parole) : await passphraseGiusta(v); }
+      catch(e){ ok = false; }
+      if (!ok){
+        $('svStato').textContent = conParole ? '❌ non sono le parole di questo forziere' : '❌ passphrase sbagliata';
+        this.disabled = false;
+        return;
+      }
+      await svuotaScomparto(b);
+    });
+  }
+  disegna();
+}
+
+async function svuotaScomparto(b){
+  var lista = fileDiBox(b.riga.id), fatti = 0;
+  function passo(t){ var el = $('svStato'); if (el) el.textContent = t; }
+  S.occupato++;
+  try {
+    // ⚠️ PRIMA Drive, POI la riga, e un file per volta — come in `elimina()`. Al contrario,
+    // una rete che cade lascerebbe su Drive `.gpg` che nessuno sa più cosa siano e che
+    // dall'app non si possono più togliere. Fatto così, una rete che cade lascia lo
+    // scomparto svuotato a metà: quel che è andato è andato, e ripremendo si riprende da
+    // dove ci si era fermati invece di ricominciare.
+    for (var i = 0; i < lista.length; i++){
+      var f = lista[i];
+      passo('Cancello… ' + (i+1) + '/' + lista.length + ' — ' + (f.meta.nome || ''));
+      if (f.riga.drive_file_id) await drive('delete', { id: f.riga.drive_file_id });
+      var d = await db('frz_files').delete().eq('id', f.riga.id);
+      if (d.error) throw new Error(d.error.message);
+      // La riga esce dall'elenco appena è uscita davvero: fermandosi a metà, quello che si
+      // vede è già quello che è rimasto. Le miniature se ne vanno da sé, per cascata da
+      // `frz_files`.
+      S.file = S.file.filter(function(x){ return x.riga.id !== f.riga.id; });
+      delete S.thumbs[f.riga.id];
+      fatti++;
+    }
+    chiudiModale();
+    disegnaBoxes(); disegnaGriglia();
+    // Lo scomparto c'è ancora, quindi il suo `contenuto.gpg` va riscritto — vuoto, che è
+    // quello che adesso è vero. Gli scomparti non si toccano: nessuno di loro è cambiato.
+    scriviIndici([b.riga.id], false);
+    alert('Fatto: ' + fatti + ' ' + (fatti === 1 ? 'documento cancellato' : 'documenti cancellati') +
+          '.\n\nLo scomparto ' + nomeBox(b.riga.id) + ' resta, vuoto.');
+  } catch(e){
+    passo('❌ ' + e.message);
+    disegnaBoxes(); disegnaGriglia();
+    var bt = $('svOk'); if (bt) bt.disabled = false;
+    alert('Non ce l\'ho fatta: ' + e.message +
+          '\n\nCancellati ' + fatti + ' file su ' + lista.length +
+          '. Quello che è già stato cancellato resta cancellato: ripremendo il pulsante si riprende da dove si era fermato.');
+  } finally { S.occupato--; }
 }
 
 // Spostare un file da uno scomparto all'altro.
