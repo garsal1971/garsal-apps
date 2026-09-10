@@ -5814,6 +5814,16 @@ posto dove si vedeva era Actions. Il passo *Merge branch into master and push* r
 master e rifà il merge fino a cinque volte. **Un conflitto vero non si riprova**: `git merge`
 esce diverso da zero, e con `bash -e` il passo muore lì — un conflitto lo risolve una persona.
 
+⚠️ **La stessa rete ce l'hanno tutt'e otto i workflow di build**, che a lavoro finito committano
+l'APK su master e si contendono lo stesso ref. Tre non l'avevano — `build-pressure-tracker-apk`,
+`build-situazione-rosa-apk`, `build-situazione-teresa-apk`, che facevano un `git push` secco — e
+il 10 settembre 2026 Situazione Rosa ci è cascata: `cannot lock ref … is at ae64430 but expected
+1a2250f`, con l'APK già compilato e buttato via. Il passo che carica su R2 aggiunge ~25 secondi
+prima del push, quindi la finestra fra il `fetch` e il `push` si è allargata e l'ha reso
+frequente invece che raro. ⚠️ **Il fallimento è solo il commit**: il caricamento su R2 viene
+prima ed era già passato, quindi quell'APK era scaricabile ma non risultava in archivio — cioè
+il contrario del difetto che l'ordine dei due passi esiste per evitare.
+
 ⚠️ **Il workflow non usa `supabase link`.** Fra le altre cose `link` chiama
 `GET /v1/projects/{ref}/api-keys`, che dal 7 agosto 2026 risponde con un errore di validazione
 del suo stesso schema (`SchemaError` su `inserted_at`): l'intero deploy moriva lì, portandosi
