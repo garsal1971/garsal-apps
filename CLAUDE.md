@@ -3571,6 +3571,34 @@ sarebbe riscrivere OpenPGP a mano, che in un forziere è precisamente ciò che n
   forziere già aperto, che è l'unico momento in cui le parole ci sono già e non si fa riscrivere
   niente. E lo sblocco passa comunque da `indice.gpg`: il Keystore dice **chi sei**, non che quelle
   parole aprano *questo* forziere.
+- ⚠️ **Il token si guarda in faccia prima di mandarlo** (v1.0.78, `ForziereDrive.token()`, gemello
+  di `tokenVivo()` in `forziere.html`). `ForziereDrive` è **l'unico posto dell'app** che legge
+  `accessToken` a mano e parla per conto suo (`HttpURLConnection`): tutto il resto passa da
+  supabase-kt, che il rinnovo se lo fa da sé. Fino alla v1.0.77 qui si guardava se un token
+  *c'era*, non se valeva ancora qualcosa — e un access token di Supabase dura **un'ora**, mentre
+  la sessione in archivio non scade mai. Con l'app rimasta aperta si finiva a mandarne uno morto:
+  il 10 settembre 2026 il Forziere ha risposto ❌ *«Drive: … serve un login valido»* e ha mandato
+  a cercare il guasto dal Drive, che non c'entrava niente. Tre cose ne discendono:
+  - `Jwt.vivo()` legge `exp` **dal token che si sta per mandare**, col margine di 30 secondi:
+    partire con uno che scade a metà operazione vuol dire le 24 parole già scritte e un file già a
+    metà. È lo stesso mezzo minuto del web, e si legge lo stesso dato — non un campo accanto
+    (`UserSession.expiresAt`) che il giorno che i due divergono direbbe un'altra cosa;
+  - ⚠️ **dopo un rinnovo il token si usa e non si ricontrolla**: `Jwt.vivo` guarda l'orologio del
+    telefono, e con l'ora sbagliata un secondo controllo direbbe «scaduto» anche su un token
+    appena nato — cioè il forziere chiuso da un orologio storto. Al più si rinnova una volta di
+    troppo; a dire se quel token vale resta il server;
+  - ⚠️ **il 401 si riprova UNA volta, dopo un rinnovo** (`post()`). Arriva da due posti che valgono
+    la stessa cosa — `chiChiama()` dentro la funzione, e il **cancello** di Supabase che rifiuta il
+    JWT prima ancora che la funzione parta (`UNAUTHORIZED_ASYMMETRIC_JWT`) — e il secondo capita
+    anche con un `exp` che a noi sembra buonissimo, per esempio dopo un cambio delle chiavi di
+    firma del progetto: `token()` da solo non se ne accorgerebbe mai. In ciclo no: se il secondo
+    giro torna 401 il problema non è il token, e riprovare terrebbe il forziere su una rotella
+    invece di dire cos'è successo. Il 403 resta quel che è — *non autorizzato*, cioè l'account
+    sbagliato — e non si traveste da sessione scaduta.
+  - ⚠️ **Il prefisso «Drive: » è nostro**, non di Google: appiccicato a un errore che il Drive non
+    ha mai visto è precisamente ciò che il 10 settembre ha fatto perdere tempo. Dove la risposta
+    porta il suo `error`, si scrive quello e basta (`motivo()`), e la sessione scaduta lo dice con
+    parole sue senza nominare il Drive.
 
 ### Cosa compare in home: il registro `PortedApps`
 
@@ -4879,6 +4907,11 @@ l'ancora, con `#diario` come ripiego.
   - **un `TOKEN_REFRESH` che arriva a pagina ferma sul login la fa ripartire**
     (`if (!sbPronto) initWithToken(…)`): prima il token nuovo si scriveva e basta, e
     l'overlay restava lì con la sessione già buona sotto.
+
+  ⚠️ **Lo stesso difetto era nell'APK nativa, ed è stato chiuso lo stesso giorno** (v1.0.78,
+  `ForziereDrive.token()`): là il sintomo era ❌ *«Drive: … serve un login valido»* — la stessa
+  sessione scaduta, riconosciuta dalla funzione invece che dal cancello. Le due correzioni sono
+  gemelle e vanno cambiate insieme; il dettaglio sta in *AppSphere nativa → Forziere nativo*.
 
 - **La chiave dell'indice è una `CryptoKey` con `extractable: false`**: esiste nel browser ma da
   JavaScript non se ne leggono i byte. Le 24 parole invece devono stare in una stringa in memoria
